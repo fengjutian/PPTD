@@ -41,6 +41,7 @@ pub struct TemplateSlideSummary {
     image_count: usize,
     shape_count: usize,
     layout: Option<String>,
+    background_color: Option<String>,
     regions: Vec<TemplateRegion>,
 }
 
@@ -59,6 +60,7 @@ pub struct TemplateRegion {
 pub struct TemplateLayoutSummary {
     index: usize,
     name: String,
+    background_color: Option<String>,
     regions: Vec<TemplateRegion>,
 }
 
@@ -74,6 +76,7 @@ pub struct TemplateAnalysis {
     theme_colors: Vec<TemplateThemeColor>,
     major_font: Option<String>,
     minor_font: Option<String>,
+    default_background_color: Option<String>,
     slides: Vec<TemplateSlideSummary>,
     layouts: Vec<TemplateLayoutSummary>,
     warnings: Vec<String>,
@@ -609,6 +612,22 @@ fn extract_template_regions(document: &roxmltree::Document<'_>) -> Vec<TemplateR
         .collect()
 }
 
+fn extract_background_color(document: &roxmltree::Document<'_>) -> Option<String> {
+    let background = document
+        .descendants()
+        .find(|node| node.tag_name().name() == "bg")?;
+    let fill = background
+        .descendants()
+        .find(|node| node.tag_name().name() == "solidFill")?;
+    let color = fill.children().find(|node| node.is_element())?;
+    match color.tag_name().name() {
+        "srgbClr" => color.attribute("val").map(|value| format!("#{value}")),
+        "sysClr" => color.attribute("lastClr").map(|value| format!("#{value}")),
+        "schemeClr" => color.attribute("val").map(str::to_owned),
+        _ => None,
+    }
+}
+
 #[tauri::command]
 pub fn analyze_pptx_template(
     app: tauri::AppHandle,
@@ -778,6 +797,7 @@ pub fn analyze_pptx_template(
                 })
         });
         let regions = extract_template_regions(&document);
+        let background_color = extract_background_color(&document);
         slides.push(TemplateSlideSummary {
             index: number,
             title,
@@ -791,6 +811,7 @@ pub fn analyze_pptx_template(
                 .filter(|node| node.tag_name().name() == "sp")
                 .count(),
             layout,
+            background_color,
             regions,
         });
     }
@@ -810,10 +831,12 @@ pub fn analyze_pptx_template(
             .unwrap_or("未命名版式")
             .to_owned();
         let regions = extract_template_regions(&document);
+        let background_color = extract_background_color(&document);
         if !regions.is_empty() {
             layouts.push(TemplateLayoutSummary {
                 index: number,
                 name,
+                background_color,
                 regions,
             });
         }
@@ -827,6 +850,12 @@ pub fn analyze_pptx_template(
         warnings.push("未发现 OOXML 主题定义".into());
     }
     warnings.push("动画、切换、SmartArt、视频和宏尚未解析".into());
+    let default_background_color =
+        read_zip_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?.and_then(|xml| {
+            roxmltree::Document::parse(&xml)
+                .ok()
+                .and_then(|document| extract_background_color(&document))
+        });
     Ok(TemplateAnalysis {
         slide_count,
         slide_width_emu,
@@ -837,6 +866,7 @@ pub fn analyze_pptx_template(
         theme_colors,
         major_font,
         minor_font,
+        default_background_color,
         slides,
         layouts,
         warnings,
@@ -939,5 +969,16 @@ mod tests {
             (100, 200, 300, 400)
         );
         assert_eq!(regions[1].role, "body");
+    }
+
+    #[test]
+    fn extracts_direct_and_theme_background_colors() {
+        let direct = roxmltree::Document::parse(r#"<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="F5F1E8"/></a:solidFill></p:bgPr></p:bg></p:cSld></p:sld>"#).unwrap();
+        let themed = roxmltree::Document::parse(r#"<p:sldLayout xmlns:p="p" xmlns:a="a"><p:cSld><p:bg><p:bgPr><a:solidFill><a:schemeClr val="bg1"/></a:solidFill></p:bgPr></p:bg></p:cSld></p:sldLayout>"#).unwrap();
+        assert_eq!(
+            extract_background_color(&direct).as_deref(),
+            Some("#F5F1E8")
+        );
+        assert_eq!(extract_background_color(&themed).as_deref(), Some("bg1"));
     }
 }

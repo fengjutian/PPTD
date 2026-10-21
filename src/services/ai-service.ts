@@ -49,7 +49,25 @@ export const aiPresentationDesignSchema = z.object({
   })).min(1).max(20),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
-export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
+export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; backgroundColor: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
+
+function colorLuminance(hex: string): number {
+  const channels = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((value) => Number.parseInt(value, 16) / 255).map((value) => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+}
+
+/** Template colors are authoritative. AI selects structure, but cannot invent a competing palette. */
+export function constrainDesignToTemplate(design: AiPresentationDesign, template: DesignTemplateContext): AiPresentationDesign {
+  const colors = new Map(template.themeColors.map((color) => [color.name.toLowerCase(), color.value.toUpperCase()]));
+  const accent = colors.get("accent1") ?? colors.get("accent2");
+  const light = colors.get("lt1") ?? colors.get("lt2");
+  const dark = colors.get("dk1") ?? colors.get("dk2");
+  if (!accent && !light && !dark) return design;
+  const rawBackground = template.defaultBackgroundColor;
+  const background = rawBackground?.startsWith("#") ? rawBackground.toUpperCase() : rawBackground ? colors.get(rawBackground.toLowerCase()) ?? light ?? "#FFFFFF" : light ?? "#FFFFFF";
+  const foreground = dark ?? (colorLuminance(background) > 0.45 ? "#1F2937" : "#FFFFFF");
+  return { slides: design.slides.map((slide) => ({ ...slide, background, accent: accent ?? slide.accent, titleColor: foreground, bodyColor: foreground })) };
+}
 /** 当前选中的厂商与模型。调用方不再关心具体厂商，由设置决定。 */
 function aiSelection(): { provider: string; model: string } {
   const settings = loadSettings();
@@ -87,7 +105,7 @@ export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBr
   const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, model, provider } });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
-  return {
+  return constrainDesignToTemplate({
     slides: design.slides.map((slide, index, slides) => {
       const content = draft.slides[index]!;
       const brief = briefs[index]!;
@@ -113,7 +131,7 @@ export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBr
       if (index > 1 && layout === slides[index - 1]?.layout && ["cards", "split", "title-body"].includes(layout)) layout = layout === "title-body" ? "split" : "title-body";
       return { ...slide, layout };
     }),
-  };
+  }, template);
 }
 
 export const aiKeyConfigured = (providerId: string) => invoke<boolean>("ai_api_key_configured", { providerId });

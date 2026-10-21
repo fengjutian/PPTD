@@ -167,6 +167,21 @@ describe("document commands", () => {
     expect(bodies.every((element) => element.frame.y + element.frame.height <= source.pageSize.height)).toBe(true);
   });
 
+  it("selects a semantic template layout and adopts its background", () => {
+    const source = createDocument();
+    const content = { title: "方案对比", body: "左侧\n右侧", speakerNotes: "" };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [
+      { index: 1, name: "标题和内容", backgroundColor: "#FFFFFF", regions: [{ role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } }, { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.84, height: 0.55 } }] },
+      { index: 2, name: "双栏比较", backgroundColor: "#F5F1E8", regions: [{ role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } }, { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.36, height: 0.55 } }, { role: "body" as const, frame: { x: 0.56, y: 0.28, width: 0.36, height: 0.55 } }] },
+    ];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板匹配", slides: [content], designs: [design], templateLayouts }));
+    expect(result.slides[0]!.background).toBe("#F5F1E8");
+    const bodies = result.slides[0]!.elements.filter((element) => element.type === "text" && element.text !== content.title);
+    expect(bodies[0]!.frame.x).toBe(Math.round(source.pageSize.width * 0.08));
+    expect(bodies[1]!.frame.x).toBe(Math.round(source.pageSize.width * 0.56));
+  });
+
   it("renders timeline blocks without parsing the body string", () => {
     const source = createDocument();
     const content = { title: "里程碑", body: "这段正文不应驱动时间线", speakerNotes: "", blocks: [{ type: "timeline" as const, items: [{ label: "第一阶段", text: "调研" }, { label: "第二阶段", text: "交付" }] }] };

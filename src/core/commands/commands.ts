@@ -14,7 +14,7 @@ export interface AiSlideDraft { title: string; body: string; speakerNotes: strin
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
 export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
 export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
-export interface AiTemplateLayout { index: number; regions: AiTemplateRegion[] }
+export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; regions: AiTemplateRegion[] }
 
 export type DocumentCommand =
   | { type: "add-slide" }
@@ -86,24 +86,33 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.content = { ...content, status: "approved" };
       const items = points(content.body);
       const bodySize = content.body.length > 260 ? 15 : content.body.length > 150 ? 17 : 20;
-      const rankedLayouts = command.templateLayouts?.filter((layout) => layout.regions.some((region) => region.role === "title")) ?? [];
-      const recipe = design.layout === "cover"
-        ? rankedLayouts[0]
-        : design.layout === "cards" || design.layout === "split"
-          ? [...rankedLayouts].sort((left, right) => right.regions.filter((region) => region.role === "body").length - left.regions.filter((region) => region.role === "body").length)[0]
-          : rankedLayouts[index % Math.max(1, rankedLayouts.length)];
-      const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
-      const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
-      const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);
-      const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
-      const [leftRecipe, rightRecipe] = recipeBodies;
-      const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       const blocks = content.blocks ?? [];
       const timelineBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "timeline" }> => block.type === "timeline");
       const comparisonBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "comparison" }> => block.type === "comparison");
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
+      const rankedLayouts = command.templateLayouts?.filter((layout) => layout.regions.some((region) => region.role === "title")) ?? [];
+      const layoutScore = (layout: AiTemplateLayout): number => {
+        const name = (layout.name ?? "").toLowerCase();
+        const bodies = layout.regions.filter((region) => region.role === "body").length;
+        const images = layout.regions.filter((region) => region.role === "image").length;
+        const keyword = (...values: string[]) => values.some((value) => name.includes(value));
+        if (design.layout === "cover") return (keyword("title slide", "cover", "封面", "标题幻灯片") ? 100 : 0) + (bodies === 0 ? 20 : 0) + images * 5;
+        if (design.layout === "section") return (keyword("section", "章节", "节标题") ? 100 : 0) + (bodies <= 1 ? 15 : 0);
+        if (design.layout === "split" || comparisonBlock) return (keyword("comparison", "two content", "双栏", "比较", "对比") ? 100 : 0) + Math.min(bodies, 2) * 20;
+        if (design.layout === "cards" || timelineBlock || processBlock || metricBlocks.length > 0) return (keyword("content", "卡片", "流程", "时间线") ? 30 : 0) + bodies * 15;
+        if (design.layout === "quote") return (keyword("quote", "引言", "引用") ? 100 : 0) + (bodies === 1 ? 15 : 0);
+        return (keyword("title and content", "标题和内容", "正文") ? 60 : 0) + (bodies === 1 ? 20 : 0);
+      };
+      const recipe = [...rankedLayouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index)[0];
+      slide.background = recipe?.backgroundColor ?? design.background;
+      const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
+      const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
+      const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);
+      const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
+      const [leftRecipe, rightRecipe] = recipeBodies;
+      const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       slide.elements = [];
       if (design.layout === "cover" && !hasDeterministicBlock) {
         slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
