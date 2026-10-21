@@ -2,14 +2,14 @@ import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, Copy, Download, FilePlus
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
-import { SettingsDialog } from "../features/settings/SettingsDialog";
+import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { generateWithMiniMax, type AiDraft } from "../services/minimax";
 import { applyTheme, loadSettings } from "../services/settings";
 import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
-type AppView = "editor" | "ai" | "theme";
+type AppView = "editor" | "ai" | "theme" | "settings";
 
 function ToolButton({ label, onClick, disabled, children }: { label: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode }) {
   return <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
@@ -65,7 +65,6 @@ export function App() {
   const [aiDraft, setAiDraft] = useState<AiDraft>();
   const [aiBusy, setAiBusy] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<{ name: string; size?: number; path?: string }>();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
@@ -268,7 +267,7 @@ export function App() {
         <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="MiniMax AI" onClick={() => setActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
         <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="PPT 模板" onClick={() => setActiveView("theme")}><Palette /><span>模板</span></button>
         <div className="nav-spacer" />
-        <button title="设置" onClick={() => setSettingsOpen(true)}><Settings /><span>设置</span></button>
+        <button className={activeView === "settings" ? "active" : ""} aria-current={activeView === "settings" ? "page" : undefined} title="设置" onClick={() => setActiveView("settings")}><Settings /><span>设置</span></button>
       </nav>
 
       {activeView === "editor" && <><aside className="left-panel">
@@ -335,8 +334,12 @@ export function App() {
         </section>
       </main>}
 
+      {activeView === "settings" && <main className="feature-workspace settings-workspace">
+        <header className="feature-header"><div><Settings /><div><h1>设置</h1><p>管理模型连接、安全凭据和 PPTD 应用外观</p></div></div></header>
+        <SettingsWorkspace onMessage={setTaskStatus} />
+      </main>}
+
       <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{taskStatus && <span className="task-status">{taskStatus}</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onMessage={setTaskStatus} />}
     </div>
   );
 }

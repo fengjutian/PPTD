@@ -182,25 +182,39 @@ button { color: inherit; }
 .task-status + .saved-dot { margin-left: 0; }
 .saved-dot.dirty { color: #e6ae62; }
 .zoom { min-width: 40px; text-align: right; color: #c6c8cd; }
-.settings-overlay { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: 30px; background: #07080bcc; backdrop-filter: blur(7px); }
-.settings-panel { width: min(620px, 94vw); max-height: 88vh; overflow-y: auto; border: 1px solid #3a3c42; border-radius: 14px; background: #18191d; box-shadow: 0 30px 90px #000b; }
-.settings-panel header, .settings-panel footer { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; }
-.settings-panel header { border-bottom: 1px solid #303238; } .settings-panel header div, .settings-panel h3 { display: flex; align-items: center; gap: 9px; }
-.settings-panel header svg, .settings-panel h3 svg { width: 18px; color: var(--ppt-accent); } .settings-panel header button { border: 0; background: transparent; cursor: pointer; }
-.settings-panel section { padding: 18px 22px; border-bottom: 1px solid #303238; } .settings-panel h3 { margin: 0 0 16px; font-size: 14px; }
-.settings-panel label { display: grid; gap: 7px; margin: 12px 0; color: #a8abb2; font-size: 12px; } .settings-panel input { padding: 10px; color: #f1f1f2; background: #222429; border: 1px solid #3b3d44; border-radius: 8px; }
-.settings-panel label span { justify-self: end; margin-top: -20px; color: #8a8e96; } .settings-panel label span.configured { color: #7eaa54; }
-.settings-panel p { color: #737780; font-size: 11px; } .remove-key { display: flex; align-items: center; gap: 6px; border: 1px solid #60343a; background: #2a2022; color: #e98b94; border-radius: 7px; padding: 7px 10px; cursor: pointer; }
-.theme-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; } .theme-options button { padding: 10px; border: 1px solid #3b3d44; border-radius: 8px; background: #222429; cursor: pointer; } .theme-options button.active { border-color: var(--ppt-accent); color: var(--ppt-accent-hover); background: var(--ppt-accent-soft); }
-.settings-panel footer { justify-content: flex-end; gap: 9px; } .settings-panel footer button { padding: 9px 15px; border: 1px solid #3b3d44; border-radius: 8px; background: #25272c; cursor: pointer; } .settings-panel footer .primary { border-color: var(--ppt-accent); background: var(--ppt-accent); color: white; }
+.settings-page { width: min(900px, calc(100% - 64px)); margin: 34px auto 70px; display: grid; gap: 16px; }
+.settings-card { padding: 24px; border: 1px solid #35373d; border-radius: 12px; background: #202126; }
+.settings-section-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 22px; }
+.settings-section-heading > svg { width: 21px; height: 21px; margin-top: 1px; color: var(--ppt-accent); }
+.settings-section-heading h2, .settings-section-heading p { margin: 0; }
+.settings-section-heading h2 { font-size: 16px; }
+.settings-section-heading p { margin-top: 5px; color: #858a93; font-size: 11px; }
+.settings-card > label { display: grid; gap: 7px; margin: 15px 0; color: #a8abb2; font-size: 12px; }
+.settings-card > label > span { justify-self: end; margin-top: -20px; color: #858a93; }
+.settings-card > label > span.configured { color: #91af66; }
+.settings-card input { width: 100%; padding: 11px 12px; border: 1px solid #3b3d44; border-radius: 8px; outline: none; color: #f1f2f4; background: #17181c; }
+.settings-card input:focus { border-color: var(--ppt-accent); box-shadow: 0 0 0 2px var(--ppt-accent-soft); }
+.field-help { margin: -3px 0 15px; color: #767a83; font-size: 11px; }
+.button-danger { display: inline-flex; align-items: center; gap: 7px; padding: 9px 12px; border: 1px solid #6b3940; border-radius: 7px; color: #ee9199; background: #2a2022; cursor: pointer; }
+.button-danger:hover:not(:disabled) { border-color: #a94f59; background: #352326; }
+.button-danger svg { width: 15px; height: 15px; }
+.theme-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.theme-options button { min-height: 74px; display: grid; grid-template-columns: 34px 1fr 18px; align-items: center; gap: 10px; padding: 11px 13px; border: 1px solid #3b3d44; border-radius: 9px; color: #cfd2d8; background: #191a1e; cursor: pointer; text-align: left; }
+.theme-options button:hover { border-color: #666a73; background: #24262b; }
+.theme-options button.active { border-color: var(--ppt-accent); color: #fff; background: #31211e; box-shadow: 0 0 0 1px var(--ppt-accent); }
+.theme-options button > svg { width: 17px; height: 17px; color: var(--ppt-accent-hover); }
+.theme-swatch { width: 34px; height: 34px; display: block; border: 1px solid #4b4e55; border-radius: 7px; background: #18191d; }
+.theme-swatch.light { border-color: #c8cbd1; background: #f5f6f8; }
+.theme-swatch.system { background: linear-gradient(90deg, #18191d 0 50%, #f5f6f8 50%); }
+.settings-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 14px 0; background: linear-gradient(transparent, #191a1e 22%); }
+.settings-actions .primary-action { min-width: 140px; }
 
 :root[data-theme="light"] { color: #22252a; background: #eef0f3; --scrollbar-track: #e4e6e9; --scrollbar-thumb: #a8acb3; --scrollbar-thumb-hover: #858a93; }
 :root[data-theme="light"] .app-shell { background: #eceef1; } :root[data-theme="light"] .topbar, :root[data-theme="light"] .statusbar { background: #f9fafb; border-color: #d6d9de; color: #5b6068; }
 :root[data-theme="light"] .nav-rail { background: #f7f8fa; border-color: #d6d9de; } :root[data-theme="light"] .nav-rail button:hover:not(:disabled) { color: #25282d; background: #e5e7eb; }
 :root[data-theme="light"] .left-panel, :root[data-theme="light"] .right-panel { background: #f4f5f7; color: #25282d; } :root[data-theme="light"] .panel-heading, :root[data-theme="light"] .inspector-title { border-color: #d9dce1; }
 :root[data-theme="light"] .workspace { background-color: #dfe2e6; background-image: radial-gradient(#b8bdc5 .65px, transparent .65px); }
-:root[data-theme="light"] .property-form input, :root[data-theme="light"] .property-form textarea, :root[data-theme="light"] .settings-panel input { color: #24272c; background: #fff; border-color: #cfd3d9; }
-:root[data-theme="light"] .settings-panel { color: #24272c; background: #f8f9fb; border-color: #cfd3d9; } :root[data-theme="light"] .settings-panel section, :root[data-theme="light"] .settings-panel header { border-color: #d9dce1; }
+:root[data-theme="light"] .property-form input, :root[data-theme="light"] .property-form textarea { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .feature-workspace { background: #eef0f3; } :root[data-theme="light"] .feature-header { background: #f8f9fb; border-color: #d6d9de; }
 :root[data-theme="light"] .ai-compose-card, :root[data-theme="light"] .draft-slide-card, :root[data-theme="light"] .presentation-themes > button { color: #24272c; background: #fff; border-color: #d4d7dc; }
 :root[data-theme="light"] .ai-compose-card textarea, :root[data-theme="light"] .ai-compose-card input, :root[data-theme="light"] .draft-review textarea, :root[data-theme="light"] .draft-review input { color: #24272c; background: #fff; border-color: #cfd3d9; }
@@ -208,5 +222,8 @@ button { color: inherit; }
 :root[data-theme="light"] .theme-applied-message { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; }
 :root[data-theme="light"] .template-dropzone { color: #24272c; background: #fff; border-color: #aeb3bb; } :root[data-theme="light"] .template-dropzone:hover, :root[data-theme="light"] .template-dropzone.selected { border-color: var(--ppt-accent); background: #fff9f7; }
 :root[data-theme="light"] .template-status { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; } :root[data-theme="light"] .template-notice { color: #494d53; background: #fff8ed; }
+:root[data-theme="light"] .settings-card { color: #24272c; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .settings-card input { color: #24272c; background: #fff; border-color: #cfd3d9; }
+:root[data-theme="light"] .theme-options button { color: #34383f; background: #f4f5f7; border-color: #cfd3d9; } :root[data-theme="light"] .theme-options button:hover { background: #e9ebee; } :root[data-theme="light"] .theme-options button.active { color: #7d2d1d; background: #fff1ed; border-color: var(--ppt-accent); }
+:root[data-theme="light"] .settings-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 
 @media (max-width: 1250px) { .app-shell { grid-template-columns: 58px 180px minmax(620px, 1fr) 220px; } .nav-rail button { width: 43px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } .feature-header { padding-inline: 22px; } .presentation-themes { gap: 12px; } }
