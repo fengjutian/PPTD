@@ -50,6 +50,61 @@ export const aiPresentationDesignSchema = z.object({
   })).min(1).max(20),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
+type AiLayoutKind = z.infer<typeof aiPresentationDesignSchema>["slides"][number]["layout"];
+const intentLayouts: Record<SlideBrief["visualIntent"], AiLayoutKind> = {
+  hero: "cover",
+  quote: "quote",
+  timeline: "cards",
+  comparison: "split",
+  process: "cards",
+  "data-chart": "title-body",
+  "image-story": "split",
+  summary: "summary",
+  "structured-text": "title-body",
+};
+
+/** Splits reviewed body copy into the visual units the page actually carries. */
+export function splitBodyItems(body: string): string[] {
+  return body.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((value) => value.trim()).filter(Boolean);
+}
+
+/**
+ * Picks the layout that matches the amount and shape of the reviewed content.
+ *
+ * The model's layout is a recommendation, not a command: a numbered list that
+ * it calls "title-body" used to be rendered as one plain text block, which is
+ * what produced pages with a small paragraph in a large empty canvas. Short
+ * lists become cards, long lists become two columns, and only continuous prose
+ * stays on a title-body page. The content itself is never changed.
+ */
+export function chooseSlideLayout(input: {
+  index: number;
+  requested: AiLayoutKind;
+  visualIntent: SlideBrief["visualIntent"];
+  density: SlideBrief["density"];
+  body: string;
+}): AiLayoutKind {
+  if (input.index === 0) return "cover";
+  const items = splitBodyItems(input.body);
+  const longestItem = items.reduce((longest, item) => Math.max(longest, [...item].length), 0);
+  const intent = intentLayouts[input.visualIntent];
+  // A model often returns title-body as a safe default. When the slide brief
+  // states a more specific intent, that intent wins.
+  let layout: AiLayoutKind = input.requested === "cover" ? "section" : input.requested;
+  if (layout === "title-body" && intent !== "title-body") layout = intent;
+  if (layout === "cover") layout = "section";
+  if (layout === "quote" && input.density === "high") layout = "title-body";
+  if (layout === "split" && items.length < 2) layout = "title-body";
+  if (layout === "cards" && (items.length < 2 || items.length > 6 || longestItem > 72 || input.body.length > 420)) {
+    layout = items.length >= 2 && items.length <= 8 && input.body.length <= 560 ? "split" : "title-body";
+  }
+  if (layout === "title-body" && items.length >= 2) {
+    const cardEligible = items.length >= 3 && items.length <= 6 && longestItem <= 56 && input.body.length <= 360;
+    layout = cardEligible ? "cards" : "split";
+  }
+  return layout;
+}
+
 export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; backgroundColor: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
 
 function colorLuminance(hex: string): number {
@@ -126,26 +181,16 @@ export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBr
     slides: design.slides.map((slide, index) => {
       const content = draft.slides[index]!;
       const brief = briefs[index]!;
-      const pointCount = content.body.split(/\n+|(?=\d+[.、]\s*)/).filter((value) => value.trim()).length;
-      let layout = slide.layout;
-      const intentLayout = {
-        hero: "cover",
-        quote: "quote",
-        timeline: "cards",
-        comparison: "split",
-        process: "cards",
-        "data-chart": "title-body",
-        "image-story": "split",
-        summary: "summary",
-        "structured-text": "title-body",
-      } as const;
-      layout = intentLayout[brief.visualIntent];
-      if (index === 0) layout = "cover";
-      else if (layout === "cover") layout = "section";
-      if (brief.density === "high" && layout === "quote") layout = "title-body";
-      if (layout === "cards" && (pointCount < 3 || content.body.length > 360)) layout = content.body.length > 180 ? "title-body" : "split";
-      if (layout === "split" && pointCount < 2) layout = "title-body";
-      return { ...slide, layout };
+      return {
+        ...slide,
+        layout: chooseSlideLayout({
+          index,
+          requested: slide.layout,
+          visualIntent: brief.visualIntent,
+          density: brief.density,
+          body: content.body,
+        }),
+      };
     }),
   }, template);
 }

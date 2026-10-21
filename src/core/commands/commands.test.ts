@@ -185,6 +185,22 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements[2]).toMatchObject({ type: "text", text: "已审核标题", style: { fontFamily: "Arial", fontSizePt: 42 } });
   });
 
+  it("renders a multi-point title-body page as a structured list instead of one stranded block", () => {
+    const source = createDocument();
+    const content = { title: "作品背景", body: "1. 作品在什么背景下创作？\n2. 作者想回应什么？\n3. 当时的社会环境如何？\n4. 作品为何采用这种形式？\n5. 它后来产生了什么影响？", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "作品背景", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(["作品背景", "01", "作品在什么背景下创作？", "02", "作者想回应什么？", "03", "当时的社会环境如何？", "04", "作品为何采用这种形式？", "05", "它后来产生了什么影响？"]);
+    // The list fills the content area instead of shrinking into the top-left.
+    const firstItem = texts[2]!;
+    const lastItem = texts[texts.length - 1]!;
+    expect(lastItem.frame.y).toBeGreaterThan(firstItem.frame.y);
+    expect(lastItem.frame.y + lastItem.frame.height).toBeLessThanOrEqual(source.pageSize.height);
+    expect(firstItem.frame.width).toBeGreaterThan(source.pageSize.width * 0.5);
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
   it("renders numbered content as editable cards with deterministic geometry", () => {
     const source = createDocument();
     const content = { title: "三个重点", body: "1. 第一项 2. 第二项 3. 第三项", speakerNotes: "" };

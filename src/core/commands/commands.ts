@@ -148,8 +148,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const resolved = range ? readableTextColorOnRange(color, range, large, fallback) : readableTextColor(color, 1, large, fallback);
       return { id: crypto.randomUUID() as ElementId, type: "text" as const, contentRef, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: fitted, color: resolved, bold, align } };
     };
-    const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle") => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: kind === "ellipse" ? 999 : 8 } });
-    const points = (body: string) => body.split(/\n+|(?=\d+[.、]\s*)/).map((value) => value.trim()).filter(Boolean);
+    const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle", stroke = fill, strokeWidthPt = 0) => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke, strokeWidthPt, radiusPt: kind === "ellipse" ? 999 : 8 } });
+    const points = (body: string) => body.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((value) => value.trim()).filter(Boolean);
+    const cleanPoint = (value: string) => value.replace(/^(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*/, "");
     // The layout of every page is decided as a sequence: the deck should rotate
     // through a small set of template layouts instead of repeating one artwork.
     const layoutIntents: TemplateLayoutIntent[] = command.slides.map((content, index) => {
@@ -254,7 +255,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(shape(frame(Math.max(0, contentBox.x - 0.02), Math.max(0, contentBox.y - 0.02), Math.min(1 - Math.max(0, contentBox.x - 0.02), contentBox.width + 0.04), Math.min(1 - Math.max(0, contentBox.y - 0.02), contentBox.height + 0.04)), scrimFill));
       }
       const contentTextLuminance = artworkTreatment === "local-scrim" ? scrimLuminance : bodyLuminance;
-      const cardLuminance = colorLuminance("#F3F5F7") ?? 0.9;
+      // A white card on a white page is invisible. Pick a surface that separates
+      // the card from the page while keeping dark body ink readable.
+      const cardFill = pageLuminance < 0.45 ? "#FFFFFF" : "#F3F5F7";
+      const cardStroke = pageLuminance < 0.45 ? "#FFFFFF" : "#E2E7EC";
+      const cardLuminance = colorLuminance(cardFill) ?? 0.9;
       const accentLuminance = colorLuminance(design.accent) ?? pageLuminance;
       // Badges and header bars carry white text, so the brand accent is only
       // used as their fill when it can hold white; otherwise it is deepened
@@ -318,7 +323,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const panelHeight = Math.min(contentBox.height, headerHeight + 0.03 + Math.max(...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize))) + 0.03);
         const panelTop = contentBox.y + (contentBox.height - panelHeight) * 0.30;
         columns.forEach((column) => {
-          slide.elements.push(shape(frame(column.x, panelTop, columnWidth, panelHeight), "#F3F5F7"), shape(frame(column.x, panelTop, columnWidth, headerHeight), accentFill));
+          slide.elements.push(shape(frame(column.x, panelTop, columnWidth, panelHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(column.x, panelTop, columnWidth, headerHeight), accentFill));
           slide.elements.push(text(column.label, centeredBlock(column.label, { x: column.x + 0.025, y: panelTop, width: columnWidth - 0.05, height: headerHeight }, labelSize), labelSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
           slide.elements.push(text(itemText(column.items), frame(column.x + 0.035, panelTop + headerHeight + 0.015, columnWidth - 0.07, panelHeight - headerHeight - 0.03), itemSize, bodyInk, false, "left", undefined, cardLuminance));
         });
@@ -340,7 +345,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const column = metricIndex % columns; const row = Math.floor(metricIndex / columns);
           const width = cellWidth - 0.025;
           const x = contentBox.x + column * cellWidth; const y = gridTop + row * (cardHeight + cardGap);
-          slide.elements.push(shape(frame(x, y, width, cardHeight), "#F3F5F7"));
+          slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
           slide.elements.push(text(metric.value, centeredBlock(metric.value, { x: x + 0.02, y: y + cardHeight * 0.10, width: width - 0.04, height: cardHeight * 0.46 }, valueSize), valueSize, design.accent, true, "center", undefined, cardLuminance));
           slide.elements.push(text(metric.label, centeredBlock(metric.label, { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 }, labelSize), labelSize, bodyInk, false, "center", undefined, cardLuminance));
         });
@@ -360,7 +365,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         processItems.forEach((item, itemIndex) => {
           const x = contentBox.x + itemIndex * (stepWidth + stepGap);
           const badgeY = stepTop - 0.01 - badgeHeight / 2;
-          slide.elements.push(shape(frame(x, stepTop, stepWidth, stepHeight), "#F3F5F7"), shape(circleFrame(x + 0.02, badgeY, badgeDiameter), accentFill, "ellipse"));
+          slide.elements.push(shape(frame(x, stepTop, stepWidth, stepHeight), cardFill, "rectangle", cardStroke, 0.75), shape(circleFrame(x + 0.02, badgeY, badgeDiameter), accentFill, "ellipse"));
           slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.02, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, badgeSize), badgeSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
           slide.elements.push(text(item.label, centeredBlock(item.label, { x: x + 0.025, y: stepTop + stepHeight * 0.12, width: stepWidth - 0.05, height: stepHeight * 0.28 }, labelSize), labelSize, titleInk, true, "center", undefined, cardLuminance));
           slide.elements.push(text(item.text, centeredBlock(item.text, { x: x + 0.025, y: stepTop + stepHeight * 0.44, width: stepWidth - 0.05, height: stepHeight * 0.46 }, textSize), textSize, bodyInk, false, "center", undefined, cardLuminance));
@@ -391,11 +396,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const rowWidth = rowItemCount * cardWidth + (rowItemCount - 1) * columnGap;
           const rowStart = contentBox.x + (contentWidth - rowWidth) / 2;
           const x = rowStart + column * (cardWidth + columnGap); const y = gridTop + row * (cardHeight + rowGap);
-          const cleanItem = item.replace(/^\d+[.、]\s*/, "");
+          const cleanItem = cleanPoint(item);
           const badgeDiameter = 0.42;
           const badgeHeight = badgeDiameter / pageHeightIn;
           const badgeY = y + cardHeight / 2 - badgeHeight / 2;
-          slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), "#FFFFFF"), shape(frame(x, y, cardWidth, 0.008), design.accent));
+          slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, y, cardWidth, 0.008), design.accent));
           slide.elements.push(shape(circleFrame(x + 0.025, badgeY, badgeDiameter), accentFill, "ellipse"));
           slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.025, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
           slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: x + 0.075, y: y + cardHeight * 0.16, width: cardWidth - 0.105, height: cardHeight * 0.68 }, 16), 16, "#293241", true, "left", undefined, cardLuminance));
@@ -404,7 +409,30 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
         const middle = Math.ceil(items.length / 2);
-        slide.elements.push(text(items.slice(0, middle).join("\n\n"), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance), text(items.slice(middle).join("\n\n"), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
+        const columnCopy = (columnItems: string[]) => columnItems
+          .map((item) => `• ${cleanPoint(item)}`)
+          .join("\n\n");
+        slide.elements.push(text(columnCopy(items.slice(0, middle)), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance), text(columnCopy(items.slice(middle)), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
+      } else if ((design.layout === "title-body" || design.layout === "summary") && items.length >= 3 && items.length <= 6) {
+        // A short list is a sequence of visual units, not one paragraph. Keeping
+        // it as a single text box was the reason a five-point page looked like a
+        // small block stranded in a large empty canvas.
+        const listItems = items.slice(0, 6);
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
+        const rowGap = Math.min(0.012, contentBox.height * 0.02);
+        const rowHeight = (contentBox.height - rowGap * (listItems.length - 1)) / listItems.length;
+        const numberWidth = Math.min(0.085, contentBox.width * 0.12);
+        const itemWidth = contentBox.width - numberWidth - 0.02;
+        const numberSize = Math.max(12, Math.min(22, (rowHeight * pageHeightIn * 72) * 0.52));
+        listItems.forEach((item, itemIndex) => {
+          const rowY = contentBox.y + itemIndex * (rowHeight + rowGap);
+          const cleanItem = cleanPoint(item);
+          slide.elements.push(shape(frame(contentBox.x, rowY, 0.008, rowHeight), design.accent));
+          slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), centeredBlock(String(itemIndex + 1).padStart(2, "0"), { x: contentBox.x + 0.022, y: rowY, width: numberWidth, height: rowHeight }, numberSize), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
+          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: contentBox.x + numberWidth + 0.025, y: rowY, width: itemWidth, height: rowHeight }, templateBodySize ?? 18), templateBodySize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
+          if (itemIndex < listItems.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + rowGap / 2 - 0.003, contentBox.width, 0.006), cardStroke));
+        });
       } else {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));

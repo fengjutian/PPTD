@@ -109,6 +109,7 @@ pub async fn review_presentation_visuals(
 - consistencyScore：模板语言、颜色、字体、圆角、线条、背景节奏和页面角色是否跨页一致，同时避免所有页面完全同构。
 - overallScore：综合视觉完成度，不是五项简单平均；严重遮挡、正文越界或无法阅读时不得高于 59。
 评分锚点：90–100 可直接交付；80–89 基本专业但有少量明显问题；70–79 可读但设计感不足；60–69 存在多项结构问题；0–59 有严重可读性或布局错误。
+单页只有一个文本块、且内容区保留超过 40% 连续空白时，overallScore 不得高于 69，并必须报告 excessive-empty-space。
 
 【问题分类和严重程度】
 - error：文字被遮挡或越界、对比度导致难以阅读、标题正文层级失效、内容覆盖 Logo/页脚、严重失衡或明显错误版式。
@@ -185,12 +186,14 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
 
 规则：
 1. slides 必须恰好 {count} 项。
-2. 每页只承担一个主要沟通任务，title 尽量表达结论，不使用空泛主题词。
-3. body 必须与 blocks 表达相同事实，方便用户直接编辑；不得虚构数字、来源、引语或案例。
-4. narrativeStrategy 只能为 management-report、proposal、retrospective、training、product-launch、fundraising、general。
-5. visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text。
-6. density 只能为 low、medium、high。
-7. blocks 支持：
+2. 每页只承担一个主要沟通任务，title 必须是可验证的结论或判断，不能使用“背景”“概述”“介绍”“总结”等栏目名。
+3. body 必须回答标题，使用陈述句和事实，禁止用疑问句充当正文；不得虚构数字、来源、引语或案例。
+4. 每页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须拆页或改为结构化内容块。
+5. body 必须与 blocks 表达相同事实，方便用户直接编辑；不得虚构数字、来源、引语或案例。
+6. narrativeStrategy 只能为 management-report、proposal、retrospective、training、product-launch、fundraising、general。
+7. visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text。
+8. density 只能为 low、medium、high。
+9. blocks 支持：
    - {{"type":"paragraph","text":"..."}}
    - {{"type":"bullet-list","items":["..."]}}
    - {{"type":"quote","text":"...","attribution":"可选"}}
@@ -198,7 +201,7 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
    - {{"type":"timeline","items":[{{"label":"...","text":"..."}}]}}
    - {{"type":"comparison","leftLabel":"...","rightLabel":"...","leftItems":["..."],"rightItems":["..."]}}
    - {{"type":"process","items":[{{"label":"步骤名称","text":"步骤说明"}}]}}
-8. 第一页通常是 hero；最后一页只有在确有总结语义时才使用 summary。
+10. 第一页通常是 hero；最后一页只有在确有总结语义时才使用 summary。
 
 仅返回严格 JSON，不要 Markdown或额外说明：
 {{"title":"文稿标题","presentationBrief":{{"objective":"演示目标","audience":"目标受众","scenario":"使用场景","expectedAction":"期望行动","coreConclusion":"一句话核心结论","narrativeStrategy":"general","assumptions":["保守假设"]}},"slides":[{{"title":"结论式页面标题","body":"可编辑正文","speakerNotes":"演讲备注","plan":{{"purpose":"页面目的","conclusion":"单一结论","visualIntent":"structured-text","density":"medium"}},"blocks":[{{"type":"bullet-list","items":["要点一","要点二"]}}]}}]}}
@@ -335,9 +338,11 @@ pub async fn generate_presentation_design(
 选择规则：
 1. 第一页优先 cover，最后一页具有总结语义时优先 summary。
 2. 原文、引语、名句赏析优先 quote；章节标题优先 section。
-3. 编号要点较多且文字较短时选择 cards；内容较长时选择 split 或 title-body。
-4. 相邻两页尽量不要使用相同版式；全篇应使用 3–5 种版式形成节奏，但不能为了变化牺牲可读性。
-5. 页面背景、强调色和文字颜色必须形成一套稳定配色。优先从模板主题色取值，并确保明显对比。
+3. 有 3–6 个短要点时优先 cards；有 2–4 个较长要点时优先 split。
+4. title-body 只用于无法可靠拆分的连续段落。禁止把编号列表、多个短句或问答条目放进 title-body，否则页面会只剩一个文本框和大片空白。
+5. 每个内容页都必须使用内容区的主要面积，不得留下超过页面三分之一的连续空白；空间不足时改用双栏或卡片，而不是缩小字号。
+6. 相邻两页尽量不要使用相同版式；全篇应使用 3–5 种版式形成节奏，但不能为了变化牺牲可读性。
+7. 页面背景、强调色和文字颜色必须形成一套稳定配色。优先从模板主题色取值，并确保明显对比。
 
 四、输出合同
 1. 仅输出一个合法 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。

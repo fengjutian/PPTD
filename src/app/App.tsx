@@ -414,7 +414,7 @@ export function App() {
     setAiDraft((draft) => draft ? { ...draft, slides: draft.slides.map((slide, slideIndex) => {
       if (slideIndex !== index) return slide;
       if (field !== "body") return { ...slide, [field]: value };
-      const items = value.split(/\n+|(?=\d+[.、]\s*)/).map((item) => item.trim()).filter(Boolean);
+      const items = value.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((item) => item.trim()).filter(Boolean);
       return { ...slide, body: value, blocks: items.length > 1 ? [{ type: "bullet-list" as const, items }] : value.trim() ? [{ type: "paragraph" as const, text: value.trim() }] : [] };
     }) } : draft);
   };

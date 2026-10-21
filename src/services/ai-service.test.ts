@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
-import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, constrainDesignToTemplate, describeAiError, slideBriefsSchema } from "./ai-service";
+import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, chooseSlideLayout, constrainDesignToTemplate, describeAiError, slideBriefsSchema, splitBodyItems } from "./ai-service";
 import { contrastRatio } from "../core/rendering/contrast";
 
 describe("AI structured outputs", () => {
@@ -53,6 +53,40 @@ describe("AI structured outputs", () => {
     expect(constrained.slides[0]!.bodyColor).not.toBe("#654321");
     expect(constrained.slides[0]!.bodyColor).not.toBe(constrained.slides[0]!.titleColor);
     expect(contrastRatio(constrained.slides[0]!.bodyColor, "#F5F1E8")).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("content-aware layout selection", () => {
+  const shortList = "1. 作品在什么背景下创作？\n2. 作者想回应什么？\n3. 当时的社会环境如何？\n4. 作品为何采用这种形式？\n5. 它后来产生了什么影响？";
+
+  it("splits numbered copy into the units the page carries", () => {
+    expect(splitBodyItems(shortList)).toHaveLength(5);
+    expect(splitBodyItems("一个段落")).toEqual(["一个段落"]);
+  });
+
+  it("turns a short numbered list into cards instead of a plain text page", () => {
+    expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "structured-text", density: "medium", body: shortList })).toBe("cards");
+  });
+
+  it("keeps a continuous paragraph on a title-body page", () => {
+    expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "structured-text", density: "medium", body: "这是一段需要连续阅读的论述，不能安全拆成多个独立要点，因此保留单栏正文。" })).toBe("title-body");
+  });
+
+  it("uses two columns for long points and for lists that would overflow the card grid", () => {
+    const longPoints = Array.from({ length: 3 }, (_, index) => `${index + 1}. ${"这是一个较长的要点，需要保持完整语义并占据两栏中的一栏。".repeat(2)}`).join("\n");
+    expect(chooseSlideLayout({ index: 2, requested: "title-body", visualIntent: "structured-text", density: "high", body: longPoints })).toBe("split");
+    const sevenPoints = Array.from({ length: 7 }, (_, index) => `${index + 1}. 第${index + 1}个短要点`).join("\n");
+    expect(chooseSlideLayout({ index: 2, requested: "cards", visualIntent: "structured-text", density: "medium", body: sevenPoints })).toBe("split");
+  });
+
+  it("honors a specific intent when the model falls back to title-body", () => {
+    expect(chooseSlideLayout({ index: 2, requested: "title-body", visualIntent: "comparison", density: "medium", body: "方案甲\n方案乙" })).toBe("split");
+    expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "quote", density: "low", body: "原文摘录" })).toBe("quote");
+  });
+
+  it("never puts a cover after the first page", () => {
+    expect(chooseSlideLayout({ index: 3, requested: "cover", visualIntent: "hero", density: "low", body: "章节标题" })).toBe("section");
+    expect(chooseSlideLayout({ index: 3, requested: "title-body", visualIntent: "hero", density: "low", body: "章节标题" })).toBe("section");
   });
 });
 
