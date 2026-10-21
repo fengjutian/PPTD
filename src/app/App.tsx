@@ -61,7 +61,7 @@ export function App() {
       <header className="topbar">
         <div className="brand"><span className="brand-mark">P</span><div><strong>PPTD</strong><small>{document.title}</small></div></div>
         <div className="toolbar-group">
-          <ToolButton label="新建"><FilePlus2 /></ToolButton><ToolButton label="保存"><Save /></ToolButton>
+          <ToolButton label="新建项目（后续切片）" disabled><FilePlus2 /></ToolButton><ToolButton label="保存（后续切片）" disabled><Save /></ToolButton>
           <span className="separator" />
           <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
         </div>
@@ -70,7 +70,7 @@ export function App() {
           <ToolButton label="矩形" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}><Square /></ToolButton>
           <ToolButton label="椭圆" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}><Circle /></ToolButton>
         </div>
-        <button className="export-button"><Download size={17} /> 导出 PPTX</button>
+        <button className="export-button" disabled title="将在 V0.1 导出切片中实现"><Download size={17} /> 导出 PPTX</button>
       </header>
 
       <aside className="left-panel">
@@ -97,7 +97,7 @@ export function App() {
         </div> : <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>}
       </aside>
 
-      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className="saved-dot">● 已保存</span><span className="zoom">75%</span></footer>
+      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className="saved-dot">● 内存草稿</span><span className="zoom">75%</span></footer>
     </div>
   );
 }

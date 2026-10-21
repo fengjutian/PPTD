@@ -1,6 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap");
-
-:root { font-family: "DM Sans", "Noto Sans SC", sans-serif; color: #e9ebee; background: #17181b; font-synthesis: none; }
+:root { font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; color: #e9ebee; background: #17181b; font-synthesis: none; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 1080px; min-height: 720px; overflow: hidden; }
 button, input, textarea { font: inherit; }
@@ -21,6 +19,7 @@ button { color: inherit; }
 .tool-button:hover:not(:disabled) { background: #292b30; }
 .tool-button:disabled { color: #55585f; cursor: default; }
 .export-button { display: flex; align-items: center; gap: 8px; background: #d8ff52; color: #111; border: 0; border-radius: 8px; padding: 9px 14px; font-weight: 700; cursor: pointer; }
+.export-button:disabled { opacity: .42; cursor: default; }
 
 .left-panel, .right-panel { background: #17181b; min-height: 0; }
 .left-panel { border-right: 1px solid #303136; }
