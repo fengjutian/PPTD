@@ -26,6 +26,14 @@ pub struct ChatMessage {
     pub content: String,
 }
 
+#[derive(Clone)]
+pub struct VisionRequest {
+    pub model: String,
+    pub prompt: String,
+    pub image_data_urls: Vec<String>,
+    pub temperature: f32,
+}
+
 /// 厂商响应体不符合预期时的分类。
 #[derive(Debug)]
 pub enum PayloadError {
@@ -63,6 +71,12 @@ pub trait ChatProvider: Send + Sync {
     ) -> reqwest::RequestBuilder;
     /// 构造厂商请求体。
     fn build_request(&self, request: &ChatRequest) -> serde_json::Value;
+    fn supports_vision(&self) -> bool {
+        false
+    }
+    fn build_vision_request(&self, _request: &VisionRequest) -> Result<serde_json::Value, String> {
+        Err(format!("AI_VISION_UNSUPPORTED:{}", self.id()))
+    }
     /// 从厂商响应中取出助手正文。
     fn parse_response(&self, payload: serde_json::Value) -> Result<String, PayloadError>;
 }
@@ -119,11 +133,11 @@ async fn post_chat(
     provider: &dyn ChatProvider,
     client: &reqwest::Client,
     api_key: &str,
-    body: &ChatRequest,
+    payload: &serde_json::Value,
 ) -> Result<serde_json::Value, ProviderFailure> {
     let response = provider
         .apply_auth(client.post(provider.api_base_url()), api_key)
-        .json(&provider.build_request(body))
+        .json(payload)
         .send()
         .await
         .map_err(|error| ProviderFailure::Transport(error.to_string()))?;
@@ -153,7 +167,8 @@ pub async fn chat(
         .build()
         .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
     for attempt in 0..3_u32 {
-        match post_chat(provider, &client, api_key, body).await {
+        let payload = provider.build_request(body);
+        match post_chat(provider, &client, api_key, &payload).await {
             Ok(payload) => {
                 return provider
                     .parse_response(payload)
@@ -181,6 +196,57 @@ pub async fn chat(
                     PayloadError::Empty => "AI_EMPTY_RESPONSE".to_string(),
                     PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
                 });
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
+    }
+    Err("AI_PROVIDER_BUSY".into())
+}
+
+pub async fn vision_chat(
+    provider: &dyn ChatProvider,
+    api_key: &str,
+    body: &VisionRequest,
+    timeout: Duration,
+) -> Result<String, String> {
+    if !provider.supports_vision() {
+        return Err(format!("AI_VISION_UNSUPPORTED:{}", provider.id()));
+    }
+    let payload = provider.build_vision_request(body)?;
+    let client = reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
+    for attempt in 0..3_u32 {
+        match post_chat(provider, &client, api_key, &payload).await {
+            Ok(response) => {
+                return provider
+                    .parse_response(response)
+                    .map_err(|error| match error {
+                        PayloadError::Empty => "AI_EMPTY_RESPONSE".to_string(),
+                        PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
+                    })
+            }
+            Err(ProviderFailure::Status(status))
+                if status == 429 || status == 529 || (500..=599).contains(&status) =>
+            {
+                if attempt == 2 {
+                    return Err("AI_PROVIDER_BUSY".into());
+                }
+            }
+            Err(ProviderFailure::Status(status)) => {
+                return Err(format!("AI_PROVIDER_HTTP_ERROR:{status}"))
+            }
+            Err(ProviderFailure::Transport(error)) => {
+                if attempt == 2 {
+                    return Err(format!("AI_VISION_REQUEST_FAILED: {error}"));
+                }
+            }
+            Err(ProviderFailure::Payload(error)) => {
+                return Err(match error {
+                    PayloadError::Empty => "AI_EMPTY_RESPONSE".into(),
+                    PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
+                })
             }
         }
         tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;

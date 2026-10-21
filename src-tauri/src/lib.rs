@@ -15,6 +15,7 @@ pub fn run() {
             commands::ai::generate_presentation,
             commands::ai::generate_slide_briefs,
             commands::ai::generate_presentation_design,
+            commands::ai::review_presentation_visuals,
             commands::ai::save_ai_api_key,
             commands::ai::delete_ai_api_key,
             commands::ai::ai_api_key_configured,

@@ -2,7 +2,7 @@
 //!
 //! 厂商专属信息（地址、鉴权、响应结构）只出现在本文件。
 
-use super::{ChatProvider, ChatRequest, PayloadError};
+use super::{ChatProvider, ChatRequest, PayloadError, VisionRequest};
 use serde::Deserialize;
 
 pub const PROVIDER_ID: &str = "minimax";
@@ -73,6 +73,25 @@ impl ChatProvider for MiniMaxProvider {
         serde_json::to_value(request).unwrap_or(serde_json::Value::Null)
     }
 
+    fn supports_vision(&self) -> bool {
+        true
+    }
+
+    fn build_vision_request(&self, request: &VisionRequest) -> Result<serde_json::Value, String> {
+        let mut content = vec![serde_json::json!({ "type": "text", "text": request.prompt })];
+        content.extend(
+            request
+                .image_data_urls
+                .iter()
+                .map(|url| serde_json::json!({ "type": "image_url", "image_url": { "url": url } })),
+        );
+        Ok(serde_json::json!({
+            "model": request.model,
+            "messages": [{ "role": "user", "content": content }],
+            "temperature": request.temperature
+        }))
+    }
+
     fn parse_response(&self, payload: serde_json::Value) -> Result<String, PayloadError> {
         let response: ChatResponse = serde_json::from_value(payload)
             .map_err(|error| PayloadError::Invalid(error.to_string()))?;
@@ -125,5 +144,19 @@ mod tests {
             .as_f64()
             .expect("temperature must be numeric");
         assert!((temperature - 0.4).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn builds_an_openai_compatible_multimodal_request() {
+        let body = MINIMAX
+            .build_vision_request(&VisionRequest {
+                model: "MiniMax-M3".into(),
+                prompt: "review".into(),
+                image_data_urls: vec!["data:image/jpeg;base64,AA==".into()],
+                temperature: 0.1,
+            })
+            .unwrap();
+        assert_eq!(body["messages"][0]["content"][0]["type"], "text");
+        assert_eq!(body["messages"][0]["content"][1]["type"], "image_url");
     }
 }

@@ -1,5 +1,8 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { PresentationVisualGoal, VisualRepairPlan, VisualReview } from "./visual-alignment";
+import { visualRepairPlanSchema, visualReviewSchema } from "./visual-alignment";
 import type { PresentationRender } from "./presentation-renderer";
+import { loadSettings } from "./settings";
 
 const MAX_VISUAL_IMAGE_BYTES = 6 * 1024 * 1024;
 const MAX_VISUAL_SLIDES = 20;
@@ -25,5 +28,30 @@ export class UnavailableVisionReviewPort implements VisionReviewPort {
   }
   async planRepairs(): Promise<VisualRepairPlan> {
     throw new Error("AI_VISION_UNSUPPORTED");
+  }
+}
+
+export class TauriVisionReviewPort implements VisionReviewPort {
+  readonly available = true;
+
+  async review(render: PresentationRender, goal: PresentationVisualGoal, slideIndexes?: number[]): Promise<VisualReview> {
+    validateVisualRenderPayload(render);
+    const indexes = (slideIndexes ?? render.slides.map((_, index) => index)).slice(0, 6);
+    if (indexes.length === 0 || indexes.some((index) => !render.slides[index])) throw new Error("AI_VISION_SLIDE_INDEX_INVALID");
+    const settings = loadSettings();
+    const result = await invoke<unknown>("review_presentation_visuals", { request: { goal, slideImages: indexes.map((index) => render.slides[index]!), contactSheet: render.contactSheet, slideIndexes: indexes, model: settings.aiModel, provider: settings.aiProviderId } });
+    return visualReviewSchema.parse(result);
+  }
+
+  async planRepairs(review: VisualReview, _goal: PresentationVisualGoal): Promise<VisualRepairPlan> {
+    const bySlide = new Map<number, VisualReview["issues"]>();
+    review.issues.forEach((issue) => bySlide.set(issue.slideIndex, [...(bySlide.get(issue.slideIndex) ?? []), issue]));
+    return visualRepairPlanSchema.parse({ repairs: [...bySlide].map(([slideIndex, issues]) => ({
+      slideIndex,
+      layout: issues.some((issue) => issue.issue === "repetitive-layout") ? "title-body" : undefined,
+      backgroundAction: issues.some((issue) => issue.issue === "background-conflict" || issue.issue === "poor-contrast") ? "replace-compatible" : "keep",
+      hierarchyAction: issues.some((issue) => issue.issue === "weak-hierarchy") ? "strengthen-title" : issues.some((issue) => issue.issue === "excessive-empty-space") ? "reduce-density" : "keep",
+      reason: issues.map((issue) => issue.suggestion).join("；"),
+    })) });
   }
 }

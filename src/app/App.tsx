@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
+import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
@@ -8,6 +9,9 @@ import { briefsFromDraft, describeAiError, generatePresentationDesign, generateP
 import { applyTheme, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
+import { renderPresentationForVisualReview } from "../services/presentation-renderer";
+import { defaultPresentationVisualGoal, runVisualAlignmentLoop } from "../services/visual-alignment";
+import { TauriVisionReviewPort } from "../services/vision-review-port";
 
 const CANVAS_WIDTH = 960;
 type AppView = "editor" | "ai" | "theme" | "settings";
@@ -288,7 +292,7 @@ export function App() {
       const templateColors = new Map(templateAnalysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]));
       const resolveTemplateColor = (value: string | null) => value?.startsWith("#") ? value : value ? templateColors.get(value.toLowerCase()) : undefined;
       setDesignProgress({ percent: 94, label: "正在渲染可编辑页面" });
-      execute({
+      const generationCommand: DocumentCommand = {
         type: "apply-ai-designed-draft",
         title: aiDraft.title,
         slides: aiDraft.slides,
@@ -297,10 +301,55 @@ export function App() {
         fontFamily: templateAnalysis.majorFont || templateAnalysis.minorFont || undefined,
         templateDecorations: hasTemplateSize ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })) : undefined,
         templateLayouts: hasTemplateSize ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts.map((layout) => ({ ...layout, name: layout.name })) : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))).map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)?.dataUrl, decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
-      });
+      };
+      execute(generationCommand);
+      let finalDesigns: AiSlideDesign[] = design.slides;
+      let visualNote = "";
+      try {
+        const goal = defaultPresentationVisualGoal();
+        const vision = new TauriVisionReviewPort();
+        const makeCandidate = (designs: AiSlideDesign[]) => {
+          const candidate = structuredClone(document);
+          applyCommand(candidate, { ...generationCommand, designs });
+          return candidate;
+        };
+        const aligned = await runVisualAlignmentLoop({
+          initial: finalDesigns,
+          goal,
+          contentFingerprint: () => JSON.stringify(aiDraft.slides.map((slide) => ({ title: slide.title, body: slide.body, speakerNotes: slide.speakerNotes, blocks: slide.blocks }))),
+          review: async (designs, visualGoal, iteration) => {
+            setDesignProgress({ percent: 95 + iteration, label: `视觉模型正在检查第 ${iteration} 轮` });
+            const render = await renderPresentationForVisualReview(makeCandidate(designs));
+            const reviews = [];
+            for (let start = 0; start < render.slides.length; start += 6) {
+              const indexes = render.slides.slice(start, start + 6).map((_, offset) => start + offset);
+              reviews.push(await vision.review(render, visualGoal, indexes));
+            }
+            return { overallScore: Math.min(...reviews.map((item) => item.overallScore)), hierarchyScore: Math.min(...reviews.map((item) => item.hierarchyScore)), alignmentScore: Math.min(...reviews.map((item) => item.alignmentScore)), readabilityScore: Math.min(...reviews.map((item) => item.readabilityScore)), consistencyScore: Math.min(...reviews.map((item) => item.consistencyScore)), issues: reviews.flatMap((item) => item.issues) };
+          },
+          repair: async (designs, review, visualGoal) => {
+            const plan = await vision.planRepairs(review, visualGoal);
+            const repairs = new Map(plan.repairs.map((repair) => [repair.slideIndex, repair]));
+            return designs.map((slide, slideIndex) => {
+              const repair = repairs.get(slideIndex);
+              if (!repair) return slide;
+              return { ...slide, layout: repair.layout ?? slide.layout, titleColor: repair.backgroundAction === "replace-compatible" ? "#FFFFFF" : slide.titleColor, bodyColor: repair.backgroundAction === "replace-compatible" ? "#293241" : slide.bodyColor };
+            });
+          },
+        });
+        finalDesigns = aligned.value;
+        visualNote = `视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`;
+      } catch (visionError) {
+        visualNote = `视觉评审降级：${visionError instanceof Error ? visionError.message : String(visionError)}`;
+      }
+      const finalDocument = structuredClone(document);
+      applyCommand(finalDocument, { ...generationCommand, designs: finalDesigns });
+      finalDocument.revisions = { document: document.revisions.document + 1, content: document.revisions.content + 1, design: document.revisions.design + 1 };
+      loadDocument(finalDocument);
       setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
       setTemplatePickerOpen(false);
       setActiveView("editor");
+      if (visualNote) window.setTimeout(() => setTaskStatus(visualNote), 50);
       setTaskStatus(`PPT 已按模板完成 AI 设计：${selectedTemplate.name}`);
     } catch (error) {
       window.clearInterval(progressTimer);

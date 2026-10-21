@@ -2,7 +2,7 @@
 //!
 //! 命令只描述"要做什么"，不关心由哪家厂商执行；厂商选择通过 `provider` 参数传入。
 
-use crate::ai::{self, ChatMessage, ChatRequest};
+use crate::ai::{self, ChatMessage, ChatRequest, VisionRequest};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::time::Duration;
@@ -33,6 +33,69 @@ pub struct GenerateBriefsRequest {
     draft: serde_json::Value,
     model: Option<String>,
     provider: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewVisualsRequest {
+    goal: serde_json::Value,
+    slide_images: Vec<String>,
+    contact_sheet: String,
+    slide_indexes: Vec<usize>,
+    model: Option<String>,
+    provider: Option<String>,
+}
+
+fn validate_review_image(value: &str) -> Result<(), String> {
+    if !value.starts_with("data:image/jpeg;base64,") || value.len() > 8_400_000 {
+        return Err("AI_VISION_IMAGE_INVALID".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn review_presentation_visuals(
+    request: ReviewVisualsRequest,
+) -> Result<serde_json::Value, String> {
+    if request.slide_images.is_empty()
+        || request.slide_images.len() > 6
+        || request.slide_images.len() != request.slide_indexes.len()
+        || request.slide_indexes.iter().any(|index| *index >= 20)
+    {
+        return Err("AI_VISION_REQUEST_INVALID".into());
+    }
+    validate_review_image(&request.contact_sheet)?;
+    for image in &request.slide_images {
+        validate_review_image(image)?;
+    }
+    let goal = serde_json::to_string(&request.goal).map_err(|_| "AI_VISION_REQUEST_INVALID")?;
+    if goal.len() > 20_000 {
+        return Err("AI_VISION_REQUEST_INVALID".into());
+    }
+    let provider = ai::resolve(request.provider.as_deref())?;
+    let api_key = ai::read_api_key(provider)?;
+    let model = ai::resolve_model(provider, request.model)?;
+    let indexes =
+        serde_json::to_string(&request.slide_indexes).map_err(|_| "AI_VISION_REQUEST_INVALID")?;
+    let prompt = format!(
+        r#"你是 PPTD 的视觉质量评审器。第一张图片是整套演示缩略图，后续图片对应页面索引 {indexes}。根据视觉目标检查层级、对齐、可读性、跨页一致性、背景冲突、空白和版式重复。不得修改或复述正文，只返回严格 JSON。分数为 0–100；只报告确实可从图片观察到的问题。输出结构：{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题与内容对齐到共同左轴"}}]}}。issue 只能是 weak-hierarchy、poor-contrast、visual-imbalance、background-conflict、misalignment、excessive-empty-space、repetitive-layout。视觉目标：{goal}"#
+    );
+    let mut images = Vec::with_capacity(request.slide_images.len() + 1);
+    images.push(request.contact_sheet);
+    images.extend(request.slide_images);
+    let content = ai::vision_chat(
+        provider,
+        &api_key,
+        &VisionRequest {
+            model,
+            prompt,
+            image_data_urls: images,
+            temperature: 0.1,
+        },
+        Duration::from_secs(120),
+    )
+    .await?;
+    parse_json(strip_code_fence(&content), "AI_VISION_JSON_INVALID")
 }
 
 /// 去掉模型可能附加的 Markdown 代码围栏。
