@@ -3,10 +3,12 @@ import { createSlide, inches } from "../document-model";
 
 export type ChangeDomain = "content" | "design" | "both";
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string }
+export type PresentationThemePreset = "business" | "warm" | "minimal";
 
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
+  | { type: "apply-theme-preset"; preset: PresentationThemePreset }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -29,6 +31,7 @@ export function commandDomain(command: DocumentCommand): ChangeDomain | null {
     case "add-image": return "both";
     case "add-slide": return "both";
     case "apply-ai-draft": return "both";
+    case "apply-theme-preset": return "design";
     case "duplicate-slide": return "both";
     case "delete-slide": return "both";
     case "move-slide": return "both";
@@ -47,12 +50,28 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     document.title = command.title.trim();
     document.slides = command.slides.map((draft, index) => {
       const slide = createSlide(index + 1);
-      slide.content = { title: draft.title, body: draft.body, speakerNotes: draft.speakerNotes, status: "draft" };
+      slide.content = { title: draft.title, body: draft.body, speakerNotes: draft.speakerNotes, status: "approved" };
       const title = slide.elements[0];
       if (title?.type === "text") title.text = draft.title;
       if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
       return slide;
     });
+    return;
+  }
+  if (command.type === "apply-theme-preset") {
+    const themes = {
+      business: { background: "#F5F7FA", text: "#172033", accent: "#315EFB", font: "Microsoft YaHei" },
+      warm: { background: "#FFF9F3", text: "#2A1D18", accent: "#D35230", font: "Microsoft YaHei" },
+      minimal: { background: "#FFFFFF", text: "#111318", accent: "#111318", font: "Arial" },
+    } as const;
+    const theme = themes[command.preset];
+    for (const slide of document.slides) {
+      slide.background = theme.background;
+      for (const element of slide.elements) {
+        if (element.type === "text") element.style = { ...element.style, color: theme.text, fontFamily: theme.font };
+        if (element.type === "shape") element.style = { ...element.style, fill: theme.accent };
+      }
+    }
     return;
   }
   if (command.type === "duplicate-slide") {

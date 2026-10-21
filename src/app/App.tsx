@@ -1,12 +1,15 @@
-import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, Lock, LockOpen, MousePointer2, Plus, Redo2, Save, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
+import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { generateWithMiniMax, type AiDraft } from "../services/minimax";
+import { applyTheme, loadSettings } from "../services/settings";
 import { choosePptxPath, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
+type AppView = "editor" | "ai" | "theme";
 
 function ToolButton({ label, onClick, disabled, children }: { label: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode }) {
   return <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
@@ -56,11 +59,12 @@ export function App() {
   const [projectPath, setProjectPath] = useState<string>();
   const [savedRevision, setSavedRevision] = useState(0);
   const [taskStatus, setTaskStatus] = useState<string>();
-  const [aiOpen, setAiOpen] = useState(false);
+  const [activeView, setActiveView] = useState<AppView>("editor");
   const [aiTopic, setAiTopic] = useState("");
   const [aiSlideCount, setAiSlideCount] = useState(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
   const [aiBusy, setAiBusy] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
@@ -69,6 +73,7 @@ export function App() {
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
+  useEffect(() => { applyTheme(loadSettings().theme); }, []);
 
   useEffect(() => {
     let active = true;
@@ -184,6 +189,17 @@ export function App() {
     finally { setAiBusy(false); }
   };
 
+  const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
+    setAiDraft((draft) => draft ? { ...draft, slides: draft.slides.map((slide, slideIndex) => slideIndex === index ? { ...slide, [field]: value } : slide) } : draft);
+  };
+
+  const continueToTheme = () => {
+    if (!aiDraft) return;
+    execute({ type: "apply-ai-draft", title: aiDraft.title, slides: aiDraft.slides });
+    setActiveView("theme");
+    setTaskStatus("内容草稿已确认，可以开始主题优化");
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : undefined;
@@ -226,7 +242,6 @@ export function App() {
           <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
         </div>
         <div className="toolbar-group insert-tools">
-          <ToolButton label="MiniMax AI 生成" onClick={() => setAiOpen(true)} disabled={!isDesktopRuntime()}><Sparkles /></ToolButton>
           <ToolButton label="选择"><MousePointer2 /></ToolButton><ToolButton label="文本" onClick={() => execute({ type: "add-text", slideId: activeSlide.id })}><Type /></ToolButton>
           <ToolButton label="矩形" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}><Square /></ToolButton>
           <ToolButton label="椭圆" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}><Circle /></ToolButton>
@@ -236,7 +251,15 @@ export function App() {
         <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button>
       </header>
 
-      <aside className="left-panel">
+      <nav className="nav-rail" aria-label="主功能">
+        <button className={activeView === "editor" ? "active" : ""} aria-current={activeView === "editor" ? "page" : undefined} title="编辑器" onClick={() => setActiveView("editor")}><LayoutDashboard /><span>编辑</span></button>
+        <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="MiniMax AI" onClick={() => setActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
+        <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="主题优化" onClick={() => setActiveView("theme")}><Palette /><span>主题</span></button>
+        <div className="nav-spacer" />
+        <button title="设置" onClick={() => setSettingsOpen(true)}><Settings /><span>设置</span></button>
+      </nav>
+
+      {activeView === "editor" && <><aside className="left-panel">
         <div className="panel-heading"><span>页面</span><button onClick={() => execute({ type: "add-slide" })}><Plus size={16} /></button></div>
         <div className="slide-list">
           {document.slides.map((slide, index) => <div key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`}>
@@ -272,17 +295,34 @@ export function App() {
             <button className="danger" disabled={selected.locked} onClick={() => execute({ type: "delete-element", slideId: activeSlide.id, elementId: selected.id })}><Trash2 />删除</button>
           </div>
         </div> : <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>}
-      </aside>
+      </aside></>}
+
+      {activeView === "ai" && <main className="feature-workspace ai-workspace">
+        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再进入视觉主题优化</p></div></div><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 主题优化</span></div></header>
+        {!aiDraft ? <section className="ai-compose-card">
+          <div className="section-kicker">MiniMax AI</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成可编辑的结构化内容。</p>
+          <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
+          <label className="slide-count-field">页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
+          <button className="primary-action" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "MiniMax 正在生成…" : "生成 PPT 草稿"}<ArrowRight /></button>
+          <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
+        </section> : <section className="draft-review">
+          <div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>主题优化不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
+          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => <article className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
+          <div className="sticky-actions"><button className="secondary-action" onClick={() => setAiDraft(undefined)}>重新生成</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，进入主题优化<ArrowRight /></button></div>
+        </section>}
+      </main>}
+
+      {activeView === "theme" && <main className="feature-workspace theme-workspace">
+        <header className="feature-header"><div><Palette /><div><h1>主题优化</h1><p>仅调整视觉设计，不修改已确认的标题、正文和页面顺序</p></div></div><div className="workflow-steps"><span className="done"><Check /> 生成草稿</span><i /><span className="done"><Check /> 编辑文字</span><i /><span className="active">3 主题优化</span></div></header>
+        <section className="theme-content"><div><div className="section-kicker">视觉风格</div><h2>选择演示文稿主题</h2><p>主题以一个设计事务应用，可随时撤销。</p></div><div className="presentation-themes">
+          <button onClick={() => execute({ type: "apply-theme-preset", preset: "business" })}><span className="theme-preview business"><b /><i /><i /></span><strong>现代商务</strong><small>蓝灰配色，适合汇报与方案</small></button>
+          <button onClick={() => execute({ type: "apply-theme-preset", preset: "warm" })}><span className="theme-preview warm"><b /><i /><i /></span><strong>活力暖橙</strong><small>PPTD 品牌色，适合产品展示</small></button>
+          <button onClick={() => execute({ type: "apply-theme-preset", preset: "minimal" })}><span className="theme-preview minimal"><b /><i /><i /></span><strong>极简黑白</strong><small>高对比留白，适合观点表达</small></button>
+        </div><button className="primary-action finish-theme" onClick={() => setActiveView("editor")}>返回编辑器继续设计<ArrowRight /></button></section>
+      </main>}
 
       <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{taskStatus && <span className="task-status">{taskStatus}</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>
-      {aiOpen && <div className="ai-overlay" role="dialog" aria-modal="true"><div className="ai-panel">
-        <div className="ai-heading"><div><Sparkles /><strong>MiniMax AI</strong><span>生成结构化演示文稿草稿</span></div><button onClick={() => setAiOpen(false)} aria-label="关闭"><X /></button></div>
-        <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报" /></label>
-        <label>页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
-        <button className="ai-generate" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "MiniMax 正在生成…" : "生成草稿"}</button>
-        {aiDraft && <div className="ai-preview"><h3>{aiDraft.title}</h3>{aiDraft.slides.map((slide, index) => <div key={index}><b>{index + 1}. {slide.title}</b><p>{slide.body}</p></div>)}<button className="ai-apply" onClick={() => { execute({ type: "apply-ai-draft", title: aiDraft.title, slides: aiDraft.slides }); setAiOpen(false); setAiDraft(undefined); }}>确认并替换当前文稿</button></div>}
-        <small>应用前不会修改当前文稿。Key 仅从 MINIMAX_API_KEY 环境变量读取。</small>
-      </div></div>}
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onMessage={setTaskStatus} />}
     </div>
   );
 }

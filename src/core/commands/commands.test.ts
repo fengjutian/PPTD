@@ -112,7 +112,17 @@ describe("document commands", () => {
     ] }));
     expect(result.title).toBe("AI 战略");
     expect(result.slides).toHaveLength(2);
-    expect(result.slides[0]!.content).toMatchObject({ title: "现状", body: "市场增长\n竞争加剧", status: "draft" });
+    expect(result.slides[0]!.content).toMatchObject({ title: "现状", body: "市场增长\n竞争加剧", status: "approved" });
     expect(result.slides[0]!.elements).toHaveLength(2);
+  });
+
+  it("applies a presentation theme without changing reviewed content", () => {
+    const source = createDocument();
+    source.slides[0]!.content.status = "approved";
+    const contentBefore = JSON.stringify(source.slides.map((slide) => slide.content));
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-theme-preset", preset: "business" }));
+    expect(JSON.stringify(result.slides.map((slide) => slide.content))).toBe(contentBefore);
+    expect(result.slides[0]!.background).toBe("#F5F7FA");
+    expect(commandDomain({ type: "apply-theme-preset", preset: "business" })).toBe("design");
   });
 });

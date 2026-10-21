@@ -8,8 +8,13 @@ export const aiDraftSchema = z.object({
 export type AiDraft = z.infer<typeof aiDraftSchema>;
 
 export async function generateWithMiniMax(topic: string, slideCount: number): Promise<AiDraft> {
-  const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount } });
+  const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
+  const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model } });
   const draft = aiDraftSchema.parse(raw);
   if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
   return draft;
 }
+
+export const minimaxKeyConfigured = () => invoke<boolean>("minimax_api_key_configured");
+export const saveMiniMaxKey = (apiKey: string) => invoke<void>("save_minimax_api_key", { apiKey });
+export const deleteMiniMaxKey = () => invoke<void>("delete_minimax_api_key");
