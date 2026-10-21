@@ -12,12 +12,12 @@ export interface TemplateDecoration { shape: "rectangle" | "ellipse"; x: number;
 export interface TemplateLayoutSummary { index: number; name: string; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }
 export interface TemplateAnalysis { slideCount: number; slideWidthEmu: number | null; slideHeightEmu: number | null; masterCount: number; layoutCount: number; themeCount: number; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; defaultDecorations: TemplateDecoration[]; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }>; layouts: TemplateLayoutSummary[]; warnings: string[] }
 
-export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument } | null> {
+export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument; modifiedAt: number } | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const path = await open({ multiple: false, directory: false, filters: projectFilter });
   if (!path) return null;
   const raw = await invoke<unknown>("open_project", { path });
-  return { path, document: parsePresentationDocument(raw) as PresentationDocument };
+  return { path, document: parsePresentationDocument(raw) as PresentationDocument, modifiedAt: await projectModifiedAt(path) };
 }
 
 export async function choosePptxTemplate(): Promise<{ path: string; name: string } | null> {
@@ -33,25 +33,33 @@ export const getPptxTemplatePreview = (templateId: string) => invoke<string | nu
 export const renderPptxTemplateLayouts = (templateId: string) => invoke<Array<{ layoutIndex: number; layoutName: string; dataUrl: string }>>("render_pptx_template_layouts", { templateId });
 export const analyzePptxTemplate = (templateId: string) => invoke<TemplateAnalysis>("analyze_pptx_template", { templateId });
 
-export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<string | null> {
+export const projectModifiedAt = (path: string) => invoke<number>("project_modified_at", { path });
+
+export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<{ path: string; modifiedAt: number | null } | null> {
   if (!isTauri()) {
     localStorage.setItem("pptd:browser-draft", JSON.stringify(document));
-    return "浏览器草稿";
+    return { path: "浏览器草稿", modifiedAt: null };
   }
   const path = currentPath ?? await save({ filters: projectFilter, defaultPath: `${safeFileName(document.title)}.pptd` });
   if (!path) return null;
   await invoke("save_project", { path, document });
-  return path;
+  return { path, modifiedAt: await projectModifiedAt(path) };
 }
 
 const browserRecoveryKey = "pptd:recovery";
+let recoveryQueue: Promise<void> = Promise.resolve();
 
-export async function saveRecovery(document: PresentationDocument): Promise<void> {
+const enqueueRecovery = (task: () => Promise<void>): Promise<void> => {
+  recoveryQueue = recoveryQueue.catch(() => undefined).then(task);
+  return recoveryQueue;
+};
+
+export function saveRecovery(document: PresentationDocument): Promise<void> {
   if (!isTauri()) {
     localStorage.setItem(browserRecoveryKey, JSON.stringify(document));
-    return;
+    return Promise.resolve();
   }
-  await invoke("save_recovery", { document });
+  return enqueueRecovery(() => invoke("save_recovery", { document }));
 }
 
 export async function loadRecovery(): Promise<PresentationDocument | null> {
@@ -68,7 +76,7 @@ export async function clearRecovery(): Promise<void> {
     localStorage.removeItem(browserRecoveryKey);
     return;
   }
-  await invoke("clear_recovery");
+  await enqueueRecovery(() => invoke("clear_recovery"));
 }
 
 function safeFileName(value: string): string {

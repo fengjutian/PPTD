@@ -22,6 +22,7 @@ pub fn run() {
             commands::ai::test_ai_connection,
             commands::project_file::save_project,
             commands::project_file::open_project,
+            commands::project_file::project_modified_at,
             commands::project_file::save_recovery,
             commands::project_file::load_recovery,
             commands::project_file::clear_recovery,

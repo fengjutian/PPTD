@@ -7,7 +7,7 @@ import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
 import { applyTheme, loadSettings } from "../services/settings";
-import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
+import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { inspectRenderedTextContrast, renderPresentationForVisualReview } from "../services/presentation-renderer";
 import { defaultPresentationVisualGoal, runVisualAlignmentLoop } from "../services/visual-alignment";
@@ -89,6 +89,9 @@ function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<ty
 export function App() {
   const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, replaceDocument, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
   const [projectPath, setProjectPath] = useState<string>();
+  const [projectMtime, setProjectMtime] = useState<number>();
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [savedRevision, setSavedRevision] = useState(0);
   const [message, setMessage] = useState<PageMessage>();
   const [textDraft, setTextDraft] = useState<{ slideId: SlideId; elementId: ElementId; value: string }>();
@@ -168,6 +171,7 @@ export function App() {
     await clearRecovery().catch(() => undefined);
     newDocument();
     setProjectPath(undefined);
+    setProjectMtime(undefined);
     setSavedRevision(0);
     setTaskStatus("已新建项目");
   };
@@ -180,21 +184,37 @@ export function App() {
       loadDocument(result.document);
       await clearRecovery();
       setProjectPath(result.path);
+      setProjectMtime(result.modifiedAt);
       setSavedRevision(result.document.revisions.document);
       setTaskStatus("项目已打开");
     } catch (error) { setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`); }
   };
 
   const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     setTaskStatus("正在保存…");
     try {
-      const path = await saveProject(document, projectPath);
-      if (!path) { setTaskStatus(undefined); return; }
-      if (isDesktopRuntime()) setProjectPath(path);
+      if (projectPath && isDesktopRuntime() && projectMtime !== undefined) {
+        const currentMtime = await projectModifiedAt(projectPath);
+        if (currentMtime !== projectMtime && !window.confirm("项目文件已被其他程序修改。继续保存会覆盖外部修改，是否继续？")) {
+          setTaskStatus("保存已取消");
+          return;
+        }
+      }
+      const result = await saveProject(document, projectPath);
+      if (!result) { setTaskStatus(undefined); return; }
+      if (isDesktopRuntime()) setProjectPath(result.path);
+      setProjectMtime(result.modifiedAt ?? undefined);
       setSavedRevision(document.revisions.document);
       await clearRecovery();
       setTaskStatus(isDesktopRuntime() ? "项目已保存" : "浏览器草稿已保存");
     } catch (error) { setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
+    finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   const handleExport = async () => {
@@ -481,7 +501,7 @@ export function App() {
       {activeView === "editor" && <header className="topbar">
         <div className="brand"><span className="brand-mark">P</span><div><strong>PPTD</strong><small>{document.title}</small></div></div>
         <div className="toolbar-group">
-          <ToolButton label="新建项目" onClick={handleNew}><FilePlus2 /></ToolButton><ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}><FileUp /></ToolButton><ToolButton label="保存项目" onClick={handleSave}><Save /></ToolButton>
+          <ToolButton label="新建项目" onClick={handleNew}><FilePlus2 /></ToolButton><ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}><FileUp /></ToolButton><ToolButton label={saving ? "正在保存" : "保存项目"} onClick={handleSave} disabled={saving}><Save /></ToolButton>
           <span className="separator" />
           <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
         </div>

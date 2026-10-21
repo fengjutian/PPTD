@@ -145,7 +145,8 @@ fn validate_path(path: &str, extension: &str) -> Result<PathBuf, String> {
 }
 
 fn ensure_project_size(path: &Path) -> Result<(), String> {
-    let metadata = fs::metadata(path).map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?;
+    let metadata =
+        fs::metadata(path).map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?;
     if !metadata.is_file() {
         return Err("PROJECT_NOT_A_FILE".into());
     }
@@ -198,7 +199,8 @@ fn validate_pptx_archive(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> Result<(), String> {    let mut child = Command::new("powershell.exe")
+fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> Result<(), String> {
+    let mut child = Command::new("powershell.exe")
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -458,6 +460,22 @@ pub fn open_project(path: String) -> Result<Value, String> {
         serde_json::from_reader(file).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
     hydrate_images(&path, &mut document)?;
     Ok(document)
+}
+
+#[tauri::command]
+pub fn project_modified_at(path: String) -> Result<u64, String> {
+    let path = validate_path(&path, "pptd")?;
+    let metadata = fs::metadata(&path).map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?;
+    if !metadata.is_file() {
+        return Err("PROJECT_NOT_A_FILE".into());
+    }
+    let modified = metadata
+        .modified()
+        .map_err(|error| format!("PROJECT_MODIFIED_TIME_UNAVAILABLE: {error}"))?;
+    Ok(modified
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "SYSTEM_TIME_INVALID")?
+        .as_millis() as u64)
 }
 
 fn recovery_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
