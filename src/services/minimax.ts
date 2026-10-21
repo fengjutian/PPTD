@@ -16,7 +16,7 @@ export const aiPresentationDesignSchema = z.object({
   })).min(1).max(20),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
-export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null }> }
+export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
 export const MINIMAX_MODELS = ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"] as const;
 
 export async function generateWithMiniMax(topic: string, slideCount: number): Promise<AiDraft> {

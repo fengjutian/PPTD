@@ -41,6 +41,25 @@ pub struct TemplateSlideSummary {
     image_count: usize,
     shape_count: usize,
     layout: Option<String>,
+    regions: Vec<TemplateRegion>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateRegion {
+    role: String,
+    x: u64,
+    y: u64,
+    width: u64,
+    height: u64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateLayoutSummary {
+    index: usize,
+    name: String,
+    regions: Vec<TemplateRegion>,
 }
 
 #[derive(serde::Serialize)]
@@ -56,6 +75,7 @@ pub struct TemplateAnalysis {
     major_font: Option<String>,
     minor_font: Option<String>,
     slides: Vec<TemplateSlideSummary>,
+    layouts: Vec<TemplateLayoutSummary>,
     warnings: Vec<String>,
 }
 
@@ -537,6 +557,58 @@ fn read_zip_text(
         .map_err(|_| "PPTX_XML_ENCODING_INVALID".into())
 }
 
+fn extract_template_regions(document: &roxmltree::Document<'_>) -> Vec<TemplateRegion> {
+    document
+        .descendants()
+        .filter(|node| matches!(node.tag_name().name(), "sp" | "pic"))
+        .filter_map(|shape| {
+            let transform = shape
+                .descendants()
+                .find(|node| node.tag_name().name() == "xfrm")?;
+            let offset = transform
+                .children()
+                .find(|node| node.tag_name().name() == "off")?;
+            let extent = transform
+                .children()
+                .find(|node| node.tag_name().name() == "ext")?;
+            let x = offset.attribute("x")?.parse().ok()?;
+            let y = offset.attribute("y")?.parse().ok()?;
+            let width = extent.attribute("cx")?.parse().ok()?;
+            let height = extent.attribute("cy")?.parse().ok()?;
+            if width == 0 || height == 0 {
+                return None;
+            }
+            let placeholder = shape
+                .descendants()
+                .find(|node| node.tag_name().name() == "ph")
+                .and_then(|node| node.attribute("type"));
+            let has_text = shape.descendants().any(|node| {
+                node.tag_name().name() == "t"
+                    && node.text().is_some_and(|text| !text.trim().is_empty())
+            });
+            let role = if shape.tag_name().name() == "pic"
+                || matches!(placeholder, Some("pic" | "clipArt" | "media"))
+            {
+                "image"
+            } else if matches!(placeholder, Some("title" | "ctrTitle")) {
+                "title"
+            } else if matches!(placeholder, Some("body" | "obj" | "subTitle")) || has_text {
+                "body"
+            } else {
+                return None;
+            };
+            Some(TemplateRegion {
+                role: role.into(),
+                x,
+                y,
+                width,
+                height,
+            })
+        })
+        .take(32)
+        .collect()
+}
+
 #[tauri::command]
 pub fn analyze_pptx_template(
     app: tauri::AppHandle,
@@ -705,6 +777,7 @@ pub fn analyze_pptx_template(
                         .map(str::to_owned)
                 })
         });
+        let regions = extract_template_regions(&document);
         slides.push(TemplateSlideSummary {
             index: number,
             title,
@@ -718,7 +791,32 @@ pub fn analyze_pptx_template(
                 .filter(|node| node.tag_name().name() == "sp")
                 .count(),
             layout,
+            regions,
         });
+    }
+
+    let mut layouts = Vec::new();
+    for number in 1..=layout_count {
+        let entry_name = format!("ppt/slideLayouts/slideLayout{number}.xml");
+        let Some(xml) = read_zip_text(&mut archive, &entry_name)? else {
+            continue;
+        };
+        let document = roxmltree::Document::parse(&xml)
+            .map_err(|error| format!("PPTX_LAYOUT_XML_INVALID: {error}"))?;
+        let name = document
+            .descendants()
+            .find(|node| node.tag_name().name() == "cSld")
+            .and_then(|node| node.attribute("name"))
+            .unwrap_or("未命名版式")
+            .to_owned();
+        let regions = extract_template_regions(&document);
+        if !regions.is_empty() {
+            layouts.push(TemplateLayoutSummary {
+                index: number,
+                name,
+                regions,
+            });
+        }
     }
 
     let mut warnings = Vec::new();
@@ -740,6 +838,7 @@ pub fn analyze_pptx_template(
         major_font,
         minor_font,
         slides,
+        layouts,
         warnings,
     })
 }
@@ -817,5 +916,28 @@ mod tests {
             open_project(path.to_string_lossy().into_owned()).unwrap(),
             value
         );
+    }
+
+    #[test]
+    fn extracts_title_and_body_regions_from_ooxml_layouts() {
+        let xml = r#"<p:sldLayout xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
+          <p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></p:spPr></p:sp>
+          <p:sp><p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="500" y="600"/><a:ext cx="700" cy="800"/></a:xfrm></p:spPr></p:sp>
+          <p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="10" y="20"/><a:ext cx="30" cy="40"/></a:xfrm></p:spPr></p:sp>
+        </p:spTree></p:cSld></p:sldLayout>"#;
+        let document = roxmltree::Document::parse(xml).unwrap();
+        let regions = extract_template_regions(&document);
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[0].role, "title");
+        assert_eq!(
+            (
+                regions[0].x,
+                regions[0].y,
+                regions[0].width,
+                regions[0].height
+            ),
+            (100, 200, 300, 400)
+        );
+        assert_eq!(regions[1].role, "body");
     }
 }

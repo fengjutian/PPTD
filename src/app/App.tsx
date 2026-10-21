@@ -276,6 +276,7 @@ export function App() {
         designs: design.slides,
         pageSize: hasTemplateSize ? { width: emu(templateAnalysis.slideWidthEmu!), height: emu(templateAnalysis.slideHeightEmu!) } : undefined,
         fontFamily: templateAnalysis.majorFont || templateAnalysis.minorFont || undefined,
+        templateLayouts: hasTemplateSize ? [...templateAnalysis.layouts, ...templateAnalysis.slides].map((layout) => ({ index: layout.index, regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
       });
       setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
       setTemplatePickerOpen(false);

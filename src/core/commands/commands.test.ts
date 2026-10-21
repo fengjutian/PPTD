@@ -137,4 +137,34 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
+  it("uses valid text regions extracted from the selected PPTX template", () => {
+    const source = createDocument();
+    const content = { title: "模板标题", body: "模板正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [{ index: 1, regions: [
+      { role: "title" as const, frame: { x: 0.12, y: 0.08, width: 0.70, height: 0.12 } },
+      { role: "body" as const, frame: { x: 0.18, y: 0.32, width: 0.60, height: 0.42 } },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板文稿", slides: [content], designs: [design], templateLayouts }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title)!;
+    const body = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.body)!;
+    expect(title.frame).toEqual({ x: Math.round(source.pageSize.width * 0.12), y: Math.round(source.pageSize.height * 0.08), width: Math.round(source.pageSize.width * 0.70), height: Math.round(source.pageSize.height * 0.12) });
+    expect(body.frame).toEqual({ x: Math.round(source.pageSize.width * 0.18), y: Math.round(source.pageSize.height * 0.32), width: Math.round(source.pageSize.width * 0.60), height: Math.round(source.pageSize.height * 0.42) });
+  });
+
+  it("rejects overlapping template regions for split layouts", () => {
+    const source = createDocument();
+    const content = { title: "双栏", body: "1. 左侧内容 2. 右侧内容", speakerNotes: "" };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [{ index: 1, regions: [
+      { role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.80, height: 0.12 } },
+      { role: "body" as const, frame: { x: 0.05, y: 0.25, width: 0.70, height: 0.50 } },
+      { role: "body" as const, frame: { x: 0.30, y: 0.25, width: 0.65, height: 0.50 } },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "安全双栏", slides: [content], designs: [design], templateLayouts }));
+    const bodies = result.slides[0]!.elements.filter((element) => element.type === "text" && element.text !== content.title);
+    expect(bodies[0]!.frame.x + bodies[0]!.frame.width).toBeLessThanOrEqual(bodies[1]!.frame.x);
+    expect(bodies.every((element) => element.frame.y + element.frame.height <= source.pageSize.height)).toBe(true);
+  });
+
 });

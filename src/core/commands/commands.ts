@@ -5,11 +5,13 @@ export type ChangeDomain = "content" | "design" | "both";
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
 export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
+export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
+export interface AiTemplateLayout { index: number; regions: AiTemplateRegion[] }
 
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; templateLayouts?: AiTemplateLayout[] }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -76,6 +78,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.content = { ...content, status: "approved" };
       const items = points(content.body);
       const bodySize = content.body.length > 260 ? 15 : content.body.length > 150 ? 17 : 20;
+      const rankedLayouts = command.templateLayouts?.filter((layout) => layout.regions.some((region) => region.role === "title")) ?? [];
+      const recipe = design.layout === "cover"
+        ? rankedLayouts[0]
+        : design.layout === "cards" || design.layout === "split"
+          ? [...rankedLayouts].sort((left, right) => right.regions.filter((region) => region.role === "body").length - left.regions.filter((region) => region.role === "body").length)[0]
+          : rankedLayouts[index % Math.max(1, rankedLayouts.length)];
+      const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
+      const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
+      const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);
+      const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
+      const [leftRecipe, rightRecipe] = recipeBodies;
+      const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       slide.elements = [];
       if (design.layout === "cover") {
         slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
@@ -88,18 +102,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (content.body.trim()) slide.elements.push(text(content.body, frame(0.39, 0.56, 0.47, 0.20), 18, design.bodyColor, false, "left"));
       } else if (design.layout === "quote") {
         slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
-        slide.elements.push(text(content.title, frame(0.15, 0.12, 0.72, 0.13), 28, design.titleColor, true, "left"));
-        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.15, 0.31, 0.68, 0.46), Math.max(18, bodySize), design.bodyColor, false, "left"));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.35, 0.08), 28, design.titleColor, true, "left"));
+        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.15, 0.31, 0.68, 0.46], 0.35, 0.28), Math.max(18, bodySize), design.bodyColor, false, "left"));
       } else if (design.layout === "cards" && items.length > 1) {
         slide.elements.push(text(content.title, frame(0.07, 0.07, 0.82, 0.12), 29, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
         const visible = items.slice(0, 6); const columns = visible.length > 3 ? 3 : 2; const rows = Math.ceil(visible.length / columns);
         visible.forEach((item, itemIndex) => { const column = itemIndex % columns; const row = Math.floor(itemIndex / columns); const x = 0.07 + column * (0.86 / columns); const y = 0.28 + row * (0.60 / rows); slide.elements.push(shape(frame(x, y, 0.86 / columns - 0.025, 0.60 / rows - 0.035), "#F3F5F7"), shape(frame(x, y, 0.012, 0.60 / rows - 0.035), design.accent), text(item, frame(x + 0.025, y + 0.035, 0.86 / columns - 0.07, 0.60 / rows - 0.10), 16, design.bodyColor, false, "left")); });
       } else if (design.layout === "split" && items.length > 1) {
-        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.84, 0.13), 30, design.titleColor, true, "left"), shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
-        const middle = Math.ceil(items.length / 2); slide.elements.push(text(items.slice(0, middle).join("\n\n"), frame(0.08, 0.28, 0.36, 0.54), bodySize, design.bodyColor, false, "left"), text(items.slice(middle).join("\n\n"), frame(0.57, 0.28, 0.35, 0.54), bodySize, design.bodyColor, false, "left"));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
+        const middle = Math.ceil(items.length / 2); slide.elements.push(text(items.slice(0, middle).join("\n\n"), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), bodySize, design.bodyColor, false, "left"), text(items.slice(middle).join("\n\n"), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), bodySize, design.bodyColor, false, "left"));
       } else {
-        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.84, 0.13), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.11, 0.012), design.accent));
-        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.08, 0.30, 0.82, 0.55), bodySize, design.bodyColor, false, "left"));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.11, 0.012), design.accent));
+        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.08, 0.30, 0.82, 0.55], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
       }
       return slide;
     });
