@@ -66,6 +66,7 @@ export function App() {
   const [aiTopic, setAiTopic] = useState("");
   const [aiSlideCount, setAiSlideCount] = useState(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
+  const [activeDraftSlideIndex, setActiveDraftSlideIndex] = useState(0);
   const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>(loadAiHistory);
   const [activeHistoryId, setActiveHistoryId] = useState<string>();
   const [aiBusy, setAiBusy] = useState(false);
@@ -194,7 +195,7 @@ export function App() {
     try {
       const draft = await generateWithMiniMax(aiTopic, aiSlideCount);
       const id = crypto.randomUUID();
-      setAiDraft(draft); setActiveHistoryId(id);
+      setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0);
       setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
       setTaskStatus("MiniMax 已完成 PPT 草稿生成");
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
@@ -214,7 +215,7 @@ export function App() {
   }, [activeHistoryId, aiDraft, aiTopic]);
 
   const openAiHistory = (entry: AiHistoryEntry) => {
-    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(entry.draft);
+    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(entry.draft); setActiveDraftSlideIndex(0);
   };
 
   const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
@@ -351,10 +352,10 @@ export function App() {
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
         </section> : <section className="draft-review">
-          <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div>{aiDraft.slides.map((slide, index) => <button type="button" key={index} onClick={() => globalThis.document.getElementById(`draft-slide-${index}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</aside>
+          <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div>{aiDraft.slides.map((slide, index) => <button type="button" className={activeDraftSlideIndex === index ? "active" : ""} aria-current={activeDraftSlideIndex === index ? "page" : undefined} key={index} onClick={() => setActiveDraftSlideIndex(index)}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</aside>
           <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>后续应用模板时不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
-          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
-          <div className="sticky-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div></div>
+          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => index === activeDraftSlideIndex && <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
+          <div className="sticky-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); setActiveDraftSlideIndex(0); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div></div>
         </section>}
       </main>}
 
