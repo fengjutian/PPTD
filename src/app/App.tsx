@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
@@ -245,9 +245,9 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <header className={`topbar ${activeView === "editor" ? "" : "module-topbar"}`}>
         <div className="brand"><span className="brand-mark">P</span><div><strong>PPTD</strong><small>{document.title}</small></div></div>
-        <div className="toolbar-group">
+        {activeView === "editor" ? <><div className="toolbar-group">
           <ToolButton label="新建项目" onClick={handleNew}><FilePlus2 /></ToolButton><ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}><FileUp /></ToolButton><ToolButton label="保存项目" onClick={handleSave}><Save /></ToolButton>
           <span className="separator" />
           <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
@@ -259,7 +259,7 @@ export function App() {
           <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolButton>
           <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { handleImageFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </div>
-        <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button>
+        <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button></> : <button type="button" className="back-to-editor" onClick={() => setActiveView("editor")}><ArrowLeft />返回编辑器</button>}
       </header>
 
       <nav className="nav-rail" aria-label="主功能">
