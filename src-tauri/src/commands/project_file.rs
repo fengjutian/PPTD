@@ -34,6 +34,17 @@ pub struct TemplateThemeColor {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TemplateSlideSummary {
+    index: usize,
+    title: String,
+    text_count: usize,
+    image_count: usize,
+    shape_count: usize,
+    layout: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TemplateAnalysis {
     slide_count: usize,
     slide_width_emu: Option<u64>,
@@ -44,6 +55,7 @@ pub struct TemplateAnalysis {
     theme_colors: Vec<TemplateThemeColor>,
     major_font: Option<String>,
     minor_font: Option<String>,
+    slides: Vec<TemplateSlideSummary>,
     warnings: Vec<String>,
 }
 
@@ -627,6 +639,88 @@ pub fn analyze_pptx_template(
             .map(str::to_owned);
     }
 
+    let mut slide_entries = Vec::new();
+    for index in 0..archive.len() {
+        let name = archive
+            .by_index(index)
+            .map_err(|error| format!("PPTX_ARCHIVE_READ_FAILED: {error}"))?
+            .name()
+            .to_owned();
+        if let Some(number) = name
+            .strip_prefix("ppt/slides/slide")
+            .and_then(|value| value.strip_suffix(".xml"))
+            .and_then(|value| value.parse::<usize>().ok())
+        {
+            slide_entries.push((number, name));
+        }
+    }
+    slide_entries.sort_by_key(|(number, _)| *number);
+    let mut slides = Vec::with_capacity(slide_entries.len());
+    for (number, entry_name) in slide_entries {
+        let Some(xml) = read_zip_text(&mut archive, &entry_name)? else {
+            continue;
+        };
+        let document = roxmltree::Document::parse(&xml)
+            .map_err(|error| format!("PPTX_SLIDE_XML_INVALID: {error}"))?;
+        let text_nodes: Vec<&str> = document
+            .descendants()
+            .filter(|node| node.tag_name().name() == "t")
+            .filter_map(|node| node.text())
+            .filter(|text| !text.trim().is_empty())
+            .collect();
+        let title = document
+            .descendants()
+            .filter(|node| node.tag_name().name() == "sp")
+            .find_map(|shape| {
+                let is_title = shape.descendants().any(|node| {
+                    node.tag_name().name() == "ph"
+                        && matches!(node.attribute("type"), Some("title" | "ctrTitle"))
+                });
+                is_title.then(|| {
+                    shape
+                        .descendants()
+                        .filter(|node| node.tag_name().name() == "t")
+                        .filter_map(|node| node.text())
+                        .collect::<Vec<_>>()
+                        .join("")
+                })
+            })
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| text_nodes.first().map(|value| (*value).to_owned()))
+            .unwrap_or_else(|| format!("第 {number} 页"));
+        let relationship_name = format!("ppt/slides/_rels/slide{number}.xml.rels");
+        let layout = read_zip_text(&mut archive, &relationship_name)?.and_then(|relationships| {
+            roxmltree::Document::parse(&relationships)
+                .ok()
+                .and_then(|doc| {
+                    doc.descendants()
+                        .find(|node| {
+                            node.tag_name().name() == "Relationship"
+                                && node
+                                    .attribute("Type")
+                                    .is_some_and(|value| value.ends_with("/slideLayout"))
+                        })
+                        .and_then(|node| node.attribute("Target"))
+                        .and_then(|target| target.rsplit('/').next())
+                        .map(str::to_owned)
+                })
+        });
+        slides.push(TemplateSlideSummary {
+            index: number,
+            title,
+            text_count: text_nodes.len(),
+            image_count: document
+                .descendants()
+                .filter(|node| node.tag_name().name() == "pic")
+                .count(),
+            shape_count: document
+                .descendants()
+                .filter(|node| node.tag_name().name() == "sp")
+                .count(),
+            layout,
+        });
+    }
+
     let mut warnings = Vec::new();
     if slide_count == 0 {
         warnings.push("未发现可解析的幻灯片页面".into());
@@ -645,6 +739,7 @@ pub fn analyze_pptx_template(
         theme_colors,
         major_font,
         minor_font,
+        slides,
         warnings,
     })
 }

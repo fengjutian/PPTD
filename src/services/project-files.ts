@@ -7,7 +7,7 @@ const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
 
 export const isDesktopRuntime = () => isTauri();
 export interface TemplateRecord { id: string; name: string; size: number; importedAt: number }
-export interface TemplateAnalysis { slideCount: number; slideWidthEmu: number | null; slideHeightEmu: number | null; masterCount: number; layoutCount: number; themeCount: number; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; warnings: string[] }
+export interface TemplateAnalysis { slideCount: number; slideWidthEmu: number | null; slideHeightEmu: number | null; masterCount: number; layoutCount: number; themeCount: number; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null }>; warnings: string[] }
 
 export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument } | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
