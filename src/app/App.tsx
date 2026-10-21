@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
+import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { generateWithMiniMax, type AiDraft } from "../services/minimax";
 import { applyTheme, loadSettings } from "../services/settings";
 import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
@@ -63,6 +64,8 @@ export function App() {
   const [aiTopic, setAiTopic] = useState("");
   const [aiSlideCount, setAiSlideCount] = useState(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
+  const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>(loadAiHistory);
+  const [activeHistoryId, setActiveHistoryId] = useState<string>();
   const [aiBusy, setAiBusy] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<{ name: string; size?: number; path?: string }>();
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -185,9 +188,24 @@ export function App() {
 
   const handleAiGenerate = async () => {
     setAiBusy(true); setAiDraft(undefined);
-    try { setAiDraft(await generateWithMiniMax(aiTopic, aiSlideCount)); }
+    try {
+      const draft = await generateWithMiniMax(aiTopic, aiSlideCount);
+      const id = crypto.randomUUID();
+      setAiDraft(draft); setActiveHistoryId(id);
+      setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
+    }
     catch (error) { setTaskStatus(`MiniMax 生成失败：${error instanceof Error ? error.message : String(error)}`); }
     finally { setAiBusy(false); }
+  };
+
+  useEffect(() => {
+    if (!aiDraft || !activeHistoryId) return;
+    const timer = window.setTimeout(() => setAiHistory(saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft })), 500);
+    return () => window.clearTimeout(timer);
+  }, [activeHistoryId, aiDraft, aiTopic]);
+
+  const openAiHistory = (entry: AiHistoryEntry) => {
+    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(entry.draft);
   };
 
   const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
@@ -310,17 +328,20 @@ export function App() {
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
         <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再选择用户的 PPT 模板</p></div></div><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 上传模板</span></div></header>
-        {!aiDraft ? <section className="ai-compose-card">
+        {!aiDraft ? <section className={`ai-start ${aiHistory.length ? "with-history" : ""}`}>
+          {aiHistory.length > 0 && <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>}
+          <div className="ai-compose-card">
           <div className="section-kicker">MiniMax AI</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成可编辑的结构化内容。</p>
           <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
           <label className="slide-count-field">页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
           <button className="primary-action" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "MiniMax 正在生成…" : "生成 PPT 草稿"}<ArrowRight /></button>
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
+          </div>
         </section> : <section className="draft-review">
           <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div>{aiDraft.slides.map((slide, index) => <button type="button" key={index} onClick={() => globalThis.document.getElementById(`draft-slide-${index}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</aside>
           <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>后续应用模板时不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
           <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
-          <div className="sticky-actions"><button className="secondary-action" onClick={() => setAiDraft(undefined)}>重新生成</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div></div>
+          <div className="sticky-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div></div>
         </section>}
       </main>}
 

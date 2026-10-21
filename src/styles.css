@@ -71,6 +71,20 @@ button { color: inherit; }
 .workflow-steps span svg { width: 13px; height: 13px; }
 .workflow-steps i { width: 34px; height: 1px; background: #3a3c42; }
 .ai-compose-card { width: min(760px, calc(100% - 64px)); margin: 54px auto; padding: 34px; border: 1px solid #34363d; border-radius: 16px; background: #202126; }
+.ai-start { min-height: calc(100% - 88px); }
+.ai-start.with-history { display: grid; grid-template-columns: 280px minmax(0, 760px); gap: 20px; align-items: start; justify-content: start; padding: 28px 18px 70px; }
+.ai-start.with-history .ai-compose-card { width: 100%; margin: 0; }
+.ai-history { min-width: 0; }
+.ai-history-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 10px; color: #d8dae0; font-size: 12px; }
+.ai-history-heading span { color: #797e87; font-size: 10px; }
+.ai-history > button { width: 100%; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 9px; margin-bottom: 8px; padding: 12px; border: 1px solid #34363d; border-radius: 8px; color: #aeb2ba; background: #202126; text-align: left; cursor: pointer; }
+.ai-history > button:hover { border-color: var(--ppt-accent); background: #242126; }
+.ai-history > button > svg { width: 17px; height: 17px; color: var(--ppt-accent-hover); }
+.ai-history > button div { min-width: 0; }
+.ai-history > button strong, .ai-history > button span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-history > button strong { color: #e1e3e7; font-size: 11px; }
+.ai-history > button span { margin-top: 4px; color: #777c85; font-size: 9px; }
+.ai-history > button p { display: -webkit-box; overflow: hidden; margin: 6px 0 0; color: #777c85; font-size: 9px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .section-kicker { margin-bottom: 8px; color: var(--ppt-accent-hover); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .ai-compose-card h2, .draft-review h2, .theme-content h2 { font-size: 22px; }
 .ai-compose-card > p, .draft-review-heading p, .theme-content p { margin-top: 8px; color: #858a93; font-size: 12px; }
@@ -255,6 +269,7 @@ button { color: inherit; }
 :root[data-theme="light"] .property-form input, :root[data-theme="light"] .property-form textarea { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .feature-workspace { background: #eef0f3; } :root[data-theme="light"] .feature-header { background: #f8f9fb; border-color: #d6d9de; }
 :root[data-theme="light"] .ai-compose-card, :root[data-theme="light"] .draft-slide-card, :root[data-theme="light"] .presentation-themes > button { color: #24272c; background: #fff; border-color: #d4d7dc; }
+:root[data-theme="light"] .ai-history-heading { color: #353a42; } :root[data-theme="light"] .ai-history > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .ai-history > button:hover { border-color: var(--ppt-accent); background: #fff8f5; } :root[data-theme="light"] .ai-history > button strong { color: #272b31; }
 :root[data-theme="light"] .draft-outline-title { color: #353a42; } :root[data-theme="light"] .draft-outline > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .draft-outline > button:hover { border-color: var(--ppt-accent); background: #fff8f5; } :root[data-theme="light"] .draft-outline > button strong { color: #272b31; }
 :root[data-theme="light"] .ai-compose-card textarea, :root[data-theme="light"] .ai-compose-card input, :root[data-theme="light"] .draft-review textarea, :root[data-theme="light"] .draft-review input { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .sticky-actions { background: linear-gradient(transparent, #eef0f3 22%); }
@@ -269,4 +284,4 @@ button { color: inherit; }
 :root[data-theme="light"] .theme-options button { color: #34383f; background: #f4f5f7; border-color: #cfd3d9; } :root[data-theme="light"] .theme-options button:hover { background: #e9ebee; } :root[data-theme="light"] .theme-options button.active { color: #7d2d1d; background: #fff1ed; border-color: var(--ppt-accent); }
 :root[data-theme="light"] .settings-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 
-@media (max-width: 1250px) { .app-shell { grid-template-columns: 58px 180px minmax(620px, 1fr) 220px; } .nav-rail button { width: 43px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } .feature-header { padding-inline: 22px; } .presentation-themes { gap: 12px; } .draft-review { grid-template-columns: 220px minmax(0, 1fr); margin-inline: 12px; gap: 14px; } }
+@media (max-width: 1250px) { .app-shell { grid-template-columns: 58px 180px minmax(620px, 1fr) 220px; } .nav-rail button { width: 43px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } .feature-header { padding-inline: 22px; } .presentation-themes { gap: 12px; } .draft-review { grid-template-columns: 220px minmax(0, 1fr); margin-inline: 12px; gap: 14px; } .ai-start.with-history { grid-template-columns: 220px minmax(0, 1fr); gap: 14px; padding-inline: 12px; } }
