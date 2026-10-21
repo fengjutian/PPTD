@@ -165,8 +165,8 @@ export function constrainDesignToTemplate(design: AiPresentationDesign, template
   return { slides: design.slides.map((slide) => ({ ...slide, background, accent: accent ?? slide.accent, titleColor: foreground, bodyColor: bodyForeground })) };
 }
 /** 当前选中的厂商与模型。调用方不再关心具体厂商，由设置决定。 */
-function aiSelection(): { provider: string; model: string } {
-  const settings = loadSettings();
+async function aiSelection(): Promise<{ provider: string; model: string }> {
+  const settings = await loadSettings();
   return { provider: settings.aiProviderId, model: settings.aiModel };
 }
 
@@ -182,7 +182,7 @@ export function describeAiError(error: unknown): string {
 }
 
 export async function generatePresentationDraft(topic: string, slideCount: number): Promise<AiDraft> {
-  const { provider, model } = aiSelection();
+  const { provider, model } = await aiSelection();
   const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider } });
   const draft = aiDraftSchema.parse(raw);
   if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
@@ -190,7 +190,7 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
 }
 
 export async function generateSlideBriefs(draft: AiDraft): Promise<SlideBrief[]> {
-  const { provider, model } = aiSelection();
+  const { provider, model } = await aiSelection();
   const raw = await invoke<unknown>("generate_slide_briefs", { request: { draft, model, provider } });
   const result = slideBriefsSchema.parse(raw);
   if (result.briefs.length !== draft.slides.length || result.briefs.some((brief, index) => brief.slideIndex !== index)) throw new Error("AI_BRIEF_SLIDE_MISMATCH");
@@ -198,7 +198,7 @@ export async function generateSlideBriefs(draft: AiDraft): Promise<SlideBrief[]>
 }
 
 export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext, visualGoal: PresentationVisualGoal = defaultPresentationVisualGoal()): Promise<AiPresentationDesign> {
-  const { provider, model } = aiSelection();
+  const { provider, model } = await aiSelection();
   const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, visualGoal, model, provider } });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");

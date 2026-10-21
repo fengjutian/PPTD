@@ -80,12 +80,42 @@ export interface ShapeElement extends ElementBase {
   style: ShapeElementStyle;
 }
 
+/**
+ * The theme of the template the deck was designed against. It is design state:
+ * it never carries reviewed copy, so it may change without touching the content
+ * version.
+ */
+export interface DocumentTheme {
+  name: string;
+  majorFont: string;
+  minorFont: string;
+  /** Theme color slots in scheme order, e.g. dk1, lt1, accent1. */
+  colors: Array<{ name: string; value: string }>;
+}
+
+/**
+ * A template layout a slide was designed against. The layout is the unit that
+ * becomes a slide master in the exported PPTX, so a deck keeps the structure of
+ * its template instead of collapsing into a flat list of shapes.
+ */
+export interface SlideLayoutSpec {
+  id: string;
+  name: string;
+  backgroundColor?: string;
+}
+
 export type SupportedImageMimeType = "image/png" | "image/jpeg" | "image/webp";
 
 export interface ImageElement extends ElementBase {
   type: "image";
   source: { kind: "embedded"; dataUrl: string; mimeType: SupportedImageMimeType };
   altText: string;
+  /**
+   * "layout-background" marks the artwork of the template layout itself. The
+   * canvas still paints it, but the exporter moves it into the slide master so
+   * the page background is part of the layout and not a loose picture.
+   */
+  placement?: "content" | "layout-background";
 }
 
 export type SlideElement = TextElement | ShapeElement | ImageElement;
@@ -95,13 +125,17 @@ export interface Slide {
   content: SlideContent;
   elements: SlideElement[];
   background: string;
+  /** The template layout this slide was designed against. */
+  layoutId?: string;
 }
 
 export interface PresentationDocument {
   id: DocumentId;
-  schemaVersion: 2;
+  schemaVersion: 3;
   title: string;
   pageSize: { width: Emu; height: Emu };
   revisions: Revisions;
   slides: Slide[];
+  theme?: DocumentTheme;
+  layouts?: SlideLayoutSpec[];
 }

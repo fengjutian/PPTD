@@ -2,7 +2,7 @@ import { Check, KeyRound, Palette, PlugZap, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
-import { loadSettings, saveSettings, type AppSettings, type AppTheme } from "../../services/settings";
+import { defaultSettings, loadSettings, saveSettings, type AppSettings, type AppTheme } from "../../services/settings";
 
 const THEME_OPTIONS: { id: AppTheme; label: string }[] = [
   { id: "dark", label: "深色" },
@@ -15,14 +15,31 @@ const THEME_OPTIONS: { id: AppTheme; label: string }[] = [
 
 export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) => void }) {
   const [activeTab, setActiveTab] = useState<"model" | "appearance">("model");
-  const [settings, setSettings] = useState<AppSettings>(loadSettings);
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [apiKey, setApiKey] = useState("");
   const [configured, setConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [testState, setTestState] = useState<{ kind: "success" | "error"; message: string }>();
   const provider = findAiProvider(settings.aiProviderId);
+  useEffect(() => {
+    let active = true;
+    void loadSettings().then((stored) => { if (active) setSettings(stored); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => { void aiKeyConfigured(settings.aiProviderId).then(setConfigured).catch(() => setConfigured(false)); }, [settings.aiProviderId]);
-  const save = async () => { setBusy(true); try { if (apiKey.trim()) await saveAiKey(settings.aiProviderId, apiKey); saveSettings(settings); setApiKey(""); setConfigured(configured || Boolean(apiKey.trim())); onMessage("设置已保存"); } catch (error) { onMessage(`设置保存失败：${error instanceof Error ? error.message : String(error)}`); } finally { setBusy(false); } };
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (apiKey.trim()) await saveAiKey(settings.aiProviderId, apiKey);
+      await saveSettings(settings);
+      setApiKey("");
+      setConfigured(configured || Boolean(apiKey.trim()));
+      onMessage("设置已保存");
+    } catch (error) {
+      const detail = error instanceof Error && error.message === "DESKTOP_RUNTIME_REQUIRED" ? "浏览器预览模式不保存设置，请使用桌面端" : error instanceof Error ? error.message : String(error);
+      onMessage(`设置保存失败：${detail}`);
+    } finally { setBusy(false); }
+  };
   const removeKey = async () => { setBusy(true); try { await deleteAiKey(settings.aiProviderId); setConfigured(false); onMessage(`${provider.label} API Key 已删除`); } finally { setBusy(false); } };
   const testConnection = async () => {
     setBusy(true); setTestState(undefined);

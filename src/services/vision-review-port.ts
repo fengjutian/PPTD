@@ -38,7 +38,7 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     validateVisualRenderPayload(render);
     const indexes = (slideIndexes ?? render.slides.map((_, index) => index)).slice(0, 6);
     if (indexes.length === 0 || indexes.some((index) => !render.slides[index])) throw new Error("AI_VISION_SLIDE_INDEX_INVALID");
-    const settings = loadSettings();
+    const settings = await loadSettings();
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {

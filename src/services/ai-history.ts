@@ -19,11 +19,7 @@ const parseHistory = (entries: unknown[]): AiHistoryEntry[] =>
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 
 export async function loadAiHistory(): Promise<AiHistoryEntry[]> {
-  try {
-    return parseHistory(await loadStoredAiHistory());
-  } catch {
-    return [];
-  }
+  return parseHistory(await loadStoredAiHistory());
 }
 
 export async function saveAiHistory(entry: { id: string; topic: string; slideCount: number; draft: AiDraft }): Promise<AiHistoryEntry[]> {

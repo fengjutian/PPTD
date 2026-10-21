@@ -389,8 +389,12 @@ export function App() {
       const id = crypto.randomUUID();
       aiOriginalDraft.current = structuredClone(draft);
       setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0); setAiSaveState("saved");
-      setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
-      setTaskStatus("AI 已完成 PPT 草稿生成");
+      try {
+        setAiHistory(await saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
+        setTaskStatus("AI 已完成 PPT 草稿生成");
+      } catch (error) {
+        setTaskStatus(`AI 草稿已生成，但历史保存失败：${error instanceof Error ? error.message : String(error)}`);
+      }
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
     }
     catch (error) {
@@ -406,15 +410,21 @@ export function App() {
     if (!aiDraft || !activeHistoryId) return;
     setAiSaveState("saving");
     const timer = window.setTimeout(() => {
-      setAiHistory(saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft }));
-      setAiSaveState("saved");
+      void saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft })
+        .then((history) => { setAiHistory(history); setAiSaveState("saved"); })
+        .catch((error: unknown) => {
+          setAiSaveState("saved");
+          setTaskStatus(`草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`);
+        });
     }, 500);
     return () => window.clearTimeout(timer);
   }, [activeHistoryId, aiDraft, aiTopic]);
 
   const persistAiDraft = () => {
     if (!aiDraft || !activeHistoryId) return;
-    setAiHistory(saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft }));
+    void saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft })
+      .then(setAiHistory)
+      .catch((error: unknown) => setTaskStatus(`草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`));
     setAiSaveState("saved");
   };
 

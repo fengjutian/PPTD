@@ -1,12 +1,12 @@
 import { loadStoredAppSettings, saveStoredAppSettings } from "./app-database";
 import { DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
 
-export type AppTheme = "dark" | "light" | "system" | "amber" | "green";
+export type AppTheme = "dark" | "light" | "system" | "amber" | "green" | "blue";
 export interface AppSettings { theme: AppTheme; aiProviderId: string; aiModel: string }
 let systemThemeQuery: MediaQueryList | undefined;
 let systemThemeListener: (() => void) | undefined;
 
-const THEMES: readonly AppTheme[] = ["dark", "light", "system", "amber", "green"];
+const THEMES: readonly AppTheme[] = ["dark", "light", "system", "amber", "green", "blue"];
 
 export function defaultSettings(): AppSettings {
   const provider = findAiProvider(DEFAULT_AI_PROVIDER_ID);

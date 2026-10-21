@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CURRENT_SCHEMA_VERSION = 2 as const;
+export const CURRENT_SCHEMA_VERSION = 3 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -36,6 +36,22 @@ const imageElement = base.extend({
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   }),
   altText: z.string().max(500),
+  placement: z.enum(["content", "layout-background"]).optional(),
+});
+
+const hexColor = z.string().regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i);
+
+const themeSchema = z.object({
+  name: z.string().min(1).max(200),
+  majorFont: z.string().min(1).max(200),
+  minorFont: z.string().min(1).max(200),
+  colors: z.array(z.object({ name: z.string().min(1).max(64), value: hexColor })).max(64),
+});
+
+const slideLayoutSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(200),
+  backgroundColor: hexColor.optional(),
 });
 
 const contentBlockSchema = z.discriminatedUnion("type", [
