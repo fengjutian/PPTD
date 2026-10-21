@@ -11,9 +11,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             application_version,
-            commands::save_project,
-            commands::open_project,
-            commands::write_pptx
+            commands::project_file::save_project,
+            commands::project_file::open_project,
+            commands::project_file::write_pptx
         ])
         .run(tauri::generate_context!())
         .expect("failed to run PPTD");

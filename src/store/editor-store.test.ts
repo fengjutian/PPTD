@@ -22,4 +22,16 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(2);
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
   });
+
+  it("treats duplicating a slide as one content and design transaction", () => {
+    const slideId = useEditorStore.getState().activeSlideId;
+    useEditorStore.getState().execute({ type: "duplicate-slide", slideId });
+    expect(useEditorStore.getState().document.slides).toHaveLength(2);
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 1, design: 1 });
+    expect(useEditorStore.getState().activeSlideId).not.toBe(slideId);
+
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().document.slides).toHaveLength(1);
+    expect(useEditorStore.getState().activeSlideId).toBe(slideId);
+  });
 });

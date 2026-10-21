@@ -66,7 +66,7 @@ pub fn open_project(path: String) -> Result<Value, String> {
     if metadata.len() > MAX_PROJECT_BYTES {
         return Err("PROJECT_TOO_LARGE".into());
     }
-    let mut file = File::open(path).map_err(|error| format!("PROJECT_OPEN_FAILED: {error}"))?;
+    let file = File::open(path).map_err(|error| format!("PROJECT_OPEN_FAILED: {error}"))?;
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
     file.take(MAX_PROJECT_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -84,4 +84,38 @@ pub fn write_pptx(path: String, bytes: Vec<u8>) -> Result<(), String> {
         return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
     }
     atomic_write(&path, &bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn saves_and_opens_a_project() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("sample.pptd");
+        let value = json!({ "schemaVersion": 1, "title": "测试" });
+        save_project(path.to_string_lossy().into_owned(), value.clone()).unwrap();
+        assert_eq!(
+            open_project(path.to_string_lossy().into_owned()).unwrap(),
+            value
+        );
+    }
+
+    #[test]
+    fn rejects_wrong_extensions_and_invalid_pptx_bytes() {
+        let directory = tempfile::tempdir().unwrap();
+        let wrong = directory.path().join("sample.json");
+        assert_eq!(
+            save_project(wrong.to_string_lossy().into_owned(), json!({})).unwrap_err(),
+            "INVALID_FILE_EXTENSION"
+        );
+
+        let pptx = directory.path().join("sample.pptx");
+        assert_eq!(
+            write_pptx(pptx.to_string_lossy().into_owned(), b"not a zip".to_vec()).unwrap_err(),
+            "PPTX_ZIP_SIGNATURE_INVALID"
+        );
+    }
 }

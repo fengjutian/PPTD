@@ -40,7 +40,16 @@ export const useEditorStore = create<EditorState>((set) => ({
       if (domain === "content" || domain === "both") draft.revisions.content += 1;
       if (domain === "design" || domain === "both") draft.revisions.design += 1;
     });
-    const activeSlideId = command.type === "add-slide" ? document.slides.at(-1)!.id : state.activeSlideId;
+    let activeSlideId = state.activeSlideId;
+    if (command.type === "add-slide") activeSlideId = document.slides.at(-1)!.id;
+    if (command.type === "duplicate-slide") {
+      const sourceIndex = state.document.slides.findIndex((slide) => slide.id === command.slideId);
+      activeSlideId = document.slides[sourceIndex + 1]!.id;
+    }
+    if (!document.slides.some((slide) => slide.id === activeSlideId)) {
+      const previousIndex = state.document.slides.findIndex((slide) => slide.id === state.activeSlideId);
+      activeSlideId = document.slides[Math.min(previousIndex, document.slides.length - 1)]!.id;
+    }
     return { ...state, document, activeSlideId, selectedElementId: null, undoStack: [...state.undoStack, { forward, inverse }], redoStack: [] };
   }),
 

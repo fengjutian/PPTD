@@ -1,7 +1,6 @@
-import { Circle, Download, FilePlus2, FileUp, Layers3, MousePointer2, Plus, Redo2, Save, Square, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, Layers3, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
-import { buildPptx } from "../features/pptx-export/export-pptx";
 import { choosePptxPath, chooseProjectToOpen, isDesktopRuntime, saveProject, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
@@ -96,6 +95,7 @@ export function App() {
   const handleExport = async () => {
     setTaskStatus("正在生成 PPTX…");
     try {
+      const { buildPptx } = await import("../features/pptx-export/export-pptx");
       const { bytes, report } = await buildPptx(document);
       const path = await choosePptxPath(document.title);
       if (path) await writePptx(path, bytes);
@@ -130,7 +130,15 @@ export function App() {
       <aside className="left-panel">
         <div className="panel-heading"><span>页面</span><button onClick={() => execute({ type: "add-slide" })}><Plus size={16} /></button></div>
         <div className="slide-list">
-          {document.slides.map((slide, index) => <button key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`} onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><div className="thumbnail"><div className="thumb-title">{slide.content.title}</div><div className="thumb-accent" /></div></button>)}
+          {document.slides.map((slide, index) => <div key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`}>
+            <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><div className="thumbnail"><div className="thumb-title">{slide.content.title}</div><div className="thumb-accent" /></div></button>
+            {slide.id === activeSlide.id && <div className="thumbnail-actions">
+              <button aria-label="上移页面" title="上移页面" disabled={index === 0} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index - 1 })}><ArrowUp /></button>
+              <button aria-label="下移页面" title="下移页面" disabled={index === document.slides.length - 1} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index + 1 })}><ArrowDown /></button>
+              <button aria-label="复制页面" title="复制页面" onClick={() => execute({ type: "duplicate-slide", slideId: slide.id })}><Copy /></button>
+              <button aria-label="删除页面" title="删除页面" disabled={document.slides.length === 1} onClick={() => execute({ type: "delete-slide", slideId: slide.id })}><Trash2 /></button>
+            </div>}
+          </div>)}
         </div>
       </aside>
 

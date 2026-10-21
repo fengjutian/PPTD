@@ -5,6 +5,9 @@ export type ChangeDomain = "content" | "design" | "both";
 
 export type DocumentCommand =
   | { type: "add-slide" }
+  | { type: "duplicate-slide"; slideId: SlideId }
+  | { type: "delete-slide"; slideId: SlideId }
+  | { type: "move-slide"; slideId: SlideId; toIndex: number }
   | { type: "set-slide"; slideId: SlideId }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
@@ -15,6 +18,9 @@ export function commandDomain(command: DocumentCommand): ChangeDomain | null {
     case "set-slide": return null;
     case "edit-text": return "content";
     case "add-slide": return "both";
+    case "duplicate-slide": return "both";
+    case "delete-slide": return "both";
+    case "move-slide": return "both";
     default: return "design";
   }
 }
@@ -23,6 +29,39 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "set-slide") return;
   if (command.type === "add-slide") {
     document.slides.push(createSlide(document.slides.length + 1));
+    return;
+  }
+  if (command.type === "duplicate-slide") {
+    const sourceIndex = document.slides.findIndex((item) => item.id === command.slideId);
+    if (sourceIndex < 0) throw new Error("SLIDE_NOT_FOUND");
+    const source = document.slides[sourceIndex]!;
+    const duplicate = {
+      ...source,
+      id: crypto.randomUUID() as SlideId,
+      content: { ...source.content },
+      elements: source.elements.map((element) => element.type === "text"
+        ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
+        : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }),
+    };
+    document.slides.splice(sourceIndex + 1, 0, duplicate);
+    return;
+  }
+  if (command.type === "delete-slide") {
+    if (document.slides.length === 1) throw new Error("LAST_SLIDE_CANNOT_BE_DELETED");
+    const sourceIndex = document.slides.findIndex((item) => item.id === command.slideId);
+    if (sourceIndex < 0) throw new Error("SLIDE_NOT_FOUND");
+    document.slides.splice(sourceIndex, 1);
+    return;
+  }
+  if (command.type === "move-slide") {
+    const sourceIndex = document.slides.findIndex((item) => item.id === command.slideId);
+    if (sourceIndex < 0) throw new Error("SLIDE_NOT_FOUND");
+    if (!Number.isInteger(command.toIndex) || command.toIndex < 0 || command.toIndex >= document.slides.length) {
+      throw new Error("SLIDE_INDEX_OUT_OF_RANGE");
+    }
+    if (sourceIndex === command.toIndex) return;
+    const [slide] = document.slides.splice(sourceIndex, 1);
+    document.slides.splice(command.toIndex, 0, slide!);
     return;
   }
   const slide = document.slides.find((item) => item.id === command.slideId);

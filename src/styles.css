@@ -27,10 +27,16 @@ button { color: inherit; }
 .panel-heading, .inspector-title { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #2c2e33; font-size: 13px; font-weight: 600; }
 .panel-heading button { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px; background: #2b2d32; cursor: pointer; }
 .slide-list { height: calc(100% - 48px); padding: 14px 10px; overflow-y: auto; }
-.thumbnail-row { width: 100%; display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 7px 5px; border: 0; background: transparent; color: #777b83; cursor: pointer; font-size: 11px; text-align: right; }
+.thumbnail-row { position: relative; width: 100%; padding: 7px 5px 31px; color: #777b83; font-size: 11px; }
+.thumbnail-select { width: 100%; display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: right; }
 .thumbnail-row.active { color: #d8ff52; }
 .thumbnail { aspect-ratio: 16 / 9; position: relative; overflow: hidden; background: #f8f8f6; border: 2px solid transparent; border-radius: 4px; box-shadow: 0 3px 10px #0005; color: #141519; text-align: left; padding: 12px; }
 .thumbnail-row.active .thumbnail { border-color: #d8ff52; }
+.thumbnail-actions { position: absolute; right: 5px; bottom: 3px; display: flex; gap: 3px; }
+.thumbnail-actions button { width: 23px; height: 23px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: #292b30; color: #aeb1b8; cursor: pointer; }
+.thumbnail-actions button:hover:not(:disabled) { color: #d8ff52; background: #34363c; }
+.thumbnail-actions button:disabled { color: #55585f; cursor: default; }
+.thumbnail-actions svg { width: 13px; height: 13px; }
 .thumb-title { width: 80%; font-weight: 700; font-size: 8px; }
 .thumb-accent { width: 36%; height: 6px; position: absolute; left: 12px; bottom: 11px; background: #d8ff52; border-radius: 5px; }
 

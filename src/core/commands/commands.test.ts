@@ -23,4 +23,26 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.status).toBe("changed");
     expect(result.slides[0]!.content.title).toBe("新的标题");
   });
+
+  it("duplicates slides with fresh stable IDs", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "duplicate-slide", slideId: slide.id }));
+    expect(result.slides).toHaveLength(2);
+    expect(result.slides[1]!.id).not.toBe(slide.id);
+    expect(result.slides[1]!.elements[0]!.id).not.toBe(slide.elements[0]!.id);
+    expect(result.slides[1]!.content).toEqual(slide.content);
+  });
+
+  it("moves and deletes slides while preserving at least one slide", () => {
+    const source = createDocument();
+    source.slides.push(createDocument().slides[0]!);
+    const firstId = source.slides[0]!.id;
+    const secondId = source.slides[1]!.id;
+    const moved = produce(source, (draft) => applyCommand(draft, { type: "move-slide", slideId: secondId, toIndex: 0 }));
+    expect(moved.slides.map((slide) => slide.id)).toEqual([secondId, firstId]);
+    const deleted = produce(moved, (draft) => applyCommand(draft, { type: "delete-slide", slideId: secondId }));
+    expect(deleted.slides.map((slide) => slide.id)).toEqual([firstId]);
+    expect(() => produce(deleted, (draft) => applyCommand(draft, { type: "delete-slide", slideId: firstId }))).toThrow("LAST_SLIDE_CANNOT_BE_DELETED");
+  });
 });
