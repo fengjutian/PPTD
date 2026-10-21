@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PresentationVisualGoal, VisualRepairPlan, VisualReview } from "./visual-alignment";
-import { visualRepairPlanSchema, visualReviewSchema } from "./visual-alignment";
+import { normalizeVisualReview, visualRepairPlanSchema } from "./visual-alignment";
 import type { PresentationRender } from "./presentation-renderer";
 import { loadSettings } from "./settings";
 
@@ -39,8 +39,16 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     const indexes = (slideIndexes ?? render.slides.map((_, index) => index)).slice(0, 6);
     if (indexes.length === 0 || indexes.some((index) => !render.slides[index])) throw new Error("AI_VISION_SLIDE_INDEX_INVALID");
     const settings = loadSettings();
-    const result = await invoke<unknown>("review_presentation_visuals", { request: { goal, slideImages: indexes.map((index) => render.slides[index]!), contactSheet: render.contactSheet, slideIndexes: indexes, model: settings.aiModel, provider: settings.aiProviderId } });
-    return visualReviewSchema.parse(result);
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await invoke<unknown>("review_presentation_visuals", { request: { goal, slideImages: indexes.map((index) => render.slides[index]!), contactSheet: render.contactSheet, slideIndexes: indexes, model: settings.aiModel, provider: settings.aiProviderId, repairHint: attempt === 0 ? undefined : "上一次响应不是可接受的严格 JSON，或缺少必填评分字段。请重新检查并严格遵循输出协议。" } });
+        return normalizeVisualReview(result, indexes);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw new Error("AI_VISION_REVIEW_RETRY_EXHAUSTED", { cause: lastError });
   }
 
   async planRepairs(review: VisualReview, _goal: PresentationVisualGoal): Promise<VisualRepairPlan> {

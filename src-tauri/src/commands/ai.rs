@@ -44,6 +44,7 @@ pub struct ReviewVisualsRequest {
     slide_indexes: Vec<usize>,
     model: Option<String>,
     provider: Option<String>,
+    repair_hint: Option<String>,
 }
 
 fn validate_review_image(value: &str) -> Result<(), String> {
@@ -70,6 +71,10 @@ pub async fn review_presentation_visuals(
     }
     let goal = serde_json::to_string(&request.goal).map_err(|_| "AI_VISION_REQUEST_INVALID")?;
     if goal.len() > 20_000 {
+        return Err("AI_VISION_REQUEST_INVALID".into());
+    }
+    let repair_hint = request.repair_hint.as_deref().unwrap_or("").trim();
+    if repair_hint.chars().count() > 500 {
         return Err("AI_VISION_REQUEST_INVALID".into());
     }
     let provider = ai::resolve(request.provider.as_deref())?;
@@ -125,7 +130,10 @@ pub async fn review_presentation_visuals(
 {{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题和主要内容移动到右侧留白区，并保持共同左轴"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}]}}
 
 【本次整套视觉目标】
-{goal}"#
+{goal}
+
+【重试纠正要求】
+{repair_hint}"#
     );
     let mut images = Vec::with_capacity(request.slide_images.len() + 1);
     images.push(request.contact_sheet);
