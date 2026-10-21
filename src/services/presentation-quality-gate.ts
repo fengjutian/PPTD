@@ -72,6 +72,22 @@ export function validatePresentationVisualQuality(document: PresentationDocument
         if (intersects(normalized(left.frame, document.pageSize.width, document.pageSize.height), normalized(right.frame, document.pageSize.width, document.pageSize.height))) issues.push({ slideIndex, elementIds: [left.id, right.id], issue: "text-overlap", message: "两个文本框发生可见重叠" });
       }
     }
+    // A split page with two tall columns can still look empty when the copy is
+    // short: the frames reserve the full column but the painted text stops in
+    // the upper half. Detect that composition instead of accepting it because
+    // every individual text box fits.
+    const splitColumns = texts.filter((element) => element.contentRef !== "title"
+      && element.style.fontSizePt >= 14
+      && element.frame.width >= document.pageSize.width * 0.18
+      && element.frame.width <= document.pageSize.width * 0.45
+      && element.frame.height >= document.pageSize.height * 0.08);
+    if (design?.layout === "split" && splitColumns.length === 2) {
+      const textHeights = splitColumns.map((element) => renderedTextHeight(element, document.pageSize.height));
+      const maxBottom = Math.max(...splitColumns.map((element, index) => element.frame.y / document.pageSize.height + textHeights[index]!));
+      if (maxBottom < 0.64 && Math.max(...textHeights) < 0.18) {
+        issues.push({ slideIndex, elementIds: splitColumns.map((element) => element.id), issue: "underfilled-columns", message: "双栏正文只占页面上半部，下方连续空白超过三分之一" });
+      }
+    }
   });
   return { passed: issues.length === 0, issues };
 }

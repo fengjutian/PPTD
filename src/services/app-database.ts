@@ -10,6 +10,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
  */
 export interface StoredAppSettings {
   theme: string;
+  uiFont: string;
   aiProviderId: string;
   aiModel: string;
 }

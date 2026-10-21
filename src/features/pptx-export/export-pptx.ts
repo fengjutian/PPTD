@@ -1,5 +1,5 @@
 import PptxGenJS from "pptxgenjs";
-import { EMU_PER_INCH, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
+import { EMU_PER_INCH, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
 import { isFontAvailable, validatePresentationForExport, type ExportIssue } from "../../core/validation/export-validation";
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
 import { applyThemeColors } from "./theme-xml";
@@ -47,6 +47,16 @@ function imageExtension(dataUrl: string): string {
 }
 
 /**
+ * Layout names come from a foreign file. They end up as the name of a layout
+ * in the package and as part of a media path, so the characters that are
+ * illegal in XML or in a package path are replaced before they are used.
+ */
+function safeMasterTitle(name: string, fallback: string): string {
+  const cleaned = name.replace(/[\u0000-\u001f<>:"|?*\\/]/g, "-").replace(/\s+/g, " ").trim();
+  return cleaned || fallback;
+}
+
+/**
  * Collects the layouts the deck was designed against. Every layout becomes one
  * slide master, so slides that share a layout share a master as well.
  */
@@ -57,8 +67,8 @@ function planMasters(document: PresentationDocument): Map<string, MasterPlan> {
     if (!slide.layoutId) continue;
     const spec: SlideLayoutSpec | undefined = document.layouts?.find((layout) => layout.id === slide.layoutId);
     if (!spec || plans.has(spec.id)) continue;
-    const artwork = slide.elements.find((element) => element.type === "image" && element.placement === "layout-background");
-    const base = spec.name.trim() || "版式";
+    const artwork = slide.elements.find((element): element is ImageElement => element.type === "image" && element.placement === "layout-background");
+    const base = safeMasterTitle(spec.name, "PPTD 版式");
     let title = base;
     let counter = 2;
     while (usedTitles.has(title)) {
@@ -117,7 +127,7 @@ export async function buildPptx(
   // new one in the design panel.
   const theme = document.theme;
   if (theme) {
-    pptx.theme = { headFontFace: theme.majorFont, bodyFontFace: theme.minorFont, lang: "zh-CN" };
+    pptx.theme = { headFontFace: theme.majorFont, bodyFontFace: theme.minorFont };
   }
 
   // Every template layout the deck was designed against becomes a slide
@@ -199,7 +209,8 @@ export async function buildPptx(
   // The palette of the template is written into the theme part of the package.
   // A failure there must not cost the deck its fonts and its masters, so the
   // package is only replaced when the theme part was actually rewritten.
-  const bytes = theme?.colors.length ? applyThemeColors(written, theme.colors) : written;
+  const themed = theme?.colors.length ? applyThemeColors(written, theme.colors) : { bytes: written, applied: false };
+  const bytes = themed.bytes;
   const packageValidation = validatePptxPackage(bytes);
   if (!packageValidation.valid) {
     throw new Error(`EXPORT_PACKAGE_INVALID: ${packageValidation.issues.join("；")}`);
@@ -212,7 +223,7 @@ export async function buildPptx(
       nativeObjectCount,
       masters: [...masters.values()].map((plan) => plan.title),
       ...(theme ? { themeFonts: { major: theme.majorFont, minor: theme.minorFont } } : {}),
-      themeColors: theme?.colors.map((color) => color.name) ?? [],
+      themeColors: themed.applied ? theme!.colors.map((slot) => slot.name) : [],
       warnings: issues.map((issue) => issue.message),
       issues,
       package: packageValidation,

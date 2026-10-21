@@ -1,5 +1,5 @@
 :root {
-  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family, Inter, "Segoe UI", "Microsoft YaHei", sans-serif);
   color: #e9ebee;
   background: #17181b;
   font-synthesis: none;
@@ -500,6 +500,18 @@ button { color: inherit; }
 .theme-swatch.amber { border-color: #d9a24a; background: linear-gradient(135deg, #f3c877 0%, #e0993a 55%, #c2660f 100%); }
 .theme-swatch.green { border-color: #107c41; background: linear-gradient(135deg, #4ea672 0%, #217346 55%, #0f5c33 100%); }
 .theme-swatch.blue { border-color: #1f4c8b; background: linear-gradient(135deg, #7ea6d9 0%, #2b579a 55%, #1f4c8b 100%); }
+.font-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.font-options button { display: grid; gap: 7px; padding: 12px 14px; border: 1px solid #3b3d44; border-radius: 9px; color: #cfd2d8; background: #191a1e; cursor: pointer; text-align: left; }
+.font-options button:hover { border-color: #666a73; background: #24262b; }
+.font-options button.active { border-color: var(--ppt-accent); color: #fff; background: #31211e; }
+.font-card-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.font-card-head strong { flex: 1; font-weight: 600; }
+.font-options button > svg { width: 17px; height: 17px; color: var(--ppt-accent-hover); }
+.font-badge { font-size: 11px; font-style: normal; padding: 2px 7px; border-radius: 999px; border: 1px solid #565a63; color: #b9bec6; }
+.font-badge.missing { border-color: #7a5b2c; color: #d8a24a; background: rgba(216, 162, 74, .12); }
+.font-sample { font-size: 15px; line-height: 1.5; color: #e9ebee; }
+.font-note { font-size: 12px; line-height: 1.5; color: #858a93; }
+@media (max-width: 900px) { .font-options { grid-template-columns: 1fr; } }
 .settings-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 14px 0; background: linear-gradient(transparent, #191a1e 22%); }
 .settings-actions .primary-action { min-width: 140px; }
 
@@ -573,6 +585,8 @@ button { color: inherit; }
 :root[data-theme="light"] .button-secondary { color: #444a53; background: #fff; border-color: #c7cbd1; } :root[data-theme="light"] .button-secondary:hover:not(:disabled) { color: #a33b24; border-color: var(--ppt-accent); }
 :root[data-theme="light"] .connection-result.success { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; } :root[data-theme="light"] .connection-result.error { color: #9f3541; background: #fff1f2; border-color: #e2a8ae; }
 :root[data-theme="light"] .theme-options button { color: #34383f; background: #f4f5f7; border-color: #cfd3d9; } :root[data-theme="light"] .theme-options button:hover { background: #e9ebee; } :root[data-theme="light"] .theme-options button.active { color: #7d2d1d; background: #fff1ed; border-color: var(--ppt-accent); }
+:root[data-theme="light"] .font-options button { color: #34383f; background: #f4f5f7; border-color: #cfd3d9; } :root[data-theme="light"] .font-options button:hover { background: #e9ebee; } :root[data-theme="light"] .font-options button.active { color: #7d2d1d; background: #fff1ed; border-color: var(--ppt-accent); }
+:root[data-theme="light"] .font-sample { color: #24272c; } :root[data-theme="light"] .font-note { color: #747a84; } :root[data-theme="light"] .font-badge { border-color: #c7cbd1; color: #5f646d; } :root[data-theme="light"] .font-badge.missing { border-color: #c2a678; color: #8a5a12; background: #fff8ed; }
 :root[data-theme="light"] .settings-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 
 /* 橙黄主题：暖米底色 + 橙色强调色，结构覆盖与浅色主题一一对应。 */
@@ -639,6 +653,8 @@ button { color: inherit; }
 :root[data-theme="amber"] .button-secondary { color: #4a4136; background: #fffdf8; border-color: #ded1bb; } :root[data-theme="amber"] .button-secondary:hover:not(:disabled) { color: #9a5a12; border-color: var(--ppt-accent); }
 :root[data-theme="amber"] .connection-result.success { color: #4f6b28; background: #f3f8e8; border-color: #b6cd8e; } :root[data-theme="amber"] .connection-result.error { color: #9a3b32; background: #fdf0ec; border-color: #e0b0a4; }
 :root[data-theme="amber"] .theme-options button { color: #3d342a; background: #f7efe1; border-color: #ded1bb; } :root[data-theme="amber"] .theme-options button:hover { background: #f0e7d8; } :root[data-theme="amber"] .theme-options button.active { color: #8a4f0e; background: #fbeedb; border-color: var(--ppt-accent); }
+:root[data-theme="amber"] .font-options button { color: #3d342a; background: #f7efe1; border-color: #ded1bb; } :root[data-theme="amber"] .font-options button:hover { background: #f0e7d8; } :root[data-theme="amber"] .font-options button.active { color: #8a4f0e; background: #fbeedb; border-color: var(--ppt-accent); }
+:root[data-theme="amber"] .font-sample { color: #322b22; } :root[data-theme="amber"] .font-note { color: #6f6557; } :root[data-theme="amber"] .font-badge { border-color: #d3c4a8; color: #6f6557; } :root[data-theme="amber"] .font-badge.missing { border-color: #c2a678; color: #8a5a12; background: #fdf3e2; }
 :root[data-theme="amber"] .settings-actions { background: linear-gradient(transparent, #f0e7d8 22%); }
 
 /* 绿色主题：贴近 Excel 的中性灰白 + Office 绿(#217346)，顶栏用 Excel 标题栏绿。 */
@@ -743,6 +759,13 @@ button { color: inherit; }
 :root[data-theme="green"] .theme-options button { color: #323130; background: #f3f2f1; border-color: #d2d0ce; }
 :root[data-theme="green"] .theme-options button:hover { background: #edebe9; }
 :root[data-theme="green"] .theme-options button.active { color: #107c41; background: #e6f2ec; border-color: var(--ppt-accent); }
+:root[data-theme="green"] .font-options button { color: #323130; background: #f3f2f1; border-color: #d2d0ce; }
+:root[data-theme="green"] .font-options button:hover { background: #edebe9; }
+:root[data-theme="green"] .font-options button.active { color: #107c41; background: #e6f2ec; border-color: var(--ppt-accent); }
+:root[data-theme="green"] .font-sample { color: #323130; }
+:root[data-theme="green"] .font-note { color: #605e5c; }
+:root[data-theme="green"] .font-badge { border-color: #d2d0ce; color: #605e5c; }
+:root[data-theme="green"] .font-badge.missing { border-color: #c2a678; color: #8a5a12; background: #fdf3e2; }
 :root[data-theme="green"] .settings-actions { background: linear-gradient(transparent, #f3f2f1 22%); }
 
 /* 蓝色主题：贴近 Word 的中性灰白 + Word 蓝(#2B579A)，顶栏用 Word 标题栏蓝。 */
@@ -847,6 +870,13 @@ button { color: inherit; }
 :root[data-theme="blue"] .theme-options button { color: #323130; background: #f3f2f1; border-color: #d2d0ce; }
 :root[data-theme="blue"] .theme-options button:hover { background: #edebe9; }
 :root[data-theme="blue"] .theme-options button.active { color: #1f4c8b; background: #e8eff8; border-color: var(--ppt-accent); }
+:root[data-theme="blue"] .font-options button { color: #323130; background: #f3f2f1; border-color: #d2d0ce; }
+:root[data-theme="blue"] .font-options button:hover { background: #edebe9; }
+:root[data-theme="blue"] .font-options button.active { color: #1f4c8b; background: #e8eff8; border-color: var(--ppt-accent); }
+:root[data-theme="blue"] .font-sample { color: #323130; }
+:root[data-theme="blue"] .font-note { color: #605e5c; }
+:root[data-theme="blue"] .font-badge { border-color: #d2d0ce; color: #605e5c; }
+:root[data-theme="blue"] .font-badge.missing { border-color: #c2a678; color: #8a5a12; background: #fdf3e2; }
 :root[data-theme="blue"] .settings-actions { background: linear-gradient(transparent, #f3f2f1 22%); }
 :root[data-theme="green"] .workflow-steps span.active, :root[data-theme="green"] .section-kicker { color: #107c41; }
 :root[data-theme="green"] .draft-outline-index, :root[data-theme="green"] .draft-slide-number, :root[data-theme="green"] .slide-plan summary small { color: #107c41; }

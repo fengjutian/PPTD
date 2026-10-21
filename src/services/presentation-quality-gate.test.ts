@@ -43,4 +43,35 @@ describe("presentation visual quality gate", () => {
     const report = validatePresentationVisualQuality(document, [current]);
     expect(report.issues.filter((issue) => issue.issue === "obstacle-overlap")).toEqual([]);
   });
+
+  it("rejects a split page whose columns stop in the upper half", () => {
+    const document = createDocument();
+    const longItem = "这是一段用于验证双栏版式的较长正文，它需要在两列中保持完整，并且不能越过页面安全区域，同时保留足够的上下文信息";
+    const current = design({ layout: "split" });
+    applyCommand(document, { type: "apply-ai-designed-draft", title: "双栏", slides: [{ title: "双栏", body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" }], designs: [current] });
+    const columns = document.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.frame.width >= document.pageSize.width * 0.18 && element.frame.width <= document.pageSize.width * 0.45 && element.frame.height >= document.pageSize.height * 0.08);
+    expect(columns).toHaveLength(2);
+    // Simulate legacy or manually shortened copy: the column frames are still
+    // tall, but the painted text no longer reaches the lower part of the page.
+    columns.forEach((element, index) => { element.text = `短句${index + 1}`; });
+    const report = validatePresentationVisualQuality(document, [current]);
+    expect(report.issues.some((issue) => issue.issue === "underfilled-columns")).toBe(true);
+  });
+
+  it("accepts a split page whose columns carry enough copy", () => {
+    const document = createDocument();
+    const longItem = "这是一段用于验证双栏版式的较长正文，它需要在两列中保持完整，并且不能越过页面安全区域，同时保留足够的上下文信息";
+    const current = design({ layout: "split" });
+    applyCommand(document, { type: "apply-ai-designed-draft", title: "双栏", slides: [{ title: "双栏", body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" }], designs: [current] });
+    const report = validatePresentationVisualQuality(document, [current]);
+    expect(report.issues.some((issue) => issue.issue === "underfilled-columns")).toBe(false);
+  });
+
+  it("does not mistake an editorial split page for two sparse columns", () => {
+    const document = createDocument();
+    const current = design({ layout: "split" });
+    applyCommand(document, { type: "apply-ai-designed-draft", title: "要点", slides: [{ title: "要点", body: "1. 第一项\n2. 第二项\n3. 第三项\n4. 第四项\n5. 第五项", speakerNotes: "" }], designs: [current] });
+    const report = validatePresentationVisualQuality(document, [current]);
+    expect(report.issues.some((issue) => issue.issue === "underfilled-columns")).toBe(false);
+  });
 });

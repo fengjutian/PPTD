@@ -8,7 +8,7 @@ import { useEditorStore } from "../../store/editor-store";
 import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
 
-const FONT_OPTIONS = ["Microsoft YaHei", "SimSun", "SimHei", "KaiTi", "FangSong", "Arial", "Calibri", "Times New Roman", "Georgia"] as const;
+const FONT_OPTIONS = ["Microsoft YaHei", "Source Han Serif SC", "Noto Serif SC", "SimSun", "SimHei", "KaiTi", "FangSong", "Arial", "Calibri", "Times New Roman", "Georgia"] as const;
 
 const ROTATION_PRESETS = [0, 90, 180, 270] as const;
 

@@ -760,4 +760,30 @@ describe("document commands", () => {
     expect(label!.type === "text" && label!.frame.y + label!.frame.height).toBeLessThanOrEqual(card!.frame.y + card!.frame.height);
   });
 
+  it("binds the page to the template layout and keeps the artwork as the layout background", () => {
+    const source = createDocument();
+    const content = { title: "模板标题", body: "模板正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [{ index: 11, name: "内页（浅色）1", backgroundColor: "#FFFFFF", backgroundImageDataUrl: "data:image/png;base64,iVBORw0KGgo=", regions: [
+      { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 } },
+      { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, {
+      type: "apply-ai-designed-draft",
+      title: "模板文稿",
+      slides: [content],
+      designs: [design],
+      templateLayouts,
+      templateTheme: { name: "昆佰泰", majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] },
+    }));
+    // The layout is kept, so the exported file can carry it as a slide master.
+    expect(result.layouts).toHaveLength(1);
+    expect(result.layouts![0]!.name).toBe("内页（浅色）1");
+    expect(result.slides[0]!.layoutId).toBe(result.layouts![0]!.id);
+    // The artwork belongs to the layout, not to the page.
+    const artwork = result.slides[0]!.elements.find((element) => element.type === "image");
+    expect(artwork?.type === "image" && artwork.placement).toBe("layout-background");
+    expect(result.theme).toEqual({ name: "昆佰泰", majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] });
+  });
+
 });

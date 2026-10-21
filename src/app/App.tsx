@@ -10,7 +10,7 @@ import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState 
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
-import { applyTheme, defaultSettings, loadSettings } from "../services/settings";
+import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { inspectRenderedTextContrast, renderPresentationForVisualReview, type RenderedContrastIssue } from "../services/presentation-renderer";
@@ -237,9 +237,11 @@ export function App() {
   const dirty = document.revisions.document !== savedRevision;
   useEffect(() => {
     void loadSettings()
-      .then((settings) => applyTheme(settings.theme))
+      .then((settings) => { applyTheme(settings.theme); applyUiFont(settings.uiFont); })
       .catch((error: unknown) => {
-        applyTheme(defaultSettings().theme);
+        const fallback = defaultSettings();
+        applyTheme(fallback.theme);
+        applyUiFont(fallback.uiFont);
         setTaskStatus(`设置读取失败：${error instanceof Error ? error.message : String(error)}`);
       });
   }, []);
@@ -542,6 +544,14 @@ export function App() {
         bodyFontFamily: templateAnalysis.minorFont || templateAnalysis.majorFont || undefined,
         templateDecorations: hasTemplateSize ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })) : undefined,
         templateLayouts: hasTemplateSize ? templateLayoutSources.map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)?.dataUrl, backgroundLuminance: backgroundProbes.get(layout.index), decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ ...normalizeRegion(region), textColor: region.textColor ?? undefined, fontSizePt: region.fontSizePt ?? undefined })) })) : undefined,
+        // The theme of the template travels with the design, so the exported
+        // deck keeps the typography and the palette of the template.
+        templateTheme: {
+          name: selectedTemplate.name,
+          majorFont: templateAnalysis.majorFont ?? undefined,
+          minorFont: templateAnalysis.minorFont ?? undefined,
+          colors: templateAnalysis.themeColors.map((color) => ({ name: color.name, value: color.value })),
+        },
         backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
       };
       let finalDesigns: AiSlideDesign[] = design.slides;

@@ -56,13 +56,13 @@ export function patchColorScheme(xml: string, colors: ThemeColorSlot[]): string 
  * template declares no usable color, so a failure here can never corrupt a
  * file that would otherwise export correctly.
  */
-export function applyThemeColors(bytes: Uint8Array, colors: ThemeColorSlot[]): Uint8Array {
-  if (colors.length === 0) return bytes;
+export function applyThemeColors(bytes: Uint8Array, colors: ThemeColorSlot[]): { bytes: Uint8Array; applied: boolean } {
+  if (colors.length === 0) return { bytes, applied: false };
   const entries = unzipSync(bytes);
   const themePart = entries[THEME_PART];
-  if (!themePart) return bytes;
+  if (!themePart) return { bytes, applied: false };
   const patched = patchColorScheme(strFromU8(themePart), colors);
-  if (!patched) return bytes;
+  if (!patched) return { bytes, applied: false };
   entries[THEME_PART] = strToU8(patched);
-  return zipSync(entries, { level: 6 });
+  return { bytes: zipSync(entries, { level: 6 }), applied: true };
 }

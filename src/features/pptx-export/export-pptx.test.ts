@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 import { applyCommand } from "../../core/commands";
-import { createDocument, inches } from "../../core/document-model";
+import { createDocument, inches, type PresentationDocument } from "../../core/document-model";
 import { buildPptx } from "./export-pptx";
 import { validatePptxPackage } from "./pptx-package";
+
+/**
+ * A deck that was designed against a template: it carries the theme of the
+ * template, one template layout and the artwork of that layout.
+ */
+function templateDocument(): PresentationDocument {
+  const document = createDocument();
+  const layoutId = crypto.randomUUID();
+  document.theme = { name: "昆佰泰", majorFont: "Source Han Sans", minorFont: "Source Han Serif", colors: [{ name: "accent1", value: "#C04A32" }] };
+  document.layouts = [{ id: layoutId, name: "内页（浅色）1", backgroundColor: "#ffffff" }];
+  document.slides[0]!.layoutId = layoutId;
+  document.slides[0]!.elements.unshift({
+    id: crypto.randomUUID() as never,
+    type: "image",
+    placement: "layout-background",
+    frame: { x: 0, y: 0, width: inches(13.333), height: inches(7.5) },
+    rotationMilliDegree: 0,
+    locked: true,
+    source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" },
+    altText: "模板版式背景",
+  });
+  return document;
+}
 
 describe("PPTX export", () => {
   it("creates a structurally valid ZIP-backed presentation and reports native objects", async () => {
@@ -69,5 +92,41 @@ describe("PPTX export", () => {
   it("rejects a package whose central directory is corrupted", () => {
     const bytes = new Uint8Array(64);
     expect(validatePptxPackage(bytes).valid).toBe(false);
+  });
+
+  it("writes the template layout as a slide master and keeps the artwork out of the page", async () => {
+    const result = await buildPptx(templateDocument());
+    const entries = unzipSync(result.bytes);
+    const layoutEntries = Object.keys(entries).filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name));
+    expect(layoutEntries.length).toBeGreaterThan(1);
+    // The slide inherits the layout, it does not carry its own background.
+    const slideXml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    expect(slideXml).not.toContain("<p:bg>");
+    const slideRels = strFromU8(entries["ppt/slides/_rels/slide1.xml.rels"]!);
+    const layoutTarget = /Target="\.\.\/slideLayouts\/(slideLayout\d+\.xml)"/.exec(slideRels)?.[1];
+    expect(layoutTarget).toBeDefined();
+    const layoutXml = strFromU8(entries[`ppt/slideLayouts/${layoutTarget}`]!);
+    expect(layoutXml).toContain('name="内页（浅色）1"');
+    // The artwork of the layout is the background of the layout.
+    expect(layoutXml).toContain("<a:blipFill");
+    expect(slideXml).not.toContain("<p:pic>");
+    expect(result.report.masters).toContain("内页（浅色）1");
+  });
+
+  it("writes the theme of the template into the theme part of the package", async () => {
+    const result = await buildPptx(templateDocument());
+    const themeXml = strFromU8(unzipSync(result.bytes)["ppt/theme/theme1.xml"]!);
+    expect(themeXml).toContain('<a:latin typeface="Source Han Sans"/>');
+    expect(themeXml).toContain('<a:latin typeface="Source Han Serif"/>');
+    expect(themeXml).toContain('<a:accent1><a:srgbClr val="C04A32"/></a:accent1>');
+    expect(result.report.themeFonts).toEqual({ major: "Source Han Sans", minor: "Source Han Serif" });
+    expect(result.report.themeColors).toEqual(["accent1"]);
+  });
+
+  it("keeps the page background on slides that were not designed against a template", async () => {
+    const result = await buildPptx(createDocument());
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain("<p:bg>");
+    expect(result.report.masters).toEqual([]);
   });
 });
