@@ -116,7 +116,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       frame: { x: inches(4), y: inches(2.4), width: inches(2.4), height: inches(1.4) },
       rotationMilliDegree: 0,
       locked: false,
-      style: { fill: "#d8ff52", stroke: "#15171a", strokeWidthPt: 1.5, radiusPt: 12 },
+      style: { fill: "#d35230", stroke: "#7f2f1d", strokeWidthPt: 1.5, radiusPt: 12 },
     });
     return;
   }
