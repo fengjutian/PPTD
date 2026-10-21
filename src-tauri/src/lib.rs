@@ -13,6 +13,9 @@ pub fn run() {
             application_version,
             commands::project_file::save_project,
             commands::project_file::open_project,
+            commands::project_file::save_recovery,
+            commands::project_file::load_recovery,
+            commands::project_file::clear_recovery,
             commands::project_file::write_pptx
         ])
         .run(tauri::generate_context!())

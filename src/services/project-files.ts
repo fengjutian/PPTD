@@ -25,6 +25,33 @@ export async function saveProject(document: PresentationDocument, currentPath?: 
   return path;
 }
 
+const browserRecoveryKey = "pptd:recovery";
+
+export async function saveRecovery(document: PresentationDocument): Promise<void> {
+  if (!isTauri()) {
+    localStorage.setItem(browserRecoveryKey, JSON.stringify(document));
+    return;
+  }
+  await invoke("save_recovery", { document });
+}
+
+export async function loadRecovery(): Promise<PresentationDocument | null> {
+  const raw: unknown = isTauri()
+    ? await invoke("load_recovery")
+    : localStorage.getItem(browserRecoveryKey);
+  if (raw === null) return null;
+  const value: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
+  return parsePresentationDocument(value) as PresentationDocument;
+}
+
+export async function clearRecovery(): Promise<void> {
+  if (!isTauri()) {
+    localStorage.removeItem(browserRecoveryKey);
+    return;
+  }
+  await invoke("clear_recovery");
+}
+
 function safeFileName(value: string): string {
   const normalized = value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim();
   return normalized || "未命名演示文稿";

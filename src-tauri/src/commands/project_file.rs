@@ -5,6 +5,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+use tauri::Manager;
 use tempfile::NamedTempFile;
 
 const MAX_IMAGE_BYTES: usize = 256 * 1024 * 1024;
@@ -148,6 +149,28 @@ fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+fn current_asset_version(document: &Value) -> String {
+    let revision = document
+        .pointer("/revisions/document")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    format!("revision-{revision}")
+}
+
+fn cleanup_old_asset_versions(path: &Path, keep: &str) {
+    let Ok(root) = assets_root(path) else { return };
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if name.starts_with("revision-") && name != keep {
+            let _ = fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
 fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
     let root = assets_root(path)?;
     let mut total_bytes = 0usize;
@@ -214,7 +237,9 @@ fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
 pub fn save_project(path: String, mut document: Value) -> Result<(), String> {
     let path = validate_path(&path, "pptd")?;
     externalize_images(&path, &mut document)?;
-    atomic_write_json(&path, &document)
+    atomic_write_json(&path, &document)?;
+    cleanup_old_asset_versions(&path, &current_asset_version(&document));
+    Ok(())
 }
 
 #[tauri::command]
@@ -225,6 +250,53 @@ pub fn open_project(path: String) -> Result<Value, String> {
         serde_json::from_reader(file).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
     hydrate_images(&path, &mut document)?;
     Ok(document)
+}
+
+fn recovery_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("APP_DATA_DIRECTORY_UNAVAILABLE: {error}"))?
+        .join("recovery");
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("RECOVERY_DIRECTORY_CREATE_FAILED: {error}"))?;
+    Ok(directory.join("latest.pptd"))
+}
+
+#[tauri::command]
+pub fn save_recovery(app: tauri::AppHandle, mut document: Value) -> Result<(), String> {
+    let path = recovery_path(&app)?;
+    externalize_images(&path, &mut document)?;
+    atomic_write_json(&path, &document)?;
+    cleanup_old_asset_versions(&path, &current_asset_version(&document));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn load_recovery(app: tauri::AppHandle) -> Result<Option<Value>, String> {
+    let path = recovery_path(&app)?;
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let file = File::open(&path).map_err(|error| format!("RECOVERY_OPEN_FAILED: {error}"))?;
+    let mut document: Value =
+        serde_json::from_reader(file).map_err(|error| format!("RECOVERY_JSON_INVALID: {error}"))?;
+    hydrate_images(&path, &mut document)?;
+    Ok(Some(document))
+}
+
+#[tauri::command]
+pub fn clear_recovery(app: tauri::AppHandle) -> Result<(), String> {
+    let path = recovery_path(&app)?;
+    if path.exists() {
+        fs::remove_file(&path).map_err(|error| format!("RECOVERY_DELETE_FAILED: {error}"))?;
+    }
+    let assets = assets_root(&path)?;
+    if assets.exists() {
+        fs::remove_dir_all(&assets)
+            .map_err(|error| format!("RECOVERY_ASSETS_DELETE_FAILED: {error}"))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

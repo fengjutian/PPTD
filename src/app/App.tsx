@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, ImagePlu
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
-import { choosePptxPath, chooseProjectToOpen, isDesktopRuntime, saveProject, writePptx } from "../services/project-files";
+import { choosePptxPath, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
@@ -64,6 +64,32 @@ export function App() {
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
 
+  useEffect(() => {
+    let active = true;
+    void loadRecovery().then((recovery) => {
+      if (!active || !recovery) return;
+      if (!window.confirm("检测到未完成的恢复快照，是否恢复？")) {
+        void clearRecovery();
+        return;
+      }
+      loadDocument(recovery);
+      setProjectPath(undefined);
+      setSavedRevision(-1);
+      setTaskStatus("已恢复自动保存快照，请另存项目");
+    }).catch((error: unknown) => setTaskStatus(`恢复检查失败：${error instanceof Error ? error.message : String(error)}`));
+    return () => { active = false; };
+  }, [loadDocument]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const timer = window.setTimeout(() => {
+      void saveRecovery(document)
+        .then(() => setTaskStatus("已自动保存恢复快照"))
+        .catch((error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [dirty, document]);
+
   const commitTransform = (field: "x" | "y" | "width" | "height" | "rotation", rawValue: string) => {
     if (!selected) return;
     const value = Number(rawValue);
@@ -77,8 +103,9 @@ export function App() {
     execute({ type: "transform-element", slideId: activeSlide.id, elementId: selected.id, frame, rotationMilliDegree });
   };
 
-  const handleNew = () => {
+  const handleNew = async () => {
     if (dirty && !window.confirm("当前项目还有未保存的修改，确定新建吗？")) return;
+    await clearRecovery().catch(() => undefined);
     newDocument();
     setProjectPath(undefined);
     setSavedRevision(0);
@@ -91,6 +118,7 @@ export function App() {
       const result = await chooseProjectToOpen();
       if (!result) return;
       loadDocument(result.document);
+      await clearRecovery();
       setProjectPath(result.path);
       setSavedRevision(result.document.revisions.document);
       setTaskStatus("项目已打开");
@@ -104,6 +132,7 @@ export function App() {
       if (!path) { setTaskStatus(undefined); return; }
       if (isDesktopRuntime()) setProjectPath(path);
       setSavedRevision(document.revisions.document);
+      await clearRecovery();
       setTaskStatus(isDesktopRuntime() ? "项目已保存" : "浏览器草稿已保存");
     } catch (error) { setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
   };
