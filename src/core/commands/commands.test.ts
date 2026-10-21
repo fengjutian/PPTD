@@ -108,6 +108,15 @@ describe("document commands", () => {
     expect(duplicated.slides[0]!.content.title).toBe(source.slides[0]!.content.title);
   });
 
+  it("aligns an element to page edges and center without touching content", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = slide.elements[0]!;
+    const aligned = produce(source, (draft) => applyCommand(draft, { type: "align-element", slideId: slide.id, elementId: element.id, align: "center" }));
+    expect(aligned.slides[0]!.elements[0]!.frame.x).toBe(Math.round((source.pageSize.width - element.frame.width) / 2));
+    expect(aligned.slides[0]!.content).toEqual(source.slides[0]!.content);
+  });
+
   it("validates and applies element transforms", () => {
     const source = createDocument();
     const slide = source.slides[0]!;

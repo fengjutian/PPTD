@@ -302,6 +302,10 @@ button { color: inherit; }
 .property-form textarea { min-height: 86px; resize: vertical; }
 .property-form input:focus, .property-form textarea:focus { border-color: var(--ppt-accent); outline: 1px solid var(--ppt-accent); }
 .property-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.align-actions { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin: 4px 0 10px; }
+.align-actions button { height: 26px; padding: 0; border: 1px solid #3b3d44; border-radius: 5px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; }
+.align-actions button:hover:not(:disabled) { border-color: var(--ppt-accent); }
+.align-actions button:disabled { opacity: .4; cursor: default; }
 .element-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 6px; }
 .element-actions button { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 7px 4px; border: 1px solid #3b3d44; border-radius: 6px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; }
 .element-actions button:hover:not(:disabled) { border-color: var(--ppt-accent); }
@@ -315,6 +319,10 @@ button { color: inherit; }
 .module-shell .statusbar { grid-row: 2; }
 .saved-dot { color: #9bad56; margin-left: auto; }
 .saved-dot.dirty { color: #e6ae62; }
+.zoom-controls { display: inline-flex; align-items: center; gap: 2px; }
+.zoom-controls button { min-width: 22px; height: 20px; padding: 0 5px; border: 1px solid #35373d; border-radius: 4px; color: #b9bcc3; background: #1b1c20; font-size: 10px; cursor: pointer; }
+.zoom-controls button:hover { border-color: #4b4e56; color: #fff; }
+.zoom-controls .zoom { min-width: 44px; border-color: transparent; background: transparent; }
 .zoom { min-width: 40px; text-align: right; color: #c6c8cd; }
 .page-message { position: fixed; z-index: 50; top: 16px; right: 18px; width: min(420px, calc(100vw - 36px)); display: grid; grid-template-columns: 20px minmax(0, 1fr) 22px; align-items: center; gap: 10px; padding: 12px 13px; border: 1px solid #484b52; border-radius: 9px; color: #e6e8ec; background: #24262b; font-size: 12px; }
 .page-message > svg { width: 18px; height: 18px; }
@@ -404,3 +412,9 @@ button { color: inherit; }
 :root[data-theme="light"] .settings-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 
 @media (max-width: 1250px) { .app-shell { grid-template-columns: 58px 180px minmax(620px, 1fr) 220px; } .nav-rail button { width: 43px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } .feature-header { padding-inline: 22px; } .presentation-themes { gap: 12px; } .draft-review { grid-template-columns: 220px minmax(0, 1fr); margin-inline: 12px; gap: 14px; } .ai-start.with-history { grid-template-columns: 220px minmax(0, 1fr); gap: 14px; padding-inline: 12px; } .template-browser { grid-template-columns: 280px minmax(0, 1fr); } }
+
+.fatal-error { min-height: 100vh; display: grid; align-content: center; justify-items: start; gap: 14px; padding: 48px; color: #e8e9ec; background: #17181c; }
+.fatal-error h1, .fatal-error p { margin: 0; }
+.fatal-error p { max-width: 680px; color: #a3a7af; line-height: 1.6; }
+.fatal-error pre { max-width: 720px; max-height: 220px; overflow: auto; padding: 14px; border: 1px solid #4a3034; border-radius: 8px; color: #ee9199; background: #241d1f; white-space: pre-wrap; }
+.fatal-error > div { display: flex; gap: 10px; }

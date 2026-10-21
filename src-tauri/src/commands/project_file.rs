@@ -268,6 +268,15 @@ fn atomic_write_json(path: &Path, document: &Value) -> Result<(), String> {
     temporary
         .flush()
         .map_err(|error| format!("FILE_WRITE_FAILED: {error}"))?;
+    if temporary
+        .as_file()
+        .metadata()
+        .map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?
+        .len()
+        > MAX_PROJECT_BYTES
+    {
+        return Err("PROJECT_TOO_LARGE".into());
+    }
     temporary
         .as_file()
         .sync_all()
@@ -466,7 +475,8 @@ pub fn open_project(path: String) -> Result<Value, String> {
 #[tauri::command]
 pub fn project_modified_at(path: String) -> Result<u64, String> {
     let path = validate_path(&path, "pptd")?;
-    let metadata = fs::metadata(&path).map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?;
+    let metadata =
+        fs::metadata(&path).map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?;
     if !metadata.is_file() {
         return Err("PROJECT_NOT_A_FILE".into());
     }

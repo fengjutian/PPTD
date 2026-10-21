@@ -185,6 +185,7 @@ export function App() {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [savedRevision, setSavedRevision] = useState(0);
+  const [zoom, setZoom] = useState(1);
   const [message, setMessage] = useState<PageMessage>();
   const [textDraft, setTextDraft] = useState<{ slideId: SlideId; elementId: ElementId; value: string }>();
   const [exportBusy, setExportBusy] = useState(false);
@@ -211,9 +212,10 @@ export function App() {
   const designCancelRef = useRef(false);
   const [designProgress, setDesignProgress] = useState<DesignProgress>({ percent: 0, label: "等待开始" });
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const clipboardElementId = useRef<ElementId | null>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
-  const scale = CANVAS_WIDTH / document.pageSize.width;
+  const scale = (CANVAS_WIDTH / document.pageSize.width) * zoom;
   const canvasHeight = document.pageSize.height * scale;
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
@@ -290,8 +292,9 @@ export function App() {
     setTaskStatus("正在保存…");
     try {
       if (projectPath && isDesktopRuntime() && projectMtime !== undefined) {
-        const currentMtime = await projectModifiedAt(projectPath);
-        if (currentMtime !== projectMtime && !window.confirm("项目文件已被其他程序修改。继续保存会覆盖外部修改，是否继续？")) {
+        let currentMtime: number | null = null;
+        try { currentMtime = await projectModifiedAt(projectPath); } catch { currentMtime = null; }
+        if (currentMtime !== null && currentMtime !== projectMtime && !window.confirm("项目文件已被其他程序修改。继续保存会覆盖外部修改，是否继续？")) {
           setTaskStatus("保存已取消");
           return;
         }
@@ -591,6 +594,23 @@ export function App() {
         redo();
         return;
       }
+      if (shortcut === "copy-element") {
+        if (!selected) return;
+        event.preventDefault();
+        clipboardElementId.current = selected.id;
+        setTaskStatus("已复制对象，可用 Ctrl+V 粘贴");
+        return;
+      }
+      if (shortcut === "paste-element") {
+        const sourceId = clipboardElementId.current;
+        if (!sourceId || !activeSlide.elements.some((element) => element.id === sourceId)) {
+          setTaskStatus("剪贴板中的对象不在当前页面");
+          return;
+        }
+        event.preventDefault();
+        execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: sourceId });
+        return;
+      }
       if (!selected || selected.locked) return;
       event.preventDefault();
       if (shortcut === "nudge-left" || shortcut === "nudge-right" || shortcut === "nudge-up" || shortcut === "nudge-down") {
@@ -659,7 +679,7 @@ export function App() {
 
       <main className="workspace" onPointerDown={() => selectElement(null)}>
         <div className="canvas-ruler">13.33 × 7.5 in</div>
-        <div className="slide-canvas" style={{ width: CANVAS_WIDTH, height: canvasHeight, background: activeSlide.background }}>
+        <div className="slide-canvas" style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }}>
           {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} scale={scale} selected={element.id === selectedElementId} onSelect={() => selectElement(element.id)} />)}
         </div>
       </main>
@@ -672,6 +692,12 @@ export function App() {
           <div className="property-grid"><label>X（英寸）<input key={`${selected.id}-x-${selected.frame.x}`} defaultValue={(selected.frame.x / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("x", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>Y（英寸）<input key={`${selected.id}-y-${selected.frame.y}`} defaultValue={(selected.frame.y / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("y", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <div className="property-grid"><label>宽度（英寸）<input key={`${selected.id}-w-${selected.frame.width}`} defaultValue={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("width", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>高度（英寸）<input key={`${selected.id}-h-${selected.frame.height}`} defaultValue={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("height", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <label>旋转（度）<input key={`${selected.id}-r-${selected.rotationMilliDegree}`} defaultValue={(selected.rotationMilliDegree / 1000).toFixed(1)} disabled={selected.locked} onBlur={(event) => commitTransform("rotation", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>
+          <div className="align-actions" aria-label="对齐到页面">
+            {([
+              ["left", "左对齐"], ["center", "水平居中"], ["right", "右对齐"],
+              ["top", "顶对齐"], ["middle", "垂直居中"], ["bottom", "底对齐"],
+            ] as const).map(([align, label]) => <button type="button" key={align} title={label} aria-label={label} disabled={selected.locked} onClick={() => execute({ type: "align-element", slideId: activeSlide.id, elementId: selected.id, align })}>{label.slice(0, 1)}</button>)}
+          </div>
           <div className="element-actions">
             <button disabled={selected.locked || activeSlide.elements.at(-1)?.id === selected.id} onClick={() => execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.findIndex((element) => element.id === selected.id) + 1 })}><ArrowUp />上移一层</button>
             <button disabled={selected.locked || activeSlide.elements[0]?.id === selected.id} onClick={() => execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.findIndex((element) => element.id === selected.id) - 1 })}><ArrowDown />下移一层</button>
@@ -728,7 +754,7 @@ export function App() {
 
       {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
 
-      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>
+      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom-controls"><button type="button" aria-label="缩小画布" onClick={() => setZoom((value) => Math.max(0.3, Math.round((value - 0.1) * 10) / 10))}>−</button><button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 10) / 10))}>＋</button></span></footer>
     </div>
   );
 }

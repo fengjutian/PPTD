@@ -62,6 +62,7 @@ export type DocumentCommand =
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
+  | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: "left" | "center" | "right" | "top" | "middle" | "bottom" }
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
@@ -455,6 +456,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (sourceIndex === command.toIndex) return;
     const [moved] = slide.elements.splice(sourceIndex, 1);
     slide.elements.splice(command.toIndex, 0, moved!);
+    return;
+  }
+  if (command.type === "align-element") {
+    const { width, height } = document.pageSize;
+    const frame = { ...element.frame };
+    if (command.align === "left") frame.x = 0 as Emu;
+    if (command.align === "center") frame.x = Math.max(0, Math.round((width - frame.width) / 2)) as Emu;
+    if (command.align === "right") frame.x = Math.max(0, width - frame.width) as Emu;
+    if (command.align === "top") frame.y = 0 as Emu;
+    if (command.align === "middle") frame.y = Math.max(0, Math.round((height - frame.height) / 2)) as Emu;
+    if (command.align === "bottom") frame.y = Math.max(0, height - frame.height) as Emu;
+    element.frame = frame;
     return;
   }
   if (command.type === "delete-element") {

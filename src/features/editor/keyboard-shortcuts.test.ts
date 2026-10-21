@@ -20,6 +20,8 @@ describe("editor keyboard shortcuts", () => {
 
   it("maps selected element actions", () => {
     expect(shortcut({ key: "d", ctrlKey: true })).toBe("duplicate-element");
+    expect(shortcut({ key: "c", ctrlKey: true })).toBe("copy-element");
+    expect(shortcut({ key: "v", ctrlKey: true })).toBe("paste-element");
     expect(shortcut({ key: "Delete" })).toBe("delete-element");
     expect(shortcut({ key: "Backspace" })).toBe("delete-element");
     expect(shortcut({ key: "ArrowLeft" })).toBe("nudge-left");

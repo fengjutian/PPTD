@@ -9,6 +9,7 @@ const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_DIRECTORY_SIGNATURE = 0x02014b50;
 const EOCD_MIN_SIZE = 22;
 const MAX_COMMENT_SIZE = 65_535;
+const MAX_ENTRIES = 4_096;
 
 function readUint32(view: DataView, offset: number): number {
   return view.getUint32(offset, true);
@@ -48,6 +49,12 @@ export function validatePptxPackage(bytes: Uint8Array): PptxPackageValidation {
 
   const entryCount = readUint16(view, eocdOffset + 10);
   const centralDirectoryOffset = readUint32(view, eocdOffset + 16);
+  if (entryCount === 0xffff || centralDirectoryOffset === 0xffffffff) {
+    return { valid: false, entryCount, slideCount: 0, issues: ["不支持 ZIP64 导出包"] };
+  }
+  if (entryCount > MAX_ENTRIES) {
+    return { valid: false, entryCount, slideCount: 0, issues: ["ZIP 条目数量超过上限"] };
+  }
   if (centralDirectoryOffset >= bytes.length) {
     return { valid: false, entryCount, slideCount: 0, issues: ["ZIP 中央目录偏移无效"] };
   }

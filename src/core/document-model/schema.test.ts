@@ -21,6 +21,14 @@ describe("presentation document schema", () => {
     expect(() => presentationDocumentSchema.parse(document)).toThrow();
   });
 
+  it("validates structured content blocks", () => {
+    const document = createDocument();
+    document.slides[0]!.content.blocks = [{ id: crypto.randomUUID(), type: "bullet-list", items: ["甲", "乙"] }];
+    expect(presentationDocumentSchema.parse(document).slides[0]!.content.blocks?.[0]?.type).toBe("bullet-list");
+    document.slides[0]!.content.blocks = [{ id: "not-a-uuid", type: "paragraph", text: "x" }];
+    expect(() => presentationDocumentSchema.parse(document)).toThrow();
+  });
+
   it("accepts embedded images from supported MIME types", () => {
     const document = createDocument();
     document.slides[0]!.elements.push({
