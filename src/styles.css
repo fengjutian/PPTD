@@ -59,6 +59,7 @@ button { color: inherit; }
 .feature-workspace { grid-column: 2 / -1; grid-row: 2; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; background: #191a1e; }
 .module-shell .feature-workspace { grid-row: 1; }
 .feature-scroll { min-width: 0; min-height: 0; overflow-y: auto; }
+.feature-scroll.draft-mode { overflow: hidden; }
 .feature-header { min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 18px 30px; border-bottom: 1px solid #303136; background: #17181b; }
 .feature-header > div:first-child { display: flex; align-items: center; gap: 13px; }
 .feature-header > div:first-child > svg { width: 25px; height: 25px; color: var(--ppt-accent); }
@@ -103,20 +104,26 @@ button { color: inherit; }
 .ai-compose-card > .primary-action { width: 100%; margin-top: 24px; }
 .ai-compose-card small { display: block; margin-top: 12px; color: #6f737c; text-align: center; }
 .draft-review { width: auto; margin: 22px 18px 90px; display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 18px; align-items: start; }
+.draft-mode .draft-review { height: 100%; margin: 0; padding: 22px 18px 16px; align-items: stretch; }
 .draft-review-main { min-width: 0; }
+.draft-mode .draft-review-main { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
 .draft-outline { min-width: 0; }
+.draft-mode .draft-outline { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.draft-outline-list { min-height: 0; }
+.draft-mode .draft-outline-list { overflow-y: auto; padding-right: 6px; }
 .draft-outline-title { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 10px; color: #d8dae0; font-size: 12px; }
 .draft-outline-title span { color: #797e87; font-size: 10px; }
-.draft-outline > button { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; margin-bottom: 8px; padding: 11px; border: 1px solid #34363d; border-radius: 8px; color: #aeb2ba; background: #202126; text-align: left; cursor: pointer; }
-.draft-outline > button:hover { border-color: var(--ppt-accent); background: #242126; }
-.draft-outline > button.active { border-color: var(--ppt-accent); background: #31211e; }
-.draft-outline > button > span { color: var(--ppt-accent-hover); font-size: 11px; font-weight: 800; }
-.draft-outline > button div { min-width: 0; }
-.draft-outline > button strong { display: block; overflow: hidden; color: #e1e3e7; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.draft-outline > button p { display: -webkit-box; overflow: hidden; margin: 6px 0 0; color: #777c85; font-size: 9px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.draft-outline-list > button { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; margin-bottom: 8px; padding: 11px; border: 1px solid #34363d; border-radius: 8px; color: #aeb2ba; background: #202126; text-align: left; cursor: pointer; }
+.draft-outline-list > button:hover { border-color: var(--ppt-accent); background: #242126; }
+.draft-outline-list > button.active { border-color: var(--ppt-accent); background: #31211e; }
+.draft-outline-list > button > span { color: var(--ppt-accent-hover); font-size: 11px; font-weight: 800; }
+.draft-outline-list > button div { min-width: 0; }
+.draft-outline-list > button strong { display: block; overflow: hidden; color: #e1e3e7; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.draft-outline-list > button p { display: -webkit-box; overflow: hidden; margin: 6px 0 0; color: #777c85; font-size: 9px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .draft-review-heading { display: grid; grid-template-columns: 1fr minmax(300px, 42%); gap: 40px; align-items: end; margin-bottom: 20px; }
 .draft-review-heading label { margin: 0; }
 .draft-slide-list { display: grid; gap: 12px; }
+.draft-mode .draft-slide-list { min-height: 0; overflow: hidden; }
 .draft-slide-card { display: grid; grid-template-columns: 52px 1fr; gap: 18px; padding: 20px; border: 1px solid #34363d; border-radius: 12px; background: #202126; }
 .draft-slide-card { scroll-margin-top: 20px; }
 .draft-slide-card > span { color: var(--ppt-accent-hover); font-size: 19px; font-weight: 800; }
@@ -124,6 +131,7 @@ button { color: inherit; }
 .draft-slide-card textarea { min-height: 82px; overflow: hidden; resize: none; field-sizing: content; }
 .draft-slide-card textarea.notes { min-height: 54px; }
 .sticky-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; padding: 14px 0; background: linear-gradient(transparent, #191a1e 22%); }
+.draft-mode .sticky-actions { position: static; margin-top: 0; }
 .theme-content { width: min(980px, calc(100% - 64px)); margin: 44px auto; }
 .presentation-themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 26px; }
 .presentation-themes > button { display: grid; gap: 8px; padding: 12px; border: 1px solid #36383e; border-radius: 12px; color: inherit; background: #202126; text-align: left; cursor: pointer; }
@@ -316,7 +324,7 @@ button { color: inherit; }
 :root[data-theme="light"] .feature-workspace { background: #eef0f3; } :root[data-theme="light"] .feature-header { background: #f8f9fb; border-color: #d6d9de; }
 :root[data-theme="light"] .ai-compose-card, :root[data-theme="light"] .draft-slide-card, :root[data-theme="light"] .presentation-themes > button { color: #24272c; background: #fff; border-color: #d4d7dc; }
 :root[data-theme="light"] .ai-history-heading { color: #353a42; } :root[data-theme="light"] .ai-history > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .ai-history > button:hover { border-color: var(--ppt-accent); background: #fff8f5; } :root[data-theme="light"] .ai-history > button strong { color: #272b31; }
-:root[data-theme="light"] .draft-outline-title { color: #353a42; } :root[data-theme="light"] .draft-outline > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .draft-outline > button:hover, :root[data-theme="light"] .draft-outline > button.active { border-color: var(--ppt-accent); background: #fff1ed; } :root[data-theme="light"] .draft-outline > button strong { color: #272b31; }
+:root[data-theme="light"] .draft-outline-title { color: #353a42; } :root[data-theme="light"] .draft-outline-list > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .draft-outline-list > button:hover, :root[data-theme="light"] .draft-outline-list > button.active { border-color: var(--ppt-accent); background: #fff1ed; } :root[data-theme="light"] .draft-outline-list > button strong { color: #272b31; }
 :root[data-theme="light"] .ai-compose-card textarea, :root[data-theme="light"] .ai-compose-card input, :root[data-theme="light"] .draft-review textarea, :root[data-theme="light"] .draft-review input { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .sticky-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 :root[data-theme="light"] .theme-applied-message { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; }

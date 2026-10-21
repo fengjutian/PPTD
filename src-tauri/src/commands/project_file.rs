@@ -450,14 +450,16 @@ pub fn get_pptx_template_preview(
         return Err("TEMPLATE_NOT_FOUND".into());
     }
     let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
-    let mut archive = ZipArchive::new(file)
-        .map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
     for (entry_name, mime_type) in [
         ("docProps/thumbnail.jpeg", "image/jpeg"),
         ("docProps/thumbnail.jpg", "image/jpeg"),
         ("docProps/thumbnail.png", "image/png"),
     ] {
-        let Ok(mut entry) = archive.by_name(entry_name) else { continue };
+        let Ok(entry) = archive.by_name(entry_name) else {
+            continue;
+        };
         if entry.size() == 0 || entry.size() > MAX_TEMPLATE_PREVIEW_BYTES {
             return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
         }
@@ -469,7 +471,10 @@ pub fn get_pptx_template_preview(
         if bytes.len() as u64 > MAX_TEMPLATE_PREVIEW_BYTES {
             return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
         }
-        return Ok(Some(format!("data:{mime_type};base64,{}", BASE64.encode(bytes))));
+        return Ok(Some(format!(
+            "data:{mime_type};base64,{}",
+            BASE64.encode(bytes)
+        )));
     }
     Ok(None)
 }
