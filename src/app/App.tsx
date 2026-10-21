@@ -91,6 +91,7 @@ export function App() {
   const [templateAnalysis, setTemplateAnalysis] = useState<TemplateAnalysis>();
   const [templatePreviewBusy, setTemplatePreviewBusy] = useState(false);
   const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
@@ -243,9 +244,15 @@ export function App() {
 
   const continueToTheme = () => {
     if (!aiDraft) return;
+    setTemplatePickerOpen(true);
+  };
+
+  const generateFromDraft = () => {
+    if (!aiDraft || !selectedTemplate) return;
     execute({ type: "apply-ai-draft", title: aiDraft.title, slides: aiDraft.slides });
-    setActiveView("theme");
-    setTaskStatus("内容草稿已确认，可以选择 PPT 模板");
+    setTemplatePickerOpen(false);
+    setActiveView("editor");
+    setTaskStatus(`PPT 已生成，已使用模板：${selectedTemplate.name}`);
   };
 
   const handleChooseTemplate = async () => {
@@ -380,7 +387,7 @@ export function App() {
       </aside></>}
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
-        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再选择用户的 PPT 模板</p></div></div><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 上传模板</span></div></header>
+        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再选择用户的 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); setActiveDraftSlideIndex(0); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
         <div className={`feature-scroll ${aiDraft ? "draft-mode" : ""}`}>
         {!aiDraft ? <section className={`ai-start ${aiHistory.length ? "with-history" : ""}`}>
           {aiHistory.length > 0 && <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>}
@@ -395,7 +402,7 @@ export function App() {
           <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div><div className="draft-outline-list">{aiDraft.slides.map((slide, index) => <button type="button" className={activeDraftSlideIndex === index ? "active" : ""} aria-current={activeDraftSlideIndex === index ? "page" : undefined} key={index} onClick={() => setActiveDraftSlideIndex(index)}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</div></aside>
           <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>后续应用模板时不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
           <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => index === activeDraftSlideIndex && <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
-          <div className="sticky-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); setActiveDraftSlideIndex(0); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div></div>
+          </div>
         </section>}
         </div>
       </main>}
@@ -418,6 +425,8 @@ export function App() {
       </main>}
 
       {templateUploadOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTemplateUploadOpen(false); }}><section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-template-title"><div className="upload-dialog-heading"><div><FileUp /><div><h2 id="upload-template-title">上传 PPT 模板</h2><p>模板将保存到 PPTD 模板库。</p></div></div><button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}><X /></button></div><button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}><FileUp /><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx，最大 512 MB</small></button><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(false)}>取消</button></div></section></div>}
+
+      {templatePickerOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTemplatePickerOpen(false); }}><section className="upload-dialog template-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="template-picker-title"><div className="upload-dialog-heading"><div><Palette /><div><h2 id="template-picker-title">选择 PPT 模板</h2><p>选择模板后生成演示文稿，并直接进入编辑模块。</p></div></div><button type="button" aria-label="关闭模板选择窗口" onClick={() => setTemplatePickerOpen(false)}><X /></button></div><div className="template-picker-toolbar"><strong>已保存模板</strong><button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(true)}><FileUp />上传模板</button></div><div className="template-picker-body"><div className="template-library"><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}</div><div className="template-preview-panel"><div className="template-preview-stage">{templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-picker-summary"><span>{templateAnalysis.slideCount} 页面</span><span>{templateAnalysis.layoutCount} 版式</span><span>{templateAnalysis.themeCount} 主题</span></div>}</div></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setTemplatePickerOpen(false)}>取消</button><button type="button" className="primary-action" disabled={!selectedTemplate || templatePreviewBusy} onClick={generateFromDraft}>生成 PPT<ArrowRight /></button></div></section></div>}
 
       {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
 
