@@ -1,4 +1,4 @@
-import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TextElementStyle } from "../document-model";
+import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
 import { createDocument, createSlide, inches, parseMetricValue } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";
@@ -36,7 +36,8 @@ export type AiContentBlock =
   | { type: "metric"; label: string; value: string }
   | { type: "timeline"; items: Array<{ label: string; text: string }> }
   | { type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
-  | { type: "process"; items: Array<{ label: string; text: string }> };
+  | { type: "process"; items: Array<{ label: string; text: string }> }
+  | { type: "table-data"; header: string[]; rows: string[][] };
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
 
 /**
@@ -78,6 +79,7 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
     if (block.type === "metric") return { id, type: "metric", label: block.label, value: block.value };
     if (block.type === "timeline") return { id, type: "timeline", items: block.items.map((item) => ({ ...item })) };
     if (block.type === "comparison") return { id, type: "comparison", leftLabel: block.leftLabel, rightLabel: block.rightLabel, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
+    if (block.type === "table-data") return { id, type: "table-data", header: [...block.header], rows: block.rows.map((row) => [...row]) };
     return { id, type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
@@ -87,6 +89,7 @@ function cloneElement(element: SlideElement): SlideElement {
   if (element.type === "text") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
   if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
   if (element.type === "chart") return { ...element, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] };
+  if (element.type === "table") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
   return { ...element, frame: { ...element.frame }, source: { ...element.source } };
 }
 
@@ -100,6 +103,7 @@ function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | unde
     if (block.type === "metric") return { type: "metric", label: block.label, value: block.value };
     if (block.type === "timeline") return { type: "timeline", items: block.items.map((item) => ({ ...item })) };
     if (block.type === "comparison") return { type: "comparison", leftLabel: block.leftLabel, rightLabel: block.rightLabel, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
+    if (block.type === "table-data") return { type: "table-data", header: [...block.header], rows: block.rows.map((row) => [...row]) };
     return { type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
@@ -127,6 +131,7 @@ export type DocumentCommand =
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
   | { type: "set-chart-style"; slideId: SlideId; elementId: ElementId; style: Partial<ChartElementStyle> }
   | { type: "set-chart-kind"; slideId: SlideId; elementId: ElementId; kind: ChartKind }
+  | { type: "set-table-style"; slideId: SlideId; elementId: ElementId; style: Partial<TableElementStyle> }
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
@@ -159,6 +164,19 @@ function assertChartStyle(style: Partial<ChartElementStyle>): void {
   }
   if (style.showLegend !== undefined && typeof style.showLegend !== "boolean") throw new Error("INVALID_CHART_STYLE");
   if (style.showValueLabels !== undefined && typeof style.showValueLabels !== "boolean") throw new Error("INVALID_CHART_STYLE");
+}
+
+/**
+ * The style of a table is presentation-only, so it is guarded like the others.
+ */
+function assertTableStyle(style: Partial<TableElementStyle>): void {
+  if (style.fontFamily !== undefined && (typeof style.fontFamily !== "string" || !style.fontFamily.trim() || style.fontFamily.length > 100)) throw new Error("INVALID_TABLE_STYLE");
+  if (style.fontSizePt !== undefined && (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)) throw new Error("INVALID_TABLE_STYLE");
+  if (style.headerFill !== undefined && !HEX_COLOR_PATTERN.test(style.headerFill)) throw new Error("INVALID_TABLE_STYLE");
+  if (style.headerTextColor !== undefined && !HEX_COLOR_PATTERN.test(style.headerTextColor)) throw new Error("INVALID_TABLE_STYLE");
+  if (style.bodyTextColor !== undefined && !HEX_COLOR_PATTERN.test(style.bodyTextColor)) throw new Error("INVALID_TABLE_STYLE");
+  if (style.borderColor !== undefined && !HEX_COLOR_PATTERN.test(style.borderColor)) throw new Error("INVALID_TABLE_STYLE");
+  if (style.firstColumnBold !== undefined && typeof style.firstColumnBold !== "boolean") throw new Error("INVALID_TABLE_STYLE");
 }
 
 /**
@@ -203,6 +221,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-shape-style":
     case "set-chart-style":
     case "set-chart-kind":
+    case "set-table-style":
     case "set-image-alt-text":
     case "set-image-crop": return "design";
     case "edit-text":
@@ -398,6 +417,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
       const quoteBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
+      // A table block is rendered as a native table: the exporter writes real
+      // table cells, so the reviewer keeps an editable grid instead of a picture.
+      const tableBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "table-data" }> => block.type === "table-data");
       // A quoted line already present in the reviewed copy can carry the page
       // as a pull quote. It is a visual emphasis of existing content, never a
       // new claim, and gives dense list pages an editorial anchor.
@@ -419,7 +441,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         && shortItems;
       const editorialSplit = design.layout === "split" && shortItems;
       const shortSplitAsCards = design.layout === "split" && items.length === 6 && shortItems;
-      const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
+      const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock);
       // The rendered artwork and the placeholder geometry describe the same
       // layout, so editable text has to land on the geometry of the layout that
       // was actually chosen. Dropping the geometry whenever a background image
@@ -582,6 +604,32 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text(column.label, centeredBlock(column.label, { x: column.x + 0.025, y: panelTop, width: columnWidth - 0.05, height: headerHeight }, labelSize), labelSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
           slide.elements.push(text(itemText(column.items), frame(column.x + 0.035, panelTop + headerHeight + 0.015, columnWidth - 0.07, panelHeight - headerHeight - 0.03), itemSize, bodyInk, false, "left", undefined, cardLuminance));
         });
+      } else if (tableBlock) {
+        const tableIndex = blocks.indexOf(tableBlock);
+        const tableContent = contentBlocks?.[tableIndex];
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        // The table element holds no cells of its own: it points at the reviewed
+        // table block, so editing the numbers keeps the grid in sync.
+        if (tableContent?.type === "table-data" && tableContent.header.length > 0 && tableContent.rows.length > 0) {
+          slide.elements.push({
+            id: crypto.randomUUID() as ElementId,
+            type: "table",
+            contentBlockId: tableContent.id,
+            frame: frame(contentBox.x, contentBox.y + contentBox.height * 0.06, contentBox.width, Math.min(contentBox.height * 0.80, 0.52)),
+            rotationMilliDegree: 0,
+            locked: false,
+            style: {
+              fontFamily: command.bodyFontFamily || command.fontFamily || "Microsoft YaHei",
+              fontSizePt: 14,
+              headerFill: accentFill,
+              headerTextColor: "#FFFFFF",
+              bodyTextColor: bodyInk,
+              borderColor: cardStroke,
+              firstColumnBold: true,
+            },
+          });
+        }
       } else if (metricBlocks.length > 0) {
         const metrics = metricBlocks.slice(0, 6);
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
@@ -907,7 +955,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
           : element.type === "chart"
             ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] }
-            : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, source: { ...element.source } }),
+            : element.type === "table"
+              ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
+              : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, source: { ...element.source } }),
     };
     document.slides.splice(sourceIndex + 1, 0, duplicate);
     return;
@@ -1004,7 +1054,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
         : element.type === "chart"
           ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] }
-          : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, source: { ...element.source } };
+          : element.type === "table"
+            ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
+            : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, source: { ...element.source } };
     // A copy is user-owned even when its source was generated.
     duplicate.origin = "user";
     slide.elements.splice(sourceIndex + 1, 0, duplicate);
@@ -1054,6 +1106,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "chart") throw new Error("ELEMENT_NOT_CHART");
     if (command.kind !== "column" && command.kind !== "bar" && command.kind !== "line" && command.kind !== "pie") throw new Error("INVALID_CHART_KIND");
     element.kind = command.kind;
+    return;
+  }
+  if (command.type === "set-table-style") {
+    if (element.type !== "table") throw new Error("ELEMENT_NOT_TABLE");
+    assertTableStyle(command.style);
+    element.style = { ...element.style, ...command.style };
     return;
   }
   if (command.type === "set-image-alt-text") {

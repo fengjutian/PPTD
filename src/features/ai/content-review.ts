@@ -43,6 +43,9 @@ function blockPointCount(block: ContentBlock): number {
       return block.items.length;
     case "comparison":
       return block.leftItems.length + block.rightItems.length;
+    case "table-data":
+      // A table is as dense as the rows it carries.
+      return block.rows.length;
     case "paragraph":
     case "quote":
     case "metric":

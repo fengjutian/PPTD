@@ -1,4 +1,4 @@
-import { EMU_PER_INCH, resolveChartData, type PresentationDocument, type SlideElement } from "../document-model";
+import { EMU_PER_INCH, resolveChartData, resolveTableData, type PresentationDocument, type SlideElement } from "../document-model";
 import { textLikelyOverflows } from "../rendering/text-fit";
 
 export type ExportIssueCode =
@@ -10,7 +10,8 @@ export type ExportIssueCode =
   | "empty-slide"
   | "missing-alt-text"
   | "duplicate-id"
-  | "invalid-chart-data";
+  | "invalid-chart-data"
+  | "invalid-table-data";
 
 export type ExportIssueSeverity = "error" | "warning";
 
@@ -127,6 +128,20 @@ export async function validatePresentationForExport(
             code: "invalid-chart-data",
             severity: "error",
             message: `第 ${slideIndex + 1} 页图表缺少可用的数值，无法导出`,
+            slideIndex,
+            elementId: element.id,
+          });
+        }
+      }
+
+      if (element.type === "table") {
+        // A table without readable cells would export as an empty grid, and an
+        // empty grid in a deck is worse than a missing one.
+        if (!resolveTableData(slide, element)) {
+          issues.push({
+            code: "invalid-table-data",
+            severity: "error",
+            message: `第 ${slideIndex + 1} 页表格缺少可用的单元格，无法导出`,
             slideIndex,
             elementId: element.id,
           });

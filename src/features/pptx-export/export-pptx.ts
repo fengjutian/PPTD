@@ -1,6 +1,6 @@
 import PptxGenJS from "pptxgenjs";
 import { unzipSync, zipSync } from "fflate";
-import { EMU_PER_INCH, resolveChartData, type ChartElement, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
+import { EMU_PER_INCH, resolveChartData, resolveTableData, type ChartElement, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
 import { isFontAvailable, validatePresentationForExport, type ExportIssue } from "../../core/validation/export-validation";
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
 import { patchThemeColors } from "./theme-xml";
@@ -17,6 +17,8 @@ export interface ExportReport {
   croppedImages: number;
   /** Charts that were written as native chart objects, not as pictures. */
   nativeChartCount: number;
+  /** Tables that were written as native table objects, not as pictures. */
+  nativeTableCount: number;
   /** Names of the slide masters written into the package. */
   masters: string[];
   /** Theme fonts written into the theme part, when the deck declares a theme. */
@@ -160,6 +162,7 @@ export async function buildPptx(
   let nativeObjectCount = 0;
   let croppedImageCount = 0;
   let nativeChartCount = 0;
+  let nativeTableCount = 0;
   // The crops of the pictures of every slide, in the order the pictures were
   // added. The source rectangle of a crop is written into the slide XML later.
   const cropsBySlide: (ImageCrop | undefined)[][] = [];
@@ -252,6 +255,51 @@ export async function buildPptx(
           fill: "FFFFFF",
         });
         nativeChartCount += 1;
+      } else if (element.type === "table") {
+        // A native table, not a picture of a grid: the cells stay editable in
+        // PowerPoint and the file keeps the reviewed rows of the page.
+        const resolved = resolveTableData(model, element);
+        if (!resolved) throw new Error("EXPORT_TABLE_DATA_INVALID");
+        const columnCount = resolved.header.length;
+        const border = { type: "solid" as const, pt: 0.75, color: color(element.style.borderColor) };
+        const header = resolved.header.map((cell) => ({
+          text: cell,
+          options: {
+            bold: true,
+            color: color(element.style.headerTextColor),
+            fill: { color: color(element.style.headerFill) },
+            border,
+          },
+        }));
+        const body = resolved.rows.map((row) => {
+          const cells = row.slice(0, columnCount);
+          while (cells.length < columnCount) cells.push("");
+          return cells.map((cell, cellIndex) => ({
+            text: cell,
+            options: {
+              color: color(element.style.bodyTextColor),
+              bold: element.style.firstColumnBold && cellIndex === 0,
+              border,
+            },
+          }));
+        });
+        const rows = [header, ...body];
+        // The rows share the frame of the element, so a table never grows past
+        // the box the designer gave it.
+        const rowHeight = Math.max(0.2, Math.min(0.6, position.h / rows.length));
+        slide.addTable(rows, {
+          ...position,
+          h: rowHeight * rows.length,
+          rowH: rowHeight,
+          fontFace: element.style.fontFamily,
+          fontSize: element.style.fontSizePt,
+          color: color(element.style.bodyTextColor),
+          valign: "middle",
+          margin: 0.05,
+          autoPage: false,
+          border,
+        });
+        nativeTableCount += 1;
       } else {
         slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });
         slideCrops.push(element.crop);
@@ -289,6 +337,7 @@ export async function buildPptx(
       nativeObjectCount,
       croppedImages: croppedImageCount,
       nativeChartCount,
+      nativeTableCount,
       masters: [...masters.values()].map((plan) => plan.title),
       ...(theme ? { themeFonts: { major: theme.majorFont, minor: theme.minorFont } } : {}),
       themeColors: themeApplied ? theme!.colors.map((slot) => slot.name) : [],

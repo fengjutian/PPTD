@@ -357,6 +357,12 @@ button { color: inherit; }
 .chart-axis-item { display: flex; flex-direction: column; align-items: center; }
 .chart-missing { align-items: center; justify-content: center; color: #8a94a6; }
 .thumbnail-chart .chart-view { font-size: 4px; }
+.slide-element.table { overflow: hidden; }
+.table-view { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; pointer-events: none; }
+.table-view th, .table-view td { border: 1px solid; padding: 2px 4px; text-align: left; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table-view th { font-weight: 700; }
+.table-missing { display: flex; align-items: center; justify-content: center; color: #8a94a6; }
+.thumbnail-table .table-view { font-size: 4px; }
 .slide-element.selected::after { content: ""; position: absolute; inset: -4px; border: 2px solid var(--ppt-accent); pointer-events: none; }
 .element-handle { position: absolute; z-index: 3; width: 9px; height: 9px; padding: 0; border: 2px solid var(--ppt-accent); border-radius: 2px; background: #fff; }
 .element-handle.nw { left: -6px; top: -6px; cursor: nwse-resize; }

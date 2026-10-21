@@ -34,6 +34,7 @@ function elementTypeLabel(element: SlideElement): string {
   if (element.type === "text") return "文本";
   if (element.type === "image") return "图片";
   if (element.type === "chart") return "图表";
+  if (element.type === "table") return "表格";
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
@@ -305,6 +306,30 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             onChange={(event) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { showLegend: event.target.checked } })} />显示图例</label>
         </div>
         <p className="inspector-hint">图表的数值来自本页已审核的指标，导出后在 PowerPoint 中仍是可编辑的图表对象。</p>
+      </section>}
+
+      {element.type === "table" && <section className="inspector-section">
+        <h4>表格</h4>
+        <div className="property-grid">
+          <SelectField label="字体" value={element.style.fontFamily} disabled={locked}
+            options={FONT_OPTIONS}
+            onCommit={(fontFamily) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { fontFamily } })} />
+          <NumberField label="字号" unit="pt" value={element.style.fontSizePt} min={4} max={400} precision={0} disabled={locked}
+            onCommit={(fontSizePt) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { fontSizePt } })} />
+          <ColorField label="表头填充" value={element.style.headerFill} wide disabled={locked}
+            onCommit={(headerFill) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { headerFill } })} />
+          <ColorField label="表头文字" value={element.style.headerTextColor} wide disabled={locked}
+            onCommit={(headerTextColor) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { headerTextColor } })} />
+          <ColorField label="正文文字" value={element.style.bodyTextColor} wide disabled={locked}
+            onCommit={(bodyTextColor) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { bodyTextColor } })} />
+          <ColorField label="边框" value={element.style.borderColor} wide disabled={locked}
+            onCommit={(borderColor) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { borderColor } })} />
+        </div>
+        <div className="field-row">
+          <label><input type="checkbox" checked={element.style.firstColumnBold} disabled={locked}
+            onChange={(event) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { firstColumnBold: event.target.checked } })} />首列加粗</label>
+        </div>
+        <p className="inspector-hint">表格的单元格来自本页已审核的表格数据，导出后在 PowerPoint 中仍是可编辑的表格对象。</p>
       </section>}
 
       {element.type === "image" && <section className="inspector-section">
