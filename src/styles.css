@@ -144,14 +144,19 @@ button { color: inherit; }
 .theme-applied-message { display: flex; align-items: center; gap: 8px; margin-top: 20px; padding: 11px 14px; border: 1px solid #52613d; border-radius: 8px; color: #a9c47e; background: #20261a; font-size: 12px; }
 .theme-applied-message svg { width: 16px; height: 16px; }
 .finish-theme { float: right; margin-top: 26px; }
-.template-content { width: min(820px, calc(100% - 64px)); margin: 44px auto; }
+.template-content { width: min(1080px, calc(100% - 64px)); margin: 44px auto; }
 .template-content h2, .template-content p { margin: 0; }
 .template-content h2 { font-size: 22px; }
 .template-content > div:first-child > p { margin-top: 8px; color: #858a93; font-size: 12px; }
+.template-page-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+.template-page-heading .primary-action { flex: 0 0 auto; }
+.template-browser { display: grid; grid-template-columns: minmax(280px, 38%) minmax(0, 1fr); gap: 16px; margin-top: 24px; }
 .template-library { margin-top: 24px; }
+.template-browser .template-library { margin-top: 0; }
 .template-library-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: #d8dae0; font-size: 12px; }
 .template-library-heading span { color: #797e87; font-size: 10px; }
 .template-library > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.template-browser .template-library > div:last-child { grid-template-columns: 1fr; }
 .template-library button { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 9px; padding: 12px; border: 1px solid #34363d; border-radius: 8px; color: #aeb2ba; background: #202126; text-align: left; cursor: pointer; }
 .template-library button:hover, .template-library button.active { border-color: var(--ppt-accent); background: #242126; }
 .template-library button > svg { width: 18px; height: 18px; color: var(--ppt-accent-hover); }
@@ -159,6 +164,14 @@ button { color: inherit; }
 .template-library button strong, .template-library button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .template-library button strong { color: #e1e3e7; font-size: 11px; }
 .template-library button small { margin-top: 4px; color: #777c85; font-size: 9px; }
+.template-empty { min-height: 130px; display: grid; place-items: center; border: 1px dashed #484b52; border-radius: 10px; color: #777c85; font-size: 12px; }
+.template-preview-panel { min-width: 0; }
+.template-preview-heading { height: 28px; display: flex; align-items: start; justify-content: space-between; gap: 16px; color: #d8dae0; font-size: 12px; }
+.template-preview-heading strong { display: flex; align-items: center; gap: 7px; }
+.template-preview-heading strong svg { width: 16px; color: var(--ppt-accent-hover); }
+.template-preview-heading > span { overflow: hidden; color: #797e87; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.template-preview-stage { aspect-ratio: 16 / 9; display: grid; place-items: center; overflow: hidden; border: 1px solid #3b3d44; border-radius: 10px; color: #777c85; background: #111216; font-size: 12px; }
+.template-preview-stage img { width: 100%; height: 100%; object-fit: contain; }
 .template-dropzone { width: 100%; min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; margin-top: 28px; border: 1px dashed #555860; border-radius: 15px; color: #d9dbe0; background: #202126; cursor: pointer; }
 .template-dropzone:hover, .template-dropzone.selected { border-color: var(--ppt-accent); background: #242126; }
 .template-dropzone > svg { width: 38px; height: 38px; margin-bottom: 5px; color: var(--ppt-accent-hover); }
@@ -171,6 +184,19 @@ button { color: inherit; }
 .template-status span { color: #84966a; font-size: 11px; }
 .template-notice { margin-top: 16px; padding: 14px 16px; border-left: 3px solid #b98548; border-radius: 5px; color: #c9cbd0; background: #25231f; font-size: 12px; }
 .template-notice p { margin-top: 6px; color: #92959c; line-height: 1.6; }
+.upload-dialog-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: rgb(0 0 0 / 58%); }
+.upload-dialog { width: min(620px, 100%); padding: 24px; border: 1px solid #3b3d44; border-radius: 14px; background: #191a1e; }
+.upload-dialog-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.upload-dialog-heading > div { display: flex; align-items: center; gap: 12px; }
+.upload-dialog-heading > div > svg { width: 24px; color: var(--ppt-accent-hover); }
+.upload-dialog-heading h2, .upload-dialog-heading p { margin: 0; }
+.upload-dialog-heading h2 { font-size: 18px; }
+.upload-dialog-heading p { margin-top: 5px; color: #858a93; font-size: 11px; }
+.upload-dialog-heading > button { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 7px; color: #9a9ea6; background: transparent; cursor: pointer; }
+.upload-dialog-heading > button:hover { color: #fff; background: #292b30; }
+.upload-dialog-heading > button svg { width: 18px; }
+.upload-dialog .template-dropzone { min-height: 230px; margin-top: 24px; }
+.upload-dialog-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
 .left-panel { border-right: 1px solid #303136; }
 .right-panel { border-left: 1px solid #303136; }
 .panel-heading, .inspector-title { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #2c2e33; font-size: 13px; font-weight: 600; }
@@ -297,6 +323,8 @@ button { color: inherit; }
 :root[data-theme="light"] .template-dropzone { color: #24272c; background: #fff; border-color: #aeb3bb; } :root[data-theme="light"] .template-dropzone:hover, :root[data-theme="light"] .template-dropzone.selected { border-color: var(--ppt-accent); background: #fff9f7; }
 :root[data-theme="light"] .template-library-heading { color: #353a42; } :root[data-theme="light"] .template-library button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .template-library button:hover, :root[data-theme="light"] .template-library button.active { border-color: var(--ppt-accent); background: #fff8f5; } :root[data-theme="light"] .template-library button strong { color: #272b31; }
 :root[data-theme="light"] .template-status { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; } :root[data-theme="light"] .template-notice { color: #494d53; background: #fff8ed; }
+:root[data-theme="light"] .template-preview-heading { color: #353a42; } :root[data-theme="light"] .template-preview-stage { color: #747a84; background: #fff; border-color: #d4d7dc; }
+:root[data-theme="light"] .upload-dialog { color: #24272c; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .upload-dialog-heading > button:hover { color: #25282d; background: #eceef1; }
 :root[data-theme="light"] .settings-card { color: #24272c; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .settings-card input { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .settings-tabs { border-color: #d4d7dc; } :root[data-theme="light"] .settings-tabs button:hover { color: #333840; }
 :root[data-theme="light"] .settings-card select { color: #24272c; background: #fff; border-color: #cfd3d9; } :root[data-theme="light"] .settings-card input[readonly] { color: #69707a; background: #f4f5f7; }
@@ -305,4 +333,4 @@ button { color: inherit; }
 :root[data-theme="light"] .theme-options button { color: #34383f; background: #f4f5f7; border-color: #cfd3d9; } :root[data-theme="light"] .theme-options button:hover { background: #e9ebee; } :root[data-theme="light"] .theme-options button.active { color: #7d2d1d; background: #fff1ed; border-color: var(--ppt-accent); }
 :root[data-theme="light"] .settings-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 
-@media (max-width: 1250px) { .app-shell { grid-template-columns: 58px 180px minmax(620px, 1fr) 220px; } .nav-rail button { width: 43px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } .feature-header { padding-inline: 22px; } .presentation-themes { gap: 12px; } .draft-review { grid-template-columns: 220px minmax(0, 1fr); margin-inline: 12px; gap: 14px; } .ai-start.with-history { grid-template-columns: 220px minmax(0, 1fr); gap: 14px; padding-inline: 12px; } }
+@media (max-width: 1250px) { .app-shell { grid-template-columns: 58px 180px minmax(620px, 1fr) 220px; } .nav-rail button { width: 43px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } .feature-header { padding-inline: 22px; } .presentation-themes { gap: 12px; } .draft-review { grid-template-columns: 220px minmax(0, 1fr); margin-inline: 12px; gap: 14px; } .ai-start.with-history { grid-template-columns: 220px minmax(0, 1fr); gap: 14px; padding-inline: 12px; } .template-browser { grid-template-columns: 280px minmax(0, 1fr); } }
