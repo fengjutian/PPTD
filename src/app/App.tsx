@@ -10,7 +10,7 @@ import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState 
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
-import { applyTheme, loadSettings } from "../services/settings";
+import { applyTheme, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { inspectRenderedTextContrast, renderPresentationForVisualReview, type RenderedContrastIssue } from "../services/presentation-renderer";
@@ -235,7 +235,14 @@ export function App() {
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
-  useEffect(() => { void loadSettings().then((settings) => applyTheme(settings.theme)); }, []);
+  useEffect(() => {
+    void loadSettings()
+      .then((settings) => applyTheme(settings.theme))
+      .catch((error: unknown) => {
+        applyTheme(defaultSettings().theme);
+        setTaskStatus(`设置读取失败：${error instanceof Error ? error.message : String(error)}`);
+      });
+  }, []);
   useEffect(() => {
     let active = true;
     void loadAiHistory()

@@ -23,7 +23,9 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
   const provider = findAiProvider(settings.aiProviderId);
   useEffect(() => {
     let active = true;
-    void loadSettings().then((stored) => { if (active) setSettings(stored); });
+    void loadSettings()
+      .then((stored) => { if (active) setSettings(stored); })
+      .catch(() => { if (active) setSettings(defaultSettings()); });
     return () => { active = false; };
   }, []);
   useEffect(() => { void aiKeyConfigured(settings.aiProviderId).then(setConfigured).catch(() => setConfigured(false)); }, [settings.aiProviderId]);

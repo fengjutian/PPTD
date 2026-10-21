@@ -15,7 +15,7 @@ export function defaultSettings(): AppSettings {
 
 export async function loadSettings(): Promise<AppSettings> {
   const fallback = defaultSettings();
-  const stored = await loadStoredAppSettings().catch(() => null);
+  const stored = await loadStoredAppSettings();
   if (!stored) return fallback;
   const provider = findAiProvider(stored.aiProviderId);
   const theme = THEMES.includes(stored.theme as AppTheme) ? (stored.theme as AppTheme) : fallback.theme;

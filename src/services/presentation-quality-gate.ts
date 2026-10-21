@@ -1,15 +1,26 @@
 import type { AiSlideDesign, AiNormalizedRect } from "../core/commands/commands";
 import type { PresentationDocument, RectEmu, Slide, TextElement } from "../core/document-model";
 import { contrastRatio } from "../core/rendering/contrast";
-import { textLikelyOverflows } from "../core/rendering/text-fit";
+import { estimateTextLines, textLikelyOverflows } from "../core/rendering/text-fit";
 
-export type PresentationQualityIssueKind = "out-of-bounds" | "text-overlap" | "obstacle-overlap" | "low-contrast" | "text-overflow";
+export type PresentationQualityIssueKind = "out-of-bounds" | "text-overlap" | "obstacle-overlap" | "low-contrast" | "text-overflow" | "underfilled-columns";
 export interface PresentationQualityIssue { slideIndex: number; elementIds: string[]; issue: PresentationQualityIssueKind; message: string }
 export interface PresentationQualityReport { passed: boolean; issues: PresentationQualityIssue[] }
 
 const intersects = (left: AiNormalizedRect, right: AiNormalizedRect): boolean => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
 const normalized = (frame: RectEmu, pageWidth: number, pageHeight: number): AiNormalizedRect => ({ x: frame.x / pageWidth, y: frame.y / pageHeight, width: frame.width / pageWidth, height: frame.height / pageHeight });
 const contains = (outer: AiNormalizedRect, inner: AiNormalizedRect): boolean => outer.x <= inner.x + 0.001 && outer.y <= inner.y + 0.001 && outer.x + outer.width >= inner.x + inner.width - 0.001 && outer.y + outer.height >= inner.y + inner.height - 0.001;
+
+/**
+ * Height the canvas actually paints, not the height of the frame. Split text is
+ * centered inside its column, so a tall frame with a short paragraph can still
+ * leave most of the page empty.
+ */
+function renderedTextHeight(element: TextElement, pageHeight: number): number {
+  const widthPt = element.frame.width / 12_700;
+  const heightPt = estimateTextLines(element.text, widthPt, element.style.fontSizePt) * element.style.fontSizePt * 1.25;
+  return (heightPt * 12_700) / pageHeight;
+}
 
 /**
  * The background that actually carries a text element: the topmost shape below it
