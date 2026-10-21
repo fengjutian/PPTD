@@ -1,6 +1,8 @@
-import { Circle, Download, FilePlus2, Layers3, MousePointer2, Plus, Redo2, Save, Square, Type, Undo2 } from "lucide-react";
+import { Circle, Download, FilePlus2, FileUp, Layers3, MousePointer2, Plus, Redo2, Save, Square, Type, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
+import { buildPptx } from "../features/pptx-export/export-pptx";
+import { choosePptxPath, chooseProjectToOpen, isDesktopRuntime, saveProject, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
@@ -48,20 +50,72 @@ function ElementView({ element, scale, selected, onSelect }: { element: SlideEle
 }
 
 export function App() {
-  const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, selectSlide, selectElement, undo, redo } = useEditorStore();
+  const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
+  const [projectPath, setProjectPath] = useState<string>();
+  const [savedRevision, setSavedRevision] = useState(0);
+  const [taskStatus, setTaskStatus] = useState<string>();
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
   const scale = CANVAS_WIDTH / document.pageSize.width;
   const canvasHeight = document.pageSize.height * scale;
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
+  const dirty = document.revisions.document !== savedRevision;
+
+  const handleNew = () => {
+    if (dirty && !window.confirm("当前项目还有未保存的修改，确定新建吗？")) return;
+    newDocument();
+    setProjectPath(undefined);
+    setSavedRevision(0);
+    setTaskStatus("已新建项目");
+  };
+
+  const handleOpen = async () => {
+    try {
+      if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开其他项目吗？")) return;
+      const result = await chooseProjectToOpen();
+      if (!result) return;
+      loadDocument(result.document);
+      setProjectPath(result.path);
+      setSavedRevision(result.document.revisions.document);
+      setTaskStatus("项目已打开");
+    } catch (error) { setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`); }
+  };
+
+  const handleSave = async () => {
+    setTaskStatus("正在保存…");
+    try {
+      const path = await saveProject(document, projectPath);
+      if (!path) { setTaskStatus(undefined); return; }
+      if (isDesktopRuntime()) setProjectPath(path);
+      setSavedRevision(document.revisions.document);
+      setTaskStatus(isDesktopRuntime() ? "项目已保存" : "浏览器草稿已保存");
+    } catch (error) { setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
+  };
+
+  const handleExport = async () => {
+    setTaskStatus("正在生成 PPTX…");
+    try {
+      const { bytes, report } = await buildPptx(document);
+      const path = await choosePptxPath(document.title);
+      if (path) await writePptx(path, bytes);
+      else if (!isDesktopRuntime()) {
+        const blob = new Blob([bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+        const url = URL.createObjectURL(blob);
+        const anchor = Object.assign(globalThis.document.createElement("a"), { href: url, download: `${document.title}.pptx` });
+        anchor.click();
+        URL.revokeObjectURL(url);
+      } else { setTaskStatus(undefined); return; }
+      setTaskStatus(`导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象`);
+    } catch (error) { setTaskStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`); }
+  };
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="brand"><span className="brand-mark">P</span><div><strong>PPTD</strong><small>{document.title}</small></div></div>
         <div className="toolbar-group">
-          <ToolButton label="新建项目（后续切片）" disabled><FilePlus2 /></ToolButton><ToolButton label="保存（后续切片）" disabled><Save /></ToolButton>
+          <ToolButton label="新建项目" onClick={handleNew}><FilePlus2 /></ToolButton><ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}><FileUp /></ToolButton><ToolButton label="保存项目" onClick={handleSave}><Save /></ToolButton>
           <span className="separator" />
           <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
         </div>
@@ -70,7 +124,7 @@ export function App() {
           <ToolButton label="矩形" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}><Square /></ToolButton>
           <ToolButton label="椭圆" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}><Circle /></ToolButton>
         </div>
-        <button className="export-button" disabled title="将在 V0.1 导出切片中实现"><Download size={17} /> 导出 PPTX</button>
+        <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button>
       </header>
 
       <aside className="left-panel">
@@ -97,7 +151,7 @@ export function App() {
         </div> : <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>}
       </aside>
 
-      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className="saved-dot">● 内存草稿</span><span className="zoom">75%</span></footer>
+      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{taskStatus && <span className="task-status">{taskStatus}</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>
     </div>
   );
 }

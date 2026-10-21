@@ -1,3 +1,5 @@
+mod commands;
+
 #[tauri::command]
 fn application_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -6,7 +8,13 @@ fn application_version() -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![application_version])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            application_version,
+            commands::save_project,
+            commands::open_project,
+            commands::write_pptx
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run PPTD");
 }

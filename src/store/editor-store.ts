@@ -18,6 +18,8 @@ interface EditorState {
   selectElement: (elementId: ElementId | null) => void;
   undo: () => void;
   redo: () => void;
+  newDocument: () => void;
+  loadDocument: (document: PresentationDocument) => void;
 }
 
 const initial = createDocument();
@@ -58,4 +60,9 @@ export const useEditorStore = create<EditorState>((set) => ({
     const document = applyPatches(state.document, entry.forward);
     return { ...state, document, undoStack: [...state.undoStack, entry], redoStack: state.redoStack.slice(0, -1), selectedElementId: null };
   }),
+  newDocument: () => set(() => {
+    const document = createDocument();
+    return { document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] };
+  }),
+  loadDocument: (document) => set(() => ({ document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] })),
 }));

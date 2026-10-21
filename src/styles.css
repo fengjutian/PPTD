@@ -55,7 +55,10 @@ button { color: inherit; }
 .empty-inspector svg { width: 30px; height: 30px; opacity: .7; }
 
 .statusbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 22px; padding: 0 14px; background: #101114; border-top: 1px solid #303136; color: #7d818a; font-size: 10px; }
+.task-status { margin-left: auto; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #babdc4; }
 .saved-dot { color: #9bad56; margin-left: auto; }
+.task-status + .saved-dot { margin-left: 0; }
+.saved-dot.dirty { color: #e6ae62; }
 .zoom { min-width: 40px; text-align: right; color: #c6c8cd; }
 
 @media (max-width: 1250px) { .app-shell { grid-template-columns: 180px minmax(620px, 1fr) 220px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } }
