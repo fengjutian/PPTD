@@ -220,7 +220,7 @@ export function App() {
       const id = crypto.randomUUID();
       setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0);
       setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
-      setTaskStatus("MiniMax 已完成 PPT 草稿生成");
+      setTaskStatus("AI 已完成 PPT 草稿生成");
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
     }
     catch (error) {
@@ -387,7 +387,7 @@ export function App() {
 
       <nav className="nav-rail" aria-label="主功能">
         <button className={activeView === "editor" ? "active" : ""} aria-current={activeView === "editor" ? "page" : undefined} title="编辑器" onClick={() => setActiveView("editor")}><LayoutDashboard /><span>编辑</span></button>
-        <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="MiniMax AI" onClick={() => setActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
+        <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="AI 生成" onClick={() => setActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
         <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="PPT 模板" onClick={() => setActiveView("theme")}><Palette /><span>模板</span></button>
         <div className="nav-spacer" />
         <button className={activeView === "settings" ? "active" : ""} aria-current={activeView === "settings" ? "page" : undefined} title="设置" onClick={() => setActiveView("settings")}><Settings /><span>设置</span></button>

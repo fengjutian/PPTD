@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
 import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, describeAiError, slideBriefsSchema } from "./ai-service";
 
-describe("MiniMax structured outputs", () => {
+describe("AI structured outputs", () => {
   it("accepts a typed slide brief without presentation content", () => {
     const result = slideBriefsSchema.parse({ briefs: [{ slideIndex: 0, purpose: "建立背景", conclusion: "理解作品背景有助于理解主题", visualIntent: "hero", density: "low" }] });
     expect(result.briefs[0]!.visualIntent).toBe("hero");
@@ -16,6 +17,16 @@ describe("MiniMax structured outputs", () => {
     expect(describeAiError("AI_PROVIDER_BUSY")).toContain("服务当前繁忙");
   });
 
+  it("maps a missing credential to the settings hint", () => {
+    expect(describeAiError("AI_API_KEY_MISSING")).toContain("API Key");
+    expect(describeAiError("AI_PROVIDER_HTTP_ERROR:401")).toContain("API Key");
+  });
+
+  it("maps an unusable provider payload to a regeneration hint", () => {
+    expect(describeAiError("AI_EMPTY_RESPONSE")).toContain("重新生成");
+    expect(describeAiError("AI_JSON_INVALID: bad token")).toContain("重新生成");
+  });
+
   it("migrates legacy drafts to presentation and slide briefs", () => {
     const draft = aiDraftSchema.parse({ title: "旧草稿", slides: [{ title: "第一页", body: "正文", speakerNotes: "" }] });
     expect(draft.presentationBrief.narrativeStrategy).toBe("general");
@@ -26,5 +37,19 @@ describe("MiniMax structured outputs", () => {
   it("accepts structured content blocks from the content planner", () => {
     const draft = aiDraftSchema.parse({ title: "结构化草稿", presentationBrief: { objective: "培训", audience: "学生", scenario: "课堂", expectedAction: "理解", coreConclusion: "掌握重点", narrativeStrategy: "training", assumptions: [] }, slides: [{ title: "重点", body: "第一点\n第二点", speakerNotes: "", plan: { purpose: "讲解重点", conclusion: "两点共同构成核心", visualIntent: "structured-text", density: "medium" }, blocks: [{ type: "bullet-list", items: ["第一点", "第二点"] }] }] });
     expect(draft.slides[0]!.blocks[0]).toMatchObject({ type: "bullet-list", items: ["第一点", "第二点"] });
+  });
+});
+
+describe("AI provider directory", () => {
+  it("falls back to the default provider for an unknown id", () => {
+    expect(findAiProvider("not-a-provider").id).toBe(DEFAULT_AI_PROVIDER_ID);
+    expect(findAiProvider("minimax").id).toBe("minimax");
+  });
+
+  it("always lists the default model inside the provider model list", () => {
+    for (const provider of AI_PROVIDERS) {
+      expect(provider.models).toContain(provider.defaultModel);
+      expect(provider.baseUrl).toMatch(/^https:\/\//);
+    }
   });
 });
