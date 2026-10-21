@@ -100,3 +100,24 @@ AI 设计任务记录开始时的三个 revision。应用结果前必须比较 `
 ## 7. 内容哈希
 
 内容审核快照对规范化内容计算哈希。规范化过程固定字段顺序、统一换行和 Unicode 形式，并排除坐标、字体、颜色等设计字段。这样主题和排版调整不会使已审核内容失效。
+
+## 8. 模板主题与版式绑定（V0.1 已实现）
+
+第 3 版文档在聚合根上保存模板主题和模板版式，页面通过 `layoutId` 指向它所依据的版式：
+
+```ts
+interface PresentationDocument {
+  // …
+  theme?: { name: string; majorFont: string; minorFont: string; colors: Array<{ name: string; value: string }> };
+  layouts?: Array<{ id: string; name: string; backgroundColor?: string }>;
+}
+
+interface Slide {
+  // …
+  layoutId?: string;
+}
+```
+
+两者都是设计态：修改主题或版式绑定只增加 design revision，不触碰内容哈希。`Slide.layoutId` 必须能在 `layouts` 中解析，否则 Schema 拒绝该文档。
+
+版式的整页画面是图片元素，带 `placement: "layout-background"`。画布把它画在页面底层，导出把它放进母版背景，页面上不再重复绘制这张图片。详见 [0008 模板主题与版式落地到导出的 PPTX](decisions/0008-template-master-and-theme-export.md)。

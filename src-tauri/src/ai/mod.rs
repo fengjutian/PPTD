@@ -123,11 +123,14 @@ fn validate_model(model: &str) -> Result<(), String> {
 enum ProviderFailure {
     /// 厂商返回了 HTTP 状态码。
     Status(u16),
-    /// 网络或传输层失败。
-    Transport(String),
+    /// 网络或传输层失败。`timed_out` 标记请求是被超时切断的。
+    Transport { detail: String, timed_out: bool },
     /// 响应体结构不符合预期。
     Payload(PayloadError),
 }
+
+/// 请求超时的稳定错误码。前端据此提示"减少页数"而不是"检查网络"。
+const REQUEST_TIMEOUT_ERROR: &str = "AI_REQUEST_TIMEOUT";
 
 async fn post_chat(
     provider: &dyn ChatProvider,
@@ -140,7 +143,10 @@ async fn post_chat(
         .json(payload)
         .send()
         .await
-        .map_err(|error| ProviderFailure::Transport(error.to_string()))?;
+        .map_err(|error| ProviderFailure::Transport {
+            detail: error.to_string(),
+            timed_out: error.is_timeout(),
+        })?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
         return Err(ProviderFailure::Status(status));
@@ -154,7 +160,8 @@ async fn post_chat(
 /// 发送一次对话请求并返回助手正文。
 ///
 /// 限流与厂商侧临时故障会按退避策略重试；`transport_error` 是传输层最终失败时
-/// 使用的错误码，由调用方按阶段区分。
+/// 使用的错误码，由调用方按阶段区分。请求超时不会重试：重试同一份大输出只会
+/// 让用户多等一轮，正确的做法是缩短单次生成规模。
 pub async fn chat(
     provider: &dyn ChatProvider,
     api_key: &str,
@@ -186,9 +193,14 @@ pub async fn chat(
                     return Err("AI_PROVIDER_BUSY".into());
                 }
             }
-            Err(ProviderFailure::Transport(error)) => {
+            Err(ProviderFailure::Transport { detail, timed_out }) => {
+                // 超时说明这一次生成量超出了预算，重试只会把同一份输出再写一遍，
+                // 等待时间成倍放大。立即返回，让调用方缩短请求规模。
+                if timed_out {
+                    return Err(REQUEST_TIMEOUT_ERROR.into());
+                }
                 if attempt == 2 {
-                    return Err(format!("{transport_error}: {error}"));
+                    return Err(format!("{transport_error}: {detail}"));
                 }
             }
             Err(ProviderFailure::Payload(error)) => {
@@ -237,9 +249,12 @@ pub async fn vision_chat(
             Err(ProviderFailure::Status(status)) => {
                 return Err(format!("AI_PROVIDER_HTTP_ERROR:{status}"))
             }
-            Err(ProviderFailure::Transport(error)) => {
+            Err(ProviderFailure::Transport { detail, timed_out }) => {
+                if timed_out {
+                    return Err(REQUEST_TIMEOUT_ERROR.into());
+                }
                 if attempt == 2 {
-                    return Err(format!("AI_VISION_REQUEST_FAILED: {error}"));
+                    return Err(format!("AI_VISION_REQUEST_FAILED: {detail}"));
                 }
             }
             Err(ProviderFailure::Payload(error)) => {

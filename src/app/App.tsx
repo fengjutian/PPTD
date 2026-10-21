@@ -9,7 +9,7 @@ import { ContentReview } from "../features/ai/ContentReview";
 import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
+import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -214,6 +214,7 @@ export function App() {
   const [newDraftConfirmOpen, setNewDraftConfirmOpen] = useState(false);
   const aiOriginalDraft = useRef<AiDraft | undefined>(undefined);
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
   const aiRequestId = useRef(0);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
@@ -385,15 +386,22 @@ export function App() {
     if (aiBusy) {
       aiRequestId.current += 1;
       setAiBusy(false);
+      setAiProgress(undefined);
       setTaskStatus("已取消 AI 内容生成");
       return;
     }
     const requestId = aiRequestId.current + 1;
     aiRequestId.current = requestId;
     setAiBusy(true); setAiDraft(undefined);
+    setAiProgress({ stage: "outline", completed: 0, total: 1, label: "正在准备生成…" });
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
     try {
-      const draft = withSlideIds(await generatePresentationDraft(aiTopic, aiSlideCount));
+      const draft = withSlideIds(await generatePresentationDraft(aiTopic, aiSlideCount, {
+        onProgress: (progress) => {
+          if (requestId === aiRequestId.current) setAiProgress(progress);
+        },
+        isCancelled: () => requestId !== aiRequestId.current,
+      }));
       if (requestId !== aiRequestId.current) return;
       const id = crypto.randomUUID();
       aiOriginalDraft.current = structuredClone(draft);
@@ -412,7 +420,7 @@ export function App() {
       setTaskStatus(`AI 内容生成失败：${detail}`);
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成失败", { body: detail });
     }
-    finally { if (requestId === aiRequestId.current) setAiBusy(false); }
+    finally { if (requestId === aiRequestId.current) { setAiBusy(false); setAiProgress(undefined); } }
   };
 
   useEffect(() => {
@@ -478,6 +486,12 @@ export function App() {
 
   const aiDraftMissingTitles = useMemo(() => (aiDraft ? missingTitleIndexes(aiDraft) : []), [aiDraft]);
   const aiDraftMetrics = useMemo(() => (aiDraft ? draftMetrics(aiDraft) : { characters: 0, points: 0 }), [aiDraft]);
+  // 大纲阶段占一小段，正文分批阶段按已完成批次推进。
+  const aiGenerationPercent = aiProgress
+    ? aiProgress.stage === "outline"
+      ? 12
+      : 12 + Math.round((88 * aiProgress.completed) / Math.max(1, aiProgress.total))
+    : 0;
 
   const continueToTheme = () => {
     if (!aiDraft) return;
@@ -839,6 +853,7 @@ export function App() {
           <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
           <label className="slide-count-field">页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
           <button className="primary-action" disabled={!aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
+          {aiBusy && aiProgress && <div className="ai-generation-progress" role="status" aria-live="polite"><strong>{aiProgress.label}</strong><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={aiGenerationPercent} role="progressbar"><i style={{ width: `${aiGenerationPercent}%` }} /></div><span>生成中可随时点击“取消生成”停止本次任务</span></div>}
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
           </div>
@@ -876,7 +891,7 @@ export function App() {
 
       {templatePickerOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!designBusy && event.target === event.currentTarget) setTemplatePickerOpen(false); }}><section className="upload-dialog template-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="template-picker-title" aria-busy={designBusy}><div className="upload-dialog-heading"><div><Palette /><div><h2 id="template-picker-title">选择 PPT 模板</h2><p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p></div></div><button type="button" aria-label="关闭模板选择窗口" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}><X /></button></div><div className="template-picker-toolbar"><strong>已保存模板</strong><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplateUploadOpen(true)}><FileUp />上传模板</button></div><div className="template-picker-body"><div className="template-library"><div>{templateLibrary.map((template) => <button type="button" disabled={designBusy} className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}</div><div className="template-preview-panel"><div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>{designBusy ? <div className="design-progress" role="status" aria-live="polite"><Sparkles /><strong>{designProgress.label}</strong><span>{designProgress.percent}%</span><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={designProgress.percent} role="progressbar"><i style={{ width: `${designProgress.percent}%` }} /></div><small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small><button type="button" className="secondary-action design-cancel-action" onClick={() => { designCancelRef.current = true; setDesignProgress({ percent: 0, label: "正在取消…" }); }}>取消生成</button></div> : templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-picker-summary"><span>{templateAnalysis.slideCount} 页面</span><span>{templateAnalysis.layoutCount} 版式</span><span>{templateAnalysis.themeCount} 主题</span></div>}</div></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}>取消</button><button type="button" className="primary-action" disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy} onClick={() => void generateFromDraft()}>{designBusy ? `${designProgress.percent}%` : "生成 PPT"}{!designBusy && <ArrowRight />}</button></div></section></div>}
 
-      {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象 · ZIP {exportReport.package.entryCount} 个条目</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
+      {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象 · ZIP {exportReport.package.entryCount} 个条目{exportReport.masters.length > 0 ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）` : ""}{exportReport.themeColors.length > 0 ? ` · 主题色 ${exportReport.themeColors.join("、")}` : ""}</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
 
       {newDraftConfirmOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewDraftConfirmOpen(false); }}><section className="upload-dialog new-draft-dialog" role="dialog" aria-modal="true" aria-labelledby="new-draft-title"><div className="upload-dialog-heading"><div><FilePlus2 /><div><h2 id="new-draft-title">新建草稿？</h2><p>当前草稿会先保存到制作历史，新草稿从空白主题开始。</p></div></div><button type="button" aria-label="关闭新建草稿窗口" onClick={() => setNewDraftConfirmOpen(false)}><X /></button></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setNewDraftConfirmOpen(false)}>取消</button><button type="button" className="primary-action" onClick={confirmNewDraft}><FilePlus2 />新建空白草稿</button></div></section></div>}
 

@@ -14,16 +14,9 @@ const PROBE_TEXT = "mmmMWil@0123";
 const PROBE_SIZE = "72px";
 const FALLBACKS = ["monospace", "sans-serif", "serif"] as const;
 
-let canvasContext: CanvasRenderingContext2D | null | undefined;
-
 function getContext(): CanvasRenderingContext2D | null {
-  if (canvasContext !== undefined) return canvasContext;
-  if (typeof document === "undefined") {
-    canvasContext = null;
-    return null;
-  }
-  canvasContext = document.createElement("canvas").getContext("2d");
-  return canvasContext;
+  if (typeof document === "undefined") return null;
+  return document.createElement("canvas").getContext("2d");
 }
 
 function measureWidth(font: string): number | undefined {

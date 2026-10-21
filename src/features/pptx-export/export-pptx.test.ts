@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 import { applyCommand } from "../../core/commands";
-import { createDocument, inches, type PresentationDocument } from "../../core/document-model";
+import { createDocument, emu, inches, type PresentationDocument } from "../../core/document-model";
 import { buildPptx } from "./export-pptx";
 import { validatePptxPackage } from "./pptx-package";
 
@@ -19,7 +19,7 @@ function templateDocument(): PresentationDocument {
     id: crypto.randomUUID() as never,
     type: "image",
     placement: "layout-background",
-    frame: { x: 0, y: 0, width: inches(13.333), height: inches(7.5) },
+    frame: { x: emu(0), y: emu(0), width: inches(13.333), height: inches(7.5) },
     rotationMilliDegree: 0,
     locked: true,
     source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" },

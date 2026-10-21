@@ -27,6 +27,19 @@ export const aiDraftSchema = z.object({
 });
 export type AiDraft = z.infer<typeof aiDraftSchema>;
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
+
+/** 大纲阶段只产出标题与简报，正文由分批阶段补齐。 */
+export const aiOutlineSchema = z.object({
+  title: z.string().min(1).max(200),
+  presentationBrief: z.object({ objective: z.string().min(1).max(500), audience: z.string().min(1).max(300), scenario: z.string().min(1).max(300), expectedAction: z.string().min(1).max(500), coreConclusion: z.string().min(1).max(500), narrativeStrategy: narrativeStrategySchema, assumptions: z.array(z.string().max(500)).max(10) }).default({ objective: "清晰传达演示主题", audience: "未指定受众", scenario: "通用演示", expectedAction: "理解演示内容", coreConclusion: "以演示文稿标题和逐页内容为准", narrativeStrategy: "general", assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"] }),
+  pages: z.array(z.object({ index: z.number().int().min(0).max(19), title: z.string().min(1).max(200), purpose: z.string().min(1).max(300) })).min(1).max(20),
+});
+export type AiOutline = z.infer<typeof aiOutlineSchema>;
+
+export const aiSlideBatchSchema = z.object({
+  slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1).max(20),
+});
+export type AiSlideBatch = z.infer<typeof aiSlideBatchSchema>;
 export const slideBriefSchema = z.object({
   slideIndex: z.number().int().min(0).max(19),
   purpose: z.string().min(1).max(300),
@@ -173,6 +186,7 @@ async function aiSelection(): Promise<{ provider: string; model: string }> {
 export function describeAiError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
   if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED")) return `生成结果未通过视觉质量检查，已阻止进入编辑器。${detail.split(": ").slice(1).join(": ")}`;
+  if (detail.includes("AI_REQUEST_TIMEOUT")) return "AI 生成超时，请减少页数后重试";
   if (detail.includes("AI_PROVIDER_BUSY")) return "AI 服务当前繁忙，系统已自动重试，请稍后再次生成";
   if (detail.includes("AI_PROVIDER_HTTP_ERROR:401") || detail.includes("AI_PROVIDER_HTTP_ERROR:403") || detail.includes("AI_API_KEY_MISSING")) return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
   if (detail.includes("AI_PROVIDER_HTTP_ERROR:429")) return "AI 请求过于频繁，请稍后再试";
@@ -181,11 +195,84 @@ export function describeAiError(error: unknown): string {
   return detail;
 }
 
-export async function generatePresentationDraft(topic: string, slideCount: number): Promise<AiDraft> {
+/** 生成过程的阶段与完成度，供界面显示真实进度。 */
+export interface AiGenerationProgress {
+  stage: "outline" | "content";
+  completed: number;
+  total: number;
+  label: string;
+}
+
+export interface AiGenerationOptions {
+  onProgress?: (progress: AiGenerationProgress) => void;
+  /** 返回 true 时放弃本次生成，用于响应用户取消。 */
+  isCancelled?: () => boolean;
+}
+
+/** 一次请求能写完的页数上限。再少就没必要拆批。 */
+const SINGLE_CALL_PAGE_LIMIT = 6;
+/** 单批页数。批越小单次输出越短，越不容易触发服务端超时。 */
+const BATCH_PAGE_COUNT = 5;
+
+function assertNotCancelled(options: AiGenerationOptions): void {
+  if (options.isCancelled?.()) throw new Error("AI_GENERATION_CANCELLED");
+}
+
+/**
+ * 生成整份演示草稿。
+ *
+ * 一次性让模型写完 20 页，输出量足以让单次请求超时，而超时后的重试会把整份
+ * 草稿重写一遍，用户等待时间成倍放大。因此页数较多时改为"先出大纲、再分批写
+ * 正文"：大纲输出很小，几秒内返回；正文分批并行，墙钟时间接近单批耗时。
+ */
+export async function generatePresentationDraft(topic: string, slideCount: number, options: AiGenerationOptions = {}): Promise<AiDraft> {
   const { provider, model } = await aiSelection();
-  const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider } });
-  const draft = aiDraftSchema.parse(raw);
+  if (slideCount <= SINGLE_CALL_PAGE_LIMIT) {
+    options.onProgress?.({ stage: "content", completed: 0, total: 1, label: "正在生成演示草稿…" });
+    const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider } });
+    const draft = aiDraftSchema.parse(raw);
+    if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
+    options.onProgress?.({ stage: "content", completed: 1, total: 1, label: "草稿已生成" });
+    return draft;
+  }
+
+  options.onProgress?.({ stage: "outline", completed: 0, total: 1, label: "正在规划演示大纲…" });
+  const outlineRaw = await invoke<unknown>("generate_presentation_outline", { request: { topic, slideCount, model, provider } });
+  const outline = aiOutlineSchema.parse(outlineRaw);
+  if (outline.pages.length !== slideCount) throw new Error("AI_OUTLINE_PAGE_COUNT_MISMATCH");
+  assertNotCancelled(options);
+
+  const batches = Array.from({ length: Math.ceil(slideCount / BATCH_PAGE_COUNT) }, (_, index) => ({
+    startIndex: index * BATCH_PAGE_COUNT,
+    count: Math.min(BATCH_PAGE_COUNT, slideCount - index * BATCH_PAGE_COUNT),
+  }));
+  options.onProgress?.({ stage: "content", completed: 0, total: batches.length, label: "正在分批生成正文…" });
+
+  let completed = 0;
+  const batchResults = await Promise.all(batches.map(async (batch) => {
+    const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider } });
+    const parsed = aiSlideBatchSchema.parse(raw);
+    if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
+    completed += 1;
+    options.onProgress?.({ stage: "content", completed, total: batches.length, label: `正在生成正文（${completed}/${batches.length} 批）` });
+    return parsed.slides;
+  }));
+
+  // 大纲是全局事实来源：页面标题以大纲为准，各批只补正文、备注、页面计划和内容块。
+  const generated = batchResults.flat();
+  const slides = outline.pages.map((page, index) => {
+    const source = generated[index];
+    return {
+      title: page.title,
+      body: source?.body ?? "",
+      speakerNotes: source?.speakerNotes ?? "",
+      plan: source?.plan ?? legacySlidePlan,
+      blocks: source?.blocks ?? [],
+    };
+  });
+  const draft = aiDraftSchema.parse({ title: outline.title, presentationBrief: outline.presentationBrief, slides });
   if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
+  options.onProgress?.({ stage: "content", completed: batches.length, total: batches.length, label: "草稿已生成" });
   return draft;
 }
 

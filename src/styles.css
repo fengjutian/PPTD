@@ -110,6 +110,9 @@ button { color: inherit; }
 .secondary-action { border: 1px solid #41434a; color: #c5c8ce; background: #24262b; }
 .ai-compose-card > .primary-action { width: 100%; margin-top: 24px; }
 .ai-compose-card small { display: block; margin-top: 12px; color: #6f737c; text-align: center; }
+.ai-generation-progress { display: grid; gap: 8px; margin-top: 14px; }
+.ai-generation-progress strong { font-size: 12px; font-weight: 700; }
+.ai-generation-progress span { opacity: .62; font-size: 10px; }
 .draft-review { width: auto; margin: 22px 18px 90px; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
 .draft-mode .draft-review { height: 100%; min-height: 0; margin: 0; padding: 18px 18px 14px; align-items: stretch; }
 .draft-review-main { min-width: 0; }
@@ -500,7 +503,7 @@ button { color: inherit; }
 .theme-swatch.amber { border-color: #d9a24a; background: linear-gradient(135deg, #f3c877 0%, #e0993a 55%, #c2660f 100%); }
 .theme-swatch.green { border-color: #107c41; background: linear-gradient(135deg, #4ea672 0%, #217346 55%, #0f5c33 100%); }
 .theme-swatch.blue { border-color: #1f4c8b; background: linear-gradient(135deg, #7ea6d9 0%, #2b579a 55%, #1f4c8b 100%); }
-.font-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.font-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px; }
 .font-options button { display: grid; gap: 7px; padding: 12px 14px; border: 1px solid #3b3d44; border-radius: 9px; color: #cfd2d8; background: #191a1e; cursor: pointer; text-align: left; }
 .font-options button:hover { border-color: #666a73; background: #24262b; }
 .font-options button.active { border-color: var(--ppt-accent); color: #fff; background: #31211e; }

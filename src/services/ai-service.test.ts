@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
-import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, chooseSlideLayout, constrainDesignToTemplate, describeAiError, slideBriefsSchema, splitBodyItems } from "./ai-service";
+import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, chooseSlideLayout, constrainDesignToTemplate, describeAiError, generatePresentationDraft, slideBriefsSchema, splitBodyItems, type AiGenerationProgress } from "./ai-service";
 import { contrastRatio } from "../core/rendering/contrast";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => false }));
 
 describe("AI structured outputs", () => {
   it("accepts a typed slide brief without presentation content", () => {
@@ -161,5 +164,72 @@ describe("AI provider directory", () => {
       expect(provider.models).toContain(provider.defaultModel);
       expect(provider.baseUrl).toMatch(/^https:\/\//);
     }
+  });
+});
+
+describe("多页草稿的分批编排", () => {
+  const outlineFor = (count: number) => ({
+    title: "岳阳楼记课件",
+    pages: Array.from({ length: count }, (_, index) => ({ index, title: `第 ${index + 1} 页标题`, purpose: `承担第 ${index + 1} 个沟通任务` })),
+  });
+  const batchFor = (startIndex: number, count: number) => ({
+    slides: Array.from({ length: count }, (_, offset) => ({
+      title: `模型自拟标题 ${startIndex + offset + 1}`,
+      body: `第 ${startIndex + offset + 1} 页正文`,
+      speakerNotes: "备注",
+      plan: { purpose: "页面目的", conclusion: "单一结论", visualIntent: "structured-text", density: "medium" },
+      blocks: [{ type: "bullet-list", items: [`要点 ${startIndex + offset + 1}`] }],
+    })),
+  });
+
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("先取大纲，再并行分批写正文，最后按大纲顺序合并", async () => {
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "generate_presentation_outline") return outlineFor(12);
+      if (command === "generate_presentation_slides_batch") {
+        const request = (args as { request: { startIndex: number; count: number } }).request;
+        return batchFor(request.startIndex, request.count);
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const progress: AiGenerationProgress[] = [];
+    const draft = await generatePresentationDraft("岳阳楼记", 12, { onProgress: (value) => progress.push(value) });
+
+    expect(draft.slides).toHaveLength(12);
+    // 页面标题以已定稿的大纲为准，模型自拟标题不会覆盖大纲。
+    expect(draft.slides[0]!.title).toBe("第 1 页标题");
+    expect(draft.slides[11]!.title).toBe("第 12 页标题");
+    expect(draft.slides[11]!.body).toBe("第 12 页正文");
+    expect(draft.slides[3]!.blocks[0]).toMatchObject({ type: "bullet-list" });
+    expect(vi.mocked(invoke).mock.calls.filter((call) => call[0] === "generate_presentation_slides_batch")).toHaveLength(3);
+    expect(progress.some((item) => item.stage === "outline")).toBe(true);
+    expect(progress[progress.length - 1]).toMatchObject({ completed: 3, total: 3 });
+  });
+
+  it("页数不多时保持一次请求，不额外调用大纲", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "generate_presentation") {
+        return { title: "短稿", slides: Array.from({ length: 4 }, (_, index) => ({ title: `第 ${index + 1} 页`, body: "正文", speakerNotes: "" })) };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const draft = await generatePresentationDraft("主题", 4);
+
+    expect(draft.slides).toHaveLength(4);
+    expect(vi.mocked(invoke).mock.calls.map((call) => call[0])).toEqual(["generate_presentation"]);
+  });
+
+  it("用户取消后停止后续分批", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "generate_presentation_outline") return outlineFor(12);
+      if (command === "generate_presentation_slides_batch") return batchFor(0, 5);
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    await expect(generatePresentationDraft("主题", 12, { isCancelled: () => true })).rejects.toThrow("AI_GENERATION_CANCELLED");
+    expect(vi.mocked(invoke).mock.calls.map((call) => call[0])).toEqual(["generate_presentation_outline"]);
   });
 });
