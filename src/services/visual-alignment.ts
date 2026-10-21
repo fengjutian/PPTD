@@ -1,0 +1,38 @@
+import { z } from "zod";
+
+export const presentationVisualGoalSchema = z.object({
+  style: z.enum(["business", "editorial", "academic", "training", "launch"]),
+  mood: z.enum(["restrained", "modern", "energetic", "formal"]),
+  density: z.enum(["low", "medium", "high"]),
+  alignment: z.enum(["left-grid", "centered-grid"]),
+  backgroundRhythm: z.object({ coverVariants: z.number().int().min(1).max(2), contentVariants: z.number().int().min(1).max(3), repeatLimit: z.number().int().min(1).max(4) }),
+  minimumScores: z.object({ overall: z.number().min(0).max(100), hierarchy: z.number().min(0).max(100), alignment: z.number().min(0).max(100), readability: z.number().min(0).max(100), consistency: z.number().min(0).max(100) }),
+});
+export type PresentationVisualGoal = z.infer<typeof presentationVisualGoalSchema>;
+
+export const visualReviewSchema = z.object({
+  overallScore: z.number().min(0).max(100), hierarchyScore: z.number().min(0).max(100), alignmentScore: z.number().min(0).max(100), readabilityScore: z.number().min(0).max(100), consistencyScore: z.number().min(0).max(100),
+  issues: z.array(z.object({ slideIndex: z.number().int().nonnegative(), severity: z.enum(["error", "warning"]), issue: z.enum(["weak-hierarchy", "poor-contrast", "visual-imbalance", "background-conflict", "misalignment", "excessive-empty-space", "repetitive-layout"]), elementIds: z.array(z.string()).default([]), suggestion: z.string().min(1).max(500) })).max(100),
+});
+export type VisualReview = z.infer<typeof visualReviewSchema>;
+export interface VisualAlignmentResult<T> { value: T; review: VisualReview; iterations: number; stopReason: "target-reached" | "stagnated" | "iteration-limit" }
+
+export async function runVisualAlignmentLoop<T>(options: { initial: T; goal: PresentationVisualGoal; contentFingerprint: (value: T) => string; review: (value: T, goal: PresentationVisualGoal, iteration: number) => Promise<VisualReview>; repair: (value: T, review: VisualReview, goal: PresentationVisualGoal) => Promise<T>; maxIterations?: number }): Promise<VisualAlignmentResult<T>> {
+  const maxIterations = Math.min(3, Math.max(1, options.maxIterations ?? 3));
+  const approvedContent = options.contentFingerprint(options.initial);
+  let value = options.initial; let previousScore = -1; let lastReview: VisualReview | undefined;
+  for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    const review = visualReviewSchema.parse(await options.review(value, options.goal, iteration)); lastReview = review;
+    const reached = review.overallScore >= options.goal.minimumScores.overall && review.hierarchyScore >= options.goal.minimumScores.hierarchy && review.alignmentScore >= options.goal.minimumScores.alignment && review.readabilityScore >= options.goal.minimumScores.readability && review.consistencyScore >= options.goal.minimumScores.consistency && !review.issues.some((issue) => issue.severity === "error");
+    if (reached) return { value, review, iterations: iteration, stopReason: "target-reached" };
+    if (previousScore >= 0 && review.overallScore - previousScore < 3) return { value, review, iterations: iteration, stopReason: "stagnated" };
+    if (iteration === maxIterations) return { value, review, iterations: iteration, stopReason: "iteration-limit" };
+    previousScore = review.overallScore;
+    const repaired = await options.repair(value, review, options.goal);
+    if (options.contentFingerprint(repaired) !== approvedContent) throw new Error("VISUAL_ALIGNMENT_CONTENT_MUTATION");
+    value = repaired;
+  }
+  throw new Error(lastReview ? "VISUAL_ALIGNMENT_ITERATION_INVALID" : "VISUAL_ALIGNMENT_REVIEW_MISSING");
+}
+
+export const defaultPresentationVisualGoal = (): PresentationVisualGoal => ({ style: "editorial", mood: "modern", density: "medium", alignment: "left-grid", backgroundRhythm: { coverVariants: 1, contentVariants: 3, repeatLimit: 2 }, minimumScores: { overall: 85, hierarchy: 82, alignment: 90, readability: 88, consistency: 85 } });

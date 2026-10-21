@@ -133,7 +133,7 @@ describe("document commands", () => {
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "卡片文稿", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
-    expect(texts.map((element) => element.text)).toEqual(["三个重点", "1", "第一项", "2", "第二项", "3", "第三项"]);
+    expect(texts.map((element) => element.text)).toEqual(["三个重点", "01", "1", "第一项", "2", "第二项", "3", "第三项"]);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 

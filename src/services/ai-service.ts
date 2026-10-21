@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import { loadSettings } from "./settings";
+import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 
 export const narrativeStrategySchema = z.enum(["management-report", "proposal", "retrospective", "training", "product-launch", "fundraising", "general"]);
 export const contentBlockSchema = z.discriminatedUnion("type", [
@@ -100,9 +101,9 @@ export async function generateSlideBriefs(draft: AiDraft): Promise<SlideBrief[]>
   return result.briefs;
 }
 
-export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext): Promise<AiPresentationDesign> {
+export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext, visualGoal: PresentationVisualGoal = defaultPresentationVisualGoal()): Promise<AiPresentationDesign> {
   const { provider, model } = aiSelection();
-  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, model, provider } });
+  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, visualGoal, model, provider } });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   return constrainDesignToTemplate({

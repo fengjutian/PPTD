@@ -22,6 +22,7 @@ pub struct GenerateDesignRequest {
     draft: serde_json::Value,
     briefs: serde_json::Value,
     template: serde_json::Value,
+    visual_goal: serde_json::Value,
     model: Option<String>,
     provider: Option<String>,
 }
@@ -176,7 +177,13 @@ pub async fn generate_presentation_design(
     let briefs = serde_json::to_string(&request.briefs).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let template =
         serde_json::to_string(&request.template).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
-    if draft.len() > 120_000 || briefs.len() > 120_000 || template.len() > 120_000 {
+    let visual_goal =
+        serde_json::to_string(&request.visual_goal).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    if draft.len() > 120_000
+        || briefs.len() > 120_000
+        || template.len() > 120_000
+        || visual_goal.len() > 20_000
+    {
         return Err("AI_DESIGN_REQUEST_TOO_LARGE".into());
     }
     let provider = ai::resolve(request.provider.as_deref())?;
@@ -236,7 +243,9 @@ pub async fn generate_presentation_design(
             },
             ChatMessage {
                 role: "user".into(),
-                content: user_prompt,
+                content: format!(
+                    "{user_prompt}\n\nPresentationVisualGoal（整套演示必须共同满足的视觉目标）：\n{visual_goal}"
+                ),
             },
         ],
         temperature: 0.25,
