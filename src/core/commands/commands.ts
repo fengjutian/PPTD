@@ -168,7 +168,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // Keep all editable text on deterministic, non-overlapping grids in that case.
       const recipe = visualRecipe?.backgroundImageDataUrl ? undefined : chooseLayout(rankedLayouts.filter(layoutIsCompatible));
       slide.background = visualRecipe?.backgroundColor ?? design.background;
-      const contentTitleColor = visualRecipe?.backgroundImageDataUrl ? "#FFFFFF" : design.titleColor;
+      const contentTitleColor = visualRecipe?.backgroundImageDataUrl && design.backgroundTreatment !== "content-panel" ? "#FFFFFF" : design.titleColor;
       const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
       const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
       const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);

@@ -9,7 +9,7 @@ import { briefsFromDraft, describeAiError, generatePresentationDesign, generateP
 import { applyTheme, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
-import { renderPresentationForVisualReview } from "../services/presentation-renderer";
+import { inspectRenderedTextContrast, renderPresentationForVisualReview } from "../services/presentation-renderer";
 import { defaultPresentationVisualGoal, runVisualAlignmentLoop } from "../services/visual-alignment";
 import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { validatePresentationVisualQuality } from "../services/presentation-quality-gate";
@@ -353,12 +353,24 @@ export function App() {
       } catch (visionError) {
         visualNote = `视觉评审降级：${visionError instanceof Error ? visionError.message : String(visionError)}`;
       }
-      const finalDocument = structuredClone(document);
-      applyCommand(finalDocument, { ...generationCommand, designs: finalDesigns });
+      const buildFinalDocument = (designs: AiSlideDesign[]) => {
+        const candidate = structuredClone(document);
+        applyCommand(candidate, { ...generationCommand, designs });
+        return candidate;
+      };
+      let finalDocument = buildFinalDocument(finalDesigns);
+      let renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
+      if (renderedContrastIssues.length > 0) {
+        const affectedSlides = new Set(renderedContrastIssues.map((issue) => issue.slideIndex));
+        finalDesigns = finalDesigns.map((slide, slideIndex) => affectedSlides.has(slideIndex) ? { ...slide, backgroundTreatment: "content-panel", titleColor: "#111827", bodyColor: "#293241" } : slide);
+        finalDocument = buildFinalDocument(finalDesigns);
+        renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
+      }
       const quality = validatePresentationVisualQuality(finalDocument, finalDesigns);
-      if (!quality.passed) {
-        const pages = [...new Set(quality.issues.map((issue) => issue.slideIndex + 1))].join("、");
-        throw new Error(`AI_VISUAL_QUALITY_GATE_FAILED: 第 ${pages} 页仍有 ${quality.issues.length} 个排版问题`);
+      if (!quality.passed || renderedContrastIssues.length > 0) {
+        const allSlideIndexes = [...quality.issues.map((issue) => issue.slideIndex), ...renderedContrastIssues.map((issue) => issue.slideIndex)];
+        const pages = [...new Set(allSlideIndexes.map((index) => index + 1))].join("、");
+        throw new Error(`AI_VISUAL_QUALITY_GATE_FAILED: 第 ${pages} 页仍有 ${quality.issues.length + renderedContrastIssues.length} 个排版问题`);
       }
       finalDocument.revisions = { document: document.revisions.document + 1, content: document.revisions.content + 1, design: document.revisions.design + 1 };
       loadDocument(finalDocument);
