@@ -192,7 +192,7 @@ describe("document commands", () => {
   it("crops a picture without touching reviewed content and can clear the crop again", () => {
     const source = createDocument();
     const slide = source.slides[0]!;
-    const withImage = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "原描�? }));
+    const withImage = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "原描述" }));
     const image = withImage.slides[0]!.elements[1]!;
     const command = { type: "set-image-crop" as const, slideId: slide.id, elementId: image.id, crop: { top: 0.1, bottom: 0.2, left: 0, right: 0.3 } };
     expect(commandDomain(command)).toBe("design");
@@ -208,7 +208,7 @@ describe("document commands", () => {
   it("refuses a crop that would hide the whole picture", () => {
     const source = createDocument();
     const slide = source.slides[0]!;
-    const withImage = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "原描�? }));
+    const withImage = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "原描述" }));
     const image = withImage.slides[0]!.elements[1]!;
     expect(() => produce(withImage, (draft) => applyCommand(draft, { type: "set-image-crop", slideId: slide.id, elementId: image.id, crop: { top: 0.6, bottom: 0.6, left: 0, right: 0 } }))).toThrow("INVALID_IMAGE_CROP");
     expect(() => produce(withImage, (draft) => applyCommand(draft, { type: "set-image-crop", slideId: slide.id, elementId: image.id, crop: { top: -0.1, bottom: 0, left: 0, right: 0 } }))).toThrow("INVALID_IMAGE_CROP");
@@ -249,8 +249,8 @@ describe("document commands", () => {
 
   it("stores structured AI content blocks with stable IDs and keeps body edits consistent", () => {
     const source = createDocument();
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-draft", title: "结构�?, slides: [
-      { title: "要点", body: "甲\n�?, speakerNotes: "", blocks: [{ type: "bullet-list", items: ["�?, "�?] }] },
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-draft", title: "结构化", slides: [
+      { title: "要点", body: "甲\n乙", speakerNotes: "", blocks: [{ type: "bullet-list", items: ["甲", "乙"] }] },
     ] }));
     const content = result.slides[0]!.content;
     expect(content.blocks).toHaveLength(1);
@@ -263,13 +263,13 @@ describe("document commands", () => {
 
   it("applies AI template design without allowing it to rewrite approved content", () => {
     const source = createDocument();
-    const content = { title: "已审核标�?, body: "已审核正�?, speakerNotes: "已审核备�? };
+    const content = { title: "已审核标题", body: "已审核正文", speakerNotes: "已审核备注" };
     const design = { layout: "cover" as const, background: "#112233", accent: "#FF6600", titleColor: "#FFFFFF", bodyColor: "#EEEEEE" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "设计文稿", slides: [content], designs: [design], fontFamily: "Arial" }));
     expect(result.slides[0]!.content).toEqual({ ...content, status: "approved" });
     expect(result.slides[0]!.background).toBe("#112233");
     expect(result.slides[0]!.elements.map((element) => element.type)).toEqual(["shape", "shape", "text", "text"]);
-    expect(result.slides[0]!.elements[2]).toMatchObject({ type: "text", text: "已审核标�?, style: { fontFamily: "Arial", fontSizePt: 42 } });
+    expect(result.slides[0]!.elements[2]).toMatchObject({ type: "text", text: "已审核标题", style: { fontFamily: "Arial", fontSizePt: 42 } });
   });
 
   it("keeps display type on the headline and text type on running copy", () => {
@@ -286,11 +286,11 @@ describe("document commands", () => {
   it("renders long multi-point title-body copy as a structured list instead of one stranded block", () => {
     const source = createDocument();
     const items = [
-      "第一个要点需要完整保留背景、人物和事件之间的因果关系，不能为了卡片整齐而截断其中任何一句。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解�?,
-      "第二个要点说明作者回应了当时社会对政治改革和士人责任的核心争论，需要连续阅读。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解�?,
-      "第三个要点补充当时的社会环境、传播条件和读者接受方式，句子较长，不适合拆成短卡片。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解�?,
-      "第四个要点解释作品为什么采用这种形式和结构，并说明形式选择与表达目标之间的关系。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解�?,
-      "第五个要点概述作品后来产生的影响，以及它在不同历史阶段被重新解释和引用的方式。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解�?,
+      "第一个要点需要完整保留背景、人物和事件之间的因果关系，不能为了卡片整齐而截断其中任何一句。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第二个要点说明作者回应了当时社会对政治改革和士人责任的核心争论，需要连续阅读。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第三个要点补充当时的社会环境、传播条件和读者接受方式，句子较长，不适合拆成短卡片。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第四个要点解释作品为什么采用这种形式和结构，并说明形式选择与表达目标之间的关系。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第五个要点概述作品后来产生的影响，以及它在不同历史阶段被重新解释和引用的方式。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
     ];
     const content = { title: "作品背景", body: `1. ${items[0]}
 2. ${items[1]}
@@ -312,17 +312,17 @@ describe("document commands", () => {
 
   it("uses a bullet-list block as cards even when body is a short summary", () => {
     const source = createDocument();
-    const content = { title: "三条结论", body: "本页用三条结论回答标题�?, speakerNotes: "", blocks: [{ type: "bullet-list" as const, items: ["结论一", "结论�?, "结论�?] }] };
+    const content = { title: "三条结论", body: "本页用三条结论回答标题。", speakerNotes: "", blocks: [{ type: "bullet-list" as const, items: ["结论一", "结论二", "结论三"] }] };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "三条结论", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toEqual(["三条结论", "01", "01", "结论一", "02", "结论�?, "03", "结论�?]);
+    expect(texts).toEqual(["三条结论", "01", "01", "结论一", "02", "结论二", "03", "结论三"]);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
   it("turns a five-point page into an editorial list with a pull quote", () => {
     const source = createDocument();
-    const content = { title: "原文赏析——第二段", body: "1. 总写洞庭湖全景\n2. '衔远�?吞长�?浩浩汤汤'\n3. 描写气象万千的景色\n4. 过渡到登楼览物之情\n5. '前人之述备矣'引出下文", speakerNotes: "", blocks: [{ type: "bullet-list" as const, items: ["总写洞庭湖全�?, "'衔远�?吞长�?浩浩汤汤'", "描写气象万千的景�?, "过渡到登楼览物之�?, "'前人之述备矣'引出下文"] }] };
+    const content = { title: "原文赏析——第二段", body: "1. 总写洞庭湖全景\n2. '衔远山,吞长江,浩浩汤汤'\n3. 描写气象万千的景色\n4. 过渡到登楼览物之情\n5. '前人之述备矣'引出下文", speakerNotes: "", blocks: [{ type: "bullet-list" as const, items: ["总写洞庭湖全景", "'衔远山,吞长江,浩浩汤汤'", "描写气象万千的景色", "过渡到登楼览物之情", "'前人之述备矣'引出下文"] }] };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
@@ -336,7 +336,7 @@ describe("document commands", () => {
 
   it("keeps a bullet list when the page also carries a quote block", () => {
     const source = createDocument();
-    const items = ["第一�?, "第二�?, "第三�?, "第四�?, "第五�?];
+    const items = ["第一项", "第二项", "第三项", "第四项", "第五项"];
     const content = { title: "重点摘录", body: items.join("\n"), speakerNotes: "", blocks: [{ type: "quote" as const, text: "先天下之忧而忧" }, { type: "bullet-list" as const, items }] };
     const design = { layout: "quote" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "重点摘录", slides: [content], designs: [design] }));
@@ -349,24 +349,24 @@ describe("document commands", () => {
 
   it("renders a quote block with its attribution instead of a plain paragraph", () => {
     const source = createDocument();
-    const content = { title: "核心观点", body: "真正的理解来自实践�?, speakerNotes: "", blocks: [{ type: "quote" as const, text: "真正的理解来自实践�?, attribution: "作�? }] };
+    const content = { title: "核心观点", body: "真正的理解来自实践。", speakerNotes: "", blocks: [{ type: "quote" as const, text: "真正的理解来自实践。", attribution: "作者" }] };
     const design = { layout: "quote" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "核心观点", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toContain("真正的理解来自实践�?);
-    expect(texts).toContain("�?作�?);
+    expect(texts).toContain("真正的理解来自实践。");
+    expect(texts).toContain("— 作者");
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
   it("renders numbered content as editable cards with deterministic geometry", () => {
     const source = createDocument();
-    const content = { title: "三个重点", body: "1. 第一�?2. 第二�?3. 第三�?, speakerNotes: "" };
+    const content = { title: "三个重点", body: "1. 第一项 2. 第二项 3. 第三项", speakerNotes: "" };
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "卡片文稿", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
-    expect(texts.map((element) => element.text)).toEqual(["三个重点", "01", "01", "第一�?, "02", "第二�?, "03", "第三�?]);
+    expect(texts.map((element) => element.text)).toEqual(["三个重点", "01", "01", "第一项", "02", "第二项", "03", "第三项"]);
     const badge = result.slides[0]!.elements.find((element) => element.type === "shape" && element.shape === "ellipse")!;
-    const firstItem = texts.find((element) => element.text === "第一�?)!;
+    const firstItem = texts.find((element) => element.text === "第一项")!;
     // The badge sits above the copy; text must start below the badge instead
     // of painting over the numeral.
     expect(firstItem.frame.y).toBeGreaterThanOrEqual(badge.frame.y + badge.frame.height);
@@ -378,15 +378,15 @@ describe("document commands", () => {
 
   it("renders a short summary list as an editorial page with a real point count", () => {
     const source = createDocument();
-    const items = ["叙事、写景、抒情、议论相结合", "骈散结合,语言凝练优美", "对比手法突出主题思想", "引用典故丰富文化内涵", "千百年来激励无数仁人志�?];
-    const content = { title: "艺术特色与深远影�?, body: items.join("\n"), speakerNotes: "" };
+    const items = ["叙事、写景、抒情、议论相结合", "骈散结合,语言凝练优美", "对比手法突出主题思想", "引用典故丰富文化内涵", "千百年来激励无数仁人志士"];
+    const content = { title: "艺术特色与深远影响", body: items.join("\n"), speakerNotes: "" };
     const design = { layout: "summary" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
     const itemTexts = texts.filter((element) => items.includes(element.text));
     expect(itemTexts).toHaveLength(items.length);
     expect(itemTexts.every((element) => element.frame.width < source.pageSize.width * 0.4)).toBe(true);
-    expect(texts.map((element) => element.text)).toContain("项要�?);
+    expect(texts.map((element) => element.text)).toContain("项要点");
     expect(texts.map((element) => element.text)).toContain("05");
     const panel = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.x > source.pageSize.width * 0.5 && element.frame.width > source.pageSize.width * 0.25 && element.frame.height > source.pageSize.height * 0.4);
     expect(panel).toBeDefined();
@@ -396,14 +396,14 @@ describe("document commands", () => {
 
   it("turns a short split page without a quote into an editorial point count", () => {
     const source = createDocument();
-    const items = ["范仲淹因主张改革被贬邓州", "受好友滕子京之托撰写", "滕子京重修岳阳楼", "作者借题发挥寄托政治理想", "体现逆境中的豁达心�?];
+    const items = ["范仲淹因主张改革被贬邓州", "受好友滕子京之托撰写", "滕子京重修岳阳楼", "作者借题发挥寄托政治理想", "体现逆境中的豁达心态"];
     const content = { title: "写作背景", body: items.join("\n"), speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
     items.forEach((item) => expect(texts).toContain(item));
-    expect(texts).toContain("项要�?);
-    expect(texts.some((text) => text.startsWith("�?))).toBe(false);
+    expect(texts).toContain("项要点");
+    expect(texts.some((text) => text.startsWith("•"))).toBe(false);
     const panel = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.x > source.pageSize.width * 0.5 && element.frame.width > source.pageSize.width * 0.25 && element.frame.height > source.pageSize.height * 0.4);
     expect(panel).toBeDefined();
     expect(result.slides[0]!.content.body).toBe(content.body);
@@ -411,14 +411,14 @@ describe("document commands", () => {
 
   it("turns a short split page with a quote into an editorial pull quote", () => {
     const source = createDocument();
-    const items = ["总写洞庭湖全�?, "'衔远�?吞长�?浩浩汤汤'", "描写气象万千的景�?, "过渡到登楼览物之�?, "'前人之述备矣'引出下文"];
+    const items = ["总写洞庭湖全景", "'衔远山,吞长江,浩浩汤汤'", "描写气象万千的景色", "过渡到登楼览物之情", "'前人之述备矣'引出下文"];
     const content = { title: "原文赏析——第二段", body: items.join("\n"), speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
     items.forEach((item) => expect(texts).toContain(item));
     expect(texts).toContain("关键摘录");
-    expect(texts.some((text) => text.startsWith("�?))).toBe(false);
+    expect(texts.some((text) => text.startsWith("•"))).toBe(false);
     const panel = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.x > source.pageSize.width * 0.5 && element.frame.width > source.pageSize.width * 0.25 && element.frame.height > source.pageSize.height * 0.4);
     expect(panel).toBeDefined();
     // The canvas renderer uses 1.25 line height; the quote frame must be tall
@@ -430,20 +430,20 @@ describe("document commands", () => {
 
   it("turns a six-point short split page into cards instead of two sparse columns", () => {
     const source = createDocument();
-    const items = ["第一�?, "第二�?, "第三�?, "第四�?, "第五�?, "第六�?];
+    const items = ["第一项", "第二项", "第三项", "第四项", "第五项", "第六项"];
     const content = { title: "六个要点", body: items.join("\n"), speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "六个要点", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
     items.forEach((item) => expect(texts).toContain(item));
-    expect(texts.some((text) => text.startsWith("�?))).toBe(false);
+    expect(texts.some((text) => text.startsWith("•"))).toBe(false);
     expect(result.slides[0]!.elements.filter((element) => element.type === "shape" && element.shape === "ellipse")).toHaveLength(items.length);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
   it("selects body template geometry for a short split page that becomes a point count", () => {
     const source = createDocument();
-    const items = ["范仲淹因主张改革被贬邓州", "受好友滕子京之托撰写", "滕子京重修岳阳楼", "作者借题发挥寄托政治理想", "体现逆境中的豁达心�?];
+    const items = ["范仲淹因主张改革被贬邓州", "受好友滕子京之托撰写", "滕子京重修岳阳楼", "作者借题发挥寄托政治理想", "体现逆境中的豁达心态"];
     const content = { title: "写作背景", body: items.join("\n"), speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const templateLayouts = [
@@ -459,7 +459,7 @@ describe("document commands", () => {
     ];
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板匹配", slides: [content], designs: [design], templateLayouts }));
     expect(result.slides[0]!.background).toBe("#FFFFFF");
-    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "项要�?)).toBe(true);
+    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "项要点")).toBe(true);
   });
 
   it("uses valid text regions extracted from the selected PPTX template", () => {
@@ -494,7 +494,7 @@ describe("document commands", () => {
 
   it("rejects a template layout whose title overlaps its body", () => {
     const source = createDocument();
-    const content = { title: "不能重叠的标�?, body: "正文内容", speakerNotes: "" };
+    const content = { title: "不能重叠的标题", body: "正文内容", speakerNotes: "" };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const templateLayouts = [{ index: 1, name: "损坏版式", regions: [
       { role: "title" as const, frame: { x: 0.10, y: 0.35, width: 0.70, height: 0.20 } },
@@ -511,7 +511,7 @@ describe("document commands", () => {
     const content = { title: "方案对比", body: "左侧\n右侧", speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const templateLayouts = [
-      { index: 1, name: "标题和内�?, backgroundColor: "#FFFFFF", regions: [{ role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } }, { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.84, height: 0.55 } }] },
+      { index: 1, name: "标题和内容", backgroundColor: "#FFFFFF", regions: [{ role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } }, { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.84, height: 0.55 } }] },
       { index: 2, name: "双栏比较", backgroundColor: "#F5F1E8", regions: [{ role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } }, { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.36, height: 0.55 } }, { role: "body" as const, frame: { x: 0.56, y: 0.28, width: 0.36, height: 0.55 } }] },
     ];
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板匹配", slides: [content], designs: [design], templateLayouts }));
@@ -523,10 +523,10 @@ describe("document commands", () => {
 
   it("places a rendered complex template layout behind editable content", () => {
     const source = createDocument();
-    const content = { title: "可编辑标�?, body: "可编辑正�?, speakerNotes: "" };
+    const content = { title: "可编辑标题", body: "可编辑正文", speakerNotes: "" };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const backgroundImageDataUrl = "data:image/png;base64,iVBORw0KGgo=";
-    const templateLayouts = [{ index: 1, name: "标题和内�?, backgroundImageDataUrl, regions: [
+    const templateLayouts = [{ index: 1, name: "标题和内容", backgroundImageDataUrl, regions: [
       { role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } },
       { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.84, height: 0.55 } },
     ] }];
@@ -538,8 +538,8 @@ describe("document commands", () => {
   it("creates controlled visual rhythm across equally suitable semantic backgrounds", () => {
     const source = createDocument();
     const slides = [
-      { title: "第一�?, body: "正文一", speakerNotes: "" },
-      { title: "第二�?, body: "正文�?, speakerNotes: "" },
+      { title: "第一页", body: "正文一", speakerNotes: "" },
+      { title: "第二页", body: "正文二", speakerNotes: "" },
     ];
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const regionSet = [
@@ -547,10 +547,10 @@ describe("document commands", () => {
       { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.84, height: 0.55 } },
     ];
     const templateLayouts = [
-      { index: 1, name: "正文�?, backgroundImageDataUrl: "data:image/png;base64,AAAA", regions: regionSet },
-      { index: 2, name: "正文�?, backgroundImageDataUrl: "data:image/png;base64,BBBB", regions: regionSet },
+      { index: 1, name: "正文甲", backgroundImageDataUrl: "data:image/png;base64,AAAA", regions: regionSet },
+      { index: 2, name: "正文乙", backgroundImageDataUrl: "data:image/png;base64,BBBB", regions: regionSet },
     ];
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版�?, slides, designs: [design, design], templateLayouts }));
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版式", slides, designs: [design, design], templateLayouts }));
     const backgrounds = result.slides.map((slide) => slide.elements.find((element) => element.type === "image"));
     expect(backgrounds[0]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[0]!.backgroundImageDataUrl } });
     expect(backgrounds[1]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[1]!.backgroundImageDataUrl } });
@@ -560,30 +560,30 @@ describe("document commands", () => {
 
   it("renders timeline blocks without parsing the body string", () => {
     const source = createDocument();
-    const content = { title: "里程�?, body: "这段正文不应驱动时间�?, speakerNotes: "", blocks: [{ type: "timeline" as const, items: [{ label: "第一阶段", text: "调研" }, { label: "第二阶段", text: "交付" }] }] };
+    const content = { title: "里程碑", body: "这段正文不应驱动时间线", speakerNotes: "", blocks: [{ type: "timeline" as const, items: [{ label: "第一阶段", text: "调研" }, { label: "第二阶段", text: "交付" }] }] };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "时间�?, slides: [content], designs: [design] }));
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "时间线", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toEqual(["里程�?, "第一阶段", "调研", "第二阶段", "交付"]);
+    expect(texts).toEqual(["里程碑", "第一阶段", "调研", "第二阶段", "交付"]);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
   it("renders comparison blocks as two labeled editable columns", () => {
     const source = createDocument();
-    const content = { title: "方案对比", body: "保留的审核正�?, speakerNotes: "", blocks: [{ type: "comparison" as const, leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["稳定"], rightItems: ["快�?] }] };
+    const content = { title: "方案对比", body: "保留的审核正文", speakerNotes: "", blocks: [{ type: "comparison" as const, leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["稳定"], rightItems: ["快速"] }] };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "对比", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toEqual(["方案对比", "方案 A", "�?稳定", "方案 B", "�?快�?]);
+    expect(texts).toEqual(["方案对比", "方案 A", "• 稳定", "方案 B", "• 快速"]);
   });
 
   it("renders metric blocks as value-first cards", () => {
     const source = createDocument();
-    const content = { title: "核心指标", body: "指标说明", speakerNotes: "", blocks: [{ type: "metric" as const, label: "增长�?, value: "42%" }, { type: "metric" as const, label: "客户�?, value: "120" }] };
+    const content = { title: "核心指标", body: "指标说明", speakerNotes: "", blocks: [{ type: "metric" as const, label: "增长率", value: "42%" }, { type: "metric" as const, label: "客户数", value: "120" }] };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "指标", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toEqual(["核心指标", "42%", "增长�?, "120", "客户�?]);
+    expect(texts).toEqual(["核心指标", "42%", "增长率", "120", "客户数"]);
   });
 
   it("renders process blocks as numbered native-object steps", () => {
@@ -592,25 +592,25 @@ describe("document commands", () => {
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "流程", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toEqual(["实施流程", "1", "分析", "确认目标", "�?, "2", "执行", "完成交付"]);
+    expect(texts).toEqual(["实施流程", "1", "分析", "确认目标", "→", "2", "执行", "完成交付"]);
     expect(result.slides[0]!.elements.every((element) => element.type === "text" || element.type === "shape")).toBe(true);
   });
 
   it("does not silently drop points when a cards layout receives more than six", () => {
     const source = createDocument();
-    const body = Array.from({ length: 7 }, (_, index) => `${index + 1}. �?{index + 1}个要点`).join("\n");
+    const body = Array.from({ length: 7 }, (_, index) => `${index + 1}. 第${index + 1}个要点`).join("\n");
     const content = { title: "七个要点", body, speakerNotes: "" };
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "七个要点", slides: [content], designs: [design] }));
     const copy = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text").map((element) => element.text).join("\n");
-    for (let index = 1; index <= 7; index += 1) expect(copy).toContain(`�?{index}个要点`);
+    for (let index = 1; index <= 7; index += 1) expect(copy).toContain(`第${index}个要点`);
     expect(result.slides[0]!.content.body).toBe(body);
   });
 
   it("keeps an explicitly requested split layout instead of forcing numbered text into cards", () => {
     const source = createDocument();
     const longItem = "这是一个用于验证中文文本框宽度估算和自动字号适配的较长段落，不能越过双栏边界覆盖另一列内容，并需要保留完整上下文";
-    const content = { title: "排版检�?, body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" };
+    const content = { title: "排版检查", body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "自动适配", slides: [content], designs: [design] }));
     const bodies = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.text !== content.title && !/^\d+$/.test(element.text));
@@ -623,10 +623,10 @@ describe("document commands", () => {
 
   it("centers an incomplete final card row on the shared alignment grid", () => {
     const source = createDocument();
-    const content = { title: "五项重点", body: "1. 第一项\n2. 第二项\n3. 第三项\n4. 第四项\n5. 第五�?, speakerNotes: "" };
+    const content = { title: "五项重点", body: "1. 第一项\n2. 第二项\n3. 第三项\n4. 第四项\n5. 第五项", speakerNotes: "" };
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "视觉对齐", slides: [content], designs: [design] }));
-    const labels = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && /^第[一二三四五]�?/.test(element.text));
+    const labels = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && /^第[一二三四五]项$/.test(element.text));
     expect(labels).toHaveLength(5);
     expect(labels[3]!.frame.x).toBeGreaterThan(labels[0]!.frame.x);
     expect(labels[4]!.frame.x + labels[4]!.frame.width).toBeLessThan(labels[2]!.frame.x + labels[2]!.frame.width);
@@ -635,9 +635,9 @@ describe("document commands", () => {
 
   it("places editable content inside a vision-recommended safe region", () => {
     const source = createDocument();
-    const content = { title: "避开模板标志", body: "正文位于视觉模型识别的留白区�?, speakerNotes: "" };
+    const content = { title: "避开模板标志", body: "正文位于视觉模型识别的留白区域", speakerNotes: "" };
     const design = { layout: "title-body" as const, background: "#234567", accent: "#22AA99", titleColor: "#FFFFFF", bodyColor: "#FFFFFF", safeRegion: { x: 0.28, y: 0.18, width: 0.64, height: 0.68 } };
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "安全�?, slides: [content], designs: [design] }));
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "安全区", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
     expect(texts[0]!.frame.x).toBe(Math.round(source.pageSize.width * design.safeRegion.x));
     expect(texts.every((element) => element.frame.x >= Math.round(source.pageSize.width * design.safeRegion.x))).toBe(true);
@@ -663,7 +663,7 @@ describe("document commands", () => {
 
   it("keeps the template artwork visible instead of covering the page with a panel", () => {
     const source = createDocument();
-    const content = { title: "对比度修�?, body: "正文", speakerNotes: "" };
+    const content = { title: "对比度修复", body: "正文", speakerNotes: "" };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333", backgroundTreatment: "local-scrim" as const };
     const templateLayouts = [{ index: 11, name: "内页（浅色）1", backgroundImageDataUrl: "data:image/png;base64,iVBORw0KGgo=", regions: [
       { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 } },
@@ -701,7 +701,7 @@ describe("document commands", () => {
     const source = createDocument();
     const content = { title: "浅底白字", body: "正文", speakerNotes: "" };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#FFFFFF", bodyColor: "#FFFFFF" };
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "对比�?, slides: [content], designs: [design] }));
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "对比度", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
     expect(texts.every((element) => element.type === "text" && contrastRatio(element.style.color, "#FFFFFF")! >= 4.5)).toBe(true);
     // The title keeps more weight than the body so the page keeps a hierarchy.
@@ -710,9 +710,9 @@ describe("document commands", () => {
 
   it("rotates the template artwork across pages instead of repeating one layout", () => {    const source = createDocument();
     const slides = [
-      { title: "第一�?, body: "正文一", speakerNotes: "" },
-      { title: "第二�?, body: "正文�?, speakerNotes: "" },
-      { title: "第三�?, body: "正文�?, speakerNotes: "" },
+      { title: "第一页", body: "正文一", speakerNotes: "" },
+      { title: "第二页", body: "正文二", speakerNotes: "" },
+      { title: "第三页", body: "正文三", speakerNotes: "" },
     ];
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const regionSet = [
@@ -724,7 +724,7 @@ describe("document commands", () => {
       { index: 13, name: "内页（浅色）3", backgroundImageDataUrl: "data:image/png;base64,BBBB", regions: regionSet },
       { index: 14, name: "内页（深色）1", backgroundImageDataUrl: "data:image/png;base64,CCCC", regions: regionSet },
     ];
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版�?, slides, designs: [design, design, design], templateLayouts }));
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版式", slides, designs: [design, design, design], templateLayouts }));
     const backgrounds = result.slides.map((slide) => slide.elements.find((element) => element.type === "image"));
     expect(backgrounds.map((element) => element?.type === "image" ? element.source.dataUrl : undefined)).toEqual([
       templateLayouts[0]!.backgroundImageDataUrl,
@@ -735,7 +735,7 @@ describe("document commands", () => {
 
   it("keeps a CJK headline on one line inside the template title box", () => {
     const source = createDocument();
-    const content = { title: "昆佰泰基因测序整体解决方�?, body: "副标�?, speakerNotes: "" };
+    const content = { title: "昆佰泰基因测序整体解决方案", body: "副标题", speakerNotes: "" };
     const design = { layout: "cover" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#FFFFFF", bodyColor: "#FFFFFF" };
     const templateLayouts = [{ index: 1, name: "封面1", backgroundImageDataUrl: "data:image/png;base64,AAAA", regions: [
       { role: "title" as const, frame: { x: 0.084, y: 0.340, width: 0.832, height: 0.167 }, textColor: "#FFFFFF", fontSizePt: 66 },
@@ -785,7 +785,7 @@ describe("document commands", () => {
 
   it("deepens a badge fill so the numerals stay readable on it", () => {
     const source = createDocument();
-    const content = { title: "要点", body: "1. 第一项优势\n2. 第二项优�?, speakerNotes: "" };
+    const content = { title: "要点", body: "1. 第一项优势\n2. 第二项优势", speakerNotes: "" };
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#15A590", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
     const badge = result.slides[0]!.elements.find((element) => element.type === "shape" && element.shape === "ellipse");
@@ -796,10 +796,10 @@ describe("document commands", () => {
 
   it("sizes a stat card to the number and the label it carries", () => {
     const source = createDocument();
-    const content = { title: "关键指标", body: "", speakerNotes: "", blocks: [{ type: "metric" as const, label: "年检测样本量", value: "38�? }] };
+    const content = { title: "关键指标", body: "", speakerNotes: "", blocks: [{ type: "metric" as const, label: "年检测样本量", value: "38万" }] };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
-    const value = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === "38�?);
+    const value = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === "38万");
     const label = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === "年检测样本量");
     const card = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.width > source.pageSize.width * 0.5);
     expect(card?.type === "shape").toBe(true);
@@ -810,7 +810,9 @@ describe("document commands", () => {
     expect(label!.type === "text" && label!.frame.y + label!.frame.height).toBeLessThanOrEqual(card!.frame.y + card!.frame.height);
   });
 
-  it("binds the page to the template layout and keeps the artwork as the layout background", () => {    const source = createDocument();    const content = { title: "模板标题", body: "模板正文", speakerNotes: "" };
+  it("binds the page to the template layout and keeps the artwork as the layout background", () => {
+    const source = createDocument();
+    const content = { title: "模板标题", body: "模板正文", speakerNotes: "" };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const templateLayouts = [{ index: 11, name: "内页（浅色）1", backgroundColor: "#FFFFFF", backgroundImageDataUrl: "data:image/png;base64,iVBORw0KGgo=", regions: [
       { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 } },
@@ -822,7 +824,7 @@ describe("document commands", () => {
       slides: [content],
       designs: [design],
       templateLayouts,
-      templateTheme: { name: "昆佰�?, majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] },
+      templateTheme: { name: "昆佰泰", majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] },
     }));
     // The layout is kept, so the exported file can carry it as a slide master.
     expect(result.layouts).toHaveLength(1);
@@ -831,7 +833,7 @@ describe("document commands", () => {
     // The artwork belongs to the layout, not to the page.
     const artwork = result.slides[0]!.elements.find((element) => element.type === "image");
     expect(artwork?.type === "image" && artwork.placement).toBe("layout-background");
-    expect(result.theme).toEqual({ name: "昆佰�?, majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] });
+    expect(result.theme).toEqual({ name: "昆佰泰", majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] });
   });
 
   it("draws metrics of the same unit as a native chart instead of loose cards", () => {
@@ -841,9 +843,9 @@ describe("document commands", () => {
       body: "",
       speakerNotes: "",
       blocks: [
-        { type: "metric" as const, label: "年检测样本量", value: "38�? },
-        { type: "metric" as const, label: "覆盖机构", value: "12�? },
-        { type: "metric" as const, label: "出具报告", value: "6�? },
+        { type: "metric" as const, label: "年检测样本量", value: "38万" },
+        { type: "metric" as const, label: "覆盖机构", value: "12万" },
+        { type: "metric" as const, label: "出具报告", value: "6万" },
       ],
     };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
@@ -856,7 +858,7 @@ describe("document commands", () => {
     // The stat cards are gone: the page carries one chart instead of boxes
     // with the same numbers.
     expect(result.slides[0]!.elements.filter((element) => element.type === "shape" && element.frame.width > source.pageSize.width * 0.2)).toHaveLength(0);
-    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "38�?)).toBe(false);
+    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "38万")).toBe(false);
   });
 
   it("keeps the stat cards when the metrics do not share one unit", () => {
@@ -866,19 +868,19 @@ describe("document commands", () => {
       body: "",
       speakerNotes: "",
       blocks: [
-        { type: "metric" as const, label: "年检测样本量", value: "38�? },
-        { type: "metric" as const, label: "年度增长�?, value: "12%" },
+        { type: "metric" as const, label: "年检测样本量", value: "38万" },
+        { type: "metric" as const, label: "年度增长率", value: "12%" },
       ],
     };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
     expect(result.slides[0]!.elements.some((element) => element.type === "chart")).toBe(false);
-    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "38�?)).toBe(true);
+    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "38万")).toBe(true);
   });
 
   it("marks generated layout elements and user additions with provenance", () => {
     const source = createDocument();
-    const content = { title: "三个重点", body: "第一项\n第二项\n第三�?, speakerNotes: "" };
+    const content = { title: "三个重点", body: "第一项\n第二项\n第三项", speakerNotes: "" };
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const generated = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "卡片", slides: [content], designs: [design] }));
     expect(generated.slides[0]!.elements.every((element) => element.origin === "generated")).toBe(true);
@@ -890,7 +892,7 @@ describe("document commands", () => {
   it("re-lays out a legacy split page as a count page without touching content or user objects", () => {
     const source = createDocument();
     const slide = source.slides[0]!;
-    const items = ["范仲淹因主张改革被贬邓州", "受好友滕子京之托撰写", "滕子京重修岳阳楼", "作者借题发挥寄托政治理想", "体现逆境中的豁达心�?];
+    const items = ["范仲淹因主张改革被贬邓州", "受好友滕子京之托撰写", "滕子京重修岳阳楼", "作者借题发挥寄托政治理想", "体现逆境中的豁达心态"];
     slide.content = { title: "写作背景", body: items.join("\n"), speakerNotes: "讲稿", status: "approved" };
     const title = slide.elements[0]!;
     if (title.type === "text") {
@@ -908,9 +910,12 @@ describe("document commands", () => {
     const contentBefore = JSON.stringify(slide.content);
     const imageId = slide.elements.find((element) => element.type === "image")!.id;
     const noteId = slide.elements.find((element) => element.type === "text" && element.text === "手工标注")!.id;
-    console.log("ALL", JSON.stringify(slide.elements.map((element) => [element.id, element.type, element.type === "text" ? element.contentRef : "", element.type === "text" ? element.text : "", element.origin, element.locked])));
-    console.log("CLASS", JSON.stringify(classifyRelayoutElements(slide).generated.map((element) => [element.type, element.type === "text" ? element.contentRef : "", element.type === "text" ? element.text : "", element.origin])));
-    console.log("CTX", JSON.stringify(inferRelayoutContext(slide, source)));
+    // The picture and the note were added by hand, so the relayout has to keep
+    // them and rebuild only what the page generated.
+    const classified = classifyRelayoutElements(slide);
+    expect(classified.preserved.some((element) => element.id === imageId)).toBe(true);
+    expect(classified.preserved.some((element) => element.id === noteId)).toBe(true);
+    expect(inferRelayoutContext(slide, source).templateLayout).toBeDefined();
     const command = { type: "relayout-slide" as const, slideId: slide.id };
     expect(commandDomain(command)).toBe("design");
     const result = produce(source, (draft) => applyCommand(draft, command));
@@ -918,8 +923,7 @@ describe("document commands", () => {
     expect(JSON.stringify(resultSlide.content)).toBe(contentBefore);
     expect(resultSlide.elements.some((element) => element.id === imageId)).toBe(true);
     expect(resultSlide.elements.some((element) => element.id === noteId && element.type === "text" && element.text === "手工标注")).toBe(true);
-    console.log("RELAYOUT", JSON.stringify(resultSlide.elements.map((element) => element.type === "text" ? [element.type, element.contentRef, element.text, element.frame] : [element.type, element.frame])));
-    expect(resultSlide.elements.some((element) => element.type === "text" && element.text === "项要�?)).toBe(true);
+    expect(resultSlide.elements.some((element) => element.type === "text" && element.text === "项要点")).toBe(true);
     expect(resultSlide.elements.filter((element) => element.origin === "user").length).toBeGreaterThanOrEqual(2);
     expect(resultSlide.layoutId).toBeDefined();
     expect(result.layouts?.some((layout) => layout.id === resultSlide.layoutId)).toBe(true);
