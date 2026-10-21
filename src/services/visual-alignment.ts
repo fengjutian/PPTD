@@ -89,6 +89,13 @@ export const visualRepairPlanSchema = z.object({
     backgroundAction: z.enum(["keep", "replace-compatible", "simplify"]).default("keep"),
     hierarchyAction: z.enum(["keep", "strengthen-title", "reduce-density", "increase-whitespace"]).default("keep"),
     safeRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional(),
+    obstacleRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(16).default([]),
+    elementActions: z.array(z.discriminatedUnion("action", [
+      z.object({ action: z.literal("move"), target: z.enum(["title", "body"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }) }),
+      z.object({ action: z.literal("resize"), target: z.enum(["title", "body"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }) }),
+      z.object({ action: z.literal("restyle"), target: z.enum(["title", "body"]), fontScale: z.number().min(0.75).max(1.5).optional(), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional() }),
+      z.object({ action: z.literal("changeLayout"), layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]) }),
+    ])).max(12).default([]),
     reason: z.string().min(1).max(500),
   })).max(20),
 });

@@ -22,6 +22,10 @@ describe("AI structured outputs", () => {
     expect(describeAiError("AI_PROVIDER_HTTP_ERROR:401")).toContain("API Key");
   });
 
+  it("explains that a failed visual quality gate blocks the generated deck", () => {
+    expect(describeAiError("AI_VISUAL_QUALITY_GATE_FAILED: 第 2 页仍有 3 个排版问题")).toContain("已阻止进入编辑器");
+  });
+
   it("maps an unusable provider payload to a regeneration hint", () => {
     expect(describeAiError("AI_EMPTY_RESPONSE")).toContain("重新生成");
     expect(describeAiError("AI_JSON_INVALID: bad token")).toContain("重新生成");

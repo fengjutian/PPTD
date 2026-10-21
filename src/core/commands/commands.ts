@@ -12,7 +12,23 @@ export type AiContentBlock =
   | { type: "process"; items: Array<{ label: string; text: string }> };
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
-export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string; safeRegion?: { x: number; y: number; width: number; height: number } }
+export interface AiNormalizedRect { x: number; y: number; width: number; height: number }
+export type AiElementRepair =
+  | { action: "move" | "resize"; target: "title" | "body"; frame: AiNormalizedRect }
+  | { action: "restyle"; target: "title" | "body"; fontScale?: number; color?: string }
+  | { action: "changeLayout"; layout: AiLayoutKind };
+export interface AiSlideDesign {
+  layout: AiLayoutKind;
+  background: string;
+  accent: string;
+  titleColor: string;
+  bodyColor: string;
+  safeRegion?: AiNormalizedRect;
+  obstacleRegions?: AiNormalizedRect[];
+  hierarchyAction?: "keep" | "strengthen-title" | "reduce-density" | "increase-whitespace";
+  backgroundTreatment?: "none" | "content-panel" | "simplify";
+  elementRepairs?: AiElementRepair[];
+}
 export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
 export interface AiTemplateDecoration { shape: "rectangle" | "ellipse"; fill: string; frame: { x: number; y: number; width: number; height: number } }
 export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; backgroundImageDataUrl?: string; decorations?: AiTemplateDecoration[]; regions: AiTemplateRegion[] }
@@ -159,11 +175,33 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
       const [leftRecipe, rightRecipe] = recipeBodies;
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
-      const visualSafe = design.safeRegion && isSafeRegion(design.safeRegion, 0.55, 0.45) ? design.safeRegion : undefined;
+      const intersects = (left: AiNormalizedRect, right: AiNormalizedRect) => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
+      const insetObstacle = (region: AiNormalizedRect): AiNormalizedRect => ({ x: Math.max(0, region.x - 0.015), y: Math.max(0, region.y - 0.015), width: Math.min(1, region.width + 0.03), height: Math.min(1, region.height + 0.03) });
+      const obstacles = (design.obstacleRegions ?? []).filter((region) => isSafeRegion(region, 0.001, 0.001)).map(insetObstacle);
+      const largestFreeRegion = (source: AiNormalizedRect): AiNormalizedRect => {
+        let candidates = [source];
+        for (const obstacle of obstacles) {
+          candidates = candidates.flatMap((candidate) => {
+            if (!intersects(candidate, obstacle)) return [candidate];
+            const right = candidate.x + candidate.width; const bottom = candidate.y + candidate.height;
+            const obstacleRight = obstacle.x + obstacle.width; const obstacleBottom = obstacle.y + obstacle.height;
+            return [
+              { x: candidate.x, y: candidate.y, width: Math.max(0, obstacle.x - candidate.x), height: candidate.height },
+              { x: Math.min(right, obstacleRight), y: candidate.y, width: Math.max(0, right - Math.max(candidate.x, obstacleRight)), height: candidate.height },
+              { x: candidate.x, y: candidate.y, width: candidate.width, height: Math.max(0, obstacle.y - candidate.y) },
+              { x: candidate.x, y: Math.min(bottom, obstacleBottom), width: candidate.width, height: Math.max(0, bottom - Math.max(candidate.y, obstacleBottom)) },
+            ].filter((region) => region.width >= 0.28 && region.height >= 0.20);
+          });
+        }
+        return candidates.sort((left, right) => right.width * right.height - left.width * left.height)[0] ?? source;
+      };
+      const requestedSafe = design.safeRegion && isSafeRegion(design.safeRegion, 0.30, 0.25) ? design.safeRegion : { x: 0.07, y: 0.12, width: 0.86, height: 0.75 };
+      const visualSafe = largestFreeRegion(requestedSafe);
       const safeLeft = visualSafe?.x ?? 0.07; const safeRight = visualSafe ? visualSafe.x + visualSafe.width : 0.93; const safeTop = visualSafe?.y ?? 0.20; const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : 0.87;
       const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(0.17, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
       slide.elements = [];
       if (visualRecipe?.backgroundImageDataUrl) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: visualRecipe.backgroundImageDataUrl, mimeType: "image/png" }, altText: `模板版式背景：${visualRecipe.name ?? visualRecipe.index}` });
+      if (design.backgroundTreatment === "content-panel") slide.elements.push(shape(frame(Math.max(0, safeLeft - 0.025), Math.max(0, safeTop - 0.035), Math.min(1 - Math.max(0, safeLeft - 0.025), safeRight - safeLeft + 0.05), Math.min(1 - Math.max(0, safeTop - 0.035), safeBottom - safeTop + 0.07)), "#F7F8FA"));
       const decorations = visualRecipe?.backgroundImageDataUrl ? [] : [...(command.templateDecorations ?? []), ...(visualRecipe?.decorations ?? [])];
       decorations.forEach((decoration) => {
         if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
@@ -245,6 +283,34 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       } else {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.35, 0.08), 30, contentTitleColor, true, "left"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
         if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
+      }
+      const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
+      const bodyRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "body");
+      for (const element of slide.elements) {
+        if (element.type !== "text") continue;
+        const repair = element.text === content.title ? titleRepair : element.text === content.body ? bodyRepair : undefined;
+        if (!repair) continue;
+        if (repair.action === "move" || repair.action === "resize") {
+          const collisionFreeFrame = obstacles.some((obstacle) => intersects(repair.frame, obstacle))
+            ? repair.target === "title"
+              ? { x: visualSafe.x, y: visualSafe.y, width: visualSafe.width, height: Math.min(0.14, visualSafe.height * 0.22) }
+              : { x: visualSafe.x, y: visualSafe.y + Math.min(0.18, visualSafe.height * 0.28), width: visualSafe.width, height: Math.max(0.08, visualSafe.height - Math.min(0.18, visualSafe.height * 0.28)) }
+            : repair.frame;
+          element.frame = frame(collisionFreeFrame.x, collisionFreeFrame.y, collisionFreeFrame.width, collisionFreeFrame.height);
+        }
+        if (repair.action === "restyle") element.style = { ...element.style, fontSizePt: Math.max(12, element.style.fontSizePt * (repair.fontScale ?? 1)), color: repair.color ?? element.style.color };
+      }
+      if (design.hierarchyAction === "strengthen-title") {
+        const title = slide.elements.find((element) => element.type === "text" && element.text === content.title);
+        if (title?.type === "text") title.style = { ...title.style, fontSizePt: Math.min(44, title.style.fontSizePt * 1.15), bold: true };
+      }
+      if (design.hierarchyAction === "reduce-density") {
+        const body = slide.elements.find((element) => element.type === "text" && element.text === content.body);
+        if (body?.type === "text") body.frame = { ...body.frame, height: Math.max(body.frame.height, Math.round(pageHeight * 0.42)) as Emu };
+      }
+      if (design.hierarchyAction === "increase-whitespace") {
+        const body = slide.elements.find((element) => element.type === "text" && element.text === content.body);
+        if (body?.type === "text") body.frame = { ...body.frame, x: (body.frame.x + Math.round(pageWidth * 0.025)) as Emu, width: Math.max(Math.round(pageWidth * 0.30), body.frame.width - Math.round(pageWidth * 0.05)) as Emu };
       }
       return slide;
     });

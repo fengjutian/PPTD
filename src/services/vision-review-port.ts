@@ -63,8 +63,16 @@ export class TauriVisionReviewPort implements VisionReviewPort {
       slideIndex,
       layout: guide?.recommendedLayout ?? (issues.some((issue) => issue.issue === "repetitive-layout") ? "title-body" : undefined),
       backgroundAction: issues.some((issue) => issue.issue === "background-conflict" || issue.issue === "poor-contrast") ? "replace-compatible" : "keep",
-      hierarchyAction: issues.some((issue) => issue.issue === "weak-hierarchy") ? "strengthen-title" : issues.some((issue) => issue.issue === "excessive-empty-space") ? "reduce-density" : "keep",
+      hierarchyAction: issues.some((issue) => issue.issue === "weak-hierarchy") ? "strengthen-title" : issues.some((issue) => issue.issue === "excessive-empty-space") ? "increase-whitespace" : "keep",
       safeRegion: guide?.safeRegion,
+      obstacleRegions: [...(guide?.logoRegions ?? []), ...(guide?.busyRegions ?? [])],
+      elementActions: [
+        ...(guide ? [{ action: "move" as const, target: "title" as const, frame: { x: guide.safeRegion.x, y: guide.safeRegion.y, width: guide.safeRegion.width, height: Math.min(0.14, guide.safeRegion.height * 0.22) } }] : []),
+        ...(guide ? [{ action: "resize" as const, target: "body" as const, frame: { x: guide.safeRegion.x, y: guide.safeRegion.y + Math.min(0.18, guide.safeRegion.height * 0.28), width: guide.safeRegion.width, height: Math.max(0.08, guide.safeRegion.height - Math.min(0.18, guide.safeRegion.height * 0.28)) } }] : []),
+        ...(issues.some((issue) => issue.issue === "weak-hierarchy") ? [{ action: "restyle" as const, target: "title" as const, fontScale: 1.15 }] : []),
+        ...(issues.some((issue) => issue.issue === "poor-contrast" || issue.issue === "background-conflict") ? [{ action: "restyle" as const, target: "body" as const, color: "#1F2937" }] : []),
+        ...(guide ? [{ action: "changeLayout" as const, layout: guide.recommendedLayout }] : []),
+      ],
       reason: issues.map((issue) => issue.suggestion).join("；"),
     }; }) });
   }

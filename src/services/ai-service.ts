@@ -77,6 +77,7 @@ function aiSelection(): { provider: string; model: string } {
 
 export function describeAiError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
+  if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED")) return `生成结果未通过视觉质量检查，已阻止进入编辑器。${detail.split(": ").slice(1).join(": ")}`;
   if (detail.includes("AI_PROVIDER_BUSY")) return "AI 服务当前繁忙，系统已自动重试，请稍后再次生成";
   if (detail.includes("AI_PROVIDER_HTTP_ERROR:401") || detail.includes("AI_PROVIDER_HTTP_ERROR:403") || detail.includes("AI_API_KEY_MISSING")) return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
   if (detail.includes("AI_PROVIDER_HTTP_ERROR:429")) return "AI 请求过于频繁，请稍后再试";

@@ -12,6 +12,7 @@ import { useEditorStore } from "../store/editor-store";
 import { renderPresentationForVisualReview } from "../services/presentation-renderer";
 import { defaultPresentationVisualGoal, runVisualAlignmentLoop } from "../services/visual-alignment";
 import { TauriVisionReviewPort } from "../services/vision-review-port";
+import { validatePresentationVisualQuality } from "../services/presentation-quality-gate";
 
 const CANVAS_WIDTH = 960;
 type AppView = "editor" | "ai" | "theme" | "settings";
@@ -302,7 +303,6 @@ export function App() {
         templateDecorations: hasTemplateSize ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })) : undefined,
         templateLayouts: hasTemplateSize ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts.map((layout) => ({ ...layout, name: layout.name })) : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))).map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)?.dataUrl, decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
       };
-      execute(generationCommand);
       let finalDesigns: AiSlideDesign[] = design.slides;
       let visualNote = "";
       try {
@@ -333,7 +333,18 @@ export function App() {
             return designs.map((slide, slideIndex) => {
               const repair = repairs.get(slideIndex);
               if (!repair) return slide;
-              return { ...slide, layout: repair.layout ?? slide.layout, safeRegion: repair.safeRegion ?? slide.safeRegion, titleColor: repair.backgroundAction === "replace-compatible" ? "#FFFFFF" : slide.titleColor, bodyColor: repair.backgroundAction === "replace-compatible" ? "#293241" : slide.bodyColor };
+              const backgroundTreatment: AiSlideDesign["backgroundTreatment"] = repair.backgroundAction === "keep" ? "none" : repair.backgroundAction === "simplify" ? "simplify" : "content-panel";
+              return {
+                ...slide,
+                layout: repair.layout ?? slide.layout,
+                safeRegion: repair.safeRegion ?? slide.safeRegion,
+                obstacleRegions: repair.obstacleRegions,
+                hierarchyAction: repair.hierarchyAction,
+                backgroundTreatment,
+                titleColor: repair.backgroundAction === "replace-compatible" ? "#1F2937" : slide.titleColor,
+                bodyColor: repair.backgroundAction === "replace-compatible" ? "#1F2937" : slide.bodyColor,
+                elementRepairs: repair.elementActions,
+              };
             });
           },
         });
@@ -344,6 +355,11 @@ export function App() {
       }
       const finalDocument = structuredClone(document);
       applyCommand(finalDocument, { ...generationCommand, designs: finalDesigns });
+      const quality = validatePresentationVisualQuality(finalDocument, finalDesigns);
+      if (!quality.passed) {
+        const pages = [...new Set(quality.issues.map((issue) => issue.slideIndex + 1))].join("、");
+        throw new Error(`AI_VISUAL_QUALITY_GATE_FAILED: 第 ${pages} 页仍有 ${quality.issues.length} 个排版问题`);
+      }
       finalDocument.revisions = { document: document.revisions.document + 1, content: document.revisions.content + 1, design: document.revisions.design + 1 };
       loadDocument(finalDocument);
       setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
