@@ -27,6 +27,7 @@ pub struct ChatMessage {
 }
 
 /// 厂商响应体不符合预期时的分类。
+#[derive(Debug)]
 pub enum PayloadError {
     /// 请求成功但没有可用正文。
     Empty,
@@ -55,8 +56,11 @@ pub trait ChatProvider: Send + Sync {
         None
     }
     /// 附加厂商要求的鉴权信息。
-    fn apply_auth(&self, request: reqwest::RequestBuilder, api_key: &str)
-        -> reqwest::RequestBuilder;
+    fn apply_auth(
+        &self,
+        request: reqwest::RequestBuilder,
+        api_key: &str,
+    ) -> reqwest::RequestBuilder;
     /// 构造厂商请求体。
     fn build_request(&self, request: &ChatRequest) -> serde_json::Value;
     /// 从厂商响应中取出助手正文。
@@ -80,10 +84,7 @@ pub fn resolve(provider_id: Option<&str>) -> Result<&'static dyn ChatProvider, S
 }
 
 /// 解析本次请求使用的模型：请求指定优先，其次环境变量，最后厂商默认值。
-pub fn resolve_model(
-    provider: &dyn ChatProvider,
-    model: Option<String>,
-) -> Result<String, String> {
+pub fn resolve_model(provider: &dyn ChatProvider, model: Option<String>) -> Result<String, String> {
     let model = model
         .or_else(|| std::env::var(provider.model_env_var()).ok())
         .unwrap_or_else(|| provider.default_model().to_string());
@@ -154,10 +155,12 @@ pub async fn chat(
     for attempt in 0..3_u32 {
         match post_chat(provider, &client, api_key, body).await {
             Ok(payload) => {
-                return provider.parse_response(payload).map_err(|error| match error {
-                    PayloadError::Empty => "AI_EMPTY_RESPONSE".to_string(),
-                    PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
-                });
+                return provider
+                    .parse_response(payload)
+                    .map_err(|error| match error {
+                        PayloadError::Empty => "AI_EMPTY_RESPONSE".to_string(),
+                        PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
+                    });
             }
             Err(ProviderFailure::Status(status)) => {
                 let retryable = status == 429 || status == 529 || (500..=599).contains(&status);
@@ -260,7 +263,9 @@ mod tests {
     fn resolves_the_default_provider_and_rejects_unknown_ids() {
         assert_eq!(resolve(None).unwrap().id(), DEFAULT_PROVIDER_ID);
         assert_eq!(resolve(Some("minimax")).unwrap().id(), "minimax");
-        let error = resolve(Some("not-a-provider")).unwrap_err();
+        let error = resolve(Some("not-a-provider"))
+            .err()
+            .expect("unknown provider must fail");
         assert_eq!(error, "AI_PROVIDER_UNKNOWN:not-a-provider");
     }
 

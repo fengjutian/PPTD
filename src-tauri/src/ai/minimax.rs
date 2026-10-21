@@ -12,6 +12,7 @@ const MINIMAX_DEFAULT_MODEL: &str = "MiniMax-M3";
 
 pub static MINIMAX: MiniMaxProvider = MiniMaxProvider;
 
+#[derive(Clone, Copy)]
 pub struct MiniMaxProvider;
 
 #[derive(Deserialize)]
@@ -69,12 +70,12 @@ impl ChatProvider for MiniMaxProvider {
 
     fn build_request(&self, request: &ChatRequest) -> serde_json::Value {
         // ChatRequest 的字段与 MiniMax 期望的请求体一致，直接序列化即可。
-        serde_json::to_value(request).unwrap_or_else(|_| serde_json::Value::Null)
+        serde_json::to_value(request).unwrap_or(serde_json::Value::Null)
     }
 
     fn parse_response(&self, payload: serde_json::Value) -> Result<String, PayloadError> {
-        let response: ChatResponse =
-            serde_json::from_value(payload).map_err(|error| PayloadError::Invalid(error.to_string()))?;
+        let response: ChatResponse = serde_json::from_value(payload)
+            .map_err(|error| PayloadError::Invalid(error.to_string()))?;
         response
             .choices
             .first()
@@ -120,6 +121,9 @@ mod tests {
         let body = provider.build_request(&request);
         assert_eq!(body["model"], "MiniMax-M3");
         assert_eq!(body["messages"][0]["content"], "你好");
-        assert_eq!(body["temperature"], 0.4);
+        let temperature = body["temperature"]
+            .as_f64()
+            .expect("temperature must be numeric");
+        assert!((temperature - 0.4).abs() < 0.000_001);
     }
 }

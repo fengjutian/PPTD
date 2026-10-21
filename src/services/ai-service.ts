@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
+import { loadSettings } from "./settings";
 
 export const narrativeStrategySchema = z.enum(["management-report", "proposal", "retrospective", "training", "product-launch", "fundraising", "general"]);
 export const contentBlockSchema = z.discriminatedUnion("type", [
@@ -49,37 +50,41 @@ export const aiPresentationDesignSchema = z.object({
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
 export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
-export const MINIMAX_MODELS = ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"] as const;
+/** 当前选中的厂商与模型。调用方不再关心具体厂商，由设置决定。 */
+function aiSelection(): { provider: string; model: string } {
+  const settings = loadSettings();
+  return { provider: settings.aiProviderId, model: settings.aiModel };
+}
 
 export function describeAiError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
   if (detail.includes("AI_PROVIDER_BUSY")) return "AI 服务当前繁忙，系统已自动重试，请稍后再次生成";
-  if (detail.includes("AI_PROVIDER_HTTP_ERROR:401") || detail.includes("AI_PROVIDER_HTTP_ERROR:403") || detail.includes("MINIMAX_API_KEY_MISSING")) return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
+  if (detail.includes("AI_PROVIDER_HTTP_ERROR:401") || detail.includes("AI_PROVIDER_HTTP_ERROR:403") || detail.includes("AI_API_KEY_MISSING")) return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
   if (detail.includes("AI_PROVIDER_HTTP_ERROR:429")) return "AI 请求过于频繁，请稍后再试";
   if (detail.includes("timed out") || detail.includes("REQUEST_FAILED")) return "AI 服务连接超时，请检查网络后重试";
-  if (detail.includes("JSON_INVALID") || detail.includes("RESPONSE_INVALID") || detail.includes("ZodError")) return "AI 返回的数据格式不符合要求，请重新生成";
+  if (detail.includes("JSON_INVALID") || detail.includes("RESPONSE_INVALID") || detail.includes("EMPTY_RESPONSE") || detail.includes("ZodError")) return "AI 返回的数据格式不符合要求，请重新生成";
   return detail;
 }
 
 export async function generatePresentationDraft(topic: string, slideCount: number): Promise<AiDraft> {
-  const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
-  const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model } });
+  const { provider, model } = aiSelection();
+  const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider } });
   const draft = aiDraftSchema.parse(raw);
   if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
   return draft;
 }
 
 export async function generateSlideBriefs(draft: AiDraft): Promise<SlideBrief[]> {
-  const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
-  const raw = await invoke<unknown>("generate_slide_briefs", { request: { draft, model } });
+  const { provider, model } = aiSelection();
+  const raw = await invoke<unknown>("generate_slide_briefs", { request: { draft, model, provider } });
   const result = slideBriefsSchema.parse(raw);
   if (result.briefs.length !== draft.slides.length || result.briefs.some((brief, index) => brief.slideIndex !== index)) throw new Error("AI_BRIEF_SLIDE_MISMATCH");
   return result.briefs;
 }
 
 export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext): Promise<AiPresentationDesign> {
-  const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
-  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, model } });
+  const { provider, model } = aiSelection();
+  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, model, provider } });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   return {
@@ -111,7 +116,7 @@ export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBr
   };
 }
 
-export const minimaxKeyConfigured = () => invoke<boolean>("minimax_api_key_configured");
-export const saveMiniMaxKey = (apiKey: string) => invoke<void>("save_minimax_api_key", { apiKey });
-export const deleteMiniMaxKey = () => invoke<void>("delete_minimax_api_key");
-export const testMiniMaxConnection = (model: string) => invoke<string>("test_minimax_connection", { model });
+export const aiKeyConfigured = (providerId: string) => invoke<boolean>("ai_api_key_configured", { providerId });
+export const saveAiKey = (providerId: string, apiKey: string) => invoke<void>("save_ai_api_key", { providerId, apiKey });
+export const deleteAiKey = (providerId: string) => invoke<void>("delete_ai_api_key", { providerId });
+export const testAiConnection = (providerId: string, model: string) => invoke<string>("test_ai_connection", { providerId, model });

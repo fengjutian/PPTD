@@ -104,7 +104,7 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
         "AI_DRAFT_REQUEST_FAILED",
     )
     .await?;
-    parse_json(&strip_code_fence(&content), "AI_JSON_INVALID")
+    parse_json(strip_code_fence(&content), "AI_JSON_INVALID")
 }
 
 #[tauri::command]
@@ -165,7 +165,7 @@ pub async fn generate_slide_briefs(
         "AI_BRIEF_REQUEST_FAILED",
     )
     .await?;
-    parse_json(&strip_code_fence(&content), "AI_BRIEF_JSON_INVALID")
+    parse_json(strip_code_fence(&content), "AI_BRIEF_JSON_INVALID")
 }
 
 #[tauri::command]
@@ -249,7 +249,7 @@ pub async fn generate_presentation_design(
         "AI_DESIGN_REQUEST_FAILED",
     )
     .await?;
-    parse_json(&strip_code_fence(&content), "AI_DESIGN_JSON_INVALID")
+    parse_json(strip_code_fence(&content), "AI_DESIGN_JSON_INVALID")
 }
 
 #[tauri::command]
@@ -304,10 +304,7 @@ mod tests {
 
     #[test]
     fn removes_the_code_fence_around_json() {
-        assert_eq!(
-            strip_code_fence("```json\n{\"a\":1}\n```"),
-            "{\"a\":1}"
-        );
+        assert_eq!(strip_code_fence("```json\n{\"a\":1}\n```"), "{\"a\":1}");
         assert_eq!(strip_code_fence("```\n{\"a\":1}\n```"), "{\"a\":1}");
         assert_eq!(strip_code_fence("{\"a\":1}"), "{\"a\":1}");
     }
@@ -319,7 +316,8 @@ mod tests {
 
     #[test]
     fn parses_the_stage_specific_invalid_code() {
-        let error = parse_json::<serde_json::Value>("not json", "AI_BRIEF_JSON_INVALID").unwrap_err();
+        let error =
+            parse_json::<serde_json::Value>("not json", "AI_BRIEF_JSON_INVALID").unwrap_err();
         assert!(error.starts_with("AI_BRIEF_JSON_INVALID:"));
     }
 }

@@ -103,12 +103,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const comparisonBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "comparison" }> => block.type === "comparison");
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
+      const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
       slide.elements = [];
-      if (design.layout === "cover") {
+      if (design.layout === "cover" && !hasDeterministicBlock) {
         slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
         slide.elements.push(text(content.title, frame(0.10, 0.24, 0.78, 0.28), 42, design.titleColor, true, "left"));
         if (content.body.trim()) slide.elements.push(text(content.body, frame(0.10, 0.56, 0.72, 0.16), 19, design.bodyColor, false, "left"));
-      } else if (design.layout === "section") {
+      } else if (design.layout === "section" && !hasDeterministicBlock) {
         slide.elements.push(shape(frame(0, 0, 0.32, 1), design.accent));
         slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left"));
         slide.elements.push(text(content.title, frame(0.39, 0.30, 0.50, 0.22), 36, design.titleColor, true, "left"));
