@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="blue">
+<head>
+<meta charset="utf-8" />
+<title>PPTD 主题预览 · 蓝</title>
+<link rel="stylesheet" href="/src/styles.css" />
+<style>body { overflow: auto; } .app-shell { height: 720px; }</style>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">P</span><div><strong>PPTD</strong><small>未命名演示文稿</small></div></div>
+    <div class="toolbar-group">
+      <button class="tool-button" aria-label="新建项目">+</button>
+      <button class="tool-button" aria-label="打开项目" disabled>o</button>
+      <button class="tool-button" aria-label="保存项目">s</button>
+      <span class="separator"></span>
+      <button class="tool-button" aria-label="撤销" disabled>u</button>
+      <button class="tool-button" aria-label="重做" disabled>r</button>
+    </div>
+    <div class="toolbar-group insert-tools">
+      <button class="tool-button" aria-label="选择">v</button>
+      <button class="tool-button" aria-label="文本">T</button>
+      <button class="tool-button" aria-label="矩形">r</button>
+      <button class="tool-button" aria-label="椭圆">e</button>
+      <button class="tool-button" aria-label="图片">i</button>
+    </div>
+    <button class="export-button">导出 PPTX</button>
+  </header>
+
+  <nav class="nav-rail" aria-label="主功能">
+    <button class="active" aria-current="page"><span>编辑</span></button>
+    <button disabled><span>AI</span></button>
+    <button><span>模板</span></button>
+    <div class="nav-spacer"></div>
+    <button><span>设置</span></button>
+  </nav>
+
+  <aside class="left-panel">
+    <div class="panel-heading"><div class="panel-tabs" role="tablist"><button class="panel-tab active">页面</button><button class="panel-tab">图层</button></div><button aria-label="新增页面">+</button></div>
+    <div class="slide-list">
+      <div class="thumbnail-row active">
+        <button class="thumbnail-select"><span>1</span><div class="thumbnail"><div class="thumbnail-scene"><div class="thumbnail-element thumbnail-text" style="left:9%;top:12%;width:60%;height:12%">开始创造你的演示文稿</div><div class="thumb-accent"></div></div></div></button>
+        <div class="thumbnail-actions"><button aria-label="上移页面">^</button><button aria-label="下移页面">v</button><button aria-label="复制页面">c</button><button aria-label="删除页面" disabled>x</button></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="workspace">
+    <div class="canvas-ruler">13.33 × 7.5 in</div>
+    <div class="slide-canvas" style="width:720px;height:405px;background:#fff">
+      <div class="slide-element text" style="left:6%;top:10%;width:60%;height:14%"><div style="font-size:34px;font-weight:800;color:#1f1f1f">创造你的演示文稿</div></div>
+      <div class="slide-element shape" style="left:6%;top:38%;width:40%;height:8px"><div class="shape-fill" style="background:#2b579a"></div></div>
+    </div>
+  </main>
+
+  <aside class="right-panel">
+    <div class="inspector-title">属性 <span class="type-chip">文本</span></div>
+    <div class="property-form">
+      <div class="property-grid">
+        <div class="field"><span class="field-label">位置 X</span><div class="field-control"><input value="0.80" /><span class="field-unit">英寸</span></div></div>
+        <div class="field"><span class="field-label">位置 Y</span><div class="field-control"><input value="1.00" /><span class="field-unit">英寸</span></div></div>
+      </div>
+      <div class="align-group"><span class="align-group-label">对齐</span><div class="align-actions"><button>l</button><button>c</button><button>r</button><button>t</button><button>m</button><button>b</button></div></div>
+      <div class="inspector-section"><h4>样式</h4><div class="element-actions"><button>加粗</button><button>斜体</button><button>下划线</button></div></div>
+      <div class="inspector-section"><h4>填充</h4><div class="toggle-button active">实心</div></div>
+    </div>
+  </aside>
+
+  <footer class="statusbar">
+    <span>第 1 / 10 页</span><span>27 个对象</span><span>内容 35 · 设计 77</span>
+    <span class="saved-dot dirty">● 未保存</span>
+    <span class="zoom-controls"><button>−</button><button class="zoom">100%</button><button>＋</button></span>
+  </footer>
+</div>
+
+<section class="settings-page">
+  <div class="settings-tabs" role="tablist"><button>模型服务</button><button class="active">应用外观</button></div>
+  <section class="settings-card">
+    <div class="settings-section-heading"><div><h2>应用主题</h2><p>只调整 PPTD 界面外观，不影响 PPT 模板和演示文稿设计。</p></div></div>
+    <div class="theme-options">
+      <button><i class="theme-swatch"></i><span>深色</span></button>
+      <button><i class="theme-swatch light"></i><span>浅色</span></button>
+      <button><i class="theme-swatch amber"></i><span>橙黄</span></button>
+      <button><i class="theme-swatch green"></i><span>绿色</span></button>
+      <button class="active"><i class="theme-swatch blue"></i><span>蓝色</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></button>
+      <button><i class="theme-swatch system"></i><span>跟随系统</span></button>
+    </div>
+    <div class="settings-actions"><button class="primary-action">保存设置</button></div>
+  </section>
+</section>
+</body>
+</html>

@@ -30,7 +30,7 @@ export function resizeWithAspectLock(frame: RectEmu, field: "width" | "height", 
   const next = { ...frame, [field]: nextEdge };
   if (!locked || frame.width <= 0 || frame.height <= 0) return next;
   const ratio = frame.width / frame.height;
-  if (field === "width") next.height = emu(Math.max(MIN_SIZE_EMU, Math.round(nextEdge * ratio)));
+  if (field === "width") next.height = emu(Math.max(MIN_SIZE_EMU, Math.round(nextEdge / ratio)));
   else next.width = emu(Math.max(MIN_SIZE_EMU, Math.round(nextEdge * ratio)));
   return next;
 }
