@@ -144,6 +144,7 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
    - {{"type":"metric","label":"...","value":"..."}}，仅当输入确有数字
    - {{"type":"timeline","items":[{{"label":"...","text":"..."}}]}}
    - {{"type":"comparison","leftLabel":"...","rightLabel":"...","leftItems":["..."],"rightItems":["..."]}}
+   - {{"type":"process","items":[{{"label":"步骤名称","text":"步骤说明"}}]}}
 8. 第一页通常是 hero；最后一页只有在确有总结语义时才使用 summary。
 
 仅返回严格 JSON，不要 Markdown或额外说明：

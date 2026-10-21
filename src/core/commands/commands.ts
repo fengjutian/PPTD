@@ -2,7 +2,15 @@ import type { ElementId, Emu, PresentationDocument, RectEmu, SlideId, SupportedI
 import { createSlide, inches } from "../document-model";
 
 export type ChangeDomain = "content" | "design" | "both";
-export interface AiSlideDraft { title: string; body: string; speakerNotes: string }
+export type AiContentBlock =
+  | { type: "paragraph"; text: string }
+  | { type: "bullet-list"; items: string[] }
+  | { type: "quote"; text: string; attribution?: string }
+  | { type: "metric"; label: string; value: string }
+  | { type: "timeline"; items: Array<{ label: string; text: string }> }
+  | { type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
+  | { type: "process"; items: Array<{ label: string; text: string }> };
+export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[] }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
 export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
 export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
@@ -90,6 +98,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
       const [leftRecipe, rightRecipe] = recipeBodies;
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
+      const blocks = content.blocks ?? [];
+      const timelineBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "timeline" }> => block.type === "timeline");
+      const comparisonBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "comparison" }> => block.type === "comparison");
+      const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
+      const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       slide.elements = [];
       if (design.layout === "cover") {
         slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
@@ -100,6 +113,45 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left"));
         slide.elements.push(text(content.title, frame(0.39, 0.30, 0.50, 0.22), 36, design.titleColor, true, "left"));
         if (content.body.trim()) slide.elements.push(text(content.body, frame(0.39, 0.56, 0.47, 0.20), 18, design.bodyColor, false, "left"));
+      } else if (timelineBlock) {
+        const timelineItems = timelineBlock.items.slice(0, 6);
+        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
+        const startX = 0.10; const endX = 0.90; const lineY = 0.48;
+        slide.elements.push(shape(frame(startX, lineY, endX - startX, 0.008), design.accent));
+        timelineItems.forEach((item, itemIndex) => {
+          const x = timelineItems.length === 1 ? 0.50 : startX + itemIndex * ((endX - startX) / (timelineItems.length - 1));
+          const above = itemIndex % 2 === 0;
+          slide.elements.push(shape(frame(x - 0.012, lineY - 0.016, 0.024, 0.04), design.accent, "ellipse"));
+          slide.elements.push(text(item.label, frame(x - 0.075, above ? 0.31 : 0.55, 0.15, 0.07), 15, design.accent, true, "center"));
+          slide.elements.push(text(item.text, frame(x - 0.075, above ? 0.38 : 0.63, 0.15, 0.14), 13, design.bodyColor, false, "center"));
+        });
+      } else if (comparisonBlock) {
+        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"));
+        const columns = [
+          { x: 0.07, label: comparisonBlock.leftLabel, items: comparisonBlock.leftItems },
+          { x: 0.53, label: comparisonBlock.rightLabel, items: comparisonBlock.rightItems },
+        ];
+        columns.forEach((column) => {
+          slide.elements.push(shape(frame(column.x, 0.25, 0.40, 0.62), "#F3F5F7"), shape(frame(column.x, 0.25, 0.40, 0.075), design.accent));
+          slide.elements.push(text(column.label, frame(column.x + 0.025, 0.263, 0.35, 0.05), 18, "#FFFFFF", true, "center"));
+          slide.elements.push(text(column.items.slice(0, 7).map((item) => `• ${item}`).join("\n\n"), frame(column.x + 0.035, 0.36, 0.33, 0.44), 16, design.bodyColor, false, "left"));
+        });
+      } else if (metricBlocks.length > 0) {
+        const metrics = metricBlocks.slice(0, 6); const columns = metrics.length > 3 ? 3 : metrics.length; const rows = Math.ceil(metrics.length / columns);
+        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
+        metrics.forEach((metric, metricIndex) => {
+          const column = metricIndex % columns; const row = Math.floor(metricIndex / columns); const width = 0.84 / columns - 0.025; const height = 0.56 / rows - 0.035; const x = 0.08 + column * (0.84 / columns); const y = 0.29 + row * (0.56 / rows);
+          slide.elements.push(shape(frame(x, y, width, height), "#F3F5F7"), text(metric.value, frame(x + 0.025, y + 0.055, width - 0.05, height * 0.42), 30, design.accent, true, "center"), text(metric.label, frame(x + 0.025, y + height * 0.58, width - 0.05, height * 0.25), 15, design.bodyColor, false, "center"));
+        });
+      } else if (processBlock) {
+        const processItems = processBlock.items.slice(0, 6); const width = 0.78 / Math.max(processItems.length, 1);
+        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
+        processItems.forEach((item, itemIndex) => {
+          const x = 0.07 + itemIndex * (0.86 / processItems.length);
+          slide.elements.push(shape(frame(x, 0.35, width, 0.38), "#F3F5F7"), shape(frame(x + 0.02, 0.29, 0.055, 0.075), design.accent, "ellipse"));
+          slide.elements.push(text(String(itemIndex + 1), frame(x + 0.025, 0.302, 0.045, 0.04), 15, "#FFFFFF", true, "center"), text(item.label, frame(x + 0.025, 0.40, width - 0.05, 0.08), 17, design.titleColor, true, "center"), text(item.text, frame(x + 0.025, 0.51, width - 0.05, 0.15), 14, design.bodyColor, false, "center"));
+          if (itemIndex < processItems.length - 1) slide.elements.push(text("→", frame(x + width, 0.48, 0.86 / processItems.length - width, 0.08), 22, design.accent, true, "center"));
+        });
       } else if (design.layout === "quote") {
         slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.35, 0.08), 28, design.titleColor, true, "left"));

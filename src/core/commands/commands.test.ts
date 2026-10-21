@@ -167,4 +167,42 @@ describe("document commands", () => {
     expect(bodies.every((element) => element.frame.y + element.frame.height <= source.pageSize.height)).toBe(true);
   });
 
+  it("renders timeline blocks without parsing the body string", () => {
+    const source = createDocument();
+    const content = { title: "里程碑", body: "这段正文不应驱动时间线", speakerNotes: "", blocks: [{ type: "timeline" as const, items: [{ label: "第一阶段", text: "调研" }, { label: "第二阶段", text: "交付" }] }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "时间线", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    expect(texts).toEqual(["里程碑", "第一阶段", "调研", "第二阶段", "交付"]);
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("renders comparison blocks as two labeled editable columns", () => {
+    const source = createDocument();
+    const content = { title: "方案对比", body: "保留的审核正文", speakerNotes: "", blocks: [{ type: "comparison" as const, leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["稳定"], rightItems: ["快速"] }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "对比", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    expect(texts).toEqual(["方案对比", "方案 A", "• 稳定", "方案 B", "• 快速"]);
+  });
+
+  it("renders metric blocks as value-first cards", () => {
+    const source = createDocument();
+    const content = { title: "核心指标", body: "指标说明", speakerNotes: "", blocks: [{ type: "metric" as const, label: "增长率", value: "42%" }, { type: "metric" as const, label: "客户数", value: "120" }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "指标", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    expect(texts).toEqual(["核心指标", "42%", "增长率", "120", "客户数"]);
+  });
+
+  it("renders process blocks as numbered native-object steps", () => {
+    const source = createDocument();
+    const content = { title: "实施流程", body: "审核正文", speakerNotes: "", blocks: [{ type: "process" as const, items: [{ label: "分析", text: "确认目标" }, { label: "执行", text: "完成交付" }] }] };
+    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "流程", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    expect(texts).toEqual(["实施流程", "1", "分析", "确认目标", "→", "2", "执行", "完成交付"]);
+    expect(result.slides[0]!.elements.every((element) => element.type === "text" || element.type === "shape")).toBe(true);
+  });
+
 });

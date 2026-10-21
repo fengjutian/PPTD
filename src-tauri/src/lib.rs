@@ -1,3 +1,4 @@
+mod ai;
 mod commands;
 
 #[tauri::command]
@@ -11,13 +12,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             application_version,
-            commands::ai_provider::generate_presentation,
-            commands::ai_provider::generate_slide_briefs,
-            commands::ai_provider::generate_presentation_design,
-            commands::ai_provider::save_minimax_api_key,
-            commands::ai_provider::delete_minimax_api_key,
-            commands::ai_provider::minimax_api_key_configured,
-            commands::ai_provider::test_minimax_connection,
+            commands::ai::generate_presentation,
+            commands::ai::generate_slide_briefs,
+            commands::ai::generate_presentation_design,
+            commands::ai::save_ai_api_key,
+            commands::ai::delete_ai_api_key,
+            commands::ai::ai_api_key_configured,
+            commands::ai::test_ai_connection,
             commands::project_file::save_project,
             commands::project_file::open_project,
             commands::project_file::save_recovery,
