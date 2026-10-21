@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>split preview</title>
+    <style>
+      body { margin: 0; background: #dfe3e8; font-family: "Microsoft YaHei", sans-serif; }
+      #mount { display: flex; flex-direction: column; gap: 24px; align-items: center; padding: 24px; }
+      img { width: 1100px; box-shadow: 0 8px 28px rgba(0,0,0,.22); }
+    </style>
+  </head>
+  <body>
+    <div id="mount"></div>
+    <script type="module">
+      import { produce } from "immer";
+      import { applyCommand } from "/src/core/commands/commands.ts";
+      import { createDocument } from "/src/core/document-model/index.ts";
+      import { renderPresentationForVisualReview } from "/src/services/presentation-renderer.ts";
+
+      const backgroundItems = [
+        "范仲淹因主张改革被贬邓州",
+        "受好友滕子京之托撰写",
+        "滕子京重修岳阳楼",
+        "作者借题发挥寄托政治理想",
+        "体现逆境中的豁达心态",
+      ];
+      const quoteItems = [
+        "总写洞庭湖全景",
+        "'衔远山,吞长江,浩浩汤汤'",
+        "描写气象万千的景色",
+        "过渡到登楼览物之情",
+        "'前人之述备矣'引出下文",
+      ];
+      const source = createDocument();
+      const designs = [
+        { layout: "split", background: "#FFFFFF", accent: "#4C7F7A", titleColor: "#1B2B4B", bodyColor: "#30343A" },
+        { layout: "split", background: "#FFFFFF", accent: "#4C7F7A", titleColor: "#1B2B4B", bodyColor: "#30343A" },
+      ];
+      const doc = produce(source, (draft) => applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "岳阳楼记",
+        slides: [
+          { title: "写作背景", body: backgroundItems.join("\n"), speakerNotes: "" },
+          { title: "原文赏析——第二段", body: quoteItems.join("\n"), speakerNotes: "" },
+        ],
+        designs,
+      }));
+      window.previewDoc = doc;
+      const render = await renderPresentationForVisualReview(doc, 1280);
+      const mount = document.getElementById("mount");
+      for (const slide of render.slides) {
+        const img = document.createElement("img");
+        img.src = slide;
+        mount.appendChild(img);
+      }
+      document.title = "ready";
+    </script>
+  </body>
+</html>

@@ -58,7 +58,7 @@ export function ContentReview({
   onNewDraft,
 }: ContentReviewProps) {
   const listRef = useRef<HTMLDivElement>(null);
-  const scrollFrame = useRef<number | undefined>(undefined);
+  const outlineRef = useRef<HTMLDivElement>(null);
   const scrollLock = useRef<number | null>(null);
   const scrollLockTimer = useRef<number | undefined>(undefined);
 
@@ -68,8 +68,19 @@ export function ContentReview({
 
   useEffect(() => () => {
     window.clearTimeout(scrollLockTimer.current);
-    if (scrollFrame.current !== undefined) window.cancelAnimationFrame(scrollFrame.current);
   }, []);
+
+  // Keep the active outline row visible while the reader scrolls the cards.
+  // Updating scrollTop directly avoids moving any other scroll container.
+  useEffect(() => {
+    const outline = outlineRef.current;
+    const active = outline?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!outline || !active) return;
+    const outlineRect = outline.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    if (activeRect.top < outlineRect.top) outline.scrollTop -= outlineRect.top - activeRect.top + 6;
+    else if (activeRect.bottom > outlineRect.bottom) outline.scrollTop += activeRect.bottom - outlineRect.bottom + 6;
+  }, [activeIndex]);
 
   const goToSlide = (index: number) => {
     onActiveIndexChange(index);
@@ -87,23 +98,20 @@ export function ContentReview({
   // prevents a smooth programmatic scroll from briefly highlighting pages in
   // between the origin and the destination.
   const handleScroll = () => {
-    if (scrollLock.current !== null || scrollFrame.current !== undefined) return;
-    scrollFrame.current = window.requestAnimationFrame(() => {
-      scrollFrame.current = undefined;
-      const list = listRef.current;
-      if (!list || scrollLock.current !== null) return;
-      const listTop = list.getBoundingClientRect().top;
-      let nearest = 0;
-      let nearestDistance = Number.POSITIVE_INFINITY;
-      list.querySelectorAll<HTMLElement>("[data-slide-index]").forEach((card) => {
-        const distance = Math.abs(card.getBoundingClientRect().top - listTop - 8);
-        if (distance < nearestDistance) {
-          nearestDistance = distance;
-          nearest = Number(card.dataset.slideIndex);
-        }
-      });
-      if (nearest !== activeIndex) onActiveIndexChange(nearest);
+    if (scrollLock.current !== null) return;
+    const list = listRef.current;
+    if (!list) return;
+    const listTop = list.getBoundingClientRect().top;
+    let nearest = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    list.querySelectorAll<HTMLElement>("[data-slide-index]").forEach((card) => {
+      const distance = Math.abs(card.getBoundingClientRect().top - listTop - 8);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = Number(card.dataset.slideIndex);
+      }
     });
+    if (nearest !== activeIndex) onActiveIndexChange(nearest);
   };
 
   return (
@@ -119,7 +127,7 @@ export function ContentReview({
             新建
           </button>
         </div>
-        <div className="draft-outline-list">
+        <div className="draft-outline-list" ref={outlineRef}>
           {draft.slides.map((slide, index) => {
             const slideStat = slideMetrics(slide);
             const missing = !slide.title.trim();
@@ -164,7 +172,14 @@ export function ContentReview({
               value={draft.title}
               onChange={(event) => onDraftTitleChange(event.target.value)}
               aria-invalid={!draft.title.trim() || undefined}
+              aria-describedby={!draft.title.trim() ? "draft-title-error" : undefined}
             />
+            {!draft.title.trim() && (
+              <small id="draft-title-error" className="draft-field-error">
+                <CircleAlert />
+                演示文稿标题不能为空
+              </small>
+            )}
           </label>
         </div>
 
@@ -191,9 +206,10 @@ export function ContentReview({
                 id={`draft-slide-${index}`}
                 className={`draft-slide-card ${missing ? "invalid" : ""}`}
                 data-slide-index={index}
-                aria-labelledby={`draft-slide-title-${index}`}
+                aria-labelledby={`draft-slide-heading-${index}`}
                 key={slide.id ?? index}
               >
+                <h3 id={`draft-slide-heading-${index}`} className="visually-hidden">第 {index + 1} 页</h3>
                 <header className="draft-slide-header">
                   <span className="draft-slide-number" aria-hidden="true">
                     {String(index + 1).padStart(2, "0")}

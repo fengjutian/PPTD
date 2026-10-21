@@ -1,5 +1,8 @@
 mod ai;
 mod commands;
+mod storage;
+
+use tauri::Manager;
 
 #[tauri::command]
 fn application_version() -> &'static str {
@@ -10,8 +13,20 @@ fn application_version() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let directory = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&directory)?;
+            let database = storage::Database::open(&directory.join("pptd.sqlite3"))
+                .map_err(std::io::Error::other)?;
+            app.manage(database);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             application_version,
+            commands::storage::load_app_settings,
+            commands::storage::save_app_settings,
+            commands::storage::load_ai_draft_history,
+            commands::storage::upsert_ai_draft_history,
             commands::ai::generate_presentation,
             commands::ai::generate_slide_briefs,
             commands::ai::generate_presentation_design,

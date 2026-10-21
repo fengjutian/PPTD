@@ -8,6 +8,8 @@ const THEME_OPTIONS: { id: AppTheme; label: string }[] = [
   { id: "dark", label: "深色" },
   { id: "light", label: "浅色" },
   { id: "amber", label: "橙黄" },
+  { id: "green", label: "绿色" },
+  { id: "blue", label: "蓝色" },
   { id: "system", label: "跟随系统" },
 ];
 

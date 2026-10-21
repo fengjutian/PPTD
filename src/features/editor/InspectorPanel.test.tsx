@@ -2,16 +2,28 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createDocument, emu, type ElementId, type SlideElement } from "../../core/document-model";
 import { InspectorPanel, InspectorPanelView } from "./InspectorPanel";
+import type { LengthUnit } from "./inspector-geometry";
 
-function renderView(element: SlideElement, background = "#ffffff"): string {
+interface ViewOptions {
+  unit?: LengthUnit;
+  aspectLocked?: boolean;
+  elementIndex?: number;
+  elementCount?: number;
+}
+
+function renderView(element: SlideElement, background = "#ffffff", options: ViewOptions = {}): string {
   return renderToStaticMarkup(
     <InspectorPanelView
       element={element}
       slideId={"slide-1" as never}
-      elementIndex={0}
-      elementCount={2}
+      elementIndex={options.elementIndex ?? 0}
+      elementCount={options.elementCount ?? 2}
       background={background}
       pageSize={{ width: emu(12_192_000), height: emu(6_858_000) }}
+      unit={options.unit ?? "inch"}
+      onUnitChange={() => undefined}
+      aspectLocked={options.aspectLocked ?? false}
+      onToggleAspectLock={() => undefined}
       onCommand={() => undefined}
     />,
   );
@@ -43,6 +55,14 @@ function imageElement(): SlideElement {
     source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" },
     altText: "架构示意图",
   };
+}
+
+/** Tells whether the button carrying the given label was rendered disabled. */
+function buttonDisabled(markup: string, label: string): boolean {
+  const index = markup.indexOf(label);
+  if (index < 0) throw new Error(`button not found: ${label}`);
+  const open = markup.lastIndexOf("<button", index);
+  return markup.slice(open, index).includes("disabled");
 }
 
 describe("inspector panel", () => {
@@ -134,5 +154,41 @@ describe("inspector panel", () => {
     const markup = renderView(element);
     expect(markup).toContain("解锁");
     expect(markup).not.toContain(">锁定<");
+  });
+
+  it("offers the whole layer order, not only the neighbouring steps", () => {
+    const markup = renderView(textElement());
+    expect(markup).toContain("置于顶层");
+    expect(markup).toContain("置于底层");
+  });
+
+  it("keeps the layer order buttons in sync with the current position", () => {
+    const bottom = renderView(textElement(), "#ffffff", { elementIndex: 0, elementCount: 3 });
+    expect(buttonDisabled(bottom, "置于底层")).toBe(true);
+    expect(buttonDisabled(bottom, "置于顶层")).toBe(false);
+    const top = renderView(textElement(), "#ffffff", { elementIndex: 2, elementCount: 3 });
+    expect(buttonDisabled(top, "置于顶层")).toBe(true);
+    expect(buttonDisabled(top, "置于底层")).toBe(false);
+  });
+
+  it("puts steppers on the numeric fields so a value can be nudged without typing", () => {
+    const markup = renderView(textElement());
+    expect(markup).toContain('aria-label="宽度 增加 0.05"');
+    expect(markup).toContain('aria-label="高度 减少 0.05"');
+    expect(markup).toContain('aria-label="旋转 增加 15"');
+  });
+
+  it("switches the length fields to centimeters on request", () => {
+    const markup = renderView(textElement(), "#ffffff", { unit: "cm" });
+    expect(markup).toContain("厘米");
+    expect(markup).toContain("33.87 × 19.05 厘米");
+    expect(markup).toContain('aria-label="宽度 增加 0.1"');
+  });
+
+  it("marks the aspect ratio lock as pressed while it is on", () => {
+    const unlocked = renderView(textElement());
+    expect(unlocked).toContain('aria-pressed="false"');
+    const locked = renderView(textElement(), "#ffffff", { aspectLocked: true });
+    expect(locked).toContain('aria-pressed="true"');
   });
 });

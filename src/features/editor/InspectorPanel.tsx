@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, CircleAlert, Copy, Layers3, Lock, LockOpen, MousePointer2, Trash2 } from "lucide-react";
-import { EMU_PER_INCH, emu, type Emu, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, SendToBack, Trash2, Unlink } from "lucide-react";
+import { type Emu, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
 import { isFontAvailable } from "../../core/validation/export-validation";
 import { useEditorStore } from "../../store/editor-store";
 import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
+import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
 
 const FONT_OPTIONS = ["Microsoft YaHei", "SimSun", "SimHei", "KaiTi", "FangSong", "Arial", "Calibri", "Times New Roman", "Georgia"] as const;
+
+const ROTATION_PRESETS = [0, 90, 180, 270] as const;
 
 const HORIZONTAL_ALIGN = [
   { align: "left", label: "左对齐", Icon: AlignLeft },
@@ -42,6 +45,12 @@ export interface InspectorPanelViewProps {
   /** Page background, used to judge text readability and to offer a readable ink. */
   background: string;
   pageSize: { width: Emu; height: Emu };
+  /** Unit the position and size fields are shown in. */
+  unit: LengthUnit;
+  onUnitChange: (unit: LengthUnit) => void;
+  /** When on, changing one edge scales the other edge by the same ratio. */
+  aspectLocked: boolean;
+  onToggleAspectLock: () => void;
   onCommand: (command: DocumentCommand) => void;
 }
 
@@ -49,7 +58,7 @@ export interface InspectorPanelViewProps {
  * Presentation of the inspector for one element. It only emits commands, so the
  * same markup can be rendered without a store and asserted in tests.
  */
-export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, onCommand }: InspectorPanelViewProps) {
+export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, unit, onUnitChange, aspectLocked, onToggleAspectLock, onCommand }: InspectorPanelViewProps) {
   const [textDraft, setTextDraft] = useState<string>();
   const [fontAvailable, setFontAvailable] = useState(true);
   const textDraftCancelRef = useRef(false);
@@ -68,8 +77,16 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
   const commitTransform = (field: "x" | "y" | "width" | "height" | "rotation", value: number) => {
     const frame = { ...element.frame };
     let rotationMilliDegree = element.rotationMilliDegree;
-    if (field === "rotation") rotationMilliDegree = Math.round(value * 1000);
-    else frame[field] = emu(value * EMU_PER_INCH);
+    if (field === "rotation") {
+      rotationMilliDegree = Math.round(value * 1000);
+    } else {
+      const next = unitToEmu(value, unit);
+      if (field === "width" || field === "height") {
+        Object.assign(frame, resizeWithAspectLock(element.frame, field, next, aspectLocked));
+      } else {
+        frame[field] = next;
+      }
+    }
     if (frame.width <= 0 || frame.height <= 0) return;
     if (frame.x === element.frame.x && frame.y === element.frame.y && frame.width === element.frame.width && frame.height === element.frame.height && rotationMilliDegree === element.rotationMilliDegree) return;
     onCommand({ type: "transform-element", slideId, elementId: element.id, frame, rotationMilliDegree });
@@ -129,14 +146,42 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
       </section>}
 
       <section className="inspector-section">
-        <h4>位置与尺寸</h4>
-        <div className="property-grid">
-          <NumberField label="X" unit="英寸" value={element.frame.x / EMU_PER_INCH} min={0} disabled={locked} onCommit={(value) => commitTransform("x", value)} />
-          <NumberField label="Y" unit="英寸" value={element.frame.y / EMU_PER_INCH} min={0} disabled={locked} onCommit={(value) => commitTransform("y", value)} />
-          <NumberField label="宽度" unit="英寸" value={element.frame.width / EMU_PER_INCH} min={0.01} disabled={locked} onCommit={(value) => commitTransform("width", value)} />
-          <NumberField label="高度" unit="英寸" value={element.frame.height / EMU_PER_INCH} min={0.01} disabled={locked} onCommit={(value) => commitTransform("height", value)} />
+        <div className="section-head">
+          <h4>位置与尺寸</h4>
+          <div className="section-tools">
+            <div className="segmented compact" role="group" aria-label="长度单位">
+              <button type="button" className={unit === "inch" ? "active" : undefined}
+                aria-pressed={unit === "inch"} onClick={() => onUnitChange("inch")}>英寸</button>
+              <button type="button" className={unit === "cm" ? "active" : undefined}
+                aria-pressed={unit === "cm"} onClick={() => onUnitChange("cm")}>厘米</button>
+            </div>
+            <button type="button" className={`icon-button ${aspectLocked ? "active" : ""}`} disabled={locked}
+              title={aspectLocked ? "已锁定宽高比" : "锁定宽高比"} aria-label="锁定宽高比" aria-pressed={aspectLocked}
+              onClick={onToggleAspectLock}>
+              {aspectLocked ? <Unlink /> : <Link2 />}
+            </button>
+          </div>
         </div>
-        <NumberField label="旋转" unit="度" value={element.rotationMilliDegree / 1000} min={-360} max={360} precision={1} disabled={locked} onCommit={(value) => commitTransform("rotation", value)} />
+        <div className="property-grid">
+          <NumberField label="X" unit={unitLabel(unit)} value={emuToUnit(element.frame.x, unit)} min={0} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+            onCommit={(value) => commitTransform("x", value)} />
+          <NumberField label="Y" unit={unitLabel(unit)} value={emuToUnit(element.frame.y, unit)} min={0} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+            onCommit={(value) => commitTransform("y", value)} />
+          <NumberField label="宽度" unit={unitLabel(unit)} value={emuToUnit(element.frame.width, unit)} min={0.01} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+            onCommit={(value) => commitTransform("width", value)} />
+          <NumberField label="高度" unit={unitLabel(unit)} value={emuToUnit(element.frame.height, unit)} min={0.01} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+            onCommit={(value) => commitTransform("height", value)} />
+        </div>
+        <NumberField label="旋转" unit="度" value={element.rotationMilliDegree / 1000} min={-360} max={360} precision={1} step={15} disabled={locked}
+          onCommit={(value) => commitTransform("rotation", value)} />
+        <div className="field-row">
+          {ROTATION_PRESETS.map((degrees) => (
+            <button type="button" key={degrees} className={`toggle-button ${Math.round(element.rotationMilliDegree / 1000) === degrees ? "active" : ""}`}
+              disabled={locked} onClick={() => commitTransform("rotation", degrees)}>
+              {degrees}°
+            </button>
+          ))}
+        </div>
       </section>
 
       <section className="inspector-section">
@@ -242,6 +287,14 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             onClick={() => onCommand({ type: "reorder-element", slideId, elementId: element.id, toIndex: elementIndex - 1 })}>
             <ArrowDown />下移一层
           </button>
+          <button disabled={locked || elementIndex >= elementCount - 1}
+            onClick={() => onCommand({ type: "reorder-element", slideId, elementId: element.id, toIndex: elementCount - 1 })}>
+            <BringToFront />置于顶层
+          </button>
+          <button disabled={locked || elementIndex <= 0}
+            onClick={() => onCommand({ type: "reorder-element", slideId, elementId: element.id, toIndex: 0 })}>
+            <SendToBack />置于底层
+          </button>
           <button onClick={() => onCommand({ type: "set-element-lock", slideId, elementId: element.id, locked: !locked })}>
             {locked ? <LockOpen /> : <Lock />}{locked ? "解锁" : "锁定"}
           </button>
@@ -262,7 +315,7 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
         </div>
       </section>
 
-      <PageProperties slideId={slideId} background={background} pageSize={pageSize} onCommand={onCommand} />
+      <PageProperties slideId={slideId} background={background} pageSize={pageSize} unit={unit} onCommand={onCommand} />
     </div>
   );
 }
@@ -271,17 +324,18 @@ interface PagePropertiesProps {
   slideId: SlideId;
   background: string;
   pageSize: { width: Emu; height: Emu };
+  unit: LengthUnit;
   onCommand: (command: DocumentCommand) => void;
 }
 
-function PageProperties({ slideId, background, pageSize, onCommand }: PagePropertiesProps) {
+function PageProperties({ slideId, background, pageSize, unit, onCommand }: PagePropertiesProps) {
   return (
     <section className="inspector-section">
       <h4>页面</h4>
       <label className="field">
         <span className="field-label">幻灯片尺寸</span>
         <span className="field-control">
-          <input value={`${(pageSize.width / EMU_PER_INCH).toFixed(2)} × ${(pageSize.height / EMU_PER_INCH).toFixed(2)} 英寸`} readOnly disabled />
+          <input value={`${emuToUnit(pageSize.width, unit).toFixed(2)} × ${emuToUnit(pageSize.height, unit).toFixed(2)} ${unitLabel(unit)}`} readOnly disabled />
         </span>
       </label>
       <ColorField label="背景色" value={background} wide
@@ -297,6 +351,10 @@ export function InspectorPanel() {
   const execute = useEditorStore((state) => state.execute);
   const slide = document.slides.find((item) => item.id === activeSlideId) ?? document.slides[0]!;
   const selected = slide.elements.find((element) => element.id === selectedElementId);
+  // Display preferences only. They never reach the document, so they cannot
+  // change a revision or the undo stack.
+  const [unit, setUnit] = useState<LengthUnit>("inch");
+  const [aspectLocked, setAspectLocked] = useState(false);
 
   return (
     <aside className="right-panel">
@@ -313,10 +371,14 @@ export function InspectorPanel() {
           elementCount={slide.elements.length}
           background={slide.background}
           pageSize={document.pageSize}
+          unit={unit}
+          onUnitChange={setUnit}
+          aspectLocked={aspectLocked}
+          onToggleAspectLock={() => setAspectLocked((current) => !current)}
           onCommand={execute}
         />
         : <div className="property-form">
-          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize} onCommand={execute} />
+          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize} unit={unit} onCommand={execute} />
           <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>
         </div>}
     </aside>

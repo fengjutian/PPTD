@@ -1,28 +1,40 @@
+import { loadStoredAppSettings, saveStoredAppSettings } from "./app-database";
 import { DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
 
-export type AppTheme = "dark" | "light" | "system" | "amber";
+export type AppTheme = "dark" | "light" | "system" | "amber" | "green";
 export interface AppSettings { theme: AppTheme; aiProviderId: string; aiModel: string }
-const themeKey = "pptd:theme";
-const providerKey = "pptd:ai-provider";
-const modelKey = "pptd:ai-model";
-/** 旧版本把模型选择存在厂商命名的键下，迁移时读取一次。 */
-const legacyModelKey = "pptd:minimax-model";
 let systemThemeQuery: MediaQueryList | undefined;
 let systemThemeListener: (() => void) | undefined;
 
-export function loadSettings(): AppSettings {
-  const theme = localStorage.getItem(themeKey);
-  const provider = findAiProvider(localStorage.getItem(providerKey) || DEFAULT_AI_PROVIDER_ID);
-  const storedModel = localStorage.getItem(modelKey) ?? localStorage.getItem(legacyModelKey);
-  const aiModel = storedModel && provider.models.includes(storedModel) ? storedModel : provider.defaultModel;
-  return { theme: theme === "light" || theme === "system" || theme === "amber" ? theme : "dark", aiProviderId: provider.id, aiModel };
+const THEMES: readonly AppTheme[] = ["dark", "light", "system", "amber", "green"];
+
+export function defaultSettings(): AppSettings {
+  const provider = findAiProvider(DEFAULT_AI_PROVIDER_ID);
+  return { theme: "dark", aiProviderId: provider.id, aiModel: provider.defaultModel };
 }
+
+export async function loadSettings(): Promise<AppSettings> {
+  const fallback = defaultSettings();
+  const stored = await loadStoredAppSettings().catch(() => null);
+  if (!stored) return fallback;
+  const provider = findAiProvider(stored.aiProviderId);
+  const theme = THEMES.includes(stored.theme as AppTheme) ? (stored.theme as AppTheme) : fallback.theme;
+  const aiModel = provider.models.includes(stored.aiModel) ? stored.aiModel : provider.defaultModel;
+  return { theme, aiProviderId: provider.id, aiModel };
+}
+
+export async function saveSettings(settings: AppSettings): Promise<void> {
+  await saveStoredAppSettings({
+    theme: settings.theme,
+    aiProviderId: settings.aiProviderId,
+    aiModel: settings.aiModel,
+  });
+  applyTheme(settings.theme);
+}
+
 export function applyTheme(theme: AppTheme): void {
   if (systemThemeQuery && systemThemeListener) systemThemeQuery.removeEventListener("change", systemThemeListener);
   const update = () => { document.documentElement.dataset.theme = theme === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : theme; };
   update();
   if (theme === "system") { systemThemeQuery = matchMedia("(prefers-color-scheme: light)"); systemThemeListener = update; systemThemeQuery.addEventListener("change", update); }
-}
-export function saveSettings(settings: AppSettings): void {
-  localStorage.setItem(themeKey, settings.theme); localStorage.setItem(providerKey, settings.aiProviderId); localStorage.setItem(modelKey, settings.aiModel); applyTheme(settings.theme);
 }

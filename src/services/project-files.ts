@@ -36,17 +36,13 @@ export const analyzePptxTemplate = (templateId: string) => invoke<TemplateAnalys
 export const projectModifiedAt = (path: string) => invoke<number>("project_modified_at", { path });
 
 export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<{ path: string; modifiedAt: number | null } | null> {
-  if (!isTauri()) {
-    localStorage.setItem("pptd:browser-draft", JSON.stringify(document));
-    return { path: "浏览器草稿", modifiedAt: null };
-  }
+  if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const path = currentPath ?? await save({ filters: projectFilter, defaultPath: `${safeFileName(document.title)}.pptd` });
   if (!path) return null;
   await invoke("save_project", { path, document });
   return { path, modifiedAt: await projectModifiedAt(path) };
 }
 
-const browserRecoveryKey = "pptd:recovery";
 let recoveryQueue: Promise<void> = Promise.resolve();
 
 const enqueueRecovery = (task: () => Promise<void>): Promise<void> => {
@@ -55,27 +51,19 @@ const enqueueRecovery = (task: () => Promise<void>): Promise<void> => {
 };
 
 export function saveRecovery(document: PresentationDocument): Promise<void> {
-  if (!isTauri()) {
-    localStorage.setItem(browserRecoveryKey, JSON.stringify(document));
-    return Promise.resolve();
-  }
+  if (!isTauri()) return Promise.resolve();
   return enqueueRecovery(() => invoke("save_recovery", { document }));
 }
 
 export async function loadRecovery(): Promise<PresentationDocument | null> {
-  const raw: unknown = isTauri()
-    ? await invoke("load_recovery")
-    : localStorage.getItem(browserRecoveryKey);
+  if (!isTauri()) return null;
+  const raw: unknown = await invoke("load_recovery");
   if (raw === null) return null;
-  const value: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
-  return parsePresentationDocument(value) as PresentationDocument;
+  return parsePresentationDocument(raw) as PresentationDocument;
 }
 
 export async function clearRecovery(): Promise<void> {
-  if (!isTauri()) {
-    localStorage.removeItem(browserRecoveryKey);
-    return;
-  }
+  if (!isTauri()) return;
   await enqueueRecovery(() => invoke("clear_recovery"));
 }
 

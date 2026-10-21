@@ -221,10 +221,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           .map(cleanPoint)
           .filter((item) => item.length >= 6 && item.length <= 48 && /[“”"'‘’「」『』]/.test(item))
           .sort((left, right) => right.length - left.length)[0];
-      // A summary without a quotation still needs a visual anchor. A count
-      // panel uses the real number of points, so it fills the right side
-      // without inventing a headline or duplicating an arbitrary bullet.
-      const countSummary = !pullQuote && design.layout === "summary" && items.length >= 3 && items.length <= 5 && items.every((item) => cleanPoint(item).length <= 48);
+      // A short summary or split page without a quotation still needs a visual
+      // anchor. A count panel uses the real number of points, so it fills the
+      // right side without inventing a headline or duplicating a bullet.
+      const shortItems = items.every((item) => cleanPoint(item).length <= 48);
+      const countPanel = !pullQuote
+        && (design.layout === "summary" || design.layout === "split")
+        && items.length >= 3
+        && items.length <= 5
+        && shortItems;
+      const editorialSplit = design.layout === "split" && shortItems;
+      const shortSplitAsCards = design.layout === "split" && items.length === 6 && shortItems;
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
       // The rendered artwork and the placeholder geometry describe the same
       // layout, so editable text has to land on the geometry of the layout that
@@ -320,7 +327,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const pointsToFraction = (points: number) => points / 72 / (pageHeight / 914400);
       const blockHeight = (value: string, widthFraction: number, fontSizePt: number) => {
         const widthPt = widthFraction * (pageWidth / 914400) * 72;
-        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt) * fontSizePt * 1.2);
+        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt) * fontSizePt * 1.25);
       };
       const centeredBlock = (value: string, slot: { x: number; y: number; width: number; height: number }, fontSizePt: number) => {
         const height = blockHeight(value, slot.width, fontSizePt) * 1.04;
@@ -446,7 +453,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             }
           }
         }
-      } else if ((pullQuote || countSummary) && items.length >= 3 && items.length <= 5 && contentBox.width >= 0.55 && contentBox.height >= 0.35 && (design.layout === "cards" || design.layout === "title-body" || design.layout === "summary" || design.layout === "quote")) {
+      } else if (
+        (pullQuote || countPanel)
+        && items.length >= 3
+        && items.length <= 5
+        && contentBox.width >= 0.55
+        && contentBox.height >= 0.35
+        && (design.layout === "cards" || design.layout === "title-body" || design.layout === "summary" || design.layout === "quote" || editorialSplit)
+      ) {
         // A narrow numbered column plus one visual anchor: an oversized pull
         // quote copied from the reviewed body, or the real count of summary
         // points when there is no quote. Neither invents content.
@@ -475,7 +489,21 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (pullQuote) {
           slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + 0.02, 0.12, 0.13), 62, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           const quoteAttribution = quoteBlock?.attribution?.trim();
-          const panelQuote = quoteAttribution ? `${pullQuote}\n— ${quoteAttribution}` : pullQuote;
+          // Prefer a punctuation boundary near the middle over an arbitrary
+          // CJK wrap. This is display-only; the reviewed body stays unchanged.
+          const displayQuote = (value: string) => {
+            if (value.includes("\n")) return value;
+            const characters = [...value];
+            if (characters.length < 12) return value;
+            const candidates = characters
+              .map((character, characterIndex) => (/[，,、；;]/.test(character) ? characterIndex + 1 : -1))
+              .filter((breakIndex) => breakIndex > 0 && breakIndex < characters.length - 1)
+              .filter((breakIndex) => breakIndex >= characters.length * 0.35 && breakIndex <= characters.length * 0.65);
+            if (candidates.length === 0) return value;
+            const breakIndex = candidates.sort((left, right) => Math.abs(left - characters.length / 2) - Math.abs(right - characters.length / 2))[0]!;
+            return `${characters.slice(0, breakIndex).join("")}\n${characters.slice(breakIndex).join("").trimStart()}`;
+          };
+          const panelQuote = quoteAttribution ? `${displayQuote(pullQuote)}\n— ${quoteAttribution}` : displayQuote(pullQuote);
           const quoteSize = panelQuote.length > 60 ? 16 : panelQuote.length > 40 ? 18 : 22;
           slide.elements.push(text(panelQuote, centeredBlock(panelQuote, { x: panelX + 0.05, y: contentBox.y + 0.14, width: panelWidth - 0.10, height: contentBox.height * 0.58 }, quoteSize), quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
           slide.elements.push(shape(frame(panelX + 0.05, contentBox.y + contentBox.height - 0.18, panelWidth - 0.10, 0.004), "#FFFFFF"));
@@ -487,7 +515,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text("项要点", frame(panelX + 0.05, contentBox.y + contentBox.height * 0.50, panelWidth - 0.10, 0.07), 18, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(text("本页要点", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.145, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
         }
-      } else if (items.length > 1 && items.length <= 6 && (design.layout === "cards" || (items.length >= 3 && (design.layout === "title-body" || design.layout === "summary") && items.every((item) => cleanPoint(item).length <= 48)))) {
+      } else if (items.length > 1 && items.length <= 6 && (design.layout === "cards" || shortSplitAsCards || (items.length >= 3 && (design.layout === "title-body" || design.layout === "summary") && shortItems))) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
         const visible = items.slice(0, 6);
@@ -531,7 +559,25 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const columnCopy = (columnItems: string[]) => columnItems
           .map((item) => `• ${cleanPoint(item)}`)
           .join("\n\n");
-        slide.elements.push(text(columnCopy(items.slice(0, middle)), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance), text(columnCopy(items.slice(middle)), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
+        const columnFont = templateColumnSize ?? 18;
+        const leftSlot = hasSafeColumns
+          ? { x: leftRecipe!.x, y: leftRecipe!.y, width: leftRecipe!.width, height: leftRecipe!.height }
+          : { x: 0.08, y: 0.28, width: 0.36, height: 0.54 };
+        const rightSlot = hasSafeColumns
+          ? { x: rightRecipe!.x, y: rightRecipe!.y, width: rightRecipe!.width, height: rightRecipe!.height }
+          : { x: 0.57, y: 0.28, width: 0.35, height: 0.54 };
+        // Long copy can fill a split column, but a short column was previously
+        // pinned to the top and left the lower half of the page blank. Center
+        // the block when it fits; keep the full slot when it needs to shrink.
+        const columnFrame = (copy: string, slot: { x: number; y: number; width: number; height: number }) => {
+          const usedHeight = blockHeight(copy, slot.width, columnFont);
+          const height = Math.max(0.04, Math.min(slot.height, usedHeight));
+          const top = usedHeight < slot.height ? slot.y + (slot.height - usedHeight) / 2 : slot.y;
+          return frame(slot.x, top, slot.width, height);
+        };
+        const leftCopy = columnCopy(items.slice(0, middle));
+        const rightCopy = columnCopy(items.slice(middle));
+        slide.elements.push(text(leftCopy, columnFrame(leftCopy, leftSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance), text(rightCopy, columnFrame(rightCopy, rightSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if ((design.layout === "title-body" || design.layout === "summary") && items.length >= 3 && items.length <= 6) {
         // A short list is a sequence of visual units, not one paragraph. Keeping
         // it as a single text box was the reason a five-point page looked like a

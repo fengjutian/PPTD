@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 const HEX_PATTERN = /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -23,6 +24,8 @@ interface NumberFieldProps {
   min?: number;
   max?: number;
   precision?: number;
+  /** When set, the field grows stepper buttons that commit the new value right away. */
+  step?: number;
   disabled?: boolean;
   onCommit: (value: number) => void;
 }
@@ -31,7 +34,7 @@ interface NumberFieldProps {
  * Numeric input that refuses to swallow bad input. Invalid values stay in the
  * field with an inline message instead of silently reverting to the old value.
  */
-export function NumberField({ label, value, unit, min, max, precision = 2, disabled, onCommit }: NumberFieldProps) {
+export function NumberField({ label, value, unit, min, max, precision = 2, step, disabled, onCommit }: NumberFieldProps) {
   const [draft, setDraft] = useState(() => formatNumber(value, precision));
   const [error, setError] = useState<string>();
   const [dirty, setDirty] = useState(false);
@@ -70,13 +73,35 @@ export function NumberField({ label, value, unit, min, max, precision = 2, disab
     onCommit(parsed);
   };
 
+  /**
+   * Steppers commit straight away instead of waiting for a blur, so dragging
+   * the value never leaves the document out of sync with the field.
+   */
+  const stepBy = (delta: number) => {
+    if (step === undefined) return;
+    let next = value + delta;
+    if (min !== undefined) next = Math.max(min, next);
+    if (max !== undefined) next = Math.min(max, next);
+    if (next === value) return;
+    const formatted = formatNumber(next, precision);
+    draftRef.current = formatted;
+    setDraft(formatted);
+    setError(undefined);
+    onCommit(next);
+  };
+
   return (
     <label className="field">
       <span className="field-label">{label}</span>
       <span className="field-control">
+        {step !== undefined && <button type="button" className="field-stepper" aria-label={`${label} 减少 ${step}`} disabled={disabled}
+          onClick={() => stepBy(-step)}>
+          <ChevronDown />
+        </button>}
         <input
           type="number"
           inputMode="decimal"
+          step={step}
           className={error ? "invalid" : undefined}
           value={draft}
           disabled={disabled}
@@ -95,6 +120,10 @@ export function NumberField({ label, value, unit, min, max, precision = 2, disab
             }
           }}
         />
+        {step !== undefined && <button type="button" className="field-stepper" aria-label={`${label} 增加 ${step}`} disabled={disabled}
+          onClick={() => stepBy(step)}>
+          <ChevronUp />
+        </button>}
         {unit && <span className="field-unit">{unit}</span>}
       </span>
       {error && <small className="field-error">{error}</small>}

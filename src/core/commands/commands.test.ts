@@ -365,6 +365,53 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
+  it("turns a short split page without a quote into an editorial point count", () => {
+    const source = createDocument();
+    const items = ["范仲淹因主张改革被贬邓州", "受好友滕子京之托撰写", "滕子京重修岳阳楼", "作者借题发挥寄托政治理想", "体现逆境中的豁达心态"];
+    const content = { title: "写作背景", body: items.join("\n"), speakerNotes: "" };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    items.forEach((item) => expect(texts).toContain(item));
+    expect(texts).toContain("项要点");
+    expect(texts.some((text) => text.startsWith("•"))).toBe(false);
+    const panel = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.x > source.pageSize.width * 0.5 && element.frame.width > source.pageSize.width * 0.25 && element.frame.height > source.pageSize.height * 0.4);
+    expect(panel).toBeDefined();
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("turns a short split page with a quote into an editorial pull quote", () => {
+    const source = createDocument();
+    const items = ["总写洞庭湖全景", "'衔远山,吞长江,浩浩汤汤'", "描写气象万千的景色", "过渡到登楼览物之情", "'前人之述备矣'引出下文"];
+    const content = { title: "原文赏析——第二段", body: items.join("\n"), speakerNotes: "" };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    items.forEach((item) => expect(texts).toContain(item));
+    expect(texts).toContain("关键摘录");
+    expect(texts.some((text) => text.startsWith("•"))).toBe(false);
+    const panel = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.x > source.pageSize.width * 0.5 && element.frame.width > source.pageSize.width * 0.25 && element.frame.height > source.pageSize.height * 0.4);
+    expect(panel).toBeDefined();
+    // The canvas renderer uses 1.25 line height; the quote frame must be tall
+    // enough for both wrapped lines instead of clipping the second one.
+    const panelQuote = result.slides[0]!.elements.find((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.text.replace(/\s/g, "") === items[1] && element.frame.x > source.pageSize.width * 0.5)!;
+    expect(estimateTextLines(panelQuote.text, panelQuote.frame.width / 12_700, panelQuote.style.fontSizePt) * panelQuote.style.fontSizePt * 1.25).toBeLessThanOrEqual(panelQuote.frame.height / 12_700 + 0.5);
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("turns a six-point short split page into cards instead of two sparse columns", () => {
+    const source = createDocument();
+    const items = ["第一项", "第二项", "第三项", "第四项", "第五项", "第六项"];
+    const content = { title: "六个要点", body: items.join("\n"), speakerNotes: "" };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "六个要点", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    items.forEach((item) => expect(texts).toContain(item));
+    expect(texts.some((text) => text.startsWith("•"))).toBe(false);
+    expect(result.slides[0]!.elements.filter((element) => element.type === "shape" && element.shape === "ellipse")).toHaveLength(items.length);
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
   it("uses valid text regions extracted from the selected PPTX template", () => {
     const source = createDocument();
     const content = { title: "模板标题", body: "模板正文", speakerNotes: "" };
@@ -512,7 +559,7 @@ describe("document commands", () => {
 
   it("keeps an explicitly requested split layout instead of forcing numbered text into cards", () => {
     const source = createDocument();
-    const longItem = "这是一个用于验证中文文本框宽度估算和自动字号适配的较长段落，不能越过双栏边界覆盖另一列内容";
+    const longItem = "这是一个用于验证中文文本框宽度估算和自动字号适配的较长段落，不能越过双栏边界覆盖另一列内容，并需要保留完整上下文";
     const content = { title: "排版检查", body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "自动适配", slides: [content], designs: [design] }));
