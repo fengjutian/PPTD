@@ -199,7 +199,7 @@ export function App() {
     if (!aiDraft) return;
     execute({ type: "apply-ai-draft", title: aiDraft.title, slides: aiDraft.slides });
     setActiveView("theme");
-    setTaskStatus("内容草稿已确认，可以开始主题优化");
+    setTaskStatus("内容草稿已确认，可以选择 PPT 模板");
   };
 
   const handleChooseTemplate = async () => {
@@ -266,7 +266,7 @@ export function App() {
       <nav className="nav-rail" aria-label="主功能">
         <button className={activeView === "editor" ? "active" : ""} aria-current={activeView === "editor" ? "page" : undefined} title="编辑器" onClick={() => setActiveView("editor")}><LayoutDashboard /><span>编辑</span></button>
         <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="MiniMax AI" onClick={() => setActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
-        <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="主题优化" onClick={() => setActiveView("theme")}><Palette /><span>主题</span></button>
+        <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="PPT 模板" onClick={() => setActiveView("theme")}><Palette /><span>模板</span></button>
         <div className="nav-spacer" />
         <button title="设置" onClick={() => setSettingsOpen(true)}><Settings /><span>设置</span></button>
       </nav>
@@ -310,7 +310,7 @@ export function App() {
       </aside></>}
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
-        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再进入视觉主题优化</p></div></div><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 主题优化</span></div></header>
+        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再选择用户的 PPT 模板</p></div></div><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 上传模板</span></div></header>
         {!aiDraft ? <section className="ai-compose-card">
           <div className="section-kicker">MiniMax AI</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成可编辑的结构化内容。</p>
           <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
@@ -318,9 +318,9 @@ export function App() {
           <button className="primary-action" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "MiniMax 正在生成…" : "生成 PPT 草稿"}<ArrowRight /></button>
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
         </section> : <section className="draft-review">
-          <div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>主题优化不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
+          <div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>后续应用模板时不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
           <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => <article className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
-          <div className="sticky-actions"><button className="secondary-action" onClick={() => setAiDraft(undefined)}>重新生成</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，进入主题优化<ArrowRight /></button></div>
+          <div className="sticky-actions"><button className="secondary-action" onClick={() => setAiDraft(undefined)}>重新生成</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>
         </section>}
       </main>}
 
