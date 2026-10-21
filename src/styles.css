@@ -134,6 +134,10 @@ button { color: inherit; }
 .draft-slide-card label { margin: 0 0 13px; }
 .draft-slide-card textarea { min-height: 82px; overflow: hidden; resize: none; field-sizing: content; }
 .draft-slide-card textarea.notes { min-height: 54px; }
+.slide-plan-summary { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; padding: 11px 12px; border-radius: 8px; background: #191a1e; }
+.slide-plan-summary > span { padding: 4px 7px; border-radius: 5px; color: var(--ppt-accent-hover); background: rgb(211 82 48 / 10%); font-size: 9px; font-weight: 700; }
+.slide-plan-summary p { flex-basis: 100%; margin: 2px 0 0; color: #8f949d; font-size: 10px; line-height: 1.5; }
+.slide-plan-summary p strong { color: #c9ccd2; }
 .sticky-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; padding: 14px 0; background: linear-gradient(transparent, #191a1e 22%); }
 .draft-mode .sticky-actions { position: static; margin-top: 0; }
 .theme-content { width: min(980px, calc(100% - 64px)); margin: 44px auto; }
@@ -362,6 +366,7 @@ button { color: inherit; }
 :root[data-theme="light"] .property-form input, :root[data-theme="light"] .property-form textarea { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .feature-workspace { background: #eef0f3; } :root[data-theme="light"] .feature-header { background: #f8f9fb; border-color: #d6d9de; }
 :root[data-theme="light"] .ai-compose-card, :root[data-theme="light"] .draft-slide-card, :root[data-theme="light"] .presentation-themes > button { color: #24272c; background: #fff; border-color: #d4d7dc; }
+:root[data-theme="light"] .slide-plan-summary { background: #f1f2f4; } :root[data-theme="light"] .slide-plan-summary p { color: #686e77; } :root[data-theme="light"] .slide-plan-summary p strong { color: #343942; }
 :root[data-theme="light"] .ai-history-heading { color: #353a42; } :root[data-theme="light"] .ai-history > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .ai-history > button:hover { border-color: var(--ppt-accent); background: #fff8f5; } :root[data-theme="light"] .ai-history > button strong { color: #272b31; }
 :root[data-theme="light"] .draft-outline-title { color: #353a42; } :root[data-theme="light"] .draft-outline-list > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .draft-outline-list > button:hover, :root[data-theme="light"] .draft-outline-list > button.active { border-color: var(--ppt-accent); background: #fff1ed; } :root[data-theme="light"] .draft-outline-list > button strong { color: #272b31; }
 :root[data-theme="light"] .ai-compose-card textarea, :root[data-theme="light"] .ai-compose-card input, :root[data-theme="light"] .draft-review textarea, :root[data-theme="light"] .draft-review input { color: #24272c; background: #fff; border-color: #cfd3d9; }

@@ -1,11 +1,29 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 
+export const narrativeStrategySchema = z.enum(["management-report", "proposal", "retrospective", "training", "product-launch", "fundraising", "general"]);
+export const contentBlockSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("paragraph"), text: z.string().min(1).max(2000) }),
+  z.object({ type: z.literal("bullet-list"), items: z.array(z.string().min(1).max(500)).min(1).max(12) }),
+  z.object({ type: z.literal("quote"), text: z.string().min(1).max(2000), attribution: z.string().max(300).optional() }),
+  z.object({ type: z.literal("metric"), label: z.string().min(1).max(300), value: z.string().min(1).max(100) }),
+  z.object({ type: z.literal("timeline"), items: z.array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) })).min(1).max(10) }),
+  z.object({ type: z.literal("comparison"), leftLabel: z.string().min(1).max(100), rightLabel: z.string().min(1).max(100), leftItems: z.array(z.string().min(1).max(500)).max(8), rightItems: z.array(z.string().min(1).max(500)).max(8) }),
+]);
+const slidePlanSchema = z.object({
+  purpose: z.string().min(1).max(300),
+  conclusion: z.string().min(1).max(300),
+  visualIntent: z.enum(["hero", "quote", "timeline", "comparison", "process", "data-chart", "image-story", "summary", "structured-text"]),
+  density: z.enum(["low", "medium", "high"]),
+});
+const legacySlidePlan = { purpose: "传达本页已审核内容", conclusion: "以本页标题和正文为准", visualIntent: "structured-text" as const, density: "medium" as const };
 export const aiDraftSchema = z.object({
   title: z.string().min(1).max(200),
-  slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000) })).min(1).max(20),
+  presentationBrief: z.object({ objective: z.string().min(1).max(500), audience: z.string().min(1).max(300), scenario: z.string().min(1).max(300), expectedAction: z.string().min(1).max(500), coreConclusion: z.string().min(1).max(500), narrativeStrategy: narrativeStrategySchema, assumptions: z.array(z.string().max(500)).max(10) }).default({ objective: "清晰传达演示主题", audience: "未指定受众", scenario: "通用演示", expectedAction: "理解演示内容", coreConclusion: "以演示文稿标题和逐页内容为准", narrativeStrategy: "general", assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"] }),
+  slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1).max(20),
 });
 export type AiDraft = z.infer<typeof aiDraftSchema>;
+export type ContentBlock = z.infer<typeof contentBlockSchema>;
 export const slideBriefSchema = z.object({
   slideIndex: z.number().int().min(0).max(19),
   purpose: z.string().min(1).max(300),
@@ -15,6 +33,10 @@ export const slideBriefSchema = z.object({
 });
 export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).min(1).max(20) });
 export type SlideBrief = z.infer<typeof slideBriefSchema>;
+
+export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
+  return draft.slides.map((slide, slideIndex) => ({ slideIndex, ...slide.plan }));
+}
 export const aiPresentationDesignSchema = z.object({
   slides: z.array(z.object({
     layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),

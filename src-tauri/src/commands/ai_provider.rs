@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+// Provider-neutral AI commands; MiniMax is the first configured adapter.
+
 const MINIMAX_CHINA_CHAT_URL: &str = "https://api.minimaxi.com/v1/text/chatcompletion_v2";
 
 #[derive(Deserialize)]
@@ -126,8 +128,30 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
         .unwrap_or_else(|| "MiniMax-M3".into());
     validate_model(&model)?;
     let prompt = format!(
-        "为以下主题生成 {} 页中文演示文稿。仅返回严格 JSON，不要 Markdown：{{\"title\":\"文稿标题\",\"slides\":[{{\"title\":\"页面标题\",\"body\":\"3-5条简洁要点\",\"speakerNotes\":\"演讲备注\"}}]}}。slides 必须恰好 {} 项。主题：{}",
-        request.slide_count, request.slide_count, request.topic.trim()
+        r#"为以下主题生成 {count} 页中文演示文稿。先形成整份演示简报和叙事策略，再为每页生成结论式标题、正文、演讲备注、页面计划和结构化内容块。
+
+规则：
+1. slides 必须恰好 {count} 项。
+2. 每页只承担一个主要沟通任务，title 尽量表达结论，不使用空泛主题词。
+3. body 必须与 blocks 表达相同事实，方便用户直接编辑；不得虚构数字、来源、引语或案例。
+4. narrativeStrategy 只能为 management-report、proposal、retrospective、training、product-launch、fundraising、general。
+5. visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text。
+6. density 只能为 low、medium、high。
+7. blocks 支持：
+   - {{"type":"paragraph","text":"..."}}
+   - {{"type":"bullet-list","items":["..."]}}
+   - {{"type":"quote","text":"...","attribution":"可选"}}
+   - {{"type":"metric","label":"...","value":"..."}}，仅当输入确有数字
+   - {{"type":"timeline","items":[{{"label":"...","text":"..."}}]}}
+   - {{"type":"comparison","leftLabel":"...","rightLabel":"...","leftItems":["..."],"rightItems":["..."]}}
+8. 第一页通常是 hero；最后一页只有在确有总结语义时才使用 summary。
+
+仅返回严格 JSON，不要 Markdown或额外说明：
+{{"title":"文稿标题","presentationBrief":{{"objective":"演示目标","audience":"目标受众","scenario":"使用场景","expectedAction":"期望行动","coreConclusion":"一句话核心结论","narrativeStrategy":"general","assumptions":["保守假设"]}},"slides":[{{"title":"结论式页面标题","body":"可编辑正文","speakerNotes":"演讲备注","plan":{{"purpose":"页面目的","conclusion":"单一结论","visualIntent":"structured-text","density":"medium"}},"blocks":[{{"type":"bullet-list","items":["要点一","要点二"]}}]}}]}}
+
+主题：{topic}"#,
+        count = request.slide_count,
+        topic = request.topic.trim()
     );
     let body = ChatRequest {
         model,

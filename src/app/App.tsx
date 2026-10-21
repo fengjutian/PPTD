@@ -4,7 +4,7 @@ import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { describeAiError, generatePresentationDesign, generatePresentationDraft, generateSlideBriefs, type AiDraft } from "../services/ai-service";
+import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
 import { applyTheme, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -242,7 +242,12 @@ export function App() {
   };
 
   const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
-    setAiDraft((draft) => draft ? { ...draft, slides: draft.slides.map((slide, slideIndex) => slideIndex === index ? { ...slide, [field]: value } : slide) } : draft);
+    setAiDraft((draft) => draft ? { ...draft, slides: draft.slides.map((slide, slideIndex) => {
+      if (slideIndex !== index) return slide;
+      if (field !== "body") return { ...slide, [field]: value };
+      const items = value.split(/\n+|(?=\d+[.、]\s*)/).map((item) => item.trim()).filter(Boolean);
+      return { ...slide, body: value, blocks: items.length > 1 ? [{ type: "bullet-list" as const, items }] : value.trim() ? [{ type: "paragraph" as const, text: value.trim() }] : [] };
+    }) } : draft);
   };
 
   const continueToTheme = () => {
@@ -265,7 +270,7 @@ export function App() {
     }, 900);
     try {
       setDesignProgress({ percent: 18, label: "正在规划逐页设计意图" });
-      const briefs = await generateSlideBriefs(aiDraft);
+      const briefs = briefsFromDraft(aiDraft);
       setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
       const design = await generatePresentationDesign(aiDraft, briefs, templateAnalysis);
       window.clearInterval(progressTimer);
@@ -432,16 +437,16 @@ export function App() {
         {!aiDraft ? <section className={`ai-start ${aiHistory.length ? "with-history" : ""}`}>
           {aiHistory.length > 0 && <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>}
           <div className="ai-compose-card">
-          <div className="section-kicker">MiniMax AI</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成可编辑的结构化内容。</p>
+          <div className="section-kicker">AI 内容规划</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成演示简报、逐页计划和可编辑的结构化内容。</p>
           <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
           <label className="slide-count-field">页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
-          <button className="primary-action" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "MiniMax 正在生成…" : "生成 PPT 草稿"}<ArrowRight /></button>
+          <button className="primary-action" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "AI 正在规划…" : "生成 PPT 草稿"}<ArrowRight /></button>
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
         </section> : <section className="draft-review">
           <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div><div className="draft-outline-list">{aiDraft.slides.map((slide, index) => <button type="button" className={activeDraftSlideIndex === index ? "active" : ""} aria-current={activeDraftSlideIndex === index ? "page" : undefined} key={index} onClick={() => setActiveDraftSlideIndex(index)}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</div></aside>
-          <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>后续应用模板时不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
-          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => index === activeDraftSlideIndex && <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
+          <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿 · {aiDraft.presentationBrief.narrativeStrategy}</div><h2>审核并编辑文字</h2><p>{aiDraft.presentationBrief.coreConclusion}</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
+          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => index === activeDraftSlideIndex && <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><div className="slide-plan-summary"><span>{slide.plan.visualIntent}</span><span>{slide.plan.density} density</span><p><strong>页面目的：</strong>{slide.plan.purpose}</p><p><strong>核心结论：</strong>{slide.plan.conclusion}</p></div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
           </div>
         </section>}
         </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiPresentationDesignSchema, describeAiError, slideBriefsSchema } from "./ai-service";
+import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, describeAiError, slideBriefsSchema } from "./ai-service";
 
 describe("MiniMax structured outputs", () => {
   it("accepts a typed slide brief without presentation content", () => {
@@ -14,5 +14,17 @@ describe("MiniMax structured outputs", () => {
 
   it("turns provider overload errors into a retryable user message", () => {
     expect(describeAiError("AI_PROVIDER_BUSY")).toContain("服务当前繁忙");
+  });
+
+  it("migrates legacy drafts to presentation and slide briefs", () => {
+    const draft = aiDraftSchema.parse({ title: "旧草稿", slides: [{ title: "第一页", body: "正文", speakerNotes: "" }] });
+    expect(draft.presentationBrief.narrativeStrategy).toBe("general");
+    expect(briefsFromDraft(draft)[0]).toMatchObject({ slideIndex: 0, visualIntent: "structured-text", density: "medium" });
+    expect(draft.slides[0]!.blocks).toEqual([]);
+  });
+
+  it("accepts structured content blocks from the content planner", () => {
+    const draft = aiDraftSchema.parse({ title: "结构化草稿", presentationBrief: { objective: "培训", audience: "学生", scenario: "课堂", expectedAction: "理解", coreConclusion: "掌握重点", narrativeStrategy: "training", assumptions: [] }, slides: [{ title: "重点", body: "第一点\n第二点", speakerNotes: "", plan: { purpose: "讲解重点", conclusion: "两点共同构成核心", visualIntent: "structured-text", density: "medium" }, blocks: [{ type: "bullet-list", items: ["第一点", "第二点"] }] }] });
+    expect(draft.slides[0]!.blocks[0]).toMatchObject({ type: "bullet-list", items: ["第一点", "第二点"] });
   });
 });
