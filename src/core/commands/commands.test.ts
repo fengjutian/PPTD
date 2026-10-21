@@ -210,7 +210,7 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text)).toEqual([content.title, content.body]);
   });
 
-  it("rotates equally suitable rendered template layouts instead of repeating one background", () => {
+  it("keeps one coherent rendered background for slides with the same semantic role", () => {
     const source = createDocument();
     const slides = [
       { title: "第一页", body: "正文一", speakerNotes: "" },
@@ -228,7 +228,7 @@ describe("document commands", () => {
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版式", slides, designs: [design, design], templateLayouts }));
     const backgrounds = result.slides.map((slide) => slide.elements.find((element) => element.type === "image"));
     expect(backgrounds[0]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[0]!.backgroundImageDataUrl } });
-    expect(backgrounds[1]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[1]!.backgroundImageDataUrl } });
+    expect(backgrounds[1]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[0]!.backgroundImageDataUrl } });
   });
 
   it("renders timeline blocks without parsing the body string", () => {
@@ -269,15 +269,18 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements.every((element) => element.type === "text" || element.type === "shape")).toBe(true);
   });
 
-  it("shrinks long Chinese text to fit narrow template columns", () => {
+  it("lays out long numbered Chinese text as separate non-overlapping cards", () => {
     const source = createDocument();
     const longItem = "这是一个用于验证中文文本框宽度估算和自动字号适配的较长段落，不能越过双栏边界覆盖另一列内容";
     const content = { title: "排版检查", body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "自动适配", slides: [content], designs: [design] }));
     const bodies = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.text !== content.title);
-    expect(bodies).toHaveLength(2);
-    expect(bodies.every((element) => element.style.fontSizePt < 20 && element.style.fontSizePt >= 12)).toBe(true);
+    expect(bodies).toHaveLength(4);
+    expect(bodies.every((element) => element.style.fontSizePt <= 16 && element.style.fontSizePt >= 12)).toBe(true);
+    for (const [bodyIndex, body] of bodies.entries()) {
+      expect(bodies.slice(bodyIndex + 1).every((candidate) => body.frame.x + body.frame.width <= candidate.frame.x || candidate.frame.x + candidate.frame.width <= body.frame.x || body.frame.y + body.frame.height <= candidate.frame.y || candidate.frame.y + candidate.frame.height <= body.frame.y)).toBe(true);
+    }
   });
 
 });

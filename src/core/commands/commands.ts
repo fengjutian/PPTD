@@ -108,6 +108,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
+      const useListGrid = !hasDeterministicBlock && items.length >= 3 && !["cover", "section", "quote"].includes(design.layout);
       const rankedLayouts = command.templateLayouts?.filter((layout) => layout.regions.some((region) => region.role === "title")) ?? [];
       const layoutIsCompatible = (layout: AiTemplateLayout): boolean => {
         const title = layout.regions.find((region) => region.role === "title")?.frame;
@@ -138,12 +139,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       };
       const chooseLayout = (layouts: AiTemplateLayout[]) => {
         const sorted = [...layouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index);
-        const bestScore = sorted[0] ? layoutScore(sorted[0]) : undefined;
-        const best = bestScore === undefined ? [] : sorted.filter((layout) => layoutScore(layout) === bestScore);
-        return best.length > 0 ? best[index % best.length] : undefined;
+        return sorted[0];
       };
       const visualRecipe = chooseLayout(rankedLayouts.filter(layoutHasSemanticGeometry)) ?? chooseLayout(rankedLayouts);
-      const recipe = chooseLayout(rankedLayouts.filter(layoutIsCompatible));
+      // Rendered template backgrounds preserve complex master artwork, but OOXML placeholder
+      // geometry is not reliable enough for editable text until inheritance is fully resolved.
+      // Keep all editable text on deterministic, non-overlapping grids in that case.
+      const recipe = visualRecipe?.backgroundImageDataUrl ? undefined : chooseLayout(rankedLayouts.filter(layoutIsCompatible));
       slide.background = visualRecipe?.backgroundColor ?? design.background;
       const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
       const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
@@ -153,7 +155,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       slide.elements = [];
       if (visualRecipe?.backgroundImageDataUrl) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: visualRecipe.backgroundImageDataUrl, mimeType: "image/png" }, altText: `模板版式背景：${visualRecipe.name ?? visualRecipe.index}` });
-      [...(command.templateDecorations ?? []), ...(visualRecipe?.decorations ?? [])].forEach((decoration) => {
+      const decorations = visualRecipe?.backgroundImageDataUrl ? [] : [...(command.templateDecorations ?? []), ...(visualRecipe?.decorations ?? [])];
+      decorations.forEach((decoration) => {
         if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
       });
       if (design.layout === "cover" && !hasDeterministicBlock) {
@@ -208,16 +211,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.35, 0.08), 28, design.titleColor, true, "left"));
         if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.15, 0.31, 0.68, 0.46], 0.35, 0.28), Math.max(18, bodySize), design.bodyColor, false, "left"));
-      } else if (design.layout === "cards" && items.length > 1) {
-        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.82, 0.12), 29, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
+      } else if ((design.layout === "cards" && items.length > 1) || useListGrid) {
+        slide.elements.push(text(content.title, frame(0.07, 0.20, 0.82, 0.10), 29, design.titleColor, true, "left"), shape(frame(0.07, 0.32, 0.12, 0.012), design.accent));
         const visible = items.slice(0, 6); const columns = visible.length > 3 ? 3 : 2; const rows = Math.ceil(visible.length / columns);
-        visible.forEach((item, itemIndex) => { const column = itemIndex % columns; const row = Math.floor(itemIndex / columns); const x = 0.07 + column * (0.86 / columns); const y = 0.28 + row * (0.60 / rows); slide.elements.push(shape(frame(x, y, 0.86 / columns - 0.025, 0.60 / rows - 0.035), "#F3F5F7"), shape(frame(x, y, 0.012, 0.60 / rows - 0.035), design.accent), text(item, frame(x + 0.025, y + 0.035, 0.86 / columns - 0.07, 0.60 / rows - 0.10), 16, design.bodyColor, false, "left")); });
+        visible.forEach((item, itemIndex) => { const column = itemIndex % columns; const row = Math.floor(itemIndex / columns); const x = 0.07 + column * (0.86 / columns); const y = 0.37 + row * (0.50 / rows); slide.elements.push(shape(frame(x, y, 0.86 / columns - 0.025, 0.50 / rows - 0.035), "#F3F5F7"), shape(frame(x, y, 0.012, 0.50 / rows - 0.035), design.accent), text(item, frame(x + 0.025, y + 0.035, 0.86 / columns - 0.07, 0.50 / rows - 0.10), 16, design.bodyColor, false, "left")); });
       } else if (design.layout === "split" && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
         const middle = Math.ceil(items.length / 2); slide.elements.push(text(items.slice(0, middle).join("\n\n"), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), bodySize, design.bodyColor, false, "left"), text(items.slice(middle).join("\n\n"), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), bodySize, design.bodyColor, false, "left"));
       } else {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.11, 0.012), design.accent));
-        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.08, 0.30, 0.82, 0.55], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.20, 0.84, 0.10], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.32, 0.11, 0.012), design.accent));
+        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.08, 0.38, 0.82, 0.46], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
       }
       return slide;
     });
