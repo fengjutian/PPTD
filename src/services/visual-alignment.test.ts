@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { affectedSlideIndexes, defaultPresentationVisualGoal, runVisualAlignmentLoop, visualRepairPlanSchema, type VisualReview } from "./visual-alignment";
 
-const review = (score: number, errors = 0): VisualReview => ({ overallScore: score, hierarchyScore: score, alignmentScore: score, readabilityScore: score, consistencyScore: score, issues: Array.from({ length: errors }, () => ({ slideIndex: 0, severity: "error", issue: "misalignment", elementIds: [], suggestion: "对齐到共享网格" })) });
+const review = (score: number, errors = 0): VisualReview => ({ overallScore: score, hierarchyScore: score, alignmentScore: score, readabilityScore: score, consistencyScore: score, issues: Array.from({ length: errors }, () => ({ slideIndex: 0, severity: "error", issue: "misalignment", elementIds: [], suggestion: "对齐到共享网格" })), slideGuidance: [] });
 
 describe("visual alignment loop", () => {
   it("stops when the target is reached", async () => {

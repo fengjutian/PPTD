@@ -12,7 +12,7 @@ export type AiContentBlock =
   | { type: "process"; items: Array<{ label: string; text: string }> };
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
-export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
+export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string; safeRegion?: { x: number; y: number; width: number; height: number } }
 export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
 export interface AiTemplateDecoration { shape: "rectangle" | "ellipse"; fill: string; frame: { x: number; y: number; width: number; height: number } }
 export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; backgroundImageDataUrl?: string; decorations?: AiTemplateDecoration[]; regions: AiTemplateRegion[] }
@@ -159,7 +159,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
       const [leftRecipe, rightRecipe] = recipeBodies;
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
-      const alignmentGrid = { left: 0.07, right: 0.93, titleY: 0.20, titleHeight: 0.10, ruleY: 0.32, contentY: 0.37, contentBottom: 0.87 } as const;
+      const visualSafe = design.safeRegion && isSafeRegion(design.safeRegion, 0.55, 0.45) ? design.safeRegion : undefined;
+      const safeLeft = visualSafe?.x ?? 0.07; const safeRight = visualSafe ? visualSafe.x + visualSafe.width : 0.93; const safeTop = visualSafe?.y ?? 0.20; const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : 0.87;
+      const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(0.17, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
       slide.elements = [];
       if (visualRecipe?.backgroundImageDataUrl) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: visualRecipe.backgroundImageDataUrl, mimeType: "image/png" }, altText: `模板版式背景：${visualRecipe.name ?? visualRecipe.index}` });
       const decorations = visualRecipe?.backgroundImageDataUrl ? [] : [...(command.templateDecorations ?? []), ...(visualRecipe?.decorations ?? [])];
@@ -219,7 +221,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.35, 0.08), 28, design.titleColor, true, "left"));
         if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.15, 0.31, 0.68, 0.46], 0.35, 0.28), Math.max(18, bodySize), design.bodyColor, false, "left"));
       } else if (design.layout === "cards" && items.length > 1) {
-        slide.elements.push(text(content.title, frame(alignmentGrid.left, alignmentGrid.titleY, 0.72, alignmentGrid.titleHeight), 32, contentTitleColor, true, "left"), text(String(index + 1).padStart(2, "0"), frame(0.86, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, contentTitleColor, true, "right"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, 0.12, 0.009), design.accent));
+        slide.elements.push(text(content.title, frame(alignmentGrid.left, alignmentGrid.titleY, Math.max(0.40, alignmentGrid.right - alignmentGrid.left - 0.10), alignmentGrid.titleHeight), 32, contentTitleColor, true, "left"), text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, contentTitleColor, true, "right"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
         const visible = items.slice(0, 6);
         const columns = visible.length === 3 || visible.length >= 5 ? 3 : 2;
         const rows = Math.ceil(visible.length / columns);
@@ -241,8 +243,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
         const middle = Math.ceil(items.length / 2); slide.elements.push(text(items.slice(0, middle).join("\n\n"), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), bodySize, design.bodyColor, false, "left"), text(items.slice(middle).join("\n\n"), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), bodySize, design.bodyColor, false, "left"));
       } else {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, 0.84, alignmentGrid.titleHeight], 0.35, 0.08), 30, contentTitleColor, true, "left"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, 0.11, 0.012), design.accent));
-        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.08, 0.38, 0.82, alignmentGrid.contentBottom - 0.38], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.35, 0.08), 30, contentTitleColor, true, "left"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
+        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
       }
       return slide;
     });

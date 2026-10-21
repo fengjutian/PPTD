@@ -13,6 +13,14 @@ export type PresentationVisualGoal = z.infer<typeof presentationVisualGoalSchema
 export const visualReviewSchema = z.object({
   overallScore: z.number().min(0).max(100), hierarchyScore: z.number().min(0).max(100), alignmentScore: z.number().min(0).max(100), readabilityScore: z.number().min(0).max(100), consistencyScore: z.number().min(0).max(100),
   issues: z.array(z.object({ slideIndex: z.number().int().nonnegative(), severity: z.enum(["error", "warning"]), issue: z.enum(["weak-hierarchy", "poor-contrast", "visual-imbalance", "background-conflict", "misalignment", "excessive-empty-space", "repetitive-layout"]), elementIds: z.array(z.string()).default([]), suggestion: z.string().min(1).max(500) })).max(100),
+  slideGuidance: z.array(z.object({
+    slideIndex: z.number().int().nonnegative(),
+    safeRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).refine((region) => region.x + region.width <= 1 && region.y + region.height <= 1),
+    logoRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(8).default([]),
+    busyRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(8).default([]),
+    focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
+    recommendedLayout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
+  })).max(20).default([]),
 });
 export type VisualReview = z.infer<typeof visualReviewSchema>;
 export const visualRepairPlanSchema = z.object({
@@ -21,6 +29,7 @@ export const visualRepairPlanSchema = z.object({
     layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]).optional(),
     backgroundAction: z.enum(["keep", "replace-compatible", "simplify"]).default("keep"),
     hierarchyAction: z.enum(["keep", "strengthen-title", "reduce-density", "increase-whitespace"]).default("keep"),
+    safeRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional(),
     reason: z.string().min(1).max(500),
   })).max(20),
 });

@@ -325,7 +325,7 @@ export function App() {
               const indexes = render.slides.slice(start, start + 6).map((_, offset) => start + offset);
               reviews.push(await vision.review(render, visualGoal, indexes));
             }
-            return { overallScore: Math.min(...reviews.map((item) => item.overallScore)), hierarchyScore: Math.min(...reviews.map((item) => item.hierarchyScore)), alignmentScore: Math.min(...reviews.map((item) => item.alignmentScore)), readabilityScore: Math.min(...reviews.map((item) => item.readabilityScore)), consistencyScore: Math.min(...reviews.map((item) => item.consistencyScore)), issues: reviews.flatMap((item) => item.issues) };
+            return { overallScore: Math.min(...reviews.map((item) => item.overallScore)), hierarchyScore: Math.min(...reviews.map((item) => item.hierarchyScore)), alignmentScore: Math.min(...reviews.map((item) => item.alignmentScore)), readabilityScore: Math.min(...reviews.map((item) => item.readabilityScore)), consistencyScore: Math.min(...reviews.map((item) => item.consistencyScore)), issues: reviews.flatMap((item) => item.issues), slideGuidance: reviews.flatMap((item) => item.slideGuidance) };
           },
           repair: async (designs, review, visualGoal) => {
             const plan = await vision.planRepairs(review, visualGoal);
@@ -333,7 +333,7 @@ export function App() {
             return designs.map((slide, slideIndex) => {
               const repair = repairs.get(slideIndex);
               if (!repair) return slide;
-              return { ...slide, layout: repair.layout ?? slide.layout, titleColor: repair.backgroundAction === "replace-compatible" ? "#FFFFFF" : slide.titleColor, bodyColor: repair.backgroundAction === "replace-compatible" ? "#293241" : slide.bodyColor };
+              return { ...slide, layout: repair.layout ?? slide.layout, safeRegion: repair.safeRegion ?? slide.safeRegion, titleColor: repair.backgroundAction === "replace-compatible" ? "#FFFFFF" : slide.titleColor, bodyColor: repair.backgroundAction === "replace-compatible" ? "#293241" : slide.bodyColor };
             });
           },
         });

@@ -46,12 +46,18 @@ export class TauriVisionReviewPort implements VisionReviewPort {
   async planRepairs(review: VisualReview, _goal: PresentationVisualGoal): Promise<VisualRepairPlan> {
     const bySlide = new Map<number, VisualReview["issues"]>();
     review.issues.forEach((issue) => bySlide.set(issue.slideIndex, [...(bySlide.get(issue.slideIndex) ?? []), issue]));
-    return visualRepairPlanSchema.parse({ repairs: [...bySlide].map(([slideIndex, issues]) => ({
+    const guidance = new Map(review.slideGuidance.map((item) => [item.slideIndex, item]));
+    const slideIndexes = new Set([...bySlide.keys(), ...guidance.keys()]);
+    return visualRepairPlanSchema.parse({ repairs: [...slideIndexes].map((slideIndex) => {
+      const issues = bySlide.get(slideIndex) ?? [];
+      const guide = guidance.get(slideIndex);
+      return {
       slideIndex,
-      layout: issues.some((issue) => issue.issue === "repetitive-layout") ? "title-body" : undefined,
+      layout: guide?.recommendedLayout ?? (issues.some((issue) => issue.issue === "repetitive-layout") ? "title-body" : undefined),
       backgroundAction: issues.some((issue) => issue.issue === "background-conflict" || issue.issue === "poor-contrast") ? "replace-compatible" : "keep",
       hierarchyAction: issues.some((issue) => issue.issue === "weak-hierarchy") ? "strengthen-title" : issues.some((issue) => issue.issue === "excessive-empty-space") ? "reduce-density" : "keep",
+      safeRegion: guide?.safeRegion,
       reason: issues.map((issue) => issue.suggestion).join("；"),
-    })) });
+    }; }) });
   }
 }

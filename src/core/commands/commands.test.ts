@@ -297,4 +297,15 @@ describe("document commands", () => {
     expect(labels[3]!.frame.y).toBe(labels[4]!.frame.y);
   });
 
+  it("places editable content inside a vision-recommended safe region", () => {
+    const source = createDocument();
+    const content = { title: "避开模板标志", body: "正文位于视觉模型识别的留白区域", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#234567", accent: "#22AA99", titleColor: "#FFFFFF", bodyColor: "#FFFFFF", safeRegion: { x: 0.28, y: 0.18, width: 0.64, height: 0.68 } };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "安全区", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    expect(texts[0]!.frame.x).toBe(Math.round(source.pageSize.width * design.safeRegion.x));
+    expect(texts.every((element) => element.frame.x >= Math.round(source.pageSize.width * design.safeRegion.x))).toBe(true);
+    expect(texts.every((element) => element.frame.x + element.frame.width <= Math.round(source.pageSize.width * (design.safeRegion.x + design.safeRegion.width)) + 1)).toBe(true);
+  });
+
 });

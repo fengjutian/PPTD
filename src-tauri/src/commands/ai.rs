@@ -78,7 +78,54 @@ pub async fn review_presentation_visuals(
     let indexes =
         serde_json::to_string(&request.slide_indexes).map_err(|_| "AI_VISION_REQUEST_INVALID")?;
     let prompt = format!(
-        r#"你是 PPTD 的视觉质量评审器。第一张图片是整套演示缩略图，后续图片对应页面索引 {indexes}。根据视觉目标检查层级、对齐、可读性、跨页一致性、背景冲突、空白和版式重复。不得修改或复述正文，只返回严格 JSON。分数为 0–100；只报告确实可从图片观察到的问题。输出结构：{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题与内容对齐到共同左轴"}}]}}。issue 只能是 weak-hierarchy、poor-contrast、visual-imbalance、background-conflict、misalignment、excessive-empty-space、repetitive-layout。视觉目标：{goal}"#
+        r#"你是 PPTD 的资深演示文稿视觉总监与质量评审器。你的任务不是重写内容，而是依据真实渲染图评价整套 PPT 的视觉质量，并给确定性排版引擎提供可执行、克制且可验证的设计指导。
+
+【输入图片】
+1. 第一张图片是整套演示的缩略图总览，用于判断跨页节奏、重复度、风格一致性和章节层级。
+2. 后续图片是需要重点检查的单页高清图，按顺序对应页面索引 {indexes}。
+3. 缩略图只用于整套判断；文字清晰度、局部对齐、安全区和背景冲突必须以单页高清图为准。
+
+【不可违反的边界】
+1. 页面正文、标题、数字、引用、备注和页面顺序均为已审核内容。不得改写、删减、扩写、纠错、翻译、概括或重新排序。
+2. 不得评价内容观点是否正确，只评价视觉表达是否清晰有效。
+3. 不得假设图片中不存在的对象、颜色、Logo、图表或装饰。
+4. 不得要求用缩小字号或压缩行距来掩盖内容过载；应建议更合适的版式、留白或密度处理。
+5. 只报告能够从渲染图中明确观察到的问题，不为凑数量制造问题。
+
+【评审流程】
+第一步：观察整套缩略图，判断封面、章节、内容、重点和总结页面是否有清晰角色；检查背景变化是否有节奏但不杂乱，相邻页面是否机械重复，标题轴线、字体、配色和组件语言是否稳定。
+第二步：逐页观察高清图，检查信息层级、视觉重心、对齐、间距、留白、文字对比度、背景干扰、Logo/页脚避让、卡片比例、长短文本平衡和阅读路径。
+第三步：为每个被检查页面识别适合放置可编辑内容的最大连续安全区，并给出最适合其现有内容语义的版式。安全区不能覆盖 Logo、网址、页码、强装饰、复杂纹理或视觉焦点。
+
+【评分标准】
+- hierarchyScore：标题、结论、正文和辅助信息是否形成清晰的三级以内层级；视觉入口是否明确。
+- alignmentScore：关键元素是否共享稳定轴线；列宽、卡片边界、间距和基线是否一致；不得仅因非关键装饰不完全对称而扣分。
+- readabilityScore：文字与背景对比是否充分，字号和行长是否适合演示，是否存在拥挤、异常换行或背景干扰。
+- consistencyScore：模板语言、颜色、字体、圆角、线条、背景节奏和页面角色是否跨页一致，同时避免所有页面完全同构。
+- overallScore：综合视觉完成度，不是五项简单平均；严重遮挡、正文越界或无法阅读时不得高于 59。
+评分锚点：90–100 可直接交付；80–89 基本专业但有少量明显问题；70–79 可读但设计感不足；60–69 存在多项结构问题；0–59 有严重可读性或布局错误。
+
+【问题分类和严重程度】
+- error：文字被遮挡或越界、对比度导致难以阅读、标题正文层级失效、内容覆盖 Logo/页脚、严重失衡或明显错误版式。
+- warning：页面略显单调、留白不理想、背景重复、局部节奏或对齐仍可提升，但不妨碍阅读。
+- issue 只能是 weak-hierarchy、poor-contrast、visual-imbalance、background-conflict、misalignment、excessive-empty-space、repetitive-layout。
+- suggestion 必须描述设计动作，例如“将内容区移至右侧留白并保持标题左轴”，不得提出改写正文。
+
+【slideGuidance 规则】
+1. 每个被检查页面必须恰好输出一条 slideGuidance，并使用真实 slideIndex。
+2. 所有坐标均为相对页面左上角的 0–1 归一化值；矩形必须完全位于页面内。
+3. safeRegion 是一个可容纳该页主要可编辑内容的最大连续矩形，宽度建议不小于 0.45，高度建议不小于 0.40；若背景复杂，应选择最清晰的留白侧，而不是覆盖视觉焦点。
+4. logoRegions 标记所有品牌 Logo；busyRegions 标记网址、页脚、强装饰、复杂纹理和不宜放置正文的区域。不要把整页背景泛化为 busyRegion。
+5. focalPoint 标记背景或构图中最强的视觉焦点。若没有明显焦点，使用页面几何中心。
+6. recommendedLayout 必须从 cover、title-body、split、cards、quote、section、summary 中选择，并与当前页面的信息类型匹配；不要因为存在编号就机械选择 cards。
+
+【输出协议】
+只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。所有被检查页面的索引必须来自 {indexes}。elementIds 无法从图片确认时返回空数组。
+输出结构：
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题和主要内容移动到右侧留白区，并保持共同左轴"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}]}}
+
+【本次整套视觉目标】
+{goal}"#
     );
     let mut images = Vec::with_capacity(request.slide_images.len() + 1);
     images.push(request.contact_sheet);
