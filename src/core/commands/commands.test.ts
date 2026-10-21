@@ -71,7 +71,7 @@ describe("document commands", () => {
     expect(unlocked.slides[0]!.elements[0]!.locked).toBe(false);
   });
 
-  it("adds independent text without overwriting the slide title when edited", () => {
+  it("adds independent decorative text without changing reviewed content", () => {
     const source = createDocument();
     source.slides[0]!.content.status = "approved";
     const slideId = source.slides[0]!.id;
@@ -79,9 +79,11 @@ describe("document commands", () => {
     const added = produce(source, (draft) => applyCommand(draft, { type: "add-text", slideId }));
     const addedText = added.slides[0]!.elements[1]!;
     expect(addedText.type).toBe("text");
-    expect(added.slides[0]!.content.status).toBe("changed");
+    expect(added.slides[0]!.content.status).toBe("approved");
+    expect(addedText.type === "text" && addedText.contentRef).toBe("decorative");
     const edited = produce(added, (draft) => applyCommand(draft, { type: "edit-text", slideId, elementId: addedText.id, text: "补充说明" }));
     expect(edited.slides[0]!.content.title).toBe(titleBefore);
+    expect(edited.slides[0]!.content.status).toBe("approved");
     expect(edited.slides[0]!.elements[1]).toMatchObject({ type: "text", text: "补充说明" });
   });
 

@@ -290,7 +290,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.35, 0.08), 30, contentTitleColor, true, "left"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
         if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
       }
-      // Link rendered title/body text back to semantic content. Structured\n      // layouts (cards, timeline items, metrics) stay decorative because one\n      // visual element cannot safely overwrite a multi-field content block.\n      for (const element of slide.elements) {\n        if (element.type !== "text") continue;\n        if (element.text === content.title) element.contentRef = "title";\n        else if (content.body.trim() && element.text === content.body) element.contentRef = "body";\n        else element.contentRef = "decorative";\n      }\n      const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
+      // Link rendered title/body text back to semantic content. Structured
+      // layouts (cards, timeline items, metrics) stay decorative because one
+      // visual element cannot safely overwrite a multi-field content block.
+      for (const element of slide.elements) {
+        if (element.type !== "text") continue;
+        if (element.text === content.title) element.contentRef = "title";
+        else if (content.body.trim() && element.text === content.body) element.contentRef = "body";
+        else element.contentRef = "decorative";
+      }
+      const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
       const bodyRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "body");
       for (const element of slide.elements) {
         if (element.type !== "text") continue;

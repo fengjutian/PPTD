@@ -1,7 +1,7 @@
 import { applyPatches, enablePatches, produceWithPatches, type Patch } from "immer";
 import { create } from "zustand";
 import { applyCommand, commandDomain, type ChangeDomain, type DocumentCommand } from "../core/commands";
-import { createDocument, type ElementId, type PresentationDocument, type SlideId } from "../core/document-model";
+import { createDocument, refreshContentHashes, type ElementId, type PresentationDocument, type SlideId } from "../core/document-model";
 
 enablePatches();
 
@@ -39,13 +39,14 @@ export const useEditorStore = create<EditorState>((set) => ({
   redoStack: [],
 
   execute: (command) => set((state) => {
-    const domain = commandDomain(command);
+    const domain = commandDomain(command, state.document);
     if (!domain) return state;
     const [document, forward, inverse] = produceWithPatches(state.document, (draft) => {
       applyCommand(draft, command);
       draft.revisions.document += 1;
       if (domain === "content" || domain === "both") draft.revisions.content += 1;
       if (domain === "design" || domain === "both") draft.revisions.design += 1;
+      refreshContentHashes(draft);
     });
     let activeSlideId = state.activeSlideId;
     if (command.type === "add-slide") activeSlideId = document.slides.at(-1)!.id;
@@ -77,6 +78,7 @@ export const useEditorStore = create<EditorState>((set) => ({
       draft.title = document.title;
       draft.pageSize = { ...document.pageSize };
       draft.slides = structuredClone(document.slides);
+      refreshContentHashes(draft);
       draft.revisions = {
         document: draft.revisions.document + 1,
         content: draft.revisions.content + (change === "content" || change === "both" ? 1 : 0),
@@ -113,5 +115,8 @@ export const useEditorStore = create<EditorState>((set) => ({
     const document = createDocument();
     return { document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] };
   }),
-  loadDocument: (document) => set(() => ({ document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] })),
+  loadDocument: (document) => set(() => {
+    refreshContentHashes(document);
+    return { document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] };
+  }),
 }));
