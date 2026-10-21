@@ -133,16 +133,18 @@ button { color: inherit; }
 .left-panel { border-right: 1px solid #303136; }
 .right-panel { border-left: 1px solid #303136; }
 .panel-heading, .inspector-title { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #2c2e33; font-size: 13px; font-weight: 600; }
-.panel-heading button { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px; background: #2b2d32; cursor: pointer; }
+.panel-heading button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid #3a3c42; border-radius: 7px; color: #c9ccd2; background: #282a2f; cursor: pointer; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
+.panel-heading button:hover { border-color: var(--ppt-accent); color: #fff; background: var(--ppt-accent); }
+.panel-heading button:active { transform: translateY(1px); }
 .slide-list { height: calc(100% - 48px); padding: 14px 10px; overflow-y: auto; }
 .thumbnail-row { position: relative; width: 100%; padding: 7px 5px 31px; color: #777b83; font-size: 11px; }
 .thumbnail-select { width: 100%; display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: right; }
 .thumbnail-row.active { color: var(--ppt-accent-hover); }
 .thumbnail { aspect-ratio: 16 / 9; position: relative; overflow: hidden; background: #f8f8f6; border: 2px solid transparent; border-radius: 4px; box-shadow: 0 3px 10px #0005; color: #141519; text-align: left; padding: 12px; }
 .thumbnail-row.active .thumbnail { border-color: var(--ppt-accent); }
-.thumbnail-actions { position: absolute; right: 5px; bottom: 3px; display: flex; gap: 3px; }
-.thumbnail-actions button { width: 23px; height: 23px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: #292b30; color: #aeb1b8; cursor: pointer; }
-.thumbnail-actions button:hover:not(:disabled) { color: var(--ppt-accent-hover); background: #34363c; }
+.thumbnail-actions { position: absolute; right: 5px; bottom: 2px; display: flex; gap: 4px; }
+.thumbnail-actions button { width: 25px; height: 25px; display: grid; place-items: center; padding: 0; border: 1px solid #3a3c42; border-radius: 6px; background: #292b30; color: #b8bbc2; cursor: pointer; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
+.thumbnail-actions button:hover:not(:disabled) { border-color: var(--ppt-accent); color: #fff; background: var(--ppt-accent); }
 .thumbnail-actions button:disabled { color: #55585f; cursor: default; }
 .thumbnail-actions svg { width: 13px; height: 13px; }
 .thumb-title { width: 80%; font-weight: 700; font-size: 8px; }
@@ -213,6 +215,11 @@ button { color: inherit; }
 :root[data-theme="light"] .app-shell { background: #eceef1; } :root[data-theme="light"] .topbar, :root[data-theme="light"] .statusbar { background: #f9fafb; border-color: #d6d9de; color: #5b6068; }
 :root[data-theme="light"] .nav-rail { background: #f7f8fa; border-color: #d6d9de; } :root[data-theme="light"] .nav-rail button:hover:not(:disabled) { color: #25282d; background: #e5e7eb; }
 :root[data-theme="light"] .left-panel, :root[data-theme="light"] .right-panel { background: #f4f5f7; color: #25282d; } :root[data-theme="light"] .panel-heading, :root[data-theme="light"] .inspector-title { border-color: #d9dce1; }
+:root[data-theme="light"] .panel-heading button { border-color: #cfd3d9; color: #555b64; background: #fff; box-shadow: 0 1px 2px #1c24300d; }
+:root[data-theme="light"] .panel-heading button:hover { border-color: var(--ppt-accent); color: #fff; background: var(--ppt-accent); }
+:root[data-theme="light"] .thumbnail-actions button { border-color: #d4d7dc; color: #555b64; background: #fff; box-shadow: 0 1px 3px #1c243012; }
+:root[data-theme="light"] .thumbnail-actions button:hover:not(:disabled) { border-color: var(--ppt-accent); color: #fff; background: var(--ppt-accent); }
+:root[data-theme="light"] .thumbnail-actions button:disabled { border-color: #e3e5e8; color: #b4b8bf; background: #f0f1f3; }
 :root[data-theme="light"] .workspace { background-color: #dfe2e6; background-image: radial-gradient(#b8bdc5 .65px, transparent .65px); }
 :root[data-theme="light"] .property-form input, :root[data-theme="light"] .property-form textarea { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .feature-workspace { background: #eef0f3; } :root[data-theme="light"] .feature-header { background: #f8f9fb; border-color: #d6d9de; }
