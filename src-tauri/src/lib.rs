@@ -12,6 +12,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             application_version,
             commands::minimax::generate_presentation,
+            commands::minimax::generate_slide_briefs,
             commands::minimax::generate_presentation_design,
             commands::minimax::save_minimax_api_key,
             commands::minimax::delete_minimax_api_key,

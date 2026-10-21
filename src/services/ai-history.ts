@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { aiDraftSchema, type AiDraft } from "./minimax";
+import { aiDraftSchema, type AiDraft } from "./ai-service";
 
 const storageKey = "pptd:ai-draft-history";
 const historyEntrySchema = z.object({

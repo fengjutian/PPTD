@@ -1,6 +1,6 @@
 import { Check, KeyRound, Palette, PlugZap, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { deleteMiniMaxKey, MINIMAX_MODELS, minimaxKeyConfigured, saveMiniMaxKey, testMiniMaxConnection } from "../../services/minimax";
+import { deleteMiniMaxKey, MINIMAX_MODELS, minimaxKeyConfigured, saveMiniMaxKey, testMiniMaxConnection } from "../../services/ai-service";
 import { loadSettings, saveSettings, type AppSettings } from "../../services/settings";
 
 export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) => void }) {

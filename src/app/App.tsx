@@ -4,7 +4,7 @@ import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { generateDesignWithMiniMax, generateWithMiniMax, type AiDraft } from "../services/minimax";
+import { generatePresentationDesign, generatePresentationDraft, generateSlideBriefs, type AiDraft } from "../services/ai-service";
 import { applyTheme, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -216,7 +216,7 @@ export function App() {
     setAiBusy(true); setAiDraft(undefined);
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
     try {
-      const draft = await generateWithMiniMax(aiTopic, aiSlideCount);
+      const draft = await generatePresentationDraft(aiTopic, aiSlideCount);
       const id = crypto.randomUUID();
       setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0);
       setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
@@ -264,7 +264,10 @@ export function App() {
       });
     }, 900);
     try {
-      const design = await generateDesignWithMiniMax(aiDraft, templateAnalysis);
+      setDesignProgress({ percent: 18, label: "正在规划逐页设计意图" });
+      const briefs = await generateSlideBriefs(aiDraft);
+      setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
+      const design = await generatePresentationDesign(aiDraft, briefs, templateAnalysis);
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
       const hasTemplateSize = templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu;

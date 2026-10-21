@@ -6,6 +6,15 @@ export const aiDraftSchema = z.object({
   slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000) })).min(1).max(20),
 });
 export type AiDraft = z.infer<typeof aiDraftSchema>;
+export const slideBriefSchema = z.object({
+  slideIndex: z.number().int().min(0).max(19),
+  purpose: z.string().min(1).max(300),
+  conclusion: z.string().min(1).max(300),
+  visualIntent: z.enum(["hero", "quote", "timeline", "comparison", "process", "data-chart", "image-story", "summary", "structured-text"]),
+  density: z.enum(["low", "medium", "high"]),
+});
+export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).min(1).max(20) });
+export type SlideBrief = z.infer<typeof slideBriefSchema>;
 export const aiPresentationDesignSchema = z.object({
   slides: z.array(z.object({
     layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
@@ -19,7 +28,7 @@ export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
 export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
 export const MINIMAX_MODELS = ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"] as const;
 
-export async function generateWithMiniMax(topic: string, slideCount: number): Promise<AiDraft> {
+export async function generatePresentationDraft(topic: string, slideCount: number): Promise<AiDraft> {
   const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
   const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model } });
   const draft = aiDraftSchema.parse(raw);
@@ -27,18 +36,40 @@ export async function generateWithMiniMax(topic: string, slideCount: number): Pr
   return draft;
 }
 
-export async function generateDesignWithMiniMax(draft: AiDraft, template: DesignTemplateContext): Promise<AiPresentationDesign> {
+export async function generateSlideBriefs(draft: AiDraft): Promise<SlideBrief[]> {
   const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
-  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, template, model } });
+  const raw = await invoke<unknown>("generate_slide_briefs", { request: { draft, model } });
+  const result = slideBriefsSchema.parse(raw);
+  if (result.briefs.length !== draft.slides.length || result.briefs.some((brief, index) => brief.slideIndex !== index)) throw new Error("AI_BRIEF_SLIDE_MISMATCH");
+  return result.briefs;
+}
+
+export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext): Promise<AiPresentationDesign> {
+  const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
+  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, model } });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   return {
     slides: design.slides.map((slide, index, slides) => {
       const content = draft.slides[index]!;
+      const brief = briefs[index]!;
       const pointCount = content.body.split(/\n+|(?=\d+[.、]\s*)/).filter((value) => value.trim()).length;
       let layout = slide.layout;
+      const intentLayout = {
+        hero: "cover",
+        quote: "quote",
+        timeline: "cards",
+        comparison: "split",
+        process: "cards",
+        "data-chart": "title-body",
+        "image-story": "split",
+        summary: "summary",
+        "structured-text": "title-body",
+      } as const;
+      layout = intentLayout[brief.visualIntent];
       if (index === 0) layout = "cover";
       else if (layout === "cover") layout = "section";
+      if (brief.density === "high" && layout === "quote") layout = "title-body";
       if (layout === "cards" && (pointCount < 3 || content.body.length > 360)) layout = content.body.length > 180 ? "title-body" : "split";
       if (layout === "split" && pointCount < 2) layout = "title-body";
       if (index > 1 && layout === slides[index - 1]?.layout && ["cards", "split", "title-body"].includes(layout)) layout = layout === "title-body" ? "split" : "title-body";
