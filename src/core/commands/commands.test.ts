@@ -345,6 +345,17 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements.every((element) => element.type === "text" || element.type === "shape")).toBe(true);
   });
 
+  it("does not silently drop points when a cards layout receives more than six", () => {
+    const source = createDocument();
+    const body = Array.from({ length: 7 }, (_, index) => `${index + 1}. 第${index + 1}个要点`).join("\n");
+    const content = { title: "七个要点", body, speakerNotes: "" };
+    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "七个要点", slides: [content], designs: [design] }));
+    const copy = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text").map((element) => element.text).join("\n");
+    for (let index = 1; index <= 7; index += 1) expect(copy).toContain(`第${index}个要点`);
+    expect(result.slides[0]!.content.body).toBe(body);
+  });
+
   it("keeps an explicitly requested split layout instead of forcing numbered text into cards", () => {
     const source = createDocument();
     const longItem = "这是一个用于验证中文文本框宽度估算和自动字号适配的较长段落，不能越过双栏边界覆盖另一列内容";

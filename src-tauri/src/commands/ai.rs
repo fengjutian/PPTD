@@ -188,7 +188,7 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
 1. slides 必须恰好 {count} 项。
 2. 每页只承担一个主要沟通任务，title 必须是可验证的结论或判断，不能使用“背景”“概述”“介绍”“总结”等栏目名。
 3. body 必须回答标题，使用陈述句和事实，禁止用疑问句充当正文；不得虚构数字、来源、引语或案例。
-4. 每页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须拆页或改为结构化内容块。
+4. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须拆页或改为结构化内容块。封面只保留一句副标题。
 5. body 必须与 blocks 表达相同事实，方便用户直接编辑；不得虚构数字、来源、引语或案例。
 6. narrativeStrategy 只能为 management-report、proposal、retrospective、training、product-launch、fundraising、general。
 7. visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text。

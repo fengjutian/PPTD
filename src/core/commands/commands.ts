@@ -378,7 +378,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!keepsArtwork) slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.25, 0.04), templateTitleSize ?? 28, titleInk, true, "left", undefined, titleLuminance));
         if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeContent, [0.15, 0.31, 0.68, 0.46], 0.25, 0.12), templateBodySize ?? 20, bodyInk, false, "left", undefined, contentTextLuminance));
-      } else if (design.layout === "cards" && items.length > 1) {
+      } else if (design.layout === "cards" && items.length > 1 && items.length <= 6) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
         const visible = items.slice(0, 6);
@@ -405,7 +405,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.025, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
           slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: x + 0.075, y: y + cardHeight * 0.16, width: cardWidth - 0.105, height: cardHeight * 0.68 }, 16), 16, "#293241", true, "left", undefined, cardLuminance));
         });
-      } else if (design.layout === "split" && items.length > 1) {
+      } else if ((design.layout === "split" || (design.layout === "cards" && items.length > 6)) && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
         const middle = Math.ceil(items.length / 2);

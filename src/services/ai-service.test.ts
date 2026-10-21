@@ -61,6 +61,8 @@ describe("content-aware layout selection", () => {
 
   it("splits numbered copy into the units the page carries", () => {
     expect(splitBodyItems(shortList)).toHaveLength(5);
+    expect(splitBodyItems("一、背景\n二、问题\n三、影响")).toHaveLength(3);
+    expect(splitBodyItems("• 背景 • 问题 • 影响")).toHaveLength(3);
     expect(splitBodyItems("一个段落")).toEqual(["一个段落"]);
   });
 
