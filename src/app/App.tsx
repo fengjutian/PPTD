@@ -263,7 +263,7 @@ export function App() {
   }, [loadDocument]);
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty || !isDesktopRuntime()) return;
     const timer = window.setTimeout(() => {
       void saveRecovery(document).catch((error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
     }, 1500);

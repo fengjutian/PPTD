@@ -13,6 +13,8 @@ const MAX_PROVIDER_ID_CHARS: usize = 64;
 const MAX_MODEL_CHARS: usize = 128;
 const MAX_TOPIC_CHARS: usize = 4000;
 const MAX_DRAFT_BYTES: usize = 4 * 1024 * 1024;
+/// 旧库里没有 ui_font 键时使用的界面字体。
+const DEFAULT_UI_FONT: &str = "sans";
 
 /// Persisted application preferences. The AI key never enters this table; it
 /// lives in the operating system credential store.
@@ -20,8 +22,14 @@ const MAX_DRAFT_BYTES: usize = 4 * 1024 * 1024;
 #[serde(rename_all = "camelCase")]
 pub struct StoredAppSettings {
     pub theme: String,
+    #[serde(default = "default_ui_font")]
+    pub ui_font: String,
     pub ai_provider_id: String,
     pub ai_model: String,
+}
+
+fn default_ui_font() -> String {
+    DEFAULT_UI_FONT.to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -50,6 +58,7 @@ impl Database {
         Self::from_connection(connection)
     }
 
+    #[cfg(test)]
     fn open_in_memory() -> Result<Self, String> {
         let connection = Connection::open_in_memory()
             .map_err(|error| format!("DATABASE_OPEN_FAILED: {error}"))?;
@@ -77,9 +86,13 @@ impl Database {
         let theme = read_setting(&connection, "theme")?;
         let provider = read_setting(&connection, "ai_provider_id")?;
         let model = read_setting(&connection, "ai_model")?;
+        // 字体键是后加的，老库里没有时回落到默认字体，不让整份设置读不出来。
+        let ui_font =
+            read_setting(&connection, "ui_font")?.unwrap_or_else(|| DEFAULT_UI_FONT.to_string());
         match (theme, provider, model) {
             (Some(theme), Some(ai_provider_id), Some(ai_model)) => Ok(Some(StoredAppSettings {
                 theme,
+                ui_font,
                 ai_provider_id,
                 ai_model,
             })),
@@ -96,6 +109,7 @@ impl Database {
         let now = unix_timestamp_ms();
         for (key, value) in [
             ("theme", settings.theme.as_str()),
+            ("ui_font", settings.ui_font.as_str()),
             ("ai_provider_id", settings.ai_provider_id.as_str()),
             ("ai_model", settings.ai_model.as_str()),
         ] {
@@ -251,18 +265,19 @@ fn read_setting(connection: &Connection, key: &str) -> Result<Option<String>, St
 fn validate_settings(settings: &StoredAppSettings) -> Result<(), String> {
     if !matches!(
         settings.theme.as_str(),
-        "dark" | "light" | "system" | "amber" | "green"
+        "dark" | "light" | "system" | "amber" | "green" | "blue"
     ) {
         return Err("SETTINGS_THEME_INVALID".into());
+    }
+    if !matches!(settings.ui_font.as_str(), "sans" | "song" | "hei" | "mono") {
+        return Err("SETTINGS_UI_FONT_INVALID".into());
     }
     if settings.ai_provider_id.trim().is_empty()
         || settings.ai_provider_id.chars().count() > MAX_PROVIDER_ID_CHARS
     {
         return Err("SETTINGS_PROVIDER_INVALID".into());
     }
-    if settings.ai_model.trim().is_empty()
-        || settings.ai_model.chars().count() > MAX_MODEL_CHARS
-    {
+    if settings.ai_model.trim().is_empty() || settings.ai_model.chars().count() > MAX_MODEL_CHARS {
         return Err("SETTINGS_MODEL_INVALID".into());
     }
     Ok(())
@@ -309,6 +324,7 @@ mod tests {
     fn settings() -> StoredAppSettings {
         StoredAppSettings {
             theme: "light".into(),
+            ui_font: "song".into(),
             ai_provider_id: "minimax".into(),
             ai_model: "MiniMax-M3".into(),
         }
@@ -330,10 +346,7 @@ mod tests {
         assert_eq!(database.load_settings().expect("load"), None);
 
         database.save_settings(&settings()).expect("save");
-        assert_eq!(
-            database.load_settings().expect("load"),
-            Some(settings())
-        );
+        assert_eq!(database.load_settings().expect("load"), Some(settings()));
     }
 
     #[test]
@@ -347,6 +360,33 @@ mod tests {
             database.save_settings(&invalid).unwrap_err(),
             "SETTINGS_THEME_INVALID"
         );
+    }
+
+    #[test]
+    fn rejects_invalid_ui_font() {
+        let database = Database::open_in_memory().expect("database");
+        let invalid = StoredAppSettings {
+            ui_font: "comic".into(),
+            ..settings()
+        };
+        assert_eq!(
+            database.save_settings(&invalid).unwrap_err(),
+            "SETTINGS_UI_FONT_INVALID"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_default_font_when_key_is_missing() {
+        let database = Database::open_in_memory().expect("database");
+        database.save_settings(&settings()).expect("save");
+        database
+            .connection
+            .lock()
+            .expect("lock")
+            .execute("DELETE FROM app_settings WHERE key = 'ui_font'", [])
+            .expect("delete");
+        let loaded = database.load_settings().expect("load").expect("settings");
+        assert_eq!(loaded.ui_font, DEFAULT_UI_FONT);
     }
 
     #[test]

@@ -404,13 +404,14 @@ button { color: inherit; }
 .icon-button:disabled { opacity: .4; cursor: default; }
 .property-form .field { display: grid; gap: 6px; margin-bottom: 12px; }
 .property-form .field-label { color: #8f939b; font-size: 11px; }
-.property-form .field-control { position: relative; display: flex; align-items: center; gap: 5px; }
+.property-form .field-control { position: relative; display: flex; align-items: center; gap: 3px; }
 .property-form .field-control input { flex: 1; min-width: 0; padding-right: 8px; }
+.property-form .field-control input[type="number"] { padding: 8px 6px; }
 .property-form .field-unit { color: #6f737c; font-size: 10px; white-space: nowrap; }
 .property-form input[type="number"]::-webkit-outer-spin-button,
 .property-form input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .property-form input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
-.property-form .field-stepper { flex: 0 0 18px; display: grid; place-items: center; width: 18px; height: 26px; padding: 0; border: 1px solid #34363d; border-radius: 5px; background: #222429; color: #8f939b; cursor: pointer; }
+.property-form .field-stepper { flex: 0 0 16px; display: grid; place-items: center; width: 16px; height: 26px; padding: 0; border: 1px solid #34363d; border-radius: 4px; background: #222429; color: #8f939b; cursor: pointer; }
 .property-form .field-stepper svg { width: 12px; height: 12px; }
 .property-form .field-stepper:hover:not(:disabled) { border-color: var(--ppt-accent); color: #fff; }
 .property-form .field-stepper:disabled { opacity: .4; cursor: default; }

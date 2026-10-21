@@ -1,4 +1,4 @@
-import type { ContentBlock, ElementId, Emu, PresentationDocument, RectEmu, ShapeElementStyle, SlideId, SupportedImageMimeType, TextElementStyle } from "../document-model";
+import type { ContentBlock, DocumentTheme, ElementId, Emu, PresentationDocument, RectEmu, ShapeElementStyle, SlideId, SlideLayoutSpec, SupportedImageMimeType, TextElementStyle } from "../document-model";
 import { createSlide, inches } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";
@@ -38,6 +38,35 @@ export type AiContentBlock =
   | { type: "process"; items: Array<{ label: string; text: string }> };
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
 
+/**
+ * The theme of the source template. It is design state: it describes the
+ * typography and the palette of the deck, never the reviewed copy.
+ */
+export interface AiTemplateTheme {
+  name?: string;
+  majorFont?: string;
+  minorFont?: string;
+  colors?: Array<{ name: string; value: string }>;
+}
+
+const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function readTemplateTheme(theme: AiTemplateTheme | undefined): DocumentTheme | undefined {
+  if (!theme) return undefined;
+  const majorFont = theme.majorFont?.trim();
+  const minorFont = theme.minorFont?.trim();
+  const colors = (theme.colors ?? [])
+    .filter((color) => typeof color.name === "string" && color.name.trim() && HEX_COLOR_PATTERN.test(color.value))
+    .map((color) => ({ name: color.name.trim(), value: color.value.toUpperCase() }));
+  if (!majorFont && !minorFont && colors.length === 0) return undefined;
+  return {
+    name: theme.name?.trim() || "模板主题",
+    majorFont: majorFont || minorFont || "Calibri",
+    minorFont: minorFont || majorFont || "Calibri",
+    colors,
+  };
+}
+
 function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] | undefined {
   if (!blocks) return undefined;
   return blocks.map((block): ContentBlock => {
@@ -54,7 +83,7 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; backgroundRhythm?: BackgroundRhythm }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; templateTheme?: AiTemplateTheme; backgroundRhythm?: BackgroundRhythm }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -74,8 +103,6 @@ export type DocumentCommand =
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
-
-const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 /** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */
 function assertTextStyle(style: Partial<TextElementStyle>): void {
@@ -144,6 +171,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "apply-ai-designed-draft") {
     if (!command.title.trim() || command.slides.length < 1 || command.slides.length > 20 || command.designs.length !== command.slides.length) throw new Error("AI_DESIGN_INVALID");
     if (command.pageSize) document.pageSize = command.pageSize;
+    const templateTheme = readTemplateTheme(command.templateTheme);
+    if (templateTheme) document.theme = templateTheme;
+    else delete document.theme;
+    // The design replaces every page, so the layouts of the previous template
+    // must not survive as empty references.
+    const layouts: SlideLayoutSpec[] = [];
+    document.layouts = layouts;
+    const layoutSpecs = new Map<number, SlideLayoutSpec>();
     const pageWidth = document.pageSize.width;
     const pageHeight = document.pageSize.height;
     const pageWidthIn = pageWidth / 914400;
@@ -239,6 +274,20 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // existed is what pushed the text onto a hard coded grid and left the
       // template design unused.
       const recipe = chosenLayouts[index];
+      // A page that was designed against a template layout keeps a reference to
+      // it. The exporter turns that reference into a real slide master, so the
+      // exported deck still carries the structure of the template instead of a
+      // flat list of shapes.
+      if (recipe && (recipe.backgroundColor || recipe.backgroundImageDataUrl)) {
+        let spec = layoutSpecs.get(recipe.index);
+        if (!spec) {
+          const backgroundColor = recipe.backgroundColor && HEX_COLOR_PATTERN.test(recipe.backgroundColor) ? recipe.backgroundColor.toUpperCase() : undefined;
+          spec = { id: crypto.randomUUID(), name: recipe.name?.trim() || `模板版式 ${recipe.index + 1}`, ...(backgroundColor ? { backgroundColor } : {}) };
+          layoutSpecs.set(recipe.index, spec);
+          layouts.push(spec);
+        }
+        slide.layoutId = spec.id;
+      }
       const recipeTitleRegion = recipe ? templateTitleRegion(recipe) : undefined;
       const recipeContentRegion = recipe ? templateContentRegion(recipe) : undefined;
       const recipeColumnRegions = recipe ? templateColumnRegions(recipe) : undefined;
@@ -293,7 +342,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const safeLeft = visualSafe?.x ?? 0.07; const safeRight = visualSafe ? visualSafe.x + visualSafe.width : 0.93; const safeTop = visualSafe?.y ?? 0.20; const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : 0.87;
       const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(0.17, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
       slide.elements = [];
-      if (keepsArtwork) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe!.backgroundImageDataUrl!, mimeType: "image/png" }, altText: `模板版式背景：${recipe!.name ?? recipe!.index}` });
+      if (keepsArtwork) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", placement: "layout-background", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe!.backgroundImageDataUrl!, mimeType: "image/png" }, altText: `模板版式背景：${recipe!.name ?? recipe!.index}` });
       const decorations = keepsArtwork ? [] : [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])];
       decorations.forEach((decoration) => {
         if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));

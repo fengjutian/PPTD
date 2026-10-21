@@ -35,7 +35,7 @@
 ### 兼容
 
 - 旧凭据槽位 `minimax-api-key` 仍会被读取一次，保存新凭据后自动清理旧槽位，历史用户无需重新配置 Key。
-- 旧的 localStorage 键 `pptd:minimax-model` 仍会被读取一次作为模型选择的回退。
+- 旧的 localStorage 键 `pptd:minimax-model` 曾在引入时读取一次作为模型回退；本地设置迁移到 SQLite 后该回退已移除。
 
 ## 后果
 
