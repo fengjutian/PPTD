@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, Lock, LockOpen, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
+import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { choosePptxPath, chooseProjectToOpen, isDesktopRuntime, saveProject, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
@@ -140,6 +141,38 @@ export function App() {
     };
     reader.readAsDataURL(file);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : undefined;
+      const shortcut = resolveEditorShortcut({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        targetTagName: target?.tagName,
+        targetIsContentEditable: target?.isContentEditable,
+      });
+      if (!shortcut) return;
+      if (shortcut === "undo") {
+        if (!undoStack.length) return;
+        event.preventDefault();
+        undo();
+        return;
+      }
+      if (shortcut === "redo") {
+        if (!redoStack.length) return;
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (!selected || selected.locked) return;
+      event.preventDefault();
+      execute({ type: shortcut, slideId: activeSlide.id, elementId: selected.id });
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeSlide.id, execute, redo, redoStack.length, selected, undo, undoStack.length]);
 
   return (
     <div className="app-shell">

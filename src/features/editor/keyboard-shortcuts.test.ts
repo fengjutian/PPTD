@@ -1,0 +1,32 @@
+import { describe, expect, it } from "vitest";
+import { resolveEditorShortcut, type ShortcutInput } from "./keyboard-shortcuts";
+
+const shortcut = (overrides: Partial<ShortcutInput>): EditorShortcutResult => resolveEditorShortcut({
+  key: "",
+  ctrlKey: false,
+  metaKey: false,
+  shiftKey: false,
+  ...overrides,
+});
+
+type EditorShortcutResult = ReturnType<typeof resolveEditorShortcut>;
+
+describe("editor keyboard shortcuts", () => {
+  it("maps Windows and macOS history shortcuts", () => {
+    expect(shortcut({ key: "z", ctrlKey: true })).toBe("undo");
+    expect(shortcut({ key: "Z", metaKey: true, shiftKey: true })).toBe("redo");
+    expect(shortcut({ key: "y", ctrlKey: true })).toBe("redo");
+  });
+
+  it("maps selected element actions", () => {
+    expect(shortcut({ key: "d", ctrlKey: true })).toBe("duplicate-element");
+    expect(shortcut({ key: "Delete" })).toBe("delete-element");
+    expect(shortcut({ key: "Backspace" })).toBe("delete-element");
+  });
+
+  it("does not intercept editable controls", () => {
+    expect(shortcut({ key: "z", ctrlKey: true, targetTagName: "textarea" })).toBeNull();
+    expect(shortcut({ key: "Delete", targetTagName: "input" })).toBeNull();
+    expect(shortcut({ key: "d", ctrlKey: true, targetIsContentEditable: true })).toBeNull();
+  });
+});

@@ -2,12 +2,11 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde_json::Value;
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
 
-const MAX_PROJECT_JSON_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_PROJECT_ASSET_BYTES: usize = 4 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BYTES: usize = 100 * 1024 * 1024;
@@ -38,6 +37,25 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .map_err(|error| format!("TEMP_FILE_CREATE_FAILED: {error}"))?;
     temporary
         .write_all(bytes)
+        .map_err(|error| format!("FILE_WRITE_FAILED: {error}"))?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|error| format!("FILE_SYNC_FAILED: {error}"))?;
+    temporary
+        .persist(path)
+        .map_err(|error| format!("FILE_REPLACE_FAILED: {}", error.error))?;
+    Ok(())
+}
+
+fn atomic_write_json(path: &Path, document: &Value) -> Result<(), String> {
+    let parent = path.parent().ok_or("INVALID_PARENT_PATH")?;
+    let mut temporary = NamedTempFile::new_in(parent)
+        .map_err(|error| format!("TEMP_FILE_CREATE_FAILED: {error}"))?;
+    serde_json::to_writer_pretty(&mut temporary, document)
+        .map_err(|error| format!("PROJECT_SERIALIZE_FAILED: {error}"))?;
+    temporary
+        .flush()
         .map_err(|error| format!("FILE_WRITE_FAILED: {error}"))?;
     temporary
         .as_file()
@@ -196,30 +214,15 @@ fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
 pub fn save_project(path: String, mut document: Value) -> Result<(), String> {
     let path = validate_path(&path, "pptd")?;
     externalize_images(&path, &mut document)?;
-    let bytes = serde_json::to_vec_pretty(&document)
-        .map_err(|error| format!("PROJECT_SERIALIZE_FAILED: {error}"))?;
-    if bytes.len() as u64 > MAX_PROJECT_JSON_BYTES {
-        return Err("PROJECT_JSON_TOO_LARGE".into());
-    }
-    atomic_write(&path, &bytes)
+    atomic_write_json(&path, &document)
 }
 
 #[tauri::command]
 pub fn open_project(path: String) -> Result<Value, String> {
     let path = validate_path(&path, "pptd")?;
-    let metadata = path
-        .metadata()
-        .map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?;
-    if metadata.len() > MAX_PROJECT_JSON_BYTES {
-        return Err("PROJECT_JSON_TOO_LARGE".into());
-    }
     let file = File::open(&path).map_err(|error| format!("PROJECT_OPEN_FAILED: {error}"))?;
-    let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.take(MAX_PROJECT_JSON_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("PROJECT_READ_FAILED: {error}"))?;
     let mut document: Value =
-        serde_json::from_slice(&bytes).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
+        serde_json::from_reader(file).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
     hydrate_images(&path, &mut document)?;
     Ok(document)
 }
@@ -251,6 +254,15 @@ mod tests {
             open_project(path.to_string_lossy().into_owned()).unwrap(),
             value
         );
+    }
+
+    #[test]
+    fn project_json_is_not_rejected_at_the_previous_size_boundary() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("large.pptd");
+        let value = json!({ "schemaVersion": 2, "payload": "x".repeat(17 * 1024 * 1024) });
+        save_project(path.to_string_lossy().into_owned(), value).unwrap();
+        assert!(path.metadata().unwrap().len() > 16 * 1024 * 1024);
     }
 
     #[test]
