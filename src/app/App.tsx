@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
+import { EMU_PER_INCH, emu, type ElementId, type SlideElement, type SlideId } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
@@ -13,6 +13,7 @@ import { inspectRenderedTextContrast, renderPresentationForVisualReview } from "
 import { defaultPresentationVisualGoal, runVisualAlignmentLoop } from "../services/visual-alignment";
 import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { validatePresentationVisualQuality } from "../services/presentation-quality-gate";
+import type { ExportReport } from "../features/pptx-export/export-pptx";
 
 const CANVAS_WIDTH = 960;
 type AppView = "editor" | "ai" | "theme" | "settings";
@@ -86,10 +87,14 @@ function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<ty
 }
 
 export function App() {
-  const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
+  const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, replaceDocument, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
   const [projectPath, setProjectPath] = useState<string>();
   const [savedRevision, setSavedRevision] = useState(0);
   const [message, setMessage] = useState<PageMessage>();
+  const [textDraft, setTextDraft] = useState<{ slideId: SlideId; elementId: ElementId; value: string }>();
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportReport, setExportReport] = useState<ExportReport>();
+  const exportController = useRef<AbortController>();
   const setTaskStatus = (text?: string) => setMessage(text ? { id: Date.now(), text, kind: /失败|错误|无效|必须|不可用/.test(text) ? "error" : /完成|成功|已保存|已添加|已打开|已新建|已恢复|已确认/.test(text) ? "success" : "info" } : undefined);
   const [activeView, setActiveView] = useState<AppView>("editor");
   const [aiTopic, setAiTopic] = useState("");
@@ -193,10 +198,18 @@ export function App() {
   };
 
   const handleExport = async () => {
+    if (exportBusy) {
+      exportController.current?.abort();
+      return;
+    }
+    const controller = new AbortController();
+    exportController.current = controller;
+    setExportBusy(true);
+    setExportReport(undefined);
     setTaskStatus("正在生成 PPTX…");
     try {
       const { buildPptx } = await import("../features/pptx-export/export-pptx");
-      const { bytes, report } = await buildPptx(document);
+      const { bytes, report } = await buildPptx(document, { signal: controller.signal });
       const path = await choosePptxPath(document.title);
       if (path) await writePptx(path, bytes);
       else if (!isDesktopRuntime()) {
@@ -206,8 +219,15 @@ export function App() {
         anchor.click();
         URL.revokeObjectURL(url);
       } else { setTaskStatus(undefined); return; }
-      setTaskStatus(`导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象`);
-    } catch (error) { setTaskStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`); }
+      setExportReport(report);
+      setTaskStatus(`导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象${report.warnings.length ? `，${report.warnings.length} 条提示` : ""}`);
+    } catch (error) {
+      if (error instanceof Error && error.message === "EXPORT_CANCELLED") setTaskStatus("导出已取消");
+      else setTaskStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setExportBusy(false);
+      exportController.current = undefined;
+    }
   };
 
   const handleImageFile = (file: File | undefined) => {
@@ -372,8 +392,7 @@ export function App() {
         const pages = [...new Set(allSlideIndexes.map((index) => index + 1))].join("、");
         throw new Error(`AI_VISUAL_QUALITY_GATE_FAILED: 第 ${pages} 页仍有 ${quality.issues.length + renderedContrastIssues.length} 个排版问题`);
       }
-      finalDocument.revisions = { document: document.revisions.document + 1, content: document.revisions.content + 1, design: document.revisions.design + 1 };
-      loadDocument(finalDocument);
+      replaceDocument(finalDocument, "both");
       setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
       setTemplatePickerOpen(false);
       setActiveView("editor");
@@ -473,7 +492,7 @@ export function App() {
           <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolButton>
           <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { handleImageFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </div>
-        <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button>
+        <button className="export-button" onClick={handleExport}><Download size={17} /> {exportBusy ? "取消导出" : "导出 PPTX"}</button>
       </header>}
 
       <nav className="nav-rail" aria-label="主功能">
@@ -510,7 +529,7 @@ export function App() {
         <div className="inspector-title"><Layers3 size={18} /><span>属性</span></div>
         {selected ? <div className="property-form">
           <label>对象类型<input value={selected.type === "text" ? "文本" : selected.type === "image" ? "图片" : selected.shape === "ellipse" ? "椭圆" : "矩形"} disabled /></label>
-          {selected.type === "text" && <label>文本内容<textarea value={selected.text} disabled={selected.locked} onChange={(event) => execute({ type: "edit-text", slideId: activeSlide.id, elementId: selected.id, text: event.target.value })} /></label>}
+          {selected.type === "text" && <label>文本内容<textarea value={textDraft?.elementId === selected.id ? textDraft.value : selected.text} disabled={selected.locked} onChange={(event) => setTextDraft({ slideId: activeSlide.id, elementId: selected.id, value: event.target.value })} onBlur={() => { if (!textDraft) return; const draftSlide = document.slides.find((slide) => slide.id === textDraft.slideId); const draftElement = draftSlide?.elements.find((element) => element.id === textDraft.elementId); if (draftElement?.type === "text" && draftElement.text !== textDraft.value) execute({ type: "edit-text", slideId: textDraft.slideId, elementId: textDraft.elementId, text: textDraft.value }); setTextDraft(undefined); }} onKeyDown={(event) => { if (event.key === "Escape") { setTextDraft(undefined); event.currentTarget.blur(); } if ((event.ctrlKey || event.metaKey) && event.key === "Enter") event.currentTarget.blur(); }} /></label>}
           <div className="property-grid"><label>X（英寸）<input key={`${selected.id}-x-${selected.frame.x}`} defaultValue={(selected.frame.x / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("x", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>Y（英寸）<input key={`${selected.id}-y-${selected.frame.y}`} defaultValue={(selected.frame.y / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("y", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <div className="property-grid"><label>宽度（英寸）<input key={`${selected.id}-w-${selected.frame.width}`} defaultValue={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("width", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>高度（英寸）<input key={`${selected.id}-h-${selected.frame.height}`} defaultValue={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("height", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <label>旋转（度）<input key={`${selected.id}-r-${selected.rotationMilliDegree}`} defaultValue={(selected.rotationMilliDegree / 1000).toFixed(1)} disabled={selected.locked} onBlur={(event) => commitTransform("rotation", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>
@@ -563,6 +582,8 @@ export function App() {
       {templateUploadOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTemplateUploadOpen(false); }}><section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-template-title"><div className="upload-dialog-heading"><div><FileUp /><div><h2 id="upload-template-title">上传 PPT 模板</h2><p>模板将保存到 PPTD 模板库。</p></div></div><button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}><X /></button></div><button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}><FileUp /><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx，最大 512 MB</small></button><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(false)}>取消</button></div></section></div>}
 
       {templatePickerOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!designBusy && event.target === event.currentTarget) setTemplatePickerOpen(false); }}><section className="upload-dialog template-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="template-picker-title" aria-busy={designBusy}><div className="upload-dialog-heading"><div><Palette /><div><h2 id="template-picker-title">选择 PPT 模板</h2><p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p></div></div><button type="button" aria-label="关闭模板选择窗口" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}><X /></button></div><div className="template-picker-toolbar"><strong>已保存模板</strong><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplateUploadOpen(true)}><FileUp />上传模板</button></div><div className="template-picker-body"><div className="template-library"><div>{templateLibrary.map((template) => <button type="button" disabled={designBusy} className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}</div><div className="template-preview-panel"><div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>{designBusy ? <div className="design-progress" role="status" aria-live="polite"><Sparkles /><strong>{designProgress.label}</strong><span>{designProgress.percent}%</span><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={designProgress.percent} role="progressbar"><i style={{ width: `${designProgress.percent}%` }} /></div><small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small></div> : templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-picker-summary"><span>{templateAnalysis.slideCount} 页面</span><span>{templateAnalysis.layoutCount} 版式</span><span>{templateAnalysis.themeCount} 主题</span></div>}</div></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}>取消</button><button type="button" className="primary-action" disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy} onClick={() => void generateFromDraft()}>{designBusy ? `${designProgress.percent}%` : "生成 PPT"}{!designBusy && <ArrowRight />}</button></div></section></div>}
+
+      {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象 · ZIP {exportReport.package.entryCount} 个条目</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
 
       {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
 

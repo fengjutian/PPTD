@@ -108,7 +108,7 @@ export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBr
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   return constrainDesignToTemplate({
-    slides: design.slides.map((slide, index, slides) => {
+    slides: design.slides.map((slide, index) => {
       const content = draft.slides[index]!;
       const brief = briefs[index]!;
       const pointCount = content.body.split(/\n+|(?=\d+[.、]\s*)/).filter((value) => value.trim()).length;

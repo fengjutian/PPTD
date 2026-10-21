@@ -1,5 +1,6 @@
 import type { AiSlideDesign, AiNormalizedRect } from "../core/commands/commands";
 import type { PresentationDocument, RectEmu, TextElement } from "../core/document-model";
+import { textLikelyOverflows } from "../core/rendering/text-fit";
 
 export type PresentationQualityIssueKind = "out-of-bounds" | "text-overlap" | "obstacle-overlap" | "low-contrast" | "text-overflow";
 export interface PresentationQualityIssue { slideIndex: number; elementIds: string[]; issue: PresentationQualityIssueKind; message: string }
@@ -24,12 +25,6 @@ const contrastRatio = (foreground: string, background: string): number | undefin
   if (first === undefined || second === undefined) return undefined;
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 };
-const likelyOverflows = (element: TextElement): boolean => {
-  const widthPt = element.frame.width / 12_700; const heightPt = element.frame.height / 12_700;
-  const unitsPerLine = Math.max(1, widthPt / (element.style.fontSizePt * 0.92));
-  const lines = element.text.split("\n").reduce((total, paragraph) => total + Math.max(1, Math.ceil([...paragraph].reduce((sum, character) => sum + (/^[\u0000-\u00ff]$/.test(character) ? 0.55 : 1), 0) / unitsPerLine)), 0);
-  return lines * element.style.fontSizePt * 1.2 > heightPt * 1.08;
-};
 
 /** Deterministic final gate; no AI score can override these observable failures. */
 export function validatePresentationVisualQuality(document: PresentationDocument, designs: AiSlideDesign[]): PresentationQualityReport {
@@ -42,7 +37,7 @@ export function validatePresentationVisualQuality(document: PresentationDocument
       const region = normalized(element.frame, document.pageSize.width, document.pageSize.height);
       if (region.x < 0 || region.y < 0 || region.width <= 0 || region.height <= 0 || region.x + region.width > 1.0001 || region.y + region.height > 1.0001) issues.push({ slideIndex, elementIds: [element.id], issue: "out-of-bounds", message: "文本框超出页面边界" });
       if (obstacles.some((obstacle) => intersects(region, obstacle))) issues.push({ slideIndex, elementIds: [element.id], issue: "obstacle-overlap", message: "文本覆盖 Logo、页脚或复杂背景区域" });
-      if (likelyOverflows(element)) issues.push({ slideIndex, elementIds: [element.id], issue: "text-overflow", message: "文本容量超过文本框可用空间" });
+      if (textLikelyOverflows(element)) issues.push({ slideIndex, elementIds: [element.id], issue: "text-overflow", message: "文本容量超过文本框可用空间" });
       const background = design?.backgroundTreatment === "content-panel" ? "#F7F8FA" : slide.background;
       const ratio = contrastRatio(element.style.color, background);
       if (ratio !== undefined && ratio < (element.style.fontSizePt >= 24 || element.style.bold ? 3 : 4.5)) issues.push({ slideIndex, elementIds: [element.id], issue: "low-contrast", message: "文字与承载背景的对比度不足" });

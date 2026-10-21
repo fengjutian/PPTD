@@ -70,4 +70,20 @@ describe("editor history", () => {
     useEditorStore.getState().undo();
     expect(useEditorStore.getState().document.slides[0]!.elements[0]!.frame).toEqual(element.frame);
   });
+
+  it("replaces a generated document as one undoable transaction", () => {
+    const generated = createDocument();
+    generated.title = "AI 生成文稿";
+    generated.slides[0]!.content.title = "新标题";
+    useEditorStore.getState().replaceDocument(generated, "both");
+    const state = useEditorStore.getState();
+    expect(state.document.title).toBe("AI 生成文稿");
+    expect(state.document.revisions).toEqual({ document: 1, content: 1, design: 1 });
+    expect(state.undoStack).toHaveLength(1);
+    state.undo();
+    expect(useEditorStore.getState().document.title).toBe("未命名演示文稿");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
+    useEditorStore.getState().redo();
+    expect(useEditorStore.getState().document.title).toBe("AI 生成文稿");
+  });
 });

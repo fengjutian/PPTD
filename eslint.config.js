@@ -22,8 +22,11 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "@typescript-eslint/consistent-type-imports": ["warn", { prefer: "type-imports" }],
       "no-console": ["warn", { allow: ["warn", "error"] }],
+      // Several sanitizers intentionally match control characters.
+      "no-control-regex": "off",
     },
   },
   {

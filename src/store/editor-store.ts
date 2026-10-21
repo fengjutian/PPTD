@@ -1,11 +1,16 @@
 import { applyPatches, enablePatches, produceWithPatches, type Patch } from "immer";
 import { create } from "zustand";
-import { applyCommand, commandDomain, type DocumentCommand } from "../core/commands";
+import { applyCommand, commandDomain, type ChangeDomain, type DocumentCommand } from "../core/commands";
 import { createDocument, type ElementId, type PresentationDocument, type SlideId } from "../core/document-model";
 
 enablePatches();
 
-interface HistoryEntry { forward: Patch[]; inverse: Patch[] }
+const HISTORY_LIMIT = 100;
+
+interface HistoryEntry {
+  forward: Patch[];
+  inverse: Patch[];
+}
 
 interface EditorState {
   document: PresentationDocument;
@@ -14,6 +19,7 @@ interface EditorState {
   undoStack: HistoryEntry[];
   redoStack: HistoryEntry[];
   execute: (command: DocumentCommand) => void;
+  replaceDocument: (document: PresentationDocument, change?: ChangeDomain) => void;
   selectSlide: (slideId: SlideId) => void;
   selectElement: (elementId: ElementId | null) => void;
   undo: () => void;
@@ -23,6 +29,7 @@ interface EditorState {
 }
 
 const initial = createDocument();
+const pushHistory = (stack: HistoryEntry[], entry: HistoryEntry): HistoryEntry[] => [...stack, entry].slice(-HISTORY_LIMIT);
 
 export const useEditorStore = create<EditorState>((set) => ({
   document: initial,
@@ -60,7 +67,30 @@ export const useEditorStore = create<EditorState>((set) => ({
       selectedElementId = slide.elements[sourceIndex + 1]!.id;
     }
     if (command.type === "set-element-lock") selectedElementId = command.elementId;
-    return { ...state, document, activeSlideId, selectedElementId, undoStack: [...state.undoStack, { forward, inverse }], redoStack: [] };
+    return { ...state, document, activeSlideId, selectedElementId, undoStack: pushHistory(state.undoStack, { forward, inverse }), redoStack: [] };
+  }),
+
+  replaceDocument: (document, change = "both") => set((state) => {
+    const [nextDocument, forward, inverse] = produceWithPatches(state.document, (draft) => {
+      draft.id = document.id;
+      draft.schemaVersion = document.schemaVersion;
+      draft.title = document.title;
+      draft.pageSize = { ...document.pageSize };
+      draft.slides = structuredClone(document.slides);
+      draft.revisions = {
+        document: draft.revisions.document + 1,
+        content: draft.revisions.content + (change === "content" || change === "both" ? 1 : 0),
+        design: draft.revisions.design + (change === "design" || change === "both" ? 1 : 0),
+      };
+    });
+    return {
+      ...state,
+      document: nextDocument,
+      activeSlideId: nextDocument.slides[0]!.id,
+      selectedElementId: null,
+      undoStack: pushHistory(state.undoStack, { forward, inverse }),
+      redoStack: [],
+    };
   }),
 
   selectSlide: (activeSlideId) => set({ activeSlideId, selectedElementId: null }),
@@ -77,7 +107,7 @@ export const useEditorStore = create<EditorState>((set) => ({
     const entry = state.redoStack.at(-1);
     if (!entry) return state;
     const document = applyPatches(state.document, entry.forward);
-    return { ...state, document, undoStack: [...state.undoStack, entry], redoStack: state.redoStack.slice(0, -1), selectedElementId: null };
+    return { ...state, document, activeSlideId: document.slides.some((s) => s.id === state.activeSlideId) ? state.activeSlideId : document.slides[0]!.id, undoStack: pushHistory(state.undoStack, entry), redoStack: state.redoStack.slice(0, -1), selectedElementId: null };
   }),
   newDocument: () => set(() => {
     const document = createDocument();
