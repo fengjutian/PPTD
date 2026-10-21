@@ -66,6 +66,8 @@ button { color: inherit; }
 .feature-header h1, .feature-header p, .ai-compose-card h2, .ai-compose-card p, .draft-review h2, .draft-review p, .theme-content h2, .theme-content p { margin: 0; }
 .feature-header h1 { font-size: 18px; }
 .feature-header p { margin-top: 4px; color: #7f838c; font-size: 11px; }
+.feature-header-actions { display: flex; align-items: center; gap: 20px; }
+.header-upload-button { min-height: 38px; white-space: nowrap; }
 .workflow-steps { display: flex; align-items: center; gap: 9px; color: #656a74; font-size: 11px; white-space: nowrap; }
 .workflow-steps span { display: flex; align-items: center; gap: 6px; }
 .workflow-steps span.active { color: var(--ppt-accent-hover); font-weight: 700; }
@@ -152,16 +154,15 @@ button { color: inherit; }
 .theme-applied-message { display: flex; align-items: center; gap: 8px; margin-top: 20px; padding: 11px 14px; border: 1px solid #52613d; border-radius: 8px; color: #a9c47e; background: #20261a; font-size: 12px; }
 .theme-applied-message svg { width: 16px; height: 16px; }
 .finish-theme { float: right; margin-top: 26px; }
-.template-content { width: min(1080px, calc(100% - 64px)); margin: 44px auto; }
+.template-content { width: min(1180px, calc(100% - 48px)); margin: 24px auto; }
 .template-content h2, .template-content p { margin: 0; }
 .template-content h2 { font-size: 22px; }
 .template-content > div:first-child > p { margin-top: 8px; color: #858a93; font-size: 12px; }
-.template-page-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
-.template-page-heading .primary-action { flex: 0 0 auto; }
-.template-browser { display: grid; grid-template-columns: minmax(280px, 38%) minmax(0, 1fr); gap: 16px; margin-top: 24px; }
+.template-browser { display: grid; grid-template-columns: minmax(280px, 36%) minmax(0, 1fr); gap: 14px; }
 .template-library { margin-top: 24px; }
 .template-browser .template-library { margin-top: 0; }
-.template-library-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: #d8dae0; font-size: 12px; }
+.template-library-heading { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #d8dae0; font-size: 12px; }
+.template-library-heading > div { display: flex; align-items: center; gap: 8px; }
 .template-library-heading span { color: #797e87; font-size: 10px; }
 .template-library > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .template-browser .template-library > div:last-child { grid-template-columns: 1fr; }
@@ -174,7 +175,7 @@ button { color: inherit; }
 .template-library button small { margin-top: 4px; color: #777c85; font-size: 9px; }
 .template-empty { min-height: 130px; display: grid; place-items: center; border: 1px dashed #484b52; border-radius: 10px; color: #777c85; font-size: 12px; }
 .template-preview-panel { min-width: 0; }
-.template-preview-heading { height: 28px; display: flex; align-items: start; justify-content: space-between; gap: 16px; color: #d8dae0; font-size: 12px; }
+.template-preview-heading { height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #d8dae0; font-size: 12px; }
 .template-preview-heading strong { display: flex; align-items: center; gap: 7px; }
 .template-preview-heading strong svg { width: 16px; color: var(--ppt-accent-hover); }
 .template-preview-heading > span { overflow: hidden; color: #797e87; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
