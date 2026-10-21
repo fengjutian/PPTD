@@ -4,6 +4,9 @@ import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type SlideElement } fr
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
+import { LayerList } from "../features/editor/LayerList";
+import { ContentReview } from "../features/ai/ContentReview";
+import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
@@ -195,6 +198,7 @@ export function App() {
   const [savedRevision, setSavedRevision] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [message, setMessage] = useState<PageMessage>();
+  const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportController = useRef<AbortController | undefined>(undefined);
@@ -206,6 +210,9 @@ export function App() {
   const [activeDraftSlideIndex, setActiveDraftSlideIndex] = useState(0);
   const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>(loadAiHistory);
   const [activeHistoryId, setActiveHistoryId] = useState<string>();
+  const [aiSaveState, setAiSaveState] = useState<AiDraftSaveState>("saved");
+  const [newDraftConfirmOpen, setNewDraftConfirmOpen] = useState(false);
+  const aiOriginalDraft = useRef<AiDraft | undefined>(undefined);
   const [aiBusy, setAiBusy] = useState(false);
   const aiRequestId = useRef(0);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
@@ -369,10 +376,11 @@ export function App() {
     setAiBusy(true); setAiDraft(undefined);
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
     try {
-      const draft = await generatePresentationDraft(aiTopic, aiSlideCount);
+      const draft = withSlideIds(await generatePresentationDraft(aiTopic, aiSlideCount));
       if (requestId !== aiRequestId.current) return;
       const id = crypto.randomUUID();
-      setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0);
+      aiOriginalDraft.current = structuredClone(draft);
+      setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0); setAiSaveState("saved");
       setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
       setTaskStatus("AI 已完成 PPT 草稿生成");
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
@@ -388,12 +396,25 @@ export function App() {
 
   useEffect(() => {
     if (!aiDraft || !activeHistoryId) return;
-    const timer = window.setTimeout(() => setAiHistory(saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft })), 500);
+    setAiSaveState("saving");
+    const timer = window.setTimeout(() => {
+      setAiHistory(saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft }));
+      setAiSaveState("saved");
+    }, 500);
     return () => window.clearTimeout(timer);
   }, [activeHistoryId, aiDraft, aiTopic]);
 
+  const persistAiDraft = () => {
+    if (!aiDraft || !activeHistoryId) return;
+    setAiHistory(saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft }));
+    setAiSaveState("saved");
+  };
+
   const openAiHistory = (entry: AiHistoryEntry) => {
-    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(entry.draft); setActiveDraftSlideIndex(0);
+    persistAiDraft();
+    const draft = withSlideIds(entry.draft);
+    aiOriginalDraft.current = structuredClone(draft);
+    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(draft); setActiveDraftSlideIndex(0); setAiSaveState("saved");
   };
 
   const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
@@ -404,6 +425,32 @@ export function App() {
       return { ...slide, body: value, blocks: items.length > 1 ? [{ type: "bullet-list" as const, items }] : value.trim() ? [{ type: "paragraph" as const, text: value.trim() }] : [] };
     }) } : draft);
   };
+
+  const updateAiDraftTitle = (title: string) => setAiDraft((draft) => (draft ? { ...draft, title } : draft));
+
+  const restoreAiSlide = (index: number) => {
+    const original = aiOriginalDraft.current?.slides[index];
+    if (!original) return;
+    setAiDraft((draft) => draft ? {
+      ...draft,
+      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...original, id: slide.id } : slide)),
+    } : draft);
+    setTaskStatus(`已恢复第 ${index + 1} 页的 AI 原始内容`);
+  };
+
+  const confirmNewDraft = () => {
+    persistAiDraft();
+    aiOriginalDraft.current = undefined;
+    setAiDraft(undefined);
+    setActiveHistoryId(undefined);
+    setActiveDraftSlideIndex(0);
+    setAiSaveState("saved");
+    setNewDraftConfirmOpen(false);
+    setTaskStatus("已新建空白草稿");
+  };
+
+  const aiDraftMissingTitles = useMemo(() => (aiDraft ? missingTitleIndexes(aiDraft) : []), [aiDraft]);
+  const aiDraftMetrics = useMemo(() => (aiDraft ? draftMetrics(aiDraft) : { characters: 0, points: 0 }), [aiDraft]);
 
   const continueToTheme = () => {
     if (!aiDraft) return;
@@ -717,8 +764,14 @@ export function App() {
       </nav>
 
       {activeView === "editor" && <><aside className="left-panel">
-        <div className="panel-heading"><span>页面</span><button onClick={() => execute({ type: "add-slide" })}><Plus size={16} /></button></div>
-        <div className="slide-list">
+        <div className="panel-heading">
+          <div className="panel-tabs" role="tablist" aria-label="左侧面板">
+            <button type="button" role="tab" aria-selected={leftTab === "slides"} className={`panel-tab ${leftTab === "slides" ? "active" : ""}`} onClick={() => setLeftTab("slides")}>页面</button>
+            <button type="button" role="tab" aria-selected={leftTab === "layers"} className={`panel-tab ${leftTab === "layers" ? "active" : ""}`} onClick={() => setLeftTab("layers")}>图层</button>
+          </div>
+          {leftTab === "slides" && <button aria-label="新增页面" title="新增页面" onClick={() => execute({ type: "add-slide" })}><Plus size={16} /></button>}
+        </div>
+        {leftTab === "slides" ? <div className="slide-list">
           {document.slides.map((slide, index) => <div key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`}>
             <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><div className="thumbnail"><SlideThumbnail slide={slide} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} /></div></button>
             {slide.id === activeSlide.id && <div className="thumbnail-actions">
@@ -728,7 +781,7 @@ export function App() {
               <button aria-label="删除页面" title="删除页面" disabled={document.slides.length === 1} onClick={() => execute({ type: "delete-slide", slideId: slide.id })}><Trash2 /></button>
             </div>}
           </div>)}
-        </div>
+        </div> : <LayerList slide={activeSlide} selectedElementId={selectedElementId} onSelect={selectElement} />}
       </aside>
 
       <main className="workspace" onPointerDown={() => selectElement(null)}>
@@ -742,7 +795,7 @@ export function App() {
     </>}
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
-        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再选择用户的 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); setActiveDraftSlideIndex(0); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
+        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>生成并审核内容，确认后再套用 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps" aria-label="制作流程"><span className={!aiDraft ? "active" : "done"} aria-current={!aiDraft ? "step" : undefined}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""} aria-current={aiDraft ? "step" : undefined}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions">{aiDraftMissingTitles.length > 0 && <span className="draft-blocked-hint"><CircleAlert />{aiDraftMissingTitles.length} 页缺少标题</span>}<button className="primary-action" title={aiDraftMissingTitles.length > 0 ? "请先补全所有页面标题" : undefined} disabled={!aiDraft.title.trim() || aiDraftMissingTitles.length > 0} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
         {!aiDraft ? <div className="ai-split">
           <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.length === 0 ? <p className="ai-history-empty">还没有草稿</p> : aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>
           <div className="feature-scroll ai-plan-pane">
@@ -754,12 +807,17 @@ export function App() {
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
           </div>
-        </div> : <div className="feature-scroll draft-mode"><section className="draft-review">
-          <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div><div className="draft-outline-list">{aiDraft.slides.map((slide, index) => <button type="button" className={activeDraftSlideIndex === index ? "active" : ""} aria-current={activeDraftSlideIndex === index ? "page" : undefined} key={index} onClick={() => setActiveDraftSlideIndex(index)}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</div></aside>
-          <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿 · {aiDraft.presentationBrief.narrativeStrategy}</div><h2>审核并编辑文字</h2><p>{aiDraft.presentationBrief.coreConclusion}</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
-          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => index === activeDraftSlideIndex && <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><div className="slide-plan-summary"><span>{slide.plan.visualIntent}</span><span>{slide.plan.density} density</span><p><strong>页面目的：</strong>{slide.plan.purpose}</p><p><strong>核心结论：</strong>{slide.plan.conclusion}</p></div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
-          </div>
-        </section></div>}
+        </div> : <div className="feature-scroll draft-mode"><ContentReview
+          draft={aiDraft}
+          originalDraft={aiOriginalDraft.current}
+          activeIndex={activeDraftSlideIndex}
+          saveState={aiSaveState}
+          onActiveIndexChange={setActiveDraftSlideIndex}
+          onDraftTitleChange={updateAiDraftTitle}
+          onSlideFieldChange={updateAiSlide}
+          onRestoreSlide={restoreAiSlide}
+          onNewDraft={() => setNewDraftConfirmOpen(true)}
+        /></div>}
       </main>}
 
       {activeView === "theme" && <main className="feature-workspace theme-workspace">
@@ -785,9 +843,11 @@ export function App() {
 
       {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象 · ZIP {exportReport.package.entryCount} 个条目</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
 
+      {newDraftConfirmOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewDraftConfirmOpen(false); }}><section className="upload-dialog new-draft-dialog" role="dialog" aria-modal="true" aria-labelledby="new-draft-title"><div className="upload-dialog-heading"><div><FilePlus2 /><div><h2 id="new-draft-title">新建草稿？</h2><p>当前草稿会先保存到制作历史，新草稿从空白主题开始。</p></div></div><button type="button" aria-label="关闭新建草稿窗口" onClick={() => setNewDraftConfirmOpen(false)}><X /></button></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setNewDraftConfirmOpen(false)}>取消</button><button type="button" className="primary-action" onClick={confirmNewDraft}><FilePlus2 />新建空白草稿</button></div></section></div>}
+
       {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
 
-      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom-controls"><button type="button" aria-label="缩小画布" onClick={() => setZoom((value) => Math.max(0.3, Math.round((value - 0.1) * 10) / 10))}>−</button><button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 10) / 10))}>＋</button></span></footer>
+      <footer className="statusbar">{activeView === "ai" ? (aiDraft ? <><span>草稿第 {activeDraftSlideIndex + 1} / {aiDraft.slides.length} 页</span><span>{aiDraftMetrics.characters} 字</span><span>{aiDraftMetrics.points} 条要点</span><span className={`saved-dot ${aiSaveState === "saving" ? "dirty" : ""}`}>● {aiSaveState === "saving" ? "保存中…" : "已自动保存"}</span></> : <><span>AI 内容工作台</span><span>填写主题后生成结构化草稿</span><span className="saved-dot">● 尚未生成草稿</span></>) : <><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom-controls"><button type="button" aria-label="缩小画布" onClick={() => setZoom((value) => Math.max(0.3, Math.round((value - 0.1) * 10) / 10))}>−</button><button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 10) / 10))}>＋</button></span></>}</footer>
     </div>
   );
 }

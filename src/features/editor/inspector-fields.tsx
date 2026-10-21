@@ -105,11 +105,13 @@ export function NumberField({ label, value, unit, min, max, precision = 2, disab
 interface ColorFieldProps {
   label: string;
   value: string;
+  /** Renders on its own row so the hex value stays readable in a narrow panel. */
+  wide?: boolean;
   disabled?: boolean;
   onCommit: (hex: string) => void;
 }
 
-export function ColorField({ label, value, disabled, onCommit }: ColorFieldProps) {
+export function ColorField({ label, value, wide, disabled, onCommit }: ColorFieldProps) {
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string>();
   const [dirty, setDirty] = useState(false);
@@ -139,7 +141,7 @@ export function ColorField({ label, value, disabled, onCommit }: ColorFieldProps
   };
 
   return (
-    <label className="field">
+    <label className={wide ? "field field-wide" : "field"}>
       <span className="field-label">{label}</span>
       <span className="field-control color-control">
         <input

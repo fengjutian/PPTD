@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, Copy, Layers3, Lock, LockOpen, MousePointer2, Trash2 } from "lucide-react";
-import { EMU_PER_INCH, emu, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
+import { useEffect, useRef, useState } from "react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, CircleAlert, Copy, Layers3, Lock, LockOpen, MousePointer2, Trash2 } from "lucide-react";
+import { EMU_PER_INCH, emu, type Emu, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
+import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
+import { isFontAvailable } from "../../core/validation/export-validation";
 import { useEditorStore } from "../../store/editor-store";
 import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
 
@@ -37,6 +39,9 @@ export interface InspectorPanelViewProps {
   /** Position of the element inside its slide, used for the layer buttons. */
   elementIndex: number;
   elementCount: number;
+  /** Page background, used to judge text readability and to offer a readable ink. */
+  background: string;
+  pageSize: { width: Emu; height: Emu };
   onCommand: (command: DocumentCommand) => void;
 }
 
@@ -44,10 +49,21 @@ export interface InspectorPanelViewProps {
  * Presentation of the inspector for one element. It only emits commands, so the
  * same markup can be rendered without a store and asserted in tests.
  */
-export function InspectorPanelView({ element, slideId, elementIndex, elementCount, onCommand }: InspectorPanelViewProps) {
+export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, onCommand }: InspectorPanelViewProps) {
   const [textDraft, setTextDraft] = useState<string>();
+  const [fontAvailable, setFontAvailable] = useState(true);
   const textDraftCancelRef = useRef(false);
   const locked = element.locked;
+  const fontFamily = element.type === "text" ? element.style.fontFamily : "";
+
+  useEffect(() => {
+    if (!fontFamily) return;
+    let active = true;
+    void isFontAvailable(fontFamily).then((available) => {
+      if (active) setFontAvailable(available);
+    });
+    return () => { active = false; };
+  }, [fontFamily]);
 
   const commitTransform = (field: "x" | "y" | "width" | "height" | "rotation", value: number) => {
     const frame = { ...element.frame };
@@ -81,6 +97,10 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
   const setShapeStyle = (style: Partial<ShapeElementStyle>) => {
     onCommand({ type: "set-shape-style", slideId, elementId: element.id, style });
   };
+
+  const contrast = element.type === "text" ? contrastRatio(element.style.color, background) : undefined;
+  const required = element.type === "text" ? requiredContrast(element.style.fontSizePt, element.style.bold) : 0;
+  const lowContrast = contrast !== undefined && contrast < required;
 
   return (
     <div className="property-form">
@@ -152,7 +172,7 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
         <div className="property-grid">
           <NumberField label="字号" unit="pt" value={element.style.fontSizePt} min={4} max={400} precision={1} disabled={locked}
             onCommit={(fontSizePt) => setTextStyle({ fontSizePt })} />
-          <ColorField label="颜色" value={element.style.color} disabled={locked}
+          <ColorField label="颜色" value={element.style.color} wide disabled={locked}
             onCommit={(color) => setTextStyle({ color })} />
         </div>
         <div className="field-row">
@@ -170,14 +190,33 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             ))}
           </div>
         </div>
+        {lowContrast && <div className="inspector-warning" role="status">
+          <CircleAlert />
+          <div>
+            <strong>文字对比度不足</strong>
+            <span>按页面背景色计算为 {contrast!.toFixed(2)}:1，需要至少 {required}:1，导出后在其他设备上可能看不清。</span>
+            <button type="button" disabled={locked} onClick={() => {
+              const luminance = colorLuminance(background);
+              if (luminance === undefined) return;
+              setTextStyle({ color: readableTextColor(element.type === "text" ? element.style.color : "#000000", luminance, isLargeText(element.type === "text" ? element.style.fontSizePt : 12, element.type === "text" ? element.style.bold : false)) });
+            }}>换成可读颜色</button>
+          </div>
+        </div>}
+        {!fontAvailable && <div className="inspector-warning" role="status">
+          <CircleAlert />
+          <div>
+            <strong>字体本机不可用</strong>
+            <span>“{fontFamily}”在本机不可用，导出后将由查看端的替代字体渲染，版式可能变化。</span>
+          </div>
+        </div>}
       </section>}
 
       {element.type === "shape" && <section className="inspector-section">
         <h4>形状外观</h4>
         <div className="property-grid">
-          <ColorField label="填充" value={element.style.fill} disabled={locked}
+          <ColorField label="填充" value={element.style.fill} wide disabled={locked}
             onCommit={(fill) => setShapeStyle({ fill })} />
-          <ColorField label="描边" value={element.style.stroke} disabled={locked}
+          <ColorField label="描边" value={element.style.stroke} wide disabled={locked}
             onCommit={(stroke) => setShapeStyle({ stroke })} />
           <NumberField label="描边宽度" unit="pt" value={element.style.strokeWidthPt} min={0} max={100} precision={1} disabled={locked}
             onCommit={(strokeWidthPt) => setShapeStyle({ strokeWidthPt })} />
@@ -222,7 +261,32 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
           </button>
         </div>
       </section>
+
+      <PageProperties slideId={slideId} background={background} pageSize={pageSize} onCommand={onCommand} />
     </div>
+  );
+}
+
+interface PagePropertiesProps {
+  slideId: SlideId;
+  background: string;
+  pageSize: { width: Emu; height: Emu };
+  onCommand: (command: DocumentCommand) => void;
+}
+
+function PageProperties({ slideId, background, pageSize, onCommand }: PagePropertiesProps) {
+  return (
+    <section className="inspector-section">
+      <h4>页面</h4>
+      <label className="field">
+        <span className="field-label">幻灯片尺寸</span>
+        <span className="field-control">
+          <input value={`${(pageSize.width / EMU_PER_INCH).toFixed(2)} × ${(pageSize.height / EMU_PER_INCH).toFixed(2)} 英寸`} readOnly disabled />
+        </span>
+      </label>
+      <ColorField label="背景色" value={background} wide
+        onCommit={(next) => onCommand({ type: "set-slide-background", slideId, background: next })} />
+    </section>
   );
 }
 
@@ -242,8 +306,19 @@ export function InspectorPanel() {
         {selected && <span className="type-chip">{elementTypeLabel(selected)}</span>}
       </div>
       {selected
-        ? <InspectorPanelView element={selected} slideId={slide.id} elementIndex={slide.elements.findIndex((item) => item.id === selected.id)} elementCount={slide.elements.length} onCommand={execute} />
-        : <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>}
+        ? <InspectorPanelView
+          element={selected}
+          slideId={slide.id}
+          elementIndex={slide.elements.findIndex((item) => item.id === selected.id)}
+          elementCount={slide.elements.length}
+          background={slide.background}
+          pageSize={document.pageSize}
+          onCommand={execute}
+        />
+        : <div className="property-form">
+          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize} onCommand={execute} />
+          <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>
+        </div>}
     </aside>
   );
 }

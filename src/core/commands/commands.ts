@@ -59,6 +59,7 @@ export type DocumentCommand =
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
   | { type: "set-slide"; slideId: SlideId }
+  | { type: "set-slide-background"; slideId: SlideId; background: string }
   | { type: "add-text"; slideId: SlideId }
   | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
@@ -96,6 +97,7 @@ function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
     case "set-slide": return null;
+    case "set-slide-background": return "design";
     case "set-text-style":
     case "set-shape-style":
     case "set-image-alt-text": return "design";
@@ -219,6 +221,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           .map(cleanPoint)
           .filter((item) => item.length >= 6 && item.length <= 48 && /[“”"'‘’「」『』]/.test(item))
           .sort((left, right) => right.length - left.length)[0];
+      // A summary without a quotation still needs a visual anchor. A count
+      // panel uses the real number of points, so it fills the right side
+      // without inventing a headline or duplicating an arbitrary bullet.
+      const countSummary = !pullQuote && design.layout === "summary" && items.length >= 3 && items.length <= 5 && items.every((item) => cleanPoint(item).length <= 48);
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
       // The rendered artwork and the placeholder geometry describe the same
       // layout, so editable text has to land on the geometry of the layout that
@@ -440,10 +446,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             }
           }
         }
-      } else if (pullQuote && items.length >= 3 && items.length <= 5 && contentBox.width >= 0.55 && contentBox.height >= 0.35 && (design.layout === "cards" || design.layout === "title-body" || design.layout === "summary" || design.layout === "quote")) {
-        // A narrow numbered column plus one oversized pull quote. The quote is
-        // copied from the reviewed body, so this is emphasis rather than new
-        // content. It turns a sparse five-row list into an editorial page.
+      } else if ((pullQuote || countSummary) && items.length >= 3 && items.length <= 5 && contentBox.width >= 0.55 && contentBox.height >= 0.35 && (design.layout === "cards" || design.layout === "title-body" || design.layout === "summary" || design.layout === "quote")) {
+        // A narrow numbered column plus one visual anchor: an oversized pull
+        // quote copied from the reviewed body, or the real count of summary
+        // points when there is no quote. Neither invents content.
         const listItems = items.slice(0, 5);
         const listWidth = contentBox.width * 0.56;
         const panelX = contentBox.x + contentBox.width * 0.60;
@@ -466,14 +472,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           if (itemIndex < listItems.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + rowGap / 2 - 0.002, listWidth, 0.004), cardStroke));
         });
         slide.elements.push(shape(frame(panelX, contentBox.y, panelWidth, contentBox.height), accentFill, "rectangle"));
-        slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + 0.02, 0.12, 0.13), 62, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-        const quoteAttribution = quoteBlock?.attribution?.trim();
-        const panelQuote = quoteAttribution ? `${pullQuote}\n— ${quoteAttribution}` : pullQuote;
-        const quoteSize = panelQuote.length > 60 ? 16 : panelQuote.length > 40 ? 18 : 22;
-        slide.elements.push(text(panelQuote, centeredBlock(panelQuote, { x: panelX + 0.05, y: contentBox.y + 0.14, width: panelWidth - 0.10, height: contentBox.height * 0.58 }, quoteSize), quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
-        slide.elements.push(shape(frame(panelX + 0.05, contentBox.y + contentBox.height - 0.18, panelWidth - 0.10, 0.004), "#FFFFFF"));
-        slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.145, panelWidth - 0.10, 0.06), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-      } else if (design.layout === "cards" && items.length > 1 && items.length <= 6) {
+        if (pullQuote) {
+          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + 0.02, 0.12, 0.13), 62, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          const quoteAttribution = quoteBlock?.attribution?.trim();
+          const panelQuote = quoteAttribution ? `${pullQuote}\n— ${quoteAttribution}` : pullQuote;
+          const quoteSize = panelQuote.length > 60 ? 16 : panelQuote.length > 40 ? 18 : 22;
+          slide.elements.push(text(panelQuote, centeredBlock(panelQuote, { x: panelX + 0.05, y: contentBox.y + 0.14, width: panelWidth - 0.10, height: contentBox.height * 0.58 }, quoteSize), quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+          slide.elements.push(shape(frame(panelX + 0.05, contentBox.y + contentBox.height - 0.18, panelWidth - 0.10, 0.004), "#FFFFFF"));
+          slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.145, panelWidth - 0.10, 0.06), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+        } else {
+          const countText = String(items.length).padStart(2, "0");
+          slide.elements.push(text(countText, centeredBlock(countText, { x: panelX + 0.05, y: contentBox.y + 0.16, width: panelWidth - 0.10, height: contentBox.height * 0.24 }, 86), 86, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(shape(frame(panelX + 0.05, contentBox.y + contentBox.height * 0.47, panelWidth - 0.10, 0.004), "#FFFFFF"));
+          slide.elements.push(text("项要点", frame(panelX + 0.05, contentBox.y + contentBox.height * 0.50, panelWidth - 0.10, 0.07), 18, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("本页要点", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.145, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+        }
+      } else if (items.length > 1 && items.length <= 6 && (design.layout === "cards" || (items.length >= 3 && (design.layout === "title-body" || design.layout === "summary") && items.every((item) => cleanPoint(item).length <= 48)))) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
         const visible = items.slice(0, 6);
@@ -631,6 +645,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   const slide = document.slides.find((item) => item.id === command.slideId);
   if (!slide) throw new Error("SLIDE_NOT_FOUND");
 
+  if (command.type === "set-slide-background") {
+    if (!HEX_COLOR_PATTERN.test(command.background)) throw new Error("INVALID_BACKGROUND_COLOR");
+    slide.background = command.background;
+    return;
+  }
   if (command.type === "add-text") {
     slide.elements.push({
       id: crypto.randomUUID() as ElementId,

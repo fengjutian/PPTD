@@ -3,9 +3,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createDocument, emu, type ElementId, type SlideElement } from "../../core/document-model";
 import { InspectorPanel, InspectorPanelView } from "./InspectorPanel";
 
-function renderView(element: SlideElement, slideId = "slide-1" as never): string {
+function renderView(element: SlideElement, background = "#ffffff"): string {
   return renderToStaticMarkup(
-    <InspectorPanelView element={element} slideId={slideId} elementIndex={0} elementCount={2} onCommand={() => undefined} />,
+    <InspectorPanelView
+      element={element}
+      slideId={"slide-1" as never}
+      elementIndex={0}
+      elementCount={2}
+      background={background}
+      pageSize={{ width: emu(12_192_000), height: emu(6_858_000) }}
+      onCommand={() => undefined}
+    />,
   );
 }
 
@@ -91,6 +99,34 @@ describe("inspector panel", () => {
     expect(markup).toContain("上移一层");
     expect(markup).toContain("下移一层");
     expect(markup).toContain("锁定");
+  });
+
+  it("gives the colour field a full row so the hex value stays readable", () => {
+    const markup = renderView(textElement());
+    expect(markup).toContain("field field-wide");
+  });
+
+  it("shows the page size and the page background on every panel state", () => {
+    const markup = renderView(textElement());
+    expect(markup).toContain("幻灯片尺寸");
+    expect(markup).toContain("13.33 × 7.50 英寸");
+    expect(markup).toContain("背景色");
+    expect(markup).toContain("#ffffff");
+  });
+
+  it("warns when the text ink does not read on the page background", () => {
+    // A light ink on a white page cannot reach the 4.5:1 threshold.
+    const base = textElement();
+    if (base.type !== "text") throw new Error("expected a text element");
+    const element: SlideElement = { ...base, style: { ...base.style, color: "#f2f2f2", fontSizePt: 12, bold: false } };
+    const markup = renderView(element, "#ffffff");
+    expect(markup).toContain("文字对比度不足");
+    expect(markup).toContain("换成可读颜色");
+  });
+
+  it("stays quiet when the text ink already reads on the page background", () => {
+    const markup = renderView(textElement(), "#ffffff");
+    expect(markup).not.toContain("文字对比度不足");
   });
 
   it("disables every editing control for a locked element", () => {

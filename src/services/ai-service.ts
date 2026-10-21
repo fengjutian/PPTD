@@ -23,7 +23,7 @@ const legacySlidePlan = { purpose: "传达本页已审核内容", conclusion: "�
 export const aiDraftSchema = z.object({
   title: z.string().min(1).max(200),
   presentationBrief: z.object({ objective: z.string().min(1).max(500), audience: z.string().min(1).max(300), scenario: z.string().min(1).max(300), expectedAction: z.string().min(1).max(500), coreConclusion: z.string().min(1).max(500), narrativeStrategy: narrativeStrategySchema, assumptions: z.array(z.string().max(500)).max(10) }).default({ objective: "清晰传达演示主题", audience: "未指定受众", scenario: "通用演示", expectedAction: "理解演示内容", coreConclusion: "以演示文稿标题和逐页内容为准", narrativeStrategy: "general", assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"] }),
-  slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1).max(20),
+  slides: z.array(z.object({ id: z.string().min(1).optional(), title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1).max(20),
 });
 export type AiDraft = z.infer<typeof aiDraftSchema>;
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
@@ -91,15 +91,20 @@ export function chooseSlideLayout(input: {
   // Blocks are the structured fact source. Body copy is the fallback for
   // legacy drafts that never produced blocks.
   const items = blockItems.length > 0 ? blockItems : splitBodyItems(input.body);
+  const hasBlock = (type: ContentBlock["type"]) => (input.blocks ?? []).some((block) => block.type === type);
   // A first page is only a cover when it actually carries a cover: a title
-  // plus a short subtitle. A five-point overview is a content page even when
-  // the model labels it "cover".
+  // plus a short subtitle. A multi-point overview is a content page even when
+  // the model labels it "cover" or the brief calls it "hero". Returning early
+  // here also prevents the hero intent from being converted to a section page,
+  // which used to dump the whole list into one small text box.
   if (input.index === 0) {
-    if (items.length < 2 && input.body.trim().length <= 80) return "cover";
-    if (input.requested === "cover") return items.length >= 3 ? "cards" : items.length === 2 ? "split" : "title-body";
+    if (items.length < 2 && input.body.trim().length <= 80 && !hasBlock("quote")) return "cover";
+    if (hasBlock("quote") && items.length < 3) return "quote";
+    if (items.length >= 3) return "cards";
+    if (items.length === 2) return "split";
+    return "title-body";
   }
   const longestItem = items.reduce((longest, item) => Math.max(longest, [...item].length), 0);
-  const hasBlock = (type: ContentBlock["type"]) => (input.blocks ?? []).some((block) => block.type === type);
   const intent = intentLayouts[input.visualIntent];
   // A model often returns title-body as a safe default. When the slide brief
   // states a more specific intent, that intent wins.

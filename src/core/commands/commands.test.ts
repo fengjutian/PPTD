@@ -196,6 +196,18 @@ describe("document commands", () => {
     expect(() => produce(locked, (draft) => applyCommand(draft, { type: "set-text-style", slideId: slide.id, elementId: title.id, style: { fontSizePt: 40 } }))).toThrow("ELEMENT_LOCKED");
   });
 
+  it("changes the page background without touching reviewed content", () => {
+    const source = createDocument();
+    source.slides[0]!.content.status = "approved";
+    const slide = source.slides[0]!;
+    const command = { type: "set-slide-background" as const, slideId: slide.id, background: "#102030" };
+    expect(commandDomain(command)).toBe("design");
+    const result = produce(source, (draft) => applyCommand(draft, command));
+    expect(result.slides[0]!.background).toBe("#102030");
+    expect(result.slides[0]!.content).toEqual(source.slides[0]!.content);
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "set-slide-background", slideId: slide.id, background: "navy" }))).toThrow("INVALID_BACKGROUND_COLOR");
+  });
+
   it("applies an AI draft as one structured document replacement", () => {
     const source = createDocument();
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-draft", title: "AI 战略", slides: [
@@ -244,13 +256,24 @@ describe("document commands", () => {
     expect(body?.type === "text" && body.style.fontFamily).toBe("Georgia");
   });
 
-  it("renders a multi-point title-body page as a structured list instead of one stranded block", () => {
+  it("renders long multi-point title-body copy as a structured list instead of one stranded block", () => {
     const source = createDocument();
-    const content = { title: "作品背景", body: "1. 作品在什么背景下创作？\n2. 作者想回应什么？\n3. 当时的社会环境如何？\n4. 作品为何采用这种形式？\n5. 它后来产生了什么影响？", speakerNotes: "" };
+    const items = [
+      "第一个要点需要完整保留背景、人物和事件之间的因果关系，不能为了卡片整齐而截断其中任何一句。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第二个要点说明作者回应了当时社会对政治改革和士人责任的核心争论，需要连续阅读。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第三个要点补充当时的社会环境、传播条件和读者接受方式，句子较长，不适合拆成短卡片。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第四个要点解释作品为什么采用这种形式和结构，并说明形式选择与表达目标之间的关系。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+      "第五个要点概述作品后来产生的影响，以及它在不同历史阶段被重新解释和引用的方式。这一段还需要保留完整的论述逻辑和上下文关系，方便读者连续理解。",
+    ];
+    const content = { title: "作品背景", body: `1. ${items[0]}
+2. ${items[1]}
+3. ${items[2]}
+4. ${items[3]}
+5. ${items[4]}`, speakerNotes: "" };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "作品背景", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
-    expect(texts.map((element) => element.text)).toEqual(["作品背景", "01", "作品在什么背景下创作？", "02", "作者想回应什么？", "03", "当时的社会环境如何？", "04", "作品为何采用这种形式？", "05", "它后来产生了什么影响？"]);
+    expect(texts.map((element) => element.text)).toEqual(["作品背景", ...items.flatMap((item, index) => [String(index + 1).padStart(2, "0"), item])]);
     // The list fills the content area instead of shrinking into the top-left.
     const firstItem = texts[2]!;
     const lastItem = texts[texts.length - 1]!;
@@ -260,13 +283,13 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
-  it("uses a bullet-list block as the page structure even when body is a short summary", () => {
+  it("uses a bullet-list block as cards even when body is a short summary", () => {
     const source = createDocument();
     const content = { title: "三条结论", body: "本页用三条结论回答标题。", speakerNotes: "", blocks: [{ type: "bullet-list" as const, items: ["结论一", "结论二", "结论三"] }] };
     const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "三条结论", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toEqual(["三条结论", "01", "结论一", "02", "结论二", "03", "结论三"]);
+    expect(texts).toEqual(["三条结论", "01", "1", "结论一", "2", "结论二", "3", "结论三"]);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
@@ -320,6 +343,24 @@ describe("document commands", () => {
     // The badge sits above the copy; text must start below the badge instead
     // of painting over the numeral.
     expect(firstItem.frame.y).toBeGreaterThanOrEqual(badge.frame.y + badge.frame.height);
+    expect(result.slides[0]!.elements.every((element) => element.frame.width > 0 && element.frame.height > 0)).toBe(true);
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("renders a short summary list as an editorial page with a real point count", () => {
+    const source = createDocument();
+    const items = ["叙事、写景、抒情、议论相结合", "骈散结合,语言凝练优美", "对比手法突出主题思想", "引用典故丰富文化内涵", "千百年来激励无数仁人志士"];
+    const content = { title: "艺术特色与深远影响", body: items.join("\n"), speakerNotes: "" };
+    const design = { layout: "summary" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    const itemTexts = texts.filter((element) => items.includes(element.text));
+    expect(itemTexts).toHaveLength(items.length);
+    expect(itemTexts.every((element) => element.frame.width < source.pageSize.width * 0.4)).toBe(true);
+    expect(texts.map((element) => element.text)).toContain("项要点");
+    expect(texts.map((element) => element.text)).toContain("05");
+    const panel = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.x > source.pageSize.width * 0.5 && element.frame.width > source.pageSize.width * 0.25 && element.frame.height > source.pageSize.height * 0.4);
+    expect(panel).toBeDefined();
     expect(result.slides[0]!.elements.every((element) => element.frame.width > 0 && element.frame.height > 0)).toBe(true);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });

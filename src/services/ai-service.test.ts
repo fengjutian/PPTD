@@ -84,6 +84,7 @@ describe("content-aware layout selection", () => {
   it("does not force a five-point overview into a cover", () => {
     const body = "1. 北宋名篇\n2. 庆历六年作\n3. 写景抒情\n4. 散文经典\n5. 语言优美";
     expect(chooseSlideLayout({ index: 0, requested: "cover", visualIntent: "hero", density: "medium", body })).toBe("cards");
+    expect(chooseSlideLayout({ index: 0, requested: "title-body", visualIntent: "hero", density: "medium", body })).toBe("cards");
     expect(chooseSlideLayout({ index: 0, requested: "cover", visualIntent: "hero", density: "low", body: "课程导览" })).toBe("cover");
   });
 
