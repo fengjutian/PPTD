@@ -2,8 +2,9 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde_json::Value;
 use std::{
     fs::{self, File},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::Manager;
 use tempfile::NamedTempFile;
@@ -11,6 +12,16 @@ use tempfile::NamedTempFile;
 const MAX_IMAGE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_PROJECT_ASSET_BYTES: usize = 4 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BYTES: usize = 100 * 1024 * 1024;
+const MAX_TEMPLATE_BYTES: u64 = 512 * 1024 * 1024;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateRecord {
+    id: String,
+    name: String,
+    size: u64,
+    imported_at: u64,
+}
 
 fn validate_path(path: &str, extension: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(path);
@@ -309,6 +320,71 @@ pub fn write_pptx(path: String, bytes: Vec<u8>) -> Result<(), String> {
         return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
     }
     atomic_write(&path, &bytes)
+}
+
+fn template_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join("templates"))
+        .map_err(|error| format!("TEMPLATE_DIRECTORY_UNAVAILABLE: {error}"))
+}
+
+fn safe_template_name(name: &str) -> String {
+    let value: String = name
+        .chars()
+        .map(|character| {
+            if matches!(character, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+                || character.is_control()
+            {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect();
+    let value = value.trim().trim_end_matches('.');
+    if value.is_empty() { "template.pptx".into() } else { value.into() }
+}
+
+#[tauri::command]
+pub fn import_pptx_template(app: tauri::AppHandle, source_path: String) -> Result<TemplateRecord, String> {
+    let source = validate_path(&source_path, "pptx")?;
+    let metadata = fs::metadata(&source).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_TEMPLATE_BYTES {
+        return Err("TEMPLATE_SIZE_INVALID".into());
+    }
+    let mut signature = [0_u8; 2];
+    File::open(&source)
+        .and_then(|mut file| file.read_exact(&mut signature))
+        .map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+    if signature != *b"PK" {
+        return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
+    }
+    let imported_at = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| "SYSTEM_TIME_INVALID")?.as_millis() as u64;
+    let name = safe_template_name(source.file_name().and_then(|value| value.to_str()).unwrap_or("template.pptx"));
+    let id = format!("{imported_at}-{name}");
+    let root = template_root(&app)?;
+    fs::create_dir_all(&root).map_err(|error| format!("TEMPLATE_DIRECTORY_CREATE_FAILED: {error}"))?;
+    fs::copy(&source, root.join(&id)).map_err(|error| format!("TEMPLATE_COPY_FAILED: {error}"))?;
+    Ok(TemplateRecord { id, name, size: metadata.len(), imported_at })
+}
+
+#[tauri::command]
+pub fn list_pptx_templates(app: tauri::AppHandle) -> Result<Vec<TemplateRecord>, String> {
+    let root = template_root(&app)?;
+    if !root.exists() { return Ok(Vec::new()); }
+    let mut templates = Vec::new();
+    for entry in fs::read_dir(root).map_err(|error| format!("TEMPLATE_LIST_FAILED: {error}"))? {
+        let entry = entry.map_err(|error| format!("TEMPLATE_LIST_FAILED: {error}"))?;
+        let id = entry.file_name().to_string_lossy().into_owned();
+        let Some((timestamp, name)) = id.split_once('-') else { continue };
+        let Ok(imported_at) = timestamp.parse::<u64>() else { continue };
+        if !name.to_ascii_lowercase().ends_with(".pptx") { continue; }
+        let metadata = entry.metadata().map_err(|error| format!("TEMPLATE_LIST_FAILED: {error}"))?;
+        if metadata.is_file() { templates.push(TemplateRecord { id, name: name.into(), size: metadata.len(), imported_at }); }
+    }
+    templates.sort_by(|a, b| b.imported_at.cmp(&a.imported_at));
+    Ok(templates)
 }
 
 #[cfg(test)]

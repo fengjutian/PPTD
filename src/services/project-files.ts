@@ -6,6 +6,7 @@ const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
 
 export const isDesktopRuntime = () => isTauri();
+export interface TemplateRecord { id: string; name: string; size: number; importedAt: number }
 
 export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument } | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
@@ -21,6 +22,9 @@ export async function choosePptxTemplate(): Promise<{ path: string; name: string
   if (!path) return null;
   return { path, name: path.split(/[\\/]/).at(-1) || "template.pptx" };
 }
+
+export const importPptxTemplate = (sourcePath: string) => invoke<TemplateRecord>("import_pptx_template", { sourcePath });
+export const listPptxTemplates = () => invoke<TemplateRecord[]>("list_pptx_templates");
 
 export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<string | null> {
   if (!isTauri()) {

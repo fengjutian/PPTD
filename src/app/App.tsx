@@ -6,7 +6,7 @@ import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { generateWithMiniMax, type AiDraft } from "../services/minimax";
 import { applyTheme, loadSettings } from "../services/settings";
-import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
+import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
@@ -67,9 +67,9 @@ export function App() {
   const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>(loadAiHistory);
   const [activeHistoryId, setActiveHistoryId] = useState<string>();
   const [aiBusy, setAiBusy] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<{ name: string; size?: number; path?: string }>();
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
+  const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const templateInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
   const scale = CANVAS_WIDTH / document.pageSize.width;
@@ -78,6 +78,7 @@ export function App() {
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
   useEffect(() => { applyTheme(loadSettings().theme); }, []);
+  useEffect(() => { if (isDesktopRuntime()) void listPptxTemplates().then(setTemplateLibrary).catch(() => setTaskStatus("模板库读取失败")); }, []);
 
   useEffect(() => {
     let active = true;
@@ -221,9 +222,13 @@ export function App() {
 
   const handleChooseTemplate = async () => {
     try {
-      if (!isDesktopRuntime()) { templateInputRef.current?.click(); return; }
+      if (!isDesktopRuntime()) { setTaskStatus("模板持久化仅在 PPTD 桌面端可用"); return; }
       const template = await choosePptxTemplate();
-      if (template) setSelectedTemplate(template);
+      if (!template) return;
+      const imported = await importPptxTemplate(template.path);
+      setSelectedTemplate(imported);
+      setTemplateLibrary(await listPptxTemplates());
+      setTaskStatus(`模板已保存：${imported.name}`);
     } catch (error) {
       setTaskStatus(`选择模板失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -348,9 +353,9 @@ export function App() {
       {activeView === "theme" && <main className="feature-workspace theme-workspace">
         <header className="feature-header"><div><Palette /><div><h1>PPT 模板</h1><p>上传用户模板，在内容确认后提取主题、母版和页面版式</p></div></div><div className="workflow-steps"><span className="done"><Check /> 生成草稿</span><i /><span className="done"><Check /> 编辑文字</span><i /><span className="active">3 上传模板</span></div></header>
         <section className="template-content"><div><div className="section-kicker">POWERPOINT TEMPLATE</div><h2>上传 PPT 模板</h2><p>请选择 `.pptx` 文件。模板将用于后续视觉设计，不会覆盖已经确认的文字内容。</p></div>
+          {templateLibrary.length > 0 && <div className="template-library"><div className="template-library-heading"><strong>已保存模板</strong><span>{templateLibrary.length} 个</span></div><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => setSelectedTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div></div>}
           <button type="button" className={`template-dropzone ${selectedTemplate ? "selected" : ""}`} onClick={handleChooseTemplate}><FileUp />{selectedTemplate ? <><strong>{selectedTemplate.name}</strong><span>{selectedTemplate.size ? `${(selectedTemplate.size / 1024 / 1024).toFixed(2)} MB · ` : ""}PowerPoint 模板已选择</span><small>点击重新选择</small></> : <><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx</small></>}</button>
-          <input ref={templateInputRef} className="visually-hidden" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={(event) => { const file = event.target.files?.[0]; if (file) setSelectedTemplate({ name: file.name, size: file.size }); event.currentTarget.value = ""; }} />
-          {selectedTemplate && <div className="template-status"><Check /><div><strong>模板已就绪，等待解析</strong><span>母版、版式和兼容性报告将在模板解析器启用后生成。</span></div></div>}
+          {selectedTemplate && <div className="template-status"><Check /><div><strong>模板已保存，等待解析</strong><span>文件已复制到 PPTD 模板库；母版、版式和兼容性报告将在模板解析器启用后生成。</span></div></div>}
           <div className="template-notice"><strong>当前能力边界</strong><p>现阶段仅完成安全选取与流程衔接，尚未解析或应用模板。不会把“已选择文件”伪装成模板已经成功套用。</p></div>
           <button type="button" className="primary-action finish-theme" onClick={() => setActiveView("editor")}>暂不使用模板，返回编辑器<ArrowRight /></button>
         </section>
