@@ -208,7 +208,7 @@ export function App() {
   const [aiSlideCount, setAiSlideCount] = useState(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
   const [activeDraftSlideIndex, setActiveDraftSlideIndex] = useState(0);
-  const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>(loadAiHistory);
+  const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string>();
   const [aiSaveState, setAiSaveState] = useState<AiDraftSaveState>("saved");
   const [newDraftConfirmOpen, setNewDraftConfirmOpen] = useState(false);
@@ -235,7 +235,14 @@ export function App() {
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
-  useEffect(() => { applyTheme(loadSettings().theme); }, []);
+  useEffect(() => { void loadSettings().then((settings) => applyTheme(settings.theme)); }, []);
+  useEffect(() => {
+    let active = true;
+    void loadAiHistory()
+      .then((history) => { if (active) setAiHistory(history); })
+      .catch((error: unknown) => { if (active) setTaskStatus(`制作历史读取失败：${error instanceof Error ? error.message : String(error)}`); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => { if (!message) return; const timer = window.setTimeout(() => setMessage(undefined), 4200); return () => window.clearTimeout(timer); }, [message]);
   useEffect(() => { if (isDesktopRuntime()) void listPptxTemplates().then(setTemplateLibrary).catch(() => setTaskStatus("模板库读取失败")); }, []);
 
@@ -289,6 +296,7 @@ export function App() {
 
   const handleSave = async () => {
     if (savingRef.current) return;
+    if (!isDesktopRuntime()) { setTaskStatus("浏览器预览模式不支持保存项目，请使用桌面端"); return; }
     savingRef.current = true;
     setSaving(true);
     setTaskStatus("正在保存…");
