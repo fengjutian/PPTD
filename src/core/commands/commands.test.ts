@@ -133,7 +133,7 @@ describe("document commands", () => {
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "卡片文稿", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
-    expect(texts.map((element) => element.text)).toEqual(["三个重点", "1. 第一项", "2. 第二项", "3. 第三项"]);
+    expect(texts.map((element) => element.text)).toEqual(["三个重点", "1", "第一项", "2", "第二项", "3", "第三项"]);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
@@ -162,7 +162,7 @@ describe("document commands", () => {
       { role: "body" as const, frame: { x: 0.30, y: 0.25, width: 0.65, height: 0.50 } },
     ] }];
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "安全双栏", slides: [content], designs: [design], templateLayouts }));
-    const bodies = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.text !== content.title);
+    const bodies = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.text !== content.title && !/^\d+$/.test(element.text));
     expect(bodies[0]!.frame.x + bodies[0]!.frame.width).toBeLessThanOrEqual(bodies[1]!.frame.x);
     expect(bodies.every((element) => element.frame.y + element.frame.height <= source.pageSize.height)).toBe(true);
   });
@@ -275,7 +275,7 @@ describe("document commands", () => {
     const content = { title: "排版检查", body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" };
     const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "自动适配", slides: [content], designs: [design] }));
-    const bodies = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.text !== content.title);
+    const bodies = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && element.text !== content.title && !/^\d+$/.test(element.text));
     expect(bodies).toHaveLength(4);
     expect(bodies.every((element) => element.style.fontSizePt <= 16 && element.style.fontSizePt >= 12)).toBe(true);
     for (const [bodyIndex, body] of bodies.entries()) {

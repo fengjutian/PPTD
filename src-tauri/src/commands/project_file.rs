@@ -1033,13 +1033,6 @@ pub fn analyze_pptx_template(
         });
     }
 
-    let master_regions = read_zip_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?
-        .and_then(|xml| {
-            roxmltree::Document::parse(&xml)
-                .ok()
-                .map(|document| extract_template_regions(&document))
-        })
-        .unwrap_or_default();
     let mut layouts = Vec::new();
     for number in 1..=layout_count {
         let entry_name = format!("ppt/slideLayouts/slideLayout{number}.xml");
@@ -1054,28 +1047,19 @@ pub fn analyze_pptx_template(
             .and_then(|node| node.attribute("name"))
             .unwrap_or("未命名版式")
             .to_owned();
-        let mut regions = extract_template_regions(&document);
-        for role in ["title", "body", "image"] {
-            if !regions.iter().any(|region| region.role == role) {
-                regions.extend(
-                    master_regions
-                        .iter()
-                        .filter(|region| region.role == role)
-                        .cloned(),
-                );
-            }
-        }
+        // Keep only placeholders explicitly declared by this layout. Copying all
+        // master placeholders into every layout makes cover layouts look like
+        // content layouts and causes the cover artwork to be reused everywhere.
+        let regions = extract_template_regions(&document);
         let background_color = extract_background_color(&document);
         let decorations = extract_template_decorations(&document);
-        if !regions.is_empty() {
-            layouts.push(TemplateLayoutSummary {
-                index: number,
-                name,
-                background_color,
-                decorations,
-                regions,
-            });
-        }
+        layouts.push(TemplateLayoutSummary {
+            index: number,
+            name,
+            background_color,
+            decorations,
+            regions,
+        });
     }
 
     let mut warnings = Vec::new();

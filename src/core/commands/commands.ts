@@ -109,7 +109,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
       const useListGrid = !hasDeterministicBlock && items.length >= 3 && !["cover", "section", "quote"].includes(design.layout);
-      const rankedLayouts = command.templateLayouts?.filter((layout) => layout.regions.some((region) => region.role === "title")) ?? [];
+      const visualLayouts = command.templateLayouts ?? [];
+      const rankedLayouts = visualLayouts.filter((layout) => layout.regions.some((region) => region.role === "title"));
       const layoutIsCompatible = (layout: AiTemplateLayout): boolean => {
         const title = layout.regions.find((region) => region.role === "title")?.frame;
         const bodies = layout.regions.filter((region) => region.role === "body").map((region) => region.frame);
@@ -141,7 +142,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const sorted = [...layouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index);
         return sorted[0];
       };
-      const visualRecipe = chooseLayout(rankedLayouts.filter(layoutHasSemanticGeometry)) ?? chooseLayout(rankedLayouts);
+      const visualRecipe = chooseLayout(visualLayouts.filter(layoutHasSemanticGeometry)) ?? chooseLayout(visualLayouts);
       // Rendered template backgrounds preserve complex master artwork, but OOXML placeholder
       // geometry is not reliable enough for editable text until inheritance is fully resolved.
       // Keep all editable text on deterministic, non-overlapping grids in that case.
@@ -214,7 +215,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       } else if ((design.layout === "cards" && items.length > 1) || useListGrid) {
         slide.elements.push(text(content.title, frame(0.07, 0.20, 0.82, 0.10), 29, design.titleColor, true, "left"), shape(frame(0.07, 0.32, 0.12, 0.012), design.accent));
         const visible = items.slice(0, 6); const columns = visible.length > 3 ? 3 : 2; const rows = Math.ceil(visible.length / columns);
-        visible.forEach((item, itemIndex) => { const column = itemIndex % columns; const row = Math.floor(itemIndex / columns); const x = 0.07 + column * (0.86 / columns); const y = 0.37 + row * (0.50 / rows); slide.elements.push(shape(frame(x, y, 0.86 / columns - 0.025, 0.50 / rows - 0.035), "#F3F5F7"), shape(frame(x, y, 0.012, 0.50 / rows - 0.035), design.accent), text(item, frame(x + 0.025, y + 0.035, 0.86 / columns - 0.07, 0.50 / rows - 0.10), 16, design.bodyColor, false, "left")); });
+        visible.forEach((item, itemIndex) => {
+          const column = itemIndex % columns; const row = Math.floor(itemIndex / columns); const x = 0.07 + column * (0.86 / columns); const y = 0.37 + row * (0.50 / rows); const cardWidth = 0.86 / columns - 0.025; const cardHeight = 0.50 / rows - 0.035;
+          const cleanItem = item.replace(/^\d+[.、]\s*/, "");
+          slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), "#F7F8FA"), shape(frame(x + 0.025, y + 0.035, 0.045, 0.060), design.accent, "ellipse"));
+          slide.elements.push(text(String(itemIndex + 1), frame(x + 0.029, y + 0.046, 0.037, 0.030), 13, "#FFFFFF", true, "center"), text(cleanItem, frame(x + 0.085, y + 0.036, cardWidth - 0.115, cardHeight - 0.070), 16, design.bodyColor, true, "left"));
+        });
       } else if (design.layout === "split" && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
         const middle = Math.ceil(items.length / 2); slide.elements.push(text(items.slice(0, middle).join("\n\n"), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), bodySize, design.bodyColor, false, "left"), text(items.slice(middle).join("\n\n"), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), bodySize, design.bodyColor, false, "left"));
