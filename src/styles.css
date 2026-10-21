@@ -154,7 +154,7 @@ button { color: inherit; }
 .theme-applied-message { display: flex; align-items: center; gap: 8px; margin-top: 20px; padding: 11px 14px; border: 1px solid #52613d; border-radius: 8px; color: #a9c47e; background: #20261a; font-size: 12px; }
 .theme-applied-message svg { width: 16px; height: 16px; }
 .finish-theme { float: right; margin-top: 26px; }
-.template-content { width: min(1180px, calc(100% - 48px)); margin: 24px auto; }
+.template-content { width: auto; margin: 18px 16px 28px; }
 .template-content h2, .template-content p { margin: 0; }
 .template-content h2 { font-size: 22px; }
 .template-content > div:first-child > p { margin-top: 8px; color: #858a93; font-size: 12px; }
