@@ -219,11 +219,17 @@ button { color: inherit; }
 
 .statusbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 22px; padding: 0 14px; background: #101114; border-top: 1px solid #303136; color: #7d818a; font-size: 10px; }
 .module-shell .statusbar { grid-row: 2; }
-.task-status { margin-left: auto; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #babdc4; }
 .saved-dot { color: #9bad56; margin-left: auto; }
-.task-status + .saved-dot { margin-left: 0; }
 .saved-dot.dirty { color: #e6ae62; }
 .zoom { min-width: 40px; text-align: right; color: #c6c8cd; }
+.page-message { position: fixed; z-index: 50; top: 16px; right: 18px; width: min(420px, calc(100vw - 36px)); display: grid; grid-template-columns: 20px minmax(0, 1fr) 22px; align-items: center; gap: 10px; padding: 12px 13px; border: 1px solid #484b52; border-radius: 9px; color: #e6e8ec; background: #24262b; font-size: 12px; }
+.page-message > svg { width: 18px; height: 18px; }
+.page-message.info > svg { color: #7fa6dc; }
+.page-message.success { border-color: #52613d; background: #20261a; } .page-message.success > svg { color: #9fbd72; }
+.page-message.error { border-color: #6b3940; background: #2a2022; } .page-message.error > svg { color: #ee9199; }
+.page-message button { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; color: #8d929b; background: transparent; cursor: pointer; }
+.page-message button:hover { color: currentColor; }
+.page-message button svg { width: 14px; height: 14px; }
 .settings-page { width: min(900px, calc(100% - 64px)); margin: 34px auto 70px; display: grid; gap: 16px; }
 .settings-tabs { display: flex; gap: 4px; border-bottom: 1px solid #35373d; }
 .settings-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 11px 16px; border: 0; border-bottom: 2px solid transparent; color: #898e97; background: transparent; cursor: pointer; }
@@ -269,6 +275,7 @@ button { color: inherit; }
 
 :root[data-theme="light"] { color: #22252a; background: #eef0f3; --scrollbar-track: #e4e6e9; --scrollbar-thumb: #a8acb3; --scrollbar-thumb-hover: #858a93; }
 :root[data-theme="light"] .app-shell { background: #eceef1; } :root[data-theme="light"] .topbar, :root[data-theme="light"] .statusbar { background: #f9fafb; border-color: #d6d9de; color: #5b6068; }
+:root[data-theme="light"] .page-message { color: #343940; background: #fff; border-color: #cfd3d9; } :root[data-theme="light"] .page-message.success { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; } :root[data-theme="light"] .page-message.error { color: #9f3541; background: #fff1f2; border-color: #e2a8ae; }
 :root[data-theme="light"] .nav-rail { background: #f7f8fa; border-color: #d6d9de; } :root[data-theme="light"] .nav-rail button:hover:not(:disabled) { color: #25282d; background: #e5e7eb; }
 :root[data-theme="light"] .left-panel, :root[data-theme="light"] .right-panel { background: #f4f5f7; color: #25282d; } :root[data-theme="light"] .panel-heading, :root[data-theme="light"] .inspector-title { border-color: #d9dce1; }
 :root[data-theme="light"] .panel-heading button { border-color: #cfd3d9; color: #555b64; background: #fff; }

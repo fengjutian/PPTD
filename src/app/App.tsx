@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, FilePlus2, FileUp, ImagePlus, Info, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
@@ -11,6 +11,7 @@ import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
 type AppView = "editor" | "ai" | "theme" | "settings";
+type PageMessage = { id: number; text: string; kind: "info" | "success" | "error" };
 
 function ToolButton({ label, onClick, disabled, children }: { label: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode }) {
   return <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
@@ -59,7 +60,8 @@ export function App() {
   const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
   const [projectPath, setProjectPath] = useState<string>();
   const [savedRevision, setSavedRevision] = useState(0);
-  const [taskStatus, setTaskStatus] = useState<string>();
+  const [message, setMessage] = useState<PageMessage>();
+  const setTaskStatus = (text?: string) => setMessage(text ? { id: Date.now(), text, kind: /失败|错误|无效|必须|不可用/.test(text) ? "error" : /完成|成功|已保存|已添加|已打开|已新建|已恢复|已确认/.test(text) ? "success" : "info" } : undefined);
   const [activeView, setActiveView] = useState<AppView>("editor");
   const [aiTopic, setAiTopic] = useState("");
   const [aiSlideCount, setAiSlideCount] = useState(6);
@@ -78,6 +80,7 @@ export function App() {
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
   useEffect(() => { applyTheme(loadSettings().theme); }, []);
+  useEffect(() => { if (!message) return; const timer = window.setTimeout(() => setMessage(undefined), 4200); return () => window.clearTimeout(timer); }, [message]);
   useEffect(() => { if (isDesktopRuntime()) void listPptxTemplates().then(setTemplateLibrary).catch(() => setTaskStatus("模板库读取失败")); }, []);
 
   useEffect(() => {
@@ -99,9 +102,7 @@ export function App() {
   useEffect(() => {
     if (!dirty) return;
     const timer = window.setTimeout(() => {
-      void saveRecovery(document)
-        .then(() => setTaskStatus("已自动保存恢复快照"))
-        .catch((error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
+      void saveRecovery(document).catch((error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [dirty, document]);
@@ -189,13 +190,20 @@ export function App() {
 
   const handleAiGenerate = async () => {
     setAiBusy(true); setAiDraft(undefined);
+    if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
     try {
       const draft = await generateWithMiniMax(aiTopic, aiSlideCount);
       const id = crypto.randomUUID();
       setAiDraft(draft); setActiveHistoryId(id);
       setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
+      setTaskStatus("MiniMax 已完成 PPT 草稿生成");
+      if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
     }
-    catch (error) { setTaskStatus(`MiniMax 生成失败：${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setTaskStatus(`MiniMax 生成失败：${detail}`);
+      if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成失败", { body: detail });
+    }
     finally { setAiBusy(false); }
   };
 
@@ -366,7 +374,9 @@ export function App() {
         <SettingsWorkspace onMessage={setTaskStatus} />
       </main>}
 
-      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{taskStatus && <span className="task-status">{taskStatus}</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>
+      {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
+
+      <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>
     </div>
   );
 }
