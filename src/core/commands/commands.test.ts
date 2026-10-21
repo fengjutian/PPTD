@@ -119,12 +119,22 @@ describe("document commands", () => {
   it("applies AI template design without allowing it to rewrite approved content", () => {
     const source = createDocument();
     const content = { title: "已审核标题", body: "已审核正文", speakerNotes: "已审核备注" };
-    const design = { background: "#112233", title: { frame: { x: 0.1, y: 0.1, width: 0.8, height: 0.15 }, fontSizePt: 32, color: "#FFFFFF", bold: true, align: "left" as const }, body: { frame: { x: 0.1, y: 0.32, width: 0.7, height: 0.5 }, fontSizePt: 20, color: "#EEEEEE", bold: false, align: "left" as const }, accents: [{ frame: { x: 0, y: 0, width: 0.03, height: 1 }, shape: "rectangle" as const, fill: "#FF6600" }] };
+    const design = { layout: "cover" as const, background: "#112233", accent: "#FF6600", titleColor: "#FFFFFF", bodyColor: "#EEEEEE" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "设计文稿", slides: [content], designs: [design], fontFamily: "Arial" }));
     expect(result.slides[0]!.content).toEqual({ ...content, status: "approved" });
     expect(result.slides[0]!.background).toBe("#112233");
-    expect(result.slides[0]!.elements.map((element) => element.type)).toEqual(["shape", "text", "text"]);
-    expect(result.slides[0]!.elements[1]).toMatchObject({ type: "text", text: "已审核标题", style: { fontFamily: "Arial", fontSizePt: 32 } });
+    expect(result.slides[0]!.elements.map((element) => element.type)).toEqual(["shape", "shape", "text", "text"]);
+    expect(result.slides[0]!.elements[2]).toMatchObject({ type: "text", text: "已审核标题", style: { fontFamily: "Arial", fontSizePt: 42 } });
+  });
+
+  it("renders numbered content as editable cards with deterministic geometry", () => {
+    const source = createDocument();
+    const content = { title: "三个重点", body: "1. 第一项 2. 第二项 3. 第三项", speakerNotes: "" };
+    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "卡片文稿", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(["三个重点", "1. 第一项", "2. 第二项", "3. 第三项"]);
+    expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
 });

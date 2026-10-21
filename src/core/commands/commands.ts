@@ -3,9 +3,8 @@ import { createSlide, inches } from "../document-model";
 
 export type ChangeDomain = "content" | "design" | "both";
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string }
-export interface AiNormalizedFrame { x: number; y: number; width: number; height: number }
-export interface AiTextDesign { frame: AiNormalizedFrame; fontSizePt: number; color: string; bold: boolean; align: "left" | "center" | "right" }
-export interface AiSlideDesign { background: string; title: AiTextDesign; body: AiTextDesign; accents: Array<{ frame: AiNormalizedFrame; shape: "rectangle" | "ellipse"; fill: string }> }
+export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
+export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
 
 export type DocumentCommand =
   | { type: "add-slide" }
@@ -65,16 +64,43 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (command.pageSize) document.pageSize = command.pageSize;
     const pageWidth = document.pageSize.width;
     const pageHeight = document.pageSize.height;
-    const frame = (value: AiNormalizedFrame): RectEmu => ({ x: Math.round(value.x * pageWidth) as Emu, y: Math.round(value.y * pageHeight) as Emu, width: Math.round(value.width * pageWidth) as Emu, height: Math.round(value.height * pageHeight) as Emu });
+    const frame = (x: number, y: number, width: number, height: number): RectEmu => ({ x: Math.round(x * pageWidth) as Emu, y: Math.round(y * pageHeight) as Emu, width: Math.round(width * pageWidth) as Emu, height: Math.round(height * pageHeight) as Emu });
+    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right") => ({ id: crypto.randomUUID() as ElementId, type: "text" as const, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt, color, bold, align } });
+    const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle") => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: kind === "ellipse" ? 999 : 8 } });
+    const points = (body: string) => body.split(/\n+|(?=\d+[.、]\s*)/).map((value) => value.trim()).filter(Boolean);
     document.title = command.title.trim();
     document.slides = command.slides.map((content, index) => {
       const design = command.designs[index]!;
       const slide = createSlide(index + 1);
       slide.background = design.background;
       slide.content = { ...content, status: "approved" };
-      slide.elements = design.accents.map((accent) => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: frame(accent.frame), rotationMilliDegree: 0, locked: false, shape: accent.shape, style: { fill: accent.fill, stroke: accent.fill, strokeWidthPt: 0, radiusPt: accent.shape === "ellipse" ? 999 : 0 } }));
-      slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: frame(design.title.frame), rotationMilliDegree: 0, locked: false, text: content.title, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: design.title.fontSizePt, color: design.title.color, bold: design.title.bold, align: design.title.align } });
-      if (content.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: frame(design.body.frame), rotationMilliDegree: 0, locked: false, text: content.body, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: design.body.fontSizePt, color: design.body.color, bold: design.body.bold, align: design.body.align } });
+      const items = points(content.body);
+      const bodySize = content.body.length > 260 ? 15 : content.body.length > 150 ? 17 : 20;
+      slide.elements = [];
+      if (design.layout === "cover") {
+        slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
+        slide.elements.push(text(content.title, frame(0.10, 0.24, 0.78, 0.28), 42, design.titleColor, true, "left"));
+        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.10, 0.56, 0.72, 0.16), 19, design.bodyColor, false, "left"));
+      } else if (design.layout === "section") {
+        slide.elements.push(shape(frame(0, 0, 0.32, 1), design.accent));
+        slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left"));
+        slide.elements.push(text(content.title, frame(0.39, 0.30, 0.50, 0.22), 36, design.titleColor, true, "left"));
+        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.39, 0.56, 0.47, 0.20), 18, design.bodyColor, false, "left"));
+      } else if (design.layout === "quote") {
+        slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
+        slide.elements.push(text(content.title, frame(0.15, 0.12, 0.72, 0.13), 28, design.titleColor, true, "left"));
+        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.15, 0.31, 0.68, 0.46), Math.max(18, bodySize), design.bodyColor, false, "left"));
+      } else if (design.layout === "cards" && items.length > 1) {
+        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.82, 0.12), 29, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
+        const visible = items.slice(0, 6); const columns = visible.length > 3 ? 3 : 2; const rows = Math.ceil(visible.length / columns);
+        visible.forEach((item, itemIndex) => { const column = itemIndex % columns; const row = Math.floor(itemIndex / columns); const x = 0.07 + column * (0.86 / columns); const y = 0.28 + row * (0.60 / rows); slide.elements.push(shape(frame(x, y, 0.86 / columns - 0.025, 0.60 / rows - 0.035), "#F3F5F7"), shape(frame(x, y, 0.012, 0.60 / rows - 0.035), design.accent), text(item, frame(x + 0.025, y + 0.035, 0.86 / columns - 0.07, 0.60 / rows - 0.10), 16, design.bodyColor, false, "left")); });
+      } else if (design.layout === "split" && items.length > 1) {
+        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.84, 0.13), 30, design.titleColor, true, "left"), shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
+        const middle = Math.ceil(items.length / 2); slide.elements.push(text(items.slice(0, middle).join("\n\n"), frame(0.08, 0.28, 0.36, 0.54), bodySize, design.bodyColor, false, "left"), text(items.slice(middle).join("\n\n"), frame(0.57, 0.28, 0.35, 0.54), bodySize, design.bodyColor, false, "left"));
+      } else {
+        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.84, 0.13), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.11, 0.012), design.accent));
+        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.08, 0.30, 0.82, 0.55), bodySize, design.bodyColor, false, "left"));
+      }
       return slide;
     });
     return;
