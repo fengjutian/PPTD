@@ -210,7 +210,7 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text)).toEqual([content.title, content.body]);
   });
 
-  it("keeps one coherent rendered background for slides with the same semantic role", () => {
+  it("creates controlled visual rhythm across equally suitable semantic backgrounds", () => {
     const source = createDocument();
     const slides = [
       { title: "第一页", body: "正文一", speakerNotes: "" },
@@ -228,7 +228,9 @@ describe("document commands", () => {
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版式", slides, designs: [design, design], templateLayouts }));
     const backgrounds = result.slides.map((slide) => slide.elements.find((element) => element.type === "image"));
     expect(backgrounds[0]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[0]!.backgroundImageDataUrl } });
-    expect(backgrounds[1]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[0]!.backgroundImageDataUrl } });
+    expect(backgrounds[1]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[1]!.backgroundImageDataUrl } });
+    const titleFrames = result.slides.map((slide, slideIndex) => slide.elements.find((element) => element.type === "text" && element.text === slides[slideIndex]!.title)!.frame);
+    expect(titleFrames[1]).toEqual(titleFrames[0]);
   });
 
   it("renders timeline blocks without parsing the body string", () => {
@@ -281,6 +283,18 @@ describe("document commands", () => {
     for (const [bodyIndex, body] of bodies.entries()) {
       expect(bodies.slice(bodyIndex + 1).every((candidate) => body.frame.x + body.frame.width <= candidate.frame.x || candidate.frame.x + candidate.frame.width <= body.frame.x || body.frame.y + body.frame.height <= candidate.frame.y || candidate.frame.y + candidate.frame.height <= body.frame.y)).toBe(true);
     }
+  });
+
+  it("centers an incomplete final card row on the shared alignment grid", () => {
+    const source = createDocument();
+    const content = { title: "五项重点", body: "1. 第一项\n2. 第二项\n3. 第三项\n4. 第四项\n5. 第五项", speakerNotes: "" };
+    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "视觉对齐", slides: [content], designs: [design] }));
+    const labels = result.slides[0]!.elements.filter((element): element is Extract<typeof element, { type: "text" }> => element.type === "text" && /^第[一二三四五]项$/.test(element.text));
+    expect(labels).toHaveLength(5);
+    expect(labels[3]!.frame.x).toBeGreaterThan(labels[0]!.frame.x);
+    expect(labels[4]!.frame.x + labels[4]!.frame.width).toBeLessThan(labels[2]!.frame.x + labels[2]!.frame.width);
+    expect(labels[3]!.frame.y).toBe(labels[4]!.frame.y);
   });
 
 });
