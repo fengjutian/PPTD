@@ -220,4 +220,15 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements.every((element) => element.type === "text" || element.type === "shape")).toBe(true);
   });
 
+  it("shrinks long Chinese text to fit narrow template columns", () => {
+    const source = createDocument();
+    const longItem = "这是一个用于验证中文文本框宽度估算和自动字号适配的较长段落，不能越过双栏边界覆盖另一列内容";
+    const content = { title: "排版检查", body: `1. ${longItem}\n2. ${longItem}\n3. ${longItem}\n4. ${longItem}`, speakerNotes: "" };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "自动适配", slides: [content], designs: [design] }));
+    const bodies = result.slides[0]!.elements.filter((element) => element.type === "text" && element.text !== content.title);
+    expect(bodies).toHaveLength(2);
+    expect(bodies.every((element) => element.style.fontSizePt < 20 && element.style.fontSizePt >= 12)).toBe(true);
+  });
+
 });

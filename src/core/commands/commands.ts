@@ -75,7 +75,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const pageWidth = document.pageSize.width;
     const pageHeight = document.pageSize.height;
     const frame = (x: number, y: number, width: number, height: number): RectEmu => ({ x: Math.round(x * pageWidth) as Emu, y: Math.round(y * pageHeight) as Emu, width: Math.round(width * pageWidth) as Emu, height: Math.round(height * pageHeight) as Emu });
-    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right") => ({ id: crypto.randomUUID() as ElementId, type: "text" as const, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt, color, bold, align } });
+    const fittedFontSize = (value: string, box: RectEmu, preferredPt: number, minimumPt = 12): number => {
+      const widthPt = box.width / 12_700;
+      const heightPt = box.height / 12_700;
+      const paragraphs = value.split("\n");
+      for (let size = preferredPt; size >= minimumPt; size -= 1) {
+        const unitsPerLine = Math.max(1, widthPt / (size * 0.92));
+        const lineCount = paragraphs.reduce((total, paragraph) => {
+          if (!paragraph) return total + 0.55;
+          const units = [...paragraph].reduce((sum, character) => sum + (/^[\u0000-\u00ff]$/.test(character) ? 0.55 : 1), 0);
+          return total + Math.max(1, Math.ceil(units / unitsPerLine));
+        }, 0);
+        if (lineCount * size * 1.2 <= heightPt) return size;
+      }
+      return minimumPt;
+    };
+    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right") => ({ id: crypto.randomUUID() as ElementId, type: "text" as const, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: fittedFontSize(value, box, fontSizePt), color, bold, align } });
     const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle") => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: kind === "ellipse" ? 999 : 8 } });
     const points = (body: string) => body.split(/\n+|(?=\d+[.、]\s*)/).map((value) => value.trim()).filter(Boolean);
     document.title = command.title.trim();

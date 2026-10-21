@@ -708,26 +708,22 @@ pub fn analyze_pptx_template(
                 }
             }
         }
-        major_font = document
-            .descendants()
-            .find(|node| node.tag_name().name() == "majorFont")
-            .and_then(|node| {
-                node.descendants()
-                    .find(|child| child.tag_name().name() == "latin")
-            })
-            .and_then(|node| node.attribute("typeface"))
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned);
-        minor_font = document
-            .descendants()
-            .find(|node| node.tag_name().name() == "minorFont")
-            .and_then(|node| {
-                node.descendants()
-                    .find(|child| child.tag_name().name() == "latin")
-            })
-            .and_then(|node| node.attribute("typeface"))
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned);
+        let theme_font = |family: &str| {
+            document
+                .descendants()
+                .find(|node| node.tag_name().name() == family)
+                .and_then(|node| {
+                    node.descendants()
+                        .find(|child| child.tag_name().name() == "ea" && child.attribute("typeface").is_some_and(|value| !value.is_empty()))
+                        .or_else(|| node.descendants().find(|child| child.tag_name().name() == "font" && matches!(child.attribute("script"), Some("Hans" | "Hant")) && child.attribute("typeface").is_some_and(|value| !value.is_empty())))
+                        .or_else(|| node.descendants().find(|child| child.tag_name().name() == "latin"))
+                })
+                .and_then(|node| node.attribute("typeface"))
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+        };
+        major_font = theme_font("majorFont");
+        minor_font = theme_font("minorFont");
     }
 
     let mut slide_entries = Vec::new();
