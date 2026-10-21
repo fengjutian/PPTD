@@ -6,7 +6,7 @@ import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { generateWithMiniMax, type AiDraft } from "../services/minimax";
 import { applyTheme, loadSettings } from "../services/settings";
-import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateRecord } from "../services/project-files";
+import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
@@ -73,6 +73,7 @@ export function App() {
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const [templatePreview, setTemplatePreview] = useState<string | null>();
+  const [templateAnalysis, setTemplateAnalysis] = useState<TemplateAnalysis>();
   const [templatePreviewBusy, setTemplatePreviewBusy] = useState(false);
   const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -251,10 +252,13 @@ export function App() {
   const handleSelectTemplate = async (template: TemplateRecord) => {
     setSelectedTemplate(template);
     setTemplatePreview(undefined);
+    setTemplateAnalysis(undefined);
     if (!isDesktopRuntime()) return;
     setTemplatePreviewBusy(true);
     try {
-      setTemplatePreview(await getPptxTemplatePreview(template.id));
+      const [preview, analysis] = await Promise.all([getPptxTemplatePreview(template.id), analyzePptxTemplate(template.id)]);
+      setTemplatePreview(preview);
+      setTemplateAnalysis(analysis);
     } catch (error) {
       setTemplatePreview(null);
       setTaskStatus(`模板预览读取失败：${error instanceof Error ? error.message : String(error)}`);
@@ -387,7 +391,7 @@ export function App() {
         <section className="template-content"><div className="template-page-heading"><div><div className="section-kicker">POWERPOINT TEMPLATE</div><h2>PPT 模板库</h2><p>选择模板查看封面预览，或上传新的 `.pptx` 模板。</p></div><button type="button" className="primary-action" onClick={() => setTemplateUploadOpen(true)}><FileUp />上传 PPT 模板</button></div>
           <div className="template-browser">
             <div className="template-library"><div className="template-library-heading"><strong>已保存模板</strong><span>{templateLibrary.length} 个</span></div><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板</div>}</div>
-            <div className="template-preview-panel"><div className="template-preview-heading"><strong><Eye />模板预览</strong>{selectedTemplate && <span>{selectedTemplate.name}</span>}</div><div className="template-preview-stage">{templatePreviewBusy ? <span>正在读取预览…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div></div>
+            <div className="template-preview-panel"><div className="template-preview-heading"><strong><Eye />模板预览</strong>{selectedTemplate && <span>{selectedTemplate.name}</span>}</div><div className="template-preview-stage">{templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-analysis"><div className="template-analysis-grid"><span><b>{templateAnalysis.slideCount}</b>页面</span><span><b>{templateAnalysis.masterCount}</b>母版</span><span><b>{templateAnalysis.layoutCount}</b>版式</span><span><b>{templateAnalysis.themeCount}</b>主题</span></div><dl><div><dt>页面尺寸</dt><dd>{templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in` : "未定义"}</dd></div><div><dt>标题字体</dt><dd>{templateAnalysis.majorFont || "未定义"}</dd></div><div><dt>正文字体</dt><dd>{templateAnalysis.minorFont || "未定义"}</dd></div></dl>{templateAnalysis.themeColors.length > 0 && <div className="template-color-row" aria-label="主题色">{templateAnalysis.themeColors.map((color) => <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />)}</div>}<div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div></div>}</div>
           </div>
           {selectedTemplate && <div className="template-status"><Check /><div><strong>模板已选择</strong><span>当前显示的是 PPTX 内嵌封面；母版、版式和兼容性报告将在模板解析器启用后生成。</span></div></div>}
           <div className="template-notice"><strong>当前能力边界</strong><p>封面预览不代表已完整解析或应用母版与版式，不会把“已保存文件”伪装成模板已经成功套用。</p></div>

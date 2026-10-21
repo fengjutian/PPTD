@@ -25,6 +25,28 @@ pub struct TemplateRecord {
     imported_at: u64,
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateThemeColor {
+    name: String,
+    value: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateAnalysis {
+    slide_count: usize,
+    slide_width_emu: Option<u64>,
+    slide_height_emu: Option<u64>,
+    master_count: usize,
+    layout_count: usize,
+    theme_count: usize,
+    theme_colors: Vec<TemplateThemeColor>,
+    major_font: Option<String>,
+    minor_font: Option<String>,
+    warnings: Vec<String>,
+}
+
 fn validate_path(path: &str, extension: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(path);
     if !path.is_absolute() {
@@ -477,6 +499,154 @@ pub fn get_pptx_template_preview(
         )));
     }
     Ok(None)
+}
+
+fn read_zip_text(
+    archive: &mut ZipArchive<File>,
+    entry_name: &str,
+) -> Result<Option<String>, String> {
+    const MAX_XML_BYTES: u64 = 8 * 1024 * 1024;
+    let Ok(entry) = archive.by_name(entry_name) else {
+        return Ok(None);
+    };
+    if entry.size() > MAX_XML_BYTES {
+        return Err("PPTX_XML_ENTRY_TOO_LARGE".into());
+    }
+    let mut bytes = Vec::with_capacity(entry.size() as usize);
+    entry
+        .take(MAX_XML_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("PPTX_XML_READ_FAILED: {error}"))?;
+    if bytes.len() as u64 > MAX_XML_BYTES {
+        return Err("PPTX_XML_ENTRY_TOO_LARGE".into());
+    }
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|_| "PPTX_XML_ENCODING_INVALID".into())
+}
+
+#[tauri::command]
+pub fn analyze_pptx_template(
+    app: tauri::AppHandle,
+    template_id: String,
+) -> Result<TemplateAnalysis, String> {
+    if template_id.is_empty()
+        || template_id.contains('/')
+        || template_id.contains('\\')
+        || template_id == "."
+        || template_id == ".."
+    {
+        return Err("TEMPLATE_ID_INVALID".into());
+    }
+    let root = template_root(&app)?;
+    let path = root.join(&template_id);
+    if !path.starts_with(&root) || !path.is_file() {
+        return Err("TEMPLATE_NOT_FOUND".into());
+    }
+    let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+    let mut slide_count = 0;
+    let mut master_count = 0;
+    let mut layout_count = 0;
+    let mut theme_count = 0;
+    for index in 0..archive.len() {
+        let name = archive
+            .by_index(index)
+            .map_err(|error| format!("PPTX_ARCHIVE_READ_FAILED: {error}"))?
+            .name()
+            .to_owned();
+        if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
+            slide_count += 1;
+        } else if name.starts_with("ppt/slideMasters/slideMaster") && name.ends_with(".xml") {
+            master_count += 1;
+        } else if name.starts_with("ppt/slideLayouts/slideLayout") && name.ends_with(".xml") {
+            layout_count += 1;
+        } else if name.starts_with("ppt/theme/theme") && name.ends_with(".xml") {
+            theme_count += 1;
+        }
+    }
+
+    let mut slide_width_emu = None;
+    let mut slide_height_emu = None;
+    if let Some(xml) = read_zip_text(&mut archive, "ppt/presentation.xml")? {
+        let document = roxmltree::Document::parse(&xml)
+            .map_err(|error| format!("PPTX_PRESENTATION_XML_INVALID: {error}"))?;
+        if let Some(size) = document
+            .descendants()
+            .find(|node| node.tag_name().name() == "sldSz")
+        {
+            slide_width_emu = size.attribute("cx").and_then(|value| value.parse().ok());
+            slide_height_emu = size.attribute("cy").and_then(|value| value.parse().ok());
+        }
+    }
+
+    let mut theme_colors = Vec::new();
+    let mut major_font = None;
+    let mut minor_font = None;
+    if let Some(xml) = read_zip_text(&mut archive, "ppt/theme/theme1.xml")? {
+        let document = roxmltree::Document::parse(&xml)
+            .map_err(|error| format!("PPTX_THEME_XML_INVALID: {error}"))?;
+        if let Some(scheme) = document
+            .descendants()
+            .find(|node| node.tag_name().name() == "clrScheme")
+        {
+            for color in scheme.children().filter(|node| node.is_element()) {
+                if let Some(value_node) = color.children().find(|node| node.is_element()) {
+                    if let Some(value) = value_node
+                        .attribute("val")
+                        .or_else(|| value_node.attribute("lastClr"))
+                    {
+                        theme_colors.push(TemplateThemeColor {
+                            name: color.tag_name().name().to_owned(),
+                            value: format!("#{value}"),
+                        });
+                    }
+                }
+            }
+        }
+        major_font = document
+            .descendants()
+            .find(|node| node.tag_name().name() == "majorFont")
+            .and_then(|node| {
+                node.descendants()
+                    .find(|child| child.tag_name().name() == "latin")
+            })
+            .and_then(|node| node.attribute("typeface"))
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        minor_font = document
+            .descendants()
+            .find(|node| node.tag_name().name() == "minorFont")
+            .and_then(|node| {
+                node.descendants()
+                    .find(|child| child.tag_name().name() == "latin")
+            })
+            .and_then(|node| node.attribute("typeface"))
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+    }
+
+    let mut warnings = Vec::new();
+    if slide_count == 0 {
+        warnings.push("未发现可解析的幻灯片页面".into());
+    }
+    if theme_count == 0 {
+        warnings.push("未发现 OOXML 主题定义".into());
+    }
+    warnings.push("动画、切换、SmartArt、视频和宏尚未解析".into());
+    Ok(TemplateAnalysis {
+        slide_count,
+        slide_width_emu,
+        slide_height_emu,
+        master_count,
+        layout_count,
+        theme_count,
+        theme_colors,
+        major_font,
+        minor_font,
+        warnings,
+    })
 }
 
 #[cfg(test)]
