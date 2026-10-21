@@ -45,4 +45,29 @@ describe("document commands", () => {
     expect(deleted.slides.map((slide) => slide.id)).toEqual([firstId]);
     expect(() => produce(deleted, (draft) => applyCommand(draft, { type: "delete-slide", slideId: firstId }))).toThrow("LAST_SLIDE_CANNOT_BE_DELETED");
   });
+
+  it("duplicates and deletes unlocked elements without changing slide content", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = slide.elements[0]!;
+    const contentBefore = JSON.stringify(slide.content);
+    const duplicated = produce(source, (draft) => applyCommand(draft, { type: "duplicate-element", slideId: slide.id, elementId: element.id }));
+    expect(duplicated.slides[0]!.elements).toHaveLength(2);
+    expect(duplicated.slides[0]!.elements[1]!.id).not.toBe(element.id);
+    expect(JSON.stringify(duplicated.slides[0]!.content)).toBe(contentBefore);
+    const duplicateId = duplicated.slides[0]!.elements[1]!.id;
+    const deleted = produce(duplicated, (draft) => applyCommand(draft, { type: "delete-element", slideId: slide.id, elementId: duplicateId }));
+    expect(deleted.slides[0]!.elements).toHaveLength(1);
+  });
+
+  it("allows unlocking but rejects edits to locked elements", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = slide.elements[0]!;
+    const locked = produce(source, (draft) => applyCommand(draft, { type: "set-element-lock", slideId: slide.id, elementId: element.id, locked: true }));
+    expect(locked.slides[0]!.elements[0]!.locked).toBe(true);
+    expect(() => produce(locked, (draft) => applyCommand(draft, { type: "delete-element", slideId: slide.id, elementId: element.id }))).toThrow("ELEMENT_LOCKED");
+    const unlocked = produce(locked, (draft) => applyCommand(draft, { type: "set-element-lock", slideId: slide.id, elementId: element.id, locked: false }));
+    expect(unlocked.slides[0]!.elements[0]!.locked).toBe(false);
+  });
 });

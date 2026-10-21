@@ -10,6 +10,9 @@ export type DocumentCommand =
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
   | { type: "set-slide"; slideId: SlideId }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
+  | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
+  | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
+  | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
 
@@ -82,7 +85,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
 
   const element = slide.elements.find((item) => item.id === command.elementId);
   if (!element) throw new Error("ELEMENT_NOT_FOUND");
+  if (command.type === "set-element-lock") {
+    element.locked = command.locked;
+    return;
+  }
   if (element.locked) throw new Error("ELEMENT_LOCKED");
+  if (command.type === "duplicate-element") {
+    const sourceIndex = slide.elements.findIndex((item) => item.id === command.elementId);
+    const offset = inches(0.2);
+    const duplicate = element.type === "text"
+      ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
+      : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } };
+    slide.elements.splice(sourceIndex + 1, 0, duplicate);
+    return;
+  }
+  if (command.type === "delete-element") {
+    slide.elements.splice(slide.elements.findIndex((item) => item.id === command.elementId), 1);
+    return;
+  }
   if (command.type === "move-element") element.frame = { ...element.frame, x: command.x, y: command.y };
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");

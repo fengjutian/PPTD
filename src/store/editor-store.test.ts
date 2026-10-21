@@ -34,4 +34,17 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.slides).toHaveLength(1);
     expect(useEditorStore.getState().activeSlideId).toBe(slideId);
   });
+
+  it("undoes element duplication as one design transaction", () => {
+    const state = useEditorStore.getState();
+    const elementId = state.document.slides[0]!.elements[0]!.id;
+    state.execute({ type: "duplicate-element", slideId: state.activeSlideId, elementId });
+    expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(2);
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
+    expect(useEditorStore.getState().selectedElementId).not.toBe(elementId);
+
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(1);
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
+  });
 });

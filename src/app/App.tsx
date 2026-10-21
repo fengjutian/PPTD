@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, Layers3, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, Layers3, Lock, LockOpen, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { choosePptxPath, chooseProjectToOpen, isDesktopRuntime, saveProject, writePptx } from "../services/project-files";
@@ -25,6 +25,7 @@ function ElementView({ element, scale, selected, onSelect }: { element: SlideEle
   const pointerDown = (event: React.PointerEvent) => {
     event.stopPropagation();
     onSelect();
+    if (element.locked) return;
     start.current = { x: event.clientX, y: event.clientY, left: frame.x, top: frame.y };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -42,7 +43,7 @@ function ElementView({ element, scale, selected, onSelect }: { element: SlideEle
   };
 
   return (
-    <div className={`slide-element ${selected ? "selected" : ""} ${element.type}`} style={style} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
+    <div className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
       {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * 1.333, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} />}
     </div>
   );
@@ -153,9 +154,14 @@ export function App() {
         <div className="inspector-title"><Layers3 size={18} /><span>属性</span></div>
         {selected ? <div className="property-form">
           <label>对象类型<input value={selected.type === "text" ? "文本" : selected.shape === "ellipse" ? "椭圆" : "矩形"} disabled /></label>
-          {selected.type === "text" && <label>文本内容<textarea value={selected.text} onChange={(event) => execute({ type: "edit-text", slideId: activeSlide.id, elementId: selected.id, text: event.target.value })} /></label>}
+          {selected.type === "text" && <label>文本内容<textarea value={selected.text} disabled={selected.locked} onChange={(event) => execute({ type: "edit-text", slideId: activeSlide.id, elementId: selected.id, text: event.target.value })} /></label>}
           <div className="property-grid"><label>X<input value={(selected.frame.x / EMU_PER_INCH).toFixed(2)} disabled /></label><label>Y<input value={(selected.frame.y / EMU_PER_INCH).toFixed(2)} disabled /></label></div>
           <div className="property-grid"><label>宽度<input value={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled /></label><label>高度<input value={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled /></label></div>
+          <div className="element-actions">
+            <button onClick={() => execute({ type: "set-element-lock", slideId: activeSlide.id, elementId: selected.id, locked: !selected.locked })}>{selected.locked ? <LockOpen /> : <Lock />}{selected.locked ? "解锁" : "锁定"}</button>
+            <button disabled={selected.locked} onClick={() => execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: selected.id })}><Copy />复制</button>
+            <button className="danger" disabled={selected.locked} onClick={() => execute({ type: "delete-element", slideId: activeSlide.id, elementId: selected.id })}><Trash2 />删除</button>
+          </div>
         </div> : <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>}
       </aside>
 

@@ -50,7 +50,14 @@ export const useEditorStore = create<EditorState>((set) => ({
       const previousIndex = state.document.slides.findIndex((slide) => slide.id === state.activeSlideId);
       activeSlideId = document.slides[Math.min(previousIndex, document.slides.length - 1)]!.id;
     }
-    return { ...state, document, activeSlideId, selectedElementId: null, undoStack: [...state.undoStack, { forward, inverse }], redoStack: [] };
+    let selectedElementId: ElementId | null = null;
+    if (command.type === "duplicate-element") {
+      const slide = document.slides.find((item) => item.id === command.slideId)!;
+      const sourceIndex = state.document.slides.find((item) => item.id === command.slideId)!.elements.findIndex((item) => item.id === command.elementId);
+      selectedElementId = slide.elements[sourceIndex + 1]!.id;
+    }
+    if (command.type === "set-element-lock") selectedElementId = command.elementId;
+    return { ...state, document, activeSlideId, selectedElementId, undoStack: [...state.undoStack, { forward, inverse }], redoStack: [] };
   }),
 
   selectSlide: (activeSlideId) => set({ activeSlideId, selectedElementId: null }),

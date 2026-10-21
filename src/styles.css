@@ -44,6 +44,7 @@ button { color: inherit; }
 .canvas-ruler { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); color: #747881; font-size: 11px; letter-spacing: .07em; }
 .slide-canvas { position: relative; flex: 0 0 auto; overflow: hidden; box-shadow: 0 24px 70px #0009, 0 0 0 1px #444; touch-action: none; }
 .slide-element { position: absolute; cursor: move; user-select: none; transform-origin: center; }
+.slide-element.locked { cursor: default; }
 .slide-element.text { padding: 4px 6px; display: flex; align-items: center; line-height: 1.15; }
 .slide-element.text > div { width: 100%; }
 .slide-element.shape .shape-fill { width: 100%; height: 100%; border-style: solid; }
@@ -57,6 +58,12 @@ button { color: inherit; }
 .property-form textarea { min-height: 86px; resize: vertical; }
 .property-form textarea:focus { border-color: #7067ff; }
 .property-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.element-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 6px; }
+.element-actions button { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 7px 4px; border: 1px solid #3b3d44; border-radius: 6px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; }
+.element-actions button:hover:not(:disabled) { border-color: #7067ff; }
+.element-actions button.danger:hover:not(:disabled) { border-color: #c95b66; color: #ff8d98; }
+.element-actions button:disabled { opacity: .4; cursor: default; }
+.element-actions svg { width: 13px; height: 13px; }
 .empty-inspector { height: calc(100% - 48px); display: grid; place-content: center; justify-items: center; color: #656972; text-align: center; font-size: 12px; line-height: 1.7; }
 .empty-inspector svg { width: 30px; height: 30px; opacity: .7; }
 
