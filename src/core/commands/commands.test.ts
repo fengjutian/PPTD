@@ -116,4 +116,15 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements).toHaveLength(2);
   });
 
+  it("applies AI template design without allowing it to rewrite approved content", () => {
+    const source = createDocument();
+    const content = { title: "已审核标题", body: "已审核正文", speakerNotes: "已审核备注" };
+    const design = { background: "#112233", title: { frame: { x: 0.1, y: 0.1, width: 0.8, height: 0.15 }, fontSizePt: 32, color: "#FFFFFF", bold: true, align: "left" as const }, body: { frame: { x: 0.1, y: 0.32, width: 0.7, height: 0.5 }, fontSizePt: 20, color: "#EEEEEE", bold: false, align: "left" as const }, accents: [{ frame: { x: 0, y: 0, width: 0.03, height: 1 }, shape: "rectangle" as const, fill: "#FF6600" }] };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "设计文稿", slides: [content], designs: [design], fontFamily: "Arial" }));
+    expect(result.slides[0]!.content).toEqual({ ...content, status: "approved" });
+    expect(result.slides[0]!.background).toBe("#112233");
+    expect(result.slides[0]!.elements.map((element) => element.type)).toEqual(["shape", "text", "text"]);
+    expect(result.slides[0]!.elements[1]).toMatchObject({ type: "text", text: "已审核标题", style: { fontFamily: "Arial", fontSizePt: 32 } });
+  });
+
 });

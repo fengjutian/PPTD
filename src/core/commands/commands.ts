@@ -3,10 +3,14 @@ import { createSlide, inches } from "../document-model";
 
 export type ChangeDomain = "content" | "design" | "both";
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string }
+export interface AiNormalizedFrame { x: number; y: number; width: number; height: number }
+export interface AiTextDesign { frame: AiNormalizedFrame; fontSizePt: number; color: string; bold: boolean; align: "left" | "center" | "right" }
+export interface AiSlideDesign { background: string; title: AiTextDesign; body: AiTextDesign; accents: Array<{ frame: AiNormalizedFrame; shape: "rectangle" | "ellipse"; fill: string }> }
 
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -29,6 +33,7 @@ export function commandDomain(command: DocumentCommand): ChangeDomain | null {
     case "add-image": return "both";
     case "add-slide": return "both";
     case "apply-ai-draft": return "both";
+    case "apply-ai-designed-draft": return "both";
     case "duplicate-slide": return "both";
     case "delete-slide": return "both";
     case "move-slide": return "both";
@@ -51,6 +56,25 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const title = slide.elements[0];
       if (title?.type === "text") title.text = draft.title;
       if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
+      return slide;
+    });
+    return;
+  }
+  if (command.type === "apply-ai-designed-draft") {
+    if (!command.title.trim() || command.slides.length < 1 || command.slides.length > 20 || command.designs.length !== command.slides.length) throw new Error("AI_DESIGN_INVALID");
+    if (command.pageSize) document.pageSize = command.pageSize;
+    const pageWidth = document.pageSize.width;
+    const pageHeight = document.pageSize.height;
+    const frame = (value: AiNormalizedFrame): RectEmu => ({ x: Math.round(value.x * pageWidth) as Emu, y: Math.round(value.y * pageHeight) as Emu, width: Math.round(value.width * pageWidth) as Emu, height: Math.round(value.height * pageHeight) as Emu });
+    document.title = command.title.trim();
+    document.slides = command.slides.map((content, index) => {
+      const design = command.designs[index]!;
+      const slide = createSlide(index + 1);
+      slide.background = design.background;
+      slide.content = { ...content, status: "approved" };
+      slide.elements = design.accents.map((accent) => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: frame(accent.frame), rotationMilliDegree: 0, locked: false, shape: accent.shape, style: { fill: accent.fill, stroke: accent.fill, strokeWidthPt: 0, radiusPt: accent.shape === "ellipse" ? 999 : 0 } }));
+      slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: frame(design.title.frame), rotationMilliDegree: 0, locked: false, text: content.title, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: design.title.fontSizePt, color: design.title.color, bold: design.title.bold, align: design.title.align } });
+      if (content.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: frame(design.body.frame), rotationMilliDegree: 0, locked: false, text: content.body, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: design.body.fontSizePt, color: design.body.color, bold: design.body.bold, align: design.body.align } });
       return slide;
     });
     return;

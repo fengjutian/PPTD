@@ -11,6 +11,14 @@ pub struct GenerateRequest {
     model: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateDesignRequest {
+    draft: serde_json::Value,
+    template: serde_json::Value,
+    model: Option<String>,
+}
+
 #[derive(Serialize)]
 struct ChatRequest {
     model: String,
@@ -106,6 +114,65 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
         .unwrap_or(content)
         .trim();
     serde_json::from_str(content).map_err(|error| format!("MINIMAX_JSON_INVALID: {error}"))
+}
+
+#[tauri::command]
+pub async fn generate_presentation_design(
+    request: GenerateDesignRequest,
+) -> Result<serde_json::Value, String> {
+    let draft = serde_json::to_string(&request.draft).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let template =
+        serde_json::to_string(&request.template).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    if draft.len() > 120_000 || template.len() > 120_000 {
+        return Err("AI_DESIGN_REQUEST_TOO_LARGE".into());
+    }
+    let api_key = read_api_key()?;
+    let model = request
+        .model
+        .or_else(|| std::env::var("MINIMAX_MODEL").ok())
+        .unwrap_or_else(|| "MiniMax-M3".into());
+    validate_model(&model)?;
+    let prompt = format!(
+        "你是演示文稿视觉设计器。依据模板分析和已审核内容，为每页生成设计参数。禁止改写或返回标题、正文、数字和备注。仅返回严格 JSON，不要 Markdown。格式：{{\"slides\":[{{\"background\":\"#FFFFFF\",\"title\":{{\"frame\":{{\"x\":0.07,\"y\":0.08,\"width\":0.86,\"height\":0.16}},\"fontSizePt\":30,\"color\":\"#111111\",\"bold\":true,\"align\":\"left\"}},\"body\":{{\"frame\":{{\"x\":0.08,\"y\":0.30,\"width\":0.84,\"height\":0.58}},\"fontSizePt\":20,\"color\":\"#333333\",\"bold\":false,\"align\":\"left\"}},\"accents\":[{{\"frame\":{{\"x\":0,\"y\":0,\"width\":0.02,\"height\":1}},\"shape\":\"rectangle\",\"fill\":\"#3366CC\"}}]}}]}}。frame 是 0 到 1 的页面比例；slides 数量必须与内容页数完全一致。模板分析：{}。已审核内容仅用于判断信息密度：{}",
+        template, draft
+    );
+    let body = ChatRequest {
+        model,
+        messages: vec![Message {
+            role: "user",
+            content: prompt,
+        }],
+        temperature: 0.25,
+    };
+    let response = reqwest::Client::new()
+        .post(MINIMAX_CHINA_CHAT_URL)
+        .bearer_auth(api_key)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|error| format!("MINIMAX_DESIGN_REQUEST_FAILED: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("MINIMAX_HTTP_ERROR: {}", response.status()));
+    }
+    let payload: ChatResponse = response
+        .json()
+        .await
+        .map_err(|error| format!("MINIMAX_RESPONSE_INVALID: {error}"))?;
+    let content = payload
+        .choices
+        .first()
+        .ok_or("MINIMAX_EMPTY_RESPONSE")?
+        .message
+        .content
+        .trim();
+    let content = content
+        .strip_prefix("```json")
+        .or_else(|| content.strip_prefix("```"))
+        .unwrap_or(content)
+        .strip_suffix("```")
+        .unwrap_or(content)
+        .trim();
+    serde_json::from_str(content).map_err(|error| format!("MINIMAX_DESIGN_JSON_INVALID: {error}"))
 }
 
 #[tauri::command]
