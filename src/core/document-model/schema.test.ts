@@ -1,20 +1,21 @@
 import { describe, expect, it } from "vitest";
 import versionOneFixture from "./__fixtures__/v1-document.json";
 import versionTwoFixture from "./__fixtures__/v2-document.json";
+import versionThreeFixture from "./__fixtures__/v3-document.json";
 import { createDocument } from "./factory";
-import { parsePresentationDocument, presentationDocumentSchema } from "./schema";
+import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
 describe("presentation document schema", () => {
   it("migrates the fixed version 1 fixture to the current version", () => {
     const migrated = parsePresentationDocument(versionOneFixture);
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(migrated.slides[0]!.content.title).toBe("Fixture");
     expect(versionOneFixture.schemaVersion).toBe(1);
   });
 
   it("migrates the fixed version 2 fixture without losing pages or objects", () => {
     const migrated = parsePresentationDocument(versionTwoFixture);
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(migrated.slides).toHaveLength(1);
     expect(migrated.slides[0]!.elements).toHaveLength(1);
     expect(migrated.slides[0]!.content.title).toBe("Fixture");
@@ -23,6 +24,14 @@ describe("presentation document schema", () => {
     expect(migrated.layouts).toBeUndefined();
     expect(migrated.slides[0]!.layoutId).toBeUndefined();
     expect(versionTwoFixture.schemaVersion).toBe(2);
+  });
+
+  it("migrates the fixed version 3 fixture and keeps its template theme", () => {
+    const migrated = parsePresentationDocument(versionThreeFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.theme?.majorFont).toBe("思源黑体");
+    expect(migrated.slides[0]!.elements).toHaveLength(1);
+    expect(versionThreeFixture.schemaVersion).toBe(3);
   });
 
   it("keeps the template theme and layout binding of a version 3 document", () => {
@@ -71,5 +80,35 @@ describe("presentation document schema", () => {
       altText: "sample",
     });
     expect(presentationDocumentSchema.parse(document).slides[0]!.elements[1]!.type).toBe("image");
+  });
+
+  it("accepts a cropped picture and refuses a crop that hides the whole image", () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "image",
+      frame: document.slides[0]!.elements[0]!.frame,
+      rotationMilliDegree: 0,
+      locked: false,
+      source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" },
+      altText: "sample",
+      crop: { top: 0.1, bottom: 0.2, left: 0, right: 0.3 },
+    });
+    const parsed = presentationDocumentSchema.parse(document);
+    expect(parsed.slides[0]!.elements[1]!.type === "image" ? parsed.slides[0]!.elements[1]!.crop : undefined)
+      .toEqual({ top: 0.1, bottom: 0.2, left: 0, right: 0.3 });
+
+    const empty = createDocument();
+    empty.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "image",
+      frame: empty.slides[0]!.elements[0]!.frame,
+      rotationMilliDegree: 0,
+      locked: false,
+      source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" },
+      altText: "sample",
+      crop: { top: 0.6, bottom: 0.6, left: 0, right: 0 },
+    });
+    expect(() => presentationDocumentSchema.parse(empty)).toThrow();
   });
 });

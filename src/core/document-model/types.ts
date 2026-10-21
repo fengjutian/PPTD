@@ -106,10 +106,24 @@ export interface SlideLayoutSpec {
 
 export type SupportedImageMimeType = "image/png" | "image/jpeg" | "image/webp";
 
+/**
+ * The part of the source image that is cut away, as a fraction of the source
+ * on each side. The remaining region fills the frame of the picture, the same
+ * way PowerPoint stores a crop as a source rectangle.
+ */
+export interface ImageCrop {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 export interface ImageElement extends ElementBase {
   type: "image";
   source: { kind: "embedded"; dataUrl: string; mimeType: SupportedImageMimeType };
   altText: string;
+  /** Crop of the source image. Absent means the whole picture is shown. */
+  crop?: ImageCrop;
   /**
    * "layout-background" marks the artwork of the template layout itself. The
    * canvas still paints it, but the exporter moves it into the slide master so
@@ -131,7 +145,7 @@ export interface Slide {
 
 export interface PresentationDocument {
   id: DocumentId;
-  schemaVersion: 3;
+  schemaVersion: 4;
   title: string;
   pageSize: { width: Emu; height: Emu };
   revisions: Revisions;

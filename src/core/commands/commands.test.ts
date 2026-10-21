@@ -188,6 +188,32 @@ describe("document commands", () => {
     expect(() => produce(source, (draft) => applyCommand(draft, { type: "set-image-alt-text", slideId: slide.id, elementId: title.id, altText: "描述" }))).toThrow("ELEMENT_NOT_IMAGE");
   });
 
+  it("crops a picture without touching reviewed content and can clear the crop again", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const withImage = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "原描述" }));
+    const image = withImage.slides[0]!.elements[1]!;
+    const command = { type: "set-image-crop" as const, slideId: slide.id, elementId: image.id, crop: { top: 0.1, bottom: 0.2, left: 0, right: 0.3 } };
+    expect(commandDomain(command)).toBe("design");
+
+    const cropped = produce(withImage, (draft) => applyCommand(draft, command));
+    expect(cropped.slides[0]!.elements[1]).toMatchObject({ crop: { top: 0.1, bottom: 0.2, left: 0, right: 0.3 } });
+    expect(cropped.slides[0]!.content).toEqual(withImage.slides[0]!.content);
+
+    const cleared = produce(cropped, (draft) => applyCommand(draft, { type: "set-image-crop", slideId: slide.id, elementId: image.id, crop: null }));
+    expect(cleared.slides[0]!.elements[1]!.type === "image" ? cleared.slides[0]!.elements[1]!.crop : "missing").toBeUndefined();
+  });
+
+  it("refuses a crop that would hide the whole picture", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const withImage = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "原描述" }));
+    const image = withImage.slides[0]!.elements[1]!;
+    expect(() => produce(withImage, (draft) => applyCommand(draft, { type: "set-image-crop", slideId: slide.id, elementId: image.id, crop: { top: 0.6, bottom: 0.6, left: 0, right: 0 } }))).toThrow("INVALID_IMAGE_CROP");
+    expect(() => produce(withImage, (draft) => applyCommand(draft, { type: "set-image-crop", slideId: slide.id, elementId: image.id, crop: { top: -0.1, bottom: 0, left: 0, right: 0 } }))).toThrow("INVALID_IMAGE_CROP");
+    expect(() => produce(withImage, (draft) => applyCommand(draft, { type: "set-image-crop", slideId: slide.id, elementId: withImage.slides[0]!.elements[0]!.id, crop: { top: 0, bottom: 0, left: 0, right: 0 } }))).toThrow("ELEMENT_NOT_IMAGE");
+  });
+
   it("refuses to restyle a locked element", () => {
     const source = createDocument();
     const slide = source.slides[0]!;

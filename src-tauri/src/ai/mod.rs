@@ -3,10 +3,13 @@
 //! 命令层只依赖本模块的厂商无关接口。新增厂商时：新增一个适配器文件，
 //! 实现 `ChatProvider`，并在 `PROVIDERS` 中注册；命令层与前端调用方式不变。
 
+pub mod cancel;
 pub mod minimax;
 
 use serde::Serialize;
 use std::time::Duration;
+
+pub use cancel::{CancelRegistry, CancelToken};
 
 const CREDENTIAL_SERVICE: &str = "com.pptd.desktop";
 
@@ -127,10 +130,14 @@ enum ProviderFailure {
     Transport { detail: String, timed_out: bool },
     /// 响应体结构不符合预期。
     Payload(PayloadError),
+    /// 用户取消了任务。
+    Cancelled,
 }
 
 /// 请求超时的稳定错误码。前端据此提示"减少页数"而不是"检查网络"。
 const REQUEST_TIMEOUT_ERROR: &str = "AI_REQUEST_TIMEOUT";
+/// 任务被取消的稳定错误码。
+const REQUEST_CANCELLED_ERROR: &str = "AI_REQUEST_CANCELLED";
 
 async fn post_chat(
     provider: &dyn ChatProvider,

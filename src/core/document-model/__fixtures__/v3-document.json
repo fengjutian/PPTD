@@ -1,0 +1,37 @@
+{
+  "id": "77777777-7777-4777-8777-777777777777",
+  "schemaVersion": 3,
+  "title": "V3 fixture",
+  "pageSize": { "width": 12191695, "height": 6858000 },
+  "revisions": { "document": 5, "content": 3, "design": 2 },
+  "theme": {
+    "name": "昆佰泰",
+    "majorFont": "思源黑体",
+    "minorFont": "思源黑体",
+    "colors": [{ "name": "accent1", "value": "#c0504d" }]
+  },
+  "slides": [
+    {
+      "id": "88888888-8888-4888-8888-888888888888",
+      "background": "#ffffff",
+      "content": {
+        "title": "Fixture",
+        "body": "正文",
+        "speakerNotes": "",
+        "status": "approved",
+        "contentHash": "0123456789abcdef"
+      },
+      "elements": [
+        {
+          "id": "99999999-9999-4999-8999-999999999999",
+          "type": "text",
+          "frame": { "x": 685800, "y": 594360, "width": 6858000, "height": 731520 },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "text": "Fixture",
+          "style": { "fontFamily": "Microsoft YaHei", "fontSizePt": 28, "color": "#17181c", "bold": true, "align": "left" }
+        }
+      ]
+    }
+  ]
+}

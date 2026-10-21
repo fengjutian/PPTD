@@ -1,5 +1,6 @@
 import type { DocumentId, ElementId, Emu, PresentationDocument, Slide, SlideId } from "./types";
 import { hashSlideContent } from "./content-hash";
+import { CURRENT_SCHEMA_VERSION } from "./schema";
 
 export const EMU_PER_INCH = 914_400;
 export const emu = (value: number) => Math.round(value) as Emu;
@@ -31,7 +32,7 @@ export function createSlide(index: number): Slide {
 export function createDocument(): PresentationDocument {
   return {
     id: uid() as DocumentId,
-    schemaVersion: 3,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     title: "未命名演示文稿",
     pageSize: { width: inches(13.333), height: inches(7.5) },
     revisions: { document: 0, content: 0, design: 0 },

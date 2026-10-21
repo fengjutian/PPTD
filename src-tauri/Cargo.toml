@@ -23,6 +23,6 @@ serde_json = "1"
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tempfile = "3"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["macros", "sync", "time"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 

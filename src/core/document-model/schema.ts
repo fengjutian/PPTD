@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CURRENT_SCHEMA_VERSION = 3 as const;
+export const CURRENT_SCHEMA_VERSION = 4 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -28,6 +28,14 @@ const shapeElement = base.extend({
   style: z.object({ fill: z.string(), stroke: z.string(), strokeWidthPt: z.number().nonnegative(), radiusPt: z.number().nonnegative() }),
 });
 
+/** A crop cuts a fraction off each side of the source image, so the visible region never vanishes. */
+const imageCropSchema = z.object({
+  top: z.number().min(0).max(0.99),
+  bottom: z.number().min(0).max(0.99),
+  left: z.number().min(0).max(0.99),
+  right: z.number().min(0).max(0.99),
+}).refine((crop) => crop.top + crop.bottom < 1 && crop.left + crop.right < 1, { message: "IMAGE_CROP_EMPTY" });
+
 const imageElement = base.extend({
   type: z.literal("image"),
   source: z.object({
@@ -36,6 +44,7 @@ const imageElement = base.extend({
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   }),
   altText: z.string().max(500),
+  crop: imageCropSchema.optional(),
   placement: z.enum(["content", "layout-background"]).optional(),
 });
 
@@ -116,6 +125,10 @@ export const presentationDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionThreeDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(3) })
+  .superRefine(validateUniqueIds);
+
 const versionTwoDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(2) })
   .superRefine(validateUniqueIds);
@@ -133,6 +146,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Both are optional, so a version 2 document keeps every page and every
   // object and simply has no layout to export.
   2: (document) => ({ ...versionTwoDocumentSchema.parse(document), schemaVersion: 3 }),
+  // Version 4 adds the crop of a picture. The field is optional, so a version 3
+  // document keeps every picture and simply shows the whole source image.
+  3: (document) => ({ ...versionThreeDocumentSchema.parse(document), schemaVersion: 4 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

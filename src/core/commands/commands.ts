@@ -1,4 +1,4 @@
-import type { ContentBlock, DocumentTheme, ElementId, Emu, PresentationDocument, RectEmu, ShapeElementStyle, SlideId, SlideLayoutSpec, SupportedImageMimeType, TextElementStyle } from "../document-model";
+import type { ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, SlideId, SlideLayoutSpec, SupportedImageMimeType, TextElementStyle } from "../document-model";
 import { createSlide, inches } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";
@@ -102,6 +102,7 @@ export type DocumentCommand =
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
+  | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
 
 /** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */
@@ -121,13 +122,25 @@ function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
   if (style.radiusPt !== undefined && (!Number.isFinite(style.radiusPt) || style.radiusPt < 0 || style.radiusPt > 1000)) throw new Error("INVALID_SHAPE_STYLE");
 }
 
+/**
+ * A crop cuts a fraction off each side of the source image. The guard keeps the
+ * visible region non empty, because a picture without a visible area cannot be
+ * rendered by the canvas or written into a PPTX.
+ */
+function assertImageCrop(crop: ImageCrop): void {
+  const sides = [crop.top, crop.bottom, crop.left, crop.right];
+  if (sides.some((value) => !Number.isFinite(value) || value < 0 || value >= 1)) throw new Error("INVALID_IMAGE_CROP");
+  if (crop.top + crop.bottom >= 1 || crop.left + crop.right >= 1) throw new Error("INVALID_IMAGE_CROP");
+}
+
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
     case "set-slide": return null;
     case "set-slide-background": return "design";
     case "set-text-style":
     case "set-shape-style":
-    case "set-image-alt-text": return "design";
+    case "set-image-alt-text":
+    case "set-image-crop": return "design";
     case "edit-text":
     case "delete-element": {
       if (!document) return command.type === "edit-text" ? "content" : "design";
@@ -278,7 +291,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // it. The exporter turns that reference into a real slide master, so the
       // exported deck still carries the structure of the template instead of a
       // flat list of shapes.
-      if (recipe && (recipe.backgroundColor || recipe.backgroundImageDataUrl)) {
+      if (recipe) {
         let spec = layoutSpecs.get(recipe.index);
         if (!spec) {
           const backgroundColor = recipe.backgroundColor && HEX_COLOR_PATTERN.test(recipe.backgroundColor) ? recipe.backgroundColor.toUpperCase() : undefined;
@@ -844,6 +857,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "image") throw new Error("ELEMENT_NOT_IMAGE");
     if (command.altText.length > 500) throw new Error("INVALID_ALT_TEXT");
     element.altText = command.altText;
+    return;
+  }
+  if (command.type === "set-image-crop") {
+    if (element.type !== "image") throw new Error("ELEMENT_NOT_IMAGE");
+    if (command.crop === null) {
+      delete element.crop;
+      return;
+    }
+    assertImageCrop(command.crop);
+    element.crop = { ...command.crop };
     return;
   }
   if (command.type === "delete-element") {
