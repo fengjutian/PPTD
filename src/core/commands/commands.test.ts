@@ -901,8 +901,27 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
-  it("keeps the table cells in the content so a design command cannot rewrite them", () => {
+  it("duplicates a page with a native table and keeps the copy pointing at its own cells", () => {
     const source = createDocument();
+    const content = {
+      title: "检测能力",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        { type: "table-data" as const, header: ["项目", "数量"], rows: [["样本量", "38万"]] },
+      ],
+    };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const designed = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
+    const result = produce(designed, (draft) => applyCommand(draft, { type: "duplicate-slide", slideId: designed.slides[0]!.id }));
+    const original = designed.slides[0]!.elements.find((element) => element.type === "table")!;
+    const copy = result.slides[1]!.elements.find((element) => element.type === "table")!;
+    expect(copy.id).not.toBe(original.id);
+    // The copy points at the table block of its own page, not at the original.
+    expect(copy.type === "table" && copy.contentBlockId).toBe(result.slides[1]!.content.blocks?.find((block) => block.type === "table-data")?.id);
+  });
+
+  it("keeps the table cells in the content so a design command cannot rewrite them", () => {    const source = createDocument();
     const content = {
       title: "检测能力",
       body: "",

@@ -84,6 +84,21 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
   });
 }
 
+/**
+ * Deep copy of the content blocks of a page, safe to read from an Immer draft.
+ * The block IDs are kept: the elements of the copy point at the same blocks, so
+ * a copied chart or table still shows the cells of the copied page.
+ */
+function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
+  return blocks.map((block) => {
+    if (block.type === "bullet-list") return { ...block, items: [...block.items] };
+    if (block.type === "timeline" || block.type === "process") return { ...block, items: block.items.map((item) => ({ ...item })) };
+    if (block.type === "comparison") return { ...block, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
+    if (block.type === "table-data") return { ...block, header: [...block.header], rows: block.rows.map((row) => [...row]) };
+    return { ...block };
+  });
+}
+
 /** Plain deep copy of an element, safe to read from an Immer draft. */
 function cloneElement(element: SlideElement): SlideElement {
   if (element.type === "text") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
@@ -948,7 +963,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const duplicate = {
       ...source,
       id: crypto.randomUUID() as SlideId,
-      content: { ...source.content, ...(source.content.blocks ? { blocks: structuredClone(source.content.blocks) } : {}) },
+      content: { ...source.content, ...(source.content.blocks ? { blocks: cloneContentBlocks(source.content.blocks) } : {}) },
       elements: source.elements.map((element) => element.type === "text"
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
         : element.type === "shape"
