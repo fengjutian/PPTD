@@ -186,6 +186,7 @@ async function aiSelection(): Promise<{ provider: string; model: string }> {
 export function describeAiError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
   if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED")) return `生成结果未通过视觉质量检查，已阻止进入编辑器。${detail.split(": ").slice(1).join(": ")}`;
+  if (detail.includes("AI_REQUEST_CANCELLED") || detail.includes("AI_GENERATION_CANCELLED")) return "已取消本次生成";
   if (detail.includes("AI_REQUEST_TIMEOUT")) return "AI 生成超时，请减少页数后重试";
   if (detail.includes("AI_PROVIDER_BUSY")) return "AI 服务当前繁忙，系统已自动重试，请稍后再次生成";
   if (detail.includes("AI_PROVIDER_HTTP_ERROR:401") || detail.includes("AI_PROVIDER_HTTP_ERROR:403") || detail.includes("AI_API_KEY_MISSING")) return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
@@ -286,9 +287,16 @@ export async function generateSlideBriefs(draft: AiDraft, taskId?: number): Prom
   return result.briefs;
 }
 
-export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext, visualGoal: PresentationVisualGoal = defaultPresentationVisualGoal(), taskId?: number): Promise<AiPresentationDesign> {
+export interface AiPresentationDesignOptions {
+  visualGoal?: PresentationVisualGoal;
+  /** 生成任务号：取消时后端会中断该任务下所有在途请求。 */
+  taskId?: number;
+}
+
+export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext, options: AiPresentationDesignOptions = {}): Promise<AiPresentationDesign> {
   const { provider, model } = await aiSelection();
-  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, visualGoal, model, provider, taskId } });
+  const visualGoal = options.visualGoal ?? defaultPresentationVisualGoal();
+  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, visualGoal, model, provider, taskId: options.taskId } });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   return constrainDesignToTemplate({

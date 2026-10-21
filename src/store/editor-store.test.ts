@@ -115,6 +115,32 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
   });
 
+  it("commits a picture crop as one design transaction and can undo it", () => {
+    const state = useEditorStore.getState();
+    const slide = state.document.slides[0]!;
+    const originalHash = slide.content.contentHash;
+    state.execute({ type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "样例" });
+    const image = useEditorStore.getState().document.slides[0]!.elements[1]!;
+    if (image.type !== "image") throw new Error("expected an image");
+
+    state.execute({ type: "set-image-crop", slideId: slide.id, elementId: image.id, crop: { top: 0.25, bottom: 0, left: 0, right: 0 } });
+    const cropped = useEditorStore.getState().document.slides[0]!.elements[1]!;
+    expect(cropped.type === "image" ? cropped.crop : undefined).toEqual({ top: 0.25, bottom: 0, left: 0, right: 0 });
+    // A crop only changes the design. The reviewed content stays frozen.
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 0, design: 2 });
+    expect(useEditorStore.getState().document.slides[0]!.content.contentHash).toBe(originalHash);
+    expect(useEditorStore.getState().undoStack).toHaveLength(2);
+
+    useEditorStore.getState().undo();
+    const reverted = useEditorStore.getState().document.slides[0]!.elements[1]!;
+    expect(reverted.type === "image" ? reverted.crop : "missing").toBeUndefined();
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
+
+    useEditorStore.getState().redo();
+    const restored = useEditorStore.getState().document.slides[0]!.elements[1]!;
+    expect(restored.type === "image" ? restored.crop : undefined).toEqual({ top: 0.25, bottom: 0, left: 0, right: 0 });
+  });
+
   it("replaces a generated document as one undoable transaction", () => {
     const generated = createDocument();
     generated.title = "AI 生成文稿";

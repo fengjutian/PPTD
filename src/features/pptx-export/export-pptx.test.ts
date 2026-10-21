@@ -152,8 +152,7 @@ describe("PPTX export", () => {
     expect(result.report.masters).toEqual([]);
   });
 
-  it("names the parts of the package so that PowerPoint can open them", async () => {
-    const result = await buildPptx(templateDocument());
+  it("names the parts of the package so that PowerPoint can open them", async () => {    const result = await buildPptx(templateDocument());
     const entries = unzipSync(result.bytes);
     const media = Object.keys(entries).filter((name) => name.startsWith("ppt/media/") && !name.endsWith("/"));
     expect(media.length).toBeGreaterThan(0);
@@ -169,5 +168,50 @@ describe("PPTX export", () => {
     // The layout keeps the name of the template, it is only the part that is renamed.
     const layoutXml = Object.keys(entries).filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name)).map((name) => strFromU8(entries[name]!)).join("");
     expect(layoutXml).toContain('name="内页（浅色）1"');
+  });
+
+  it("writes a chart as a native chart object with the reviewed numbers", async () => {
+    const document = createDocument();
+    document.slides[0]!.content.status = "approved";
+    const first = { id: crypto.randomUUID(), type: "metric" as const, label: "样本量", value: "38万" };
+    const second = { id: crypto.randomUUID(), type: "metric" as const, label: "覆盖机构", value: "12万" };
+    document.slides[0]!.content.blocks = [first, second];
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "chart",
+      contentBlockIds: [first.id, second.id],
+      kind: "column",
+      frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(4) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, textColor: "#17181c", seriesColors: ["#3366CC"], showLegend: false, showValueLabels: true },
+    });
+    const result = await buildPptx(document);
+    const entries = unzipSync(result.bytes);
+    const chartEntries = Object.keys(entries).filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+    // A native chart, not a picture of a chart: the data stays editable.
+    expect(chartEntries).toHaveLength(1);
+    const chartXml = strFromU8(entries[chartEntries[0]!]!);
+    expect(chartXml).toContain("样本量");
+    expect(chartXml).toContain("38");
+    expect(chartXml).toContain("12");
+    // The value keeps the unit of the reviewed number.
+    expect(chartXml).toContain('formatCode="#,##0.##&quot;万&quot;"');
+    expect(result.report.nativeObjectCount).toBe(2);
+  });
+
+  it("refuses to export a chart whose numbers are gone", async () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "chart",
+      contentBlockIds: [crypto.randomUUID()],
+      kind: "column",
+      frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(4) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, textColor: "#17181c", seriesColors: ["#3366CC"], showLegend: false, showValueLabels: true },
+    });
+    await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
   });
 });

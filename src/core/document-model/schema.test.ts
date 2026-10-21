@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import versionOneFixture from "./__fixtures__/v1-document.json";
 import versionTwoFixture from "./__fixtures__/v2-document.json";
 import versionThreeFixture from "./__fixtures__/v3-document.json";
+import versionFourFixture from "./__fixtures__/v4-document.json";
+import versionFiveFixture from "./__fixtures__/v5-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -32,6 +34,35 @@ describe("presentation document schema", () => {
     expect(migrated.theme?.majorFont).toBe("思源黑体");
     expect(migrated.slides[0]!.elements).toHaveLength(1);
     expect(versionThreeFixture.schemaVersion).toBe(3);
+  });
+
+  it("migrates the fixed version 4 fixture and keeps its layout binding", () => {
+    const migrated = parsePresentationDocument(versionFourFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.layouts).toHaveLength(1);
+    expect(migrated.slides[0]!.layoutId).toBe(migrated.layouts![0]!.id);
+    // A version 4 document has no chart, so it simply has nothing to chart.
+    expect(migrated.slides[0]!.elements.some((element) => element.type === "chart")).toBe(false);
+    expect(versionFourFixture.schemaVersion).toBe(4);
+  });
+
+  it("migrates the fixed version 5 fixture without inventing provenance", () => {
+    const migrated = parsePresentationDocument(versionFiveFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.elements).toHaveLength(1);
+    expect(migrated.slides[0]!.elements[0]!.origin).toBeUndefined();
+    expect(versionFiveFixture.schemaVersion).toBe(5);
+  });
+
+  it("accepts explicit element provenance and rejects an unknown origin", () => {
+    const document = createDocument();
+    document.slides[0]!.elements[0]!.origin = "user";
+    const parsed = presentationDocumentSchema.parse(document);
+    expect(parsed.slides[0]!.elements[0]!.origin).toBe("user");
+
+    const invalid = createDocument() as unknown as { slides: Array<{ elements: Array<Record<string, unknown>> }> };
+    invalid.slides[0]!.elements[0]!.origin = "ai";
+    expect(() => presentationDocumentSchema.parse(invalid)).toThrow();
   });
 
   it("keeps the template theme and layout binding of a version 3 document", () => {

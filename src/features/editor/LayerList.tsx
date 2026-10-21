@@ -1,15 +1,17 @@
-import { Circle, Image as ImageIcon, Lock, Square, Type } from "lucide-react";
+import { BarChart3, Circle, Image as ImageIcon, Lock, Square, Type } from "lucide-react";
 import type { ElementId, Slide, SlideElement } from "../../core/document-model";
 
 function elementLabel(element: SlideElement): string {
   if (element.type === "text") return element.text.trim().slice(0, 14) || "文本";
   if (element.type === "image") return element.altText.trim().slice(0, 14) || "图片";
+  if (element.type === "chart") return "图表";
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
 function ElementIcon({ element }: { element: SlideElement }) {
   if (element.type === "text") return <Type />;
   if (element.type === "image") return <ImageIcon />;
+  if (element.type === "chart") return <BarChart3 />;
   return element.shape === "ellipse" ? <Circle /> : <Square />;
 }
 

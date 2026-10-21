@@ -1,6 +1,6 @@
 import PptxGenJS from "pptxgenjs";
 import { unzipSync, zipSync } from "fflate";
-import { EMU_PER_INCH, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
+import { EMU_PER_INCH, resolveChartData, type ChartElement, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
 import { isFontAvailable, validatePresentationForExport, type ExportIssue } from "../../core/validation/export-validation";
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
 import { patchThemeColors } from "./theme-xml";
@@ -15,6 +15,8 @@ export interface ExportReport {
   nativeObjectCount: number;
   /** Pictures that were written with a crop. */
   croppedImages: number;
+  /** Charts that were written as native chart objects, not as pictures. */
+  nativeChartCount: number;
   /** Names of the slide masters written into the package. */
   masters: string[];
   /** Theme fonts written into the theme part, when the deck declares a theme. */
@@ -101,6 +103,13 @@ function shapeType(pptx: PptxGenJS, element: ShapeElement) {
   return pptx.ShapeType.rect;
 }
 
+/** The kind of a native chart in the vocabulary of the exporter. */
+function chartType(pptx: PptxGenJS, kind: ChartElement["kind"]) {
+  if (kind === "line") return pptx.ChartType.line;
+  if (kind === "pie") return pptx.ChartType.pie;
+  return pptx.ChartType.bar;
+}
+
 /**
  * Build a PPTX from an immutable snapshot. Element order is the document's
  * z-order and is never re-sorted: the canvas, thumbnails and export must agree.
@@ -150,6 +159,7 @@ export async function buildPptx(
 
   let nativeObjectCount = 0;
   let croppedImageCount = 0;
+  let nativeChartCount = 0;
   // The crops of the pictures of every slide, in the order the pictures were
   // added. The source rectangle of a crop is written into the slide XML later.
   const cropsBySlide: (ImageCrop | undefined)[][] = [];
@@ -204,6 +214,44 @@ export async function buildPptx(
             ? { rectRadius: Math.min(element.style.radiusPt / 72, position.w / 2, position.h / 2) }
             : {}),
         });
+      } else if (element.type === "chart") {
+        // A native chart, not a picture of a chart: the numbers stay editable
+        // in PowerPoint and the file keeps the data of the page.
+        const resolved = resolveChartData(model, element);
+        if (!resolved) throw new Error("EXPORT_CHART_DATA_INVALID");
+        const values = resolved.data.map((datum) => datum.value);
+        const labels = resolved.data.map((datum) => datum.category);
+        const colors = element.kind === "pie"
+          ? resolved.data.map((_, index) => color(element.style.seriesColors[index % element.style.seriesColors.length]!))
+          : [color(element.style.seriesColors[0]!)];
+        // The unit of the reviewed numbers belongs to the labels, so a value
+        // reads "38万" in the deck and not "380000".
+        const valueFormat = resolved.unit ? `#,##0.##"${resolved.unit}"` : "#,##0.##";
+        slide.addChart(chartType(pptx, element.kind), [{ name: resolved.unit || "数值", labels, values }], {
+          ...position,
+          ...(element.kind === "column" || element.kind === "bar" ? { barDir: element.kind === "bar" ? "bar" : "col" } : {}),
+          chartColors: colors,
+          showLegend: element.style.showLegend,
+          showTitle: false,
+          showValue: element.style.showValueLabels,
+          dataLabelFormatCode: valueFormat,
+          dataLabelColor: color(element.style.textColor),
+          dataLabelFontFace: element.style.fontFamily,
+          dataLabelFontSize: element.style.fontSizePt,
+          catAxisLabelColor: color(element.style.textColor),
+          catAxisLabelFontFace: element.style.fontFamily,
+          catAxisLabelFontSize: element.style.fontSizePt,
+          valAxisLabelColor: color(element.style.textColor),
+          valAxisLabelFontFace: element.style.fontFamily,
+          valAxisLabelFontSize: Math.max(8, element.style.fontSizePt - 2),
+          valAxisLabelFormatCode: valueFormat,
+          valGridLine: { color: "E3E7EC", size: 1 },
+          catAxisLineShow: false,
+          valAxisLineShow: false,
+          border: { pt: 0, color: "FFFFFF" },
+          fill: "FFFFFF",
+        });
+        nativeChartCount += 1;
       } else {
         slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });
         slideCrops.push(element.crop);
@@ -240,6 +288,7 @@ export async function buildPptx(
       slideCount: document.slides.length,
       nativeObjectCount,
       croppedImages: croppedImageCount,
+      nativeChartCount,
       masters: [...masters.values()].map((plan) => plan.title),
       ...(theme ? { themeFonts: { major: theme.majorFont, minor: theme.minorFont } } : {}),
       themeColors: themeApplied ? theme!.colors.map((slot) => slot.name) : [],

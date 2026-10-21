@@ -1,4 +1,4 @@
-import { EMU_PER_INCH, type PresentationDocument, type SlideElement } from "../document-model";
+import { EMU_PER_INCH, resolveChartData, type PresentationDocument, type SlideElement } from "../document-model";
 import { textLikelyOverflows } from "../rendering/text-fit";
 
 export type ExportIssueCode =
@@ -9,7 +9,8 @@ export type ExportIssueCode =
   | "unsupported-image-source"
   | "empty-slide"
   | "missing-alt-text"
-  | "duplicate-id";
+  | "duplicate-id"
+  | "invalid-chart-data";
 
 export type ExportIssueSeverity = "error" | "warning";
 
@@ -115,6 +116,20 @@ export async function validatePresentationForExport(
               elementId: element.id,
             });
           }
+        }
+      }
+
+      if (element.type === "chart") {
+        // A chart without readable numbers would export as an empty chart, and
+        // an empty chart in a deck is worse than a missing one.
+        if (!resolveChartData(slide, element)) {
+          issues.push({
+            code: "invalid-chart-data",
+            severity: "error",
+            message: `第 ${slideIndex + 1} 页图表缺少可用的数值，无法导出`,
+            slideIndex,
+            elementId: element.id,
+          });
         }
       }
 

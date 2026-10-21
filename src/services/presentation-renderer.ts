@@ -1,4 +1,4 @@
-import type { PresentationDocument, Slide, TextElement } from "../core/document-model";
+import { formatChartValue, resolveChartData, type ChartElement, type PresentationDocument, type Slide, type TextElement } from "../core/document-model";
 
 export interface PresentationRender { slides: string[]; contactSheet: string }
 export interface RenderedContrastIssue { slideIndex: number; elementId: string; contrastRatio: number; /** The sampled artwork color that carries the text. */ backgroundColor: string }
@@ -32,6 +32,7 @@ async function renderSlide(document: PresentationDocument, slide: Slide, width: 
     if (element.type === "image") { const image = await loadImage(element.source.dataUrl); context.drawImage(image, 0, 0, w, h); }
     if (element.type === "shape") { context.fillStyle = element.style.fill; if (element.shape === "ellipse") { context.beginPath(); context.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); context.fill(); } else { context.beginPath(); context.roundRect(0, 0, w, h, element.style.radiusPt); context.fill(); } }
     if (element.type === "text") drawText(context, element, w, h, sx);
+    if (element.type === "chart") drawChart(context, element, slide, w, h);
     context.restore();
   }
   return canvas;
@@ -84,6 +85,35 @@ export async function inspectRenderedTextContrast(document: PresentationDocument
     }
   }
   return issues;
+}
+
+/**
+ * Draws a native chart as bars for the visual review.
+ *
+ * The review sees a picture of the page, so a chart has to be drawn here as
+ * well. The numbers come from the same reviewed metric blocks the export
+ * reads, so the reviewer judges the numbers that will be in the file.
+ */
+function drawChart(context: CanvasRenderingContext2D, element: ChartElement, slide: Slide, width: number, height: number): void {
+  const resolved = resolveChartData(slide, element);
+  if (!resolved) return;
+  const max = Math.max(...resolved.data.map((datum) => Math.abs(datum.value)), 1);
+  const slot = width / resolved.data.length;
+  const plotHeight = height * 0.72;
+  const labelSize = Math.max(9, height * 0.06);
+  context.font = `${labelSize}px "${element.style.fontFamily}"`;
+  context.textBaseline = "bottom";
+  context.textAlign = "center";
+  resolved.data.forEach((datum, index) => {
+    const barWidth = slot * 0.56;
+    const barHeight = (Math.abs(datum.value) / max) * plotHeight;
+    const x = index * slot + (slot - barWidth) / 2;
+    context.fillStyle = element.style.seriesColors[index % element.style.seriesColors.length] ?? "#3366CC";
+    context.fillRect(x, height - plotHeight - barHeight, barWidth, barHeight);
+    context.fillStyle = element.style.textColor;
+    if (element.style.showValueLabels) context.fillText(formatChartValue(datum.value, resolved.unit), x + barWidth / 2, height - plotHeight - barHeight - 2);
+    context.fillText(datum.category.slice(0, 6), x + barWidth / 2, height);
+  });
 }
 
 function drawText(context: CanvasRenderingContext2D, element: TextElement, width: number, height: number, scale: number): void {

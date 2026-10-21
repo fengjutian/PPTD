@@ -333,6 +333,30 @@ button { color: inherit; }
 .slide-element.shape .shape-fill { width: 100%; height: 100%; border-style: solid; }
 .slide-element.image { overflow: hidden; }
 .slide-element.image .image-fill { display: block; position: absolute; object-fit: fill; pointer-events: none; }
+.slide-element.chart { overflow: hidden; }
+.chart-view { width: 100%; height: 100%; display: flex; pointer-events: none; }
+.chart-vertical { flex-direction: row; align-items: flex-end; justify-content: space-around; gap: 4%; padding: 2% 1% 0; }
+.chart-column { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 2px; }
+.chart-column .chart-bar { width: 62%; min-height: 2px; border-radius: 2px 2px 0 0; }
+.chart-horizontal { flex-direction: column; justify-content: space-around; gap: 4%; padding: 2% 1%; }
+.chart-row { display: flex; align-items: center; gap: 6px; }
+.chart-row .chart-category { flex: 0 0 22%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-row .chart-track { flex: 1 1 auto; height: 60%; background: rgba(127, 138, 152, 0.16); border-radius: 2px; overflow: hidden; }
+.chart-row .chart-bar { display: block; height: 100%; border-radius: 2px; }
+.chart-row .chart-value { flex: 0 0 auto; }
+.chart-value { line-height: 1.1; }
+.chart-category { line-height: 1.1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-pie { flex-direction: row; align-items: center; justify-content: center; gap: 6%; }
+.chart-pie-disc { width: 62%; aspect-ratio: 1 / 1; border-radius: 50%; }
+.chart-legend { display: flex; flex-direction: column; gap: 4px; }
+.chart-legend-item { display: flex; align-items: center; gap: 4px; }
+.chart-legend-item i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.chart-line { flex-direction: column; }
+.chart-line-svg { width: 100%; flex: 1 1 auto; overflow: visible; }
+.chart-axis { display: flex; justify-content: space-between; gap: 2px; }
+.chart-axis-item { display: flex; flex-direction: column; align-items: center; }
+.chart-missing { align-items: center; justify-content: center; color: #8a94a6; }
+.thumbnail-chart .chart-view { font-size: 4px; }
 .slide-element.selected::after { content: ""; position: absolute; inset: -4px; border: 2px solid var(--ppt-accent); pointer-events: none; }
 .element-handle { position: absolute; z-index: 3; width: 9px; height: 9px; padding: 0; border: 2px solid var(--ppt-accent); border-radius: 2px; background: #fff; }
 .element-handle.nw { left: -6px; top: -6px; cursor: nwse-resize; }

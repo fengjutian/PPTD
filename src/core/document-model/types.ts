@@ -26,7 +26,8 @@ export type ContentBlock =
   | { id: string; type: "metric"; label: string; value: string }
   | { id: string; type: "timeline"; items: Array<{ label: string; text: string }> }
   | { id: string; type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
-  | { id: string; type: "process"; items: Array<{ label: string; text: string }> };
+  | { id: string; type: "process"; items: Array<{ label: string; text: string }> }
+  | { id: string; type: "table-data"; header: string[]; rows: string[][] };
 
 export interface SlideContent {
   title: string;
@@ -39,6 +40,14 @@ export interface SlideContent {
 }
 
 export type TextContentRole = "title" | "body" | "decorative";
+
+/**
+ * Where an element came from. Generated elements belong to the layout and may
+ * be replaced by a design-only relayout; user elements must survive it.
+ * Documents created before provenance existed have no value, so the relayout
+ * command falls back to conservative structural inference for them.
+ */
+export type ElementOrigin = "generated" | "user";
 
 export type TextAlign = "left" | "center" | "right";
 
@@ -59,11 +68,41 @@ export interface ShapeElementStyle {
   radiusPt: number;
 }
 
-interface ElementBase {
+/** The kind of a native chart. The choice is design, the numbers are content. */
+export type ChartKind = "column" | "bar" | "line" | "pie";
+
+/** Presentation-only styling of a native chart. Never part of the content hash. */
+export interface ChartElementStyle {
+  fontFamily: string;
+  fontSizePt: number;
+  textColor: string;
+  /** Colors of the series, in order. */
+  seriesColors: string[];
+  showLegend: boolean;
+  showValueLabels: boolean;
+}
+
+export interface ElementBase {
   id: ElementId;
   frame: RectEmu;
   rotationMilliDegree: number;
   locked: boolean;
+  /** Design provenance used by design-only relayout. */
+  origin?: ElementOrigin;
+}
+
+/**
+ * A native chart. The numbers are not stored here: they stay in the metric
+ * blocks of the reviewed content, and the chart only points at them. Editing
+ * the content therefore changes the chart, and the chart cannot invent a
+ * number of its own.
+ */
+export interface ChartElement extends ElementBase {
+  type: "chart";
+  /** The metric blocks that carry the categories and the values, in order. */
+  contentBlockIds: string[];
+  kind: ChartKind;
+  style: ChartElementStyle;
 }
 
 export interface TextElement extends ElementBase {
@@ -132,7 +171,30 @@ export interface ImageElement extends ElementBase {
   placement?: "content" | "layout-background";
 }
 
-export type SlideElement = TextElement | ShapeElement | ImageElement;
+/** Presentation-only styling of a native table. Never part of the content hash. */
+export interface TableElementStyle {
+  fontFamily: string;
+  fontSizePt: number;
+  headerFill: string;
+  headerTextColor: string;
+  bodyTextColor: string;
+  borderColor: string;
+  /** The first column carries the row names and is set in bold. */
+  firstColumnBold: boolean;
+}
+
+/**
+ * A native table. Like the chart, it holds no data of its own: the cells are
+ * read from the table block of the reviewed content.
+ */
+export interface TableElement extends ElementBase {
+  type: "table";
+  /** The content block that carries the header and the rows. */
+  contentBlockId: string;
+  style: TableElementStyle;
+}
+
+export type SlideElement = TextElement | ShapeElement | ImageElement | ChartElement | TableElement;
 
 export interface Slide {
   id: SlideId;
@@ -145,7 +207,7 @@ export interface Slide {
 
 export interface PresentationDocument {
   id: DocumentId;
-  schemaVersion: 4;
+  schemaVersion: 7;
   title: string;
   pageSize: { width: Emu; height: Emu };
   revisions: Revisions;

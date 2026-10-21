@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Trash2, Unlink } from "lucide-react";
-import { type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
+import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
 import { isFontAvailable } from "../../core/validation/export-validation";
@@ -33,6 +33,7 @@ const TEXT_ALIGN = [
 function elementTypeLabel(element: SlideElement): string {
   if (element.type === "text") return "文本";
   if (element.type === "image") return "图片";
+  if (element.type === "chart") return "图表";
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
@@ -284,6 +285,26 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
           {element.shape === "rectangle" && <NumberField label="圆角" unit="pt" value={element.style.radiusPt} min={0} max={1000} precision={1} disabled={locked}
             onCommit={(radiusPt) => setShapeStyle({ radiusPt })} />}
         </div>
+      </section>}
+
+      {element.type === "chart" && <section className="inspector-section">
+        <h4>图表</h4>
+        <div className="property-grid">
+          <SelectField label="类型" value={element.kind} disabled={locked}
+            options={["column", "bar", "line", "pie"]}
+            onCommit={(kind) => onCommand({ type: "set-chart-kind", slideId, elementId: element.id, kind: kind as ChartKind })} />
+          <ColorField label="系列颜色" value={element.style.seriesColors[0] ?? "#3366CC"} disabled={locked}
+            onCommit={(color) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { seriesColors: [color, ...element.style.seriesColors.slice(1)] } })} />
+          <NumberField label="字号" unit="pt" value={element.style.fontSizePt} min={4} max={400} precision={0} disabled={locked}
+            onCommit={(fontSizePt) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { fontSizePt } })} />
+        </div>
+        <div className="field-row">
+          <label><input type="checkbox" checked={element.style.showValueLabels} disabled={locked}
+            onChange={(event) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { showValueLabels: event.target.checked } })} />显示数值</label>
+          <label><input type="checkbox" checked={element.style.showLegend} disabled={locked}
+            onChange={(event) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { showLegend: event.target.checked } })} />显示图例</label>
+        </div>
+        <p className="inspector-hint">图表的数值来自本页已审核的指标，导出后在 PowerPoint 中仍是可编辑的图表对象。</p>
       </section>}
 
       {element.type === "image" && <section className="inspector-section">

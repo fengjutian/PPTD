@@ -17,7 +17,7 @@ export function validateVisualRenderPayload(render: PresentationRender): void {
 /** Provider-neutral boundary for a model that can inspect rendered slide images. */
 export interface VisionReviewPort {
   readonly available: boolean;
-  review(render: PresentationRender, goal: PresentationVisualGoal, slideIndexes?: number[]): Promise<VisualReview>;
+  review(render: PresentationRender, goal: PresentationVisualGoal, slideIndexes?: number[], taskId?: number): Promise<VisualReview>;
   planRepairs(review: VisualReview, goal: PresentationVisualGoal): Promise<VisualRepairPlan>;
 }
 
@@ -34,7 +34,7 @@ export class UnavailableVisionReviewPort implements VisionReviewPort {
 export class TauriVisionReviewPort implements VisionReviewPort {
   readonly available = true;
 
-  async review(render: PresentationRender, goal: PresentationVisualGoal, slideIndexes?: number[]): Promise<VisualReview> {
+  async review(render: PresentationRender, goal: PresentationVisualGoal, slideIndexes?: number[], taskId?: number): Promise<VisualReview> {
     validateVisualRenderPayload(render);
     const indexes = (slideIndexes ?? render.slides.map((_, index) => index)).slice(0, 6);
     if (indexes.length === 0 || indexes.some((index) => !render.slides[index])) throw new Error("AI_VISION_SLIDE_INDEX_INVALID");
@@ -42,10 +42,12 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const result = await invoke<unknown>("review_presentation_visuals", { request: { goal, slideImages: indexes.map((index) => render.slides[index]!), contactSheet: render.contactSheet, slideIndexes: indexes, model: settings.aiModel, provider: settings.aiProviderId, repairHint: attempt === 0 ? undefined : "上一次响应不是可接受的严格 JSON，或缺少必填评分字段。请重新检查并严格遵循输出协议。" } });
+        const result = await invoke<unknown>("review_presentation_visuals", { request: { goal, slideImages: indexes.map((index) => render.slides[index]!), contactSheet: render.contactSheet, slideIndexes: indexes, model: settings.aiModel, provider: settings.aiProviderId, repairHint: attempt === 0 ? undefined : "上一次响应不是可接受的严格 JSON，或缺少必填评分字段。请重新检查并严格遵循输出协议。", taskId } });
         return normalizeVisualReview(result, indexes);
       } catch (error) {
         lastError = error;
+        // 取消不是失败：立刻放弃，不再重试一次。
+        if (error instanceof Error && error.message.includes("AI_REQUEST_CANCELLED")) throw error;
       }
     }
     throw new Error("AI_VISION_REVIEW_RETRY_EXHAUSTED", { cause: lastError });

@@ -22,6 +22,7 @@ export function createSlide(index: number): Slide {
         frame: { x: inches(0.75), y: inches(0.65), width: inches(7.5), height: inches(0.8) },
         rotationMilliDegree: 0,
         locked: false,
+        origin: "user",
         text: index === 1 ? "开始创造你的演示文稿" : `第 ${index} 页`,
         style: { fontFamily: "Microsoft YaHei", fontSizePt: 28, color: "#17181c", bold: true, align: "left" },
       },

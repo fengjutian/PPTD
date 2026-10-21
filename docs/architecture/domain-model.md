@@ -121,3 +121,20 @@ interface Slide {
 两者都是设计态：修改主题或版式绑定只增加 design revision，不触碰内容哈希。`Slide.layoutId` 必须能在 `layouts` 中解析，否则 Schema 拒绝该文档。
 
 版式的整页画面是图片元素，带 `placement: "layout-background"`。画布把它画在页面底层，导出把它放进母版背景，页面上不再重复绘制这张图片。详见 [0008 模板主题与版式落地到导出的 PPTX](decisions/0008-template-master-and-theme-export.md)。
+
+## 9. 图表元素（V0.1 已实现）
+
+图表的数字属于内容，图表的样式属于设计。`ChartElement` 因此不保存数值，只保存它引用了哪些指标块：
+
+```ts
+interface ChartElement extends ElementBase {
+  type: "chart";
+  contentBlockIds: string[];
+  kind: "column" | "bar" | "line" | "pie";
+  style: ChartElementStyle;
+}
+```
+
+`resolveChartData` 从 `slide.content.blocks` 里读回这些指标的标签和数值。只有纯数字且单位一致的指标才能成图；否则图表无法解析，导出前检查会报 `invalid-chart-data` 并阻止导出。
+
+新增图表元素使持久化格式升到第 5 版，迁移与固定样例见 `src/core/document-model/__fixtures__/v4-document.json`。详见 [0010 数值指标渲染为原生图表](decisions/0010-native-chart-for-metrics.md)。

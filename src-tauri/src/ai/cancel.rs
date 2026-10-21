@@ -62,10 +62,7 @@ impl CancelRegistry {
             return CancelToken::new();
         };
         let mut tasks = self.lock();
-        tasks
-            .entry(task_id)
-            .or_insert_with(CancelToken::new)
-            .clone()
+        tasks.entry(task_id).or_default().clone()
     }
 
     /// 取消整个任务。返回是否找到了该任务。

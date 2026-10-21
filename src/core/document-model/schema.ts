@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CURRENT_SCHEMA_VERSION = 4 as const;
+export const CURRENT_SCHEMA_VERSION = 7 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -10,6 +10,8 @@ const base = z.object({
   frame: rect,
   rotationMilliDegree: z.number().int(),
   locked: z.boolean(),
+  /** Missing in legacy documents; the relayout command infers it structurally. */
+  origin: z.enum(["generated", "user"]).optional(),
 });
 
 const textElement = base.extend({
@@ -50,6 +52,26 @@ const imageElement = base.extend({
 
 const hexColor = z.string().regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i);
 
+const tableElement = base.extend({
+  type: z.literal("table"),
+  contentBlockId: z.string().uuid(),
+  style: z.object({
+    fontFamily: z.string().min(1), fontSizePt: z.number().positive(),
+    headerFill: hexColor, headerTextColor: hexColor, bodyTextColor: hexColor, borderColor: hexColor,
+    firstColumnBold: z.boolean(),
+  }),
+});
+
+const chartElement = base.extend({
+  type: z.literal("chart"),
+  contentBlockIds: z.array(z.string().uuid()).min(1).max(32),
+  kind: z.enum(["column", "bar", "line", "pie"]),
+  style: z.object({
+    fontFamily: z.string().min(1), fontSizePt: z.number().positive(), textColor: hexColor,
+    seriesColors: z.array(hexColor).min(1).max(12), showLegend: z.boolean(), showValueLabels: z.boolean(),
+  }),
+});
+
 const themeSchema = z.object({
   name: z.string().min(1).max(200),
   majorFont: z.string().min(1).max(200),
@@ -71,13 +93,14 @@ const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ id: z.string().uuid(), type: z.literal("timeline"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
   z.object({ id: z.string().uuid(), type: z.literal("comparison"), leftLabel: z.string().max(1_000), rightLabel: z.string().max(1_000), leftItems: z.array(z.string().max(2_000)).max(50), rightItems: z.array(z.string().max(2_000)).max(50) }),
   z.object({ id: z.string().uuid(), type: z.literal("process"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
+  z.object({ id: z.string().uuid(), type: z.literal("table-data"), header: z.array(z.string().max(200)).min(1).max(8), rows: z.array(z.array(z.string().max(500)).min(1).max(8)).min(1).max(30) }),
 ]);
 
 const slideSchema = z.object({
   id: z.string().uuid(),
   background: z.string(),
   content: z.object({ title: z.string(), body: z.string(), blocks: z.array(contentBlockSchema).max(64).optional(), speakerNotes: z.string(), status: z.enum(["draft", "review", "approved", "changed", "needs_review"]), contentHash: z.string().regex(/^[0-9a-f]{16}$/).optional() }),
-  elements: z.array(z.discriminatedUnion("type", [textElement, shapeElement, imageElement])),
+  elements: z.array(z.discriminatedUnion("type", [textElement, shapeElement, imageElement, chartElement, tableElement])),
   layoutId: z.string().uuid().optional(),
 });
 
@@ -125,6 +148,18 @@ export const presentationDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionSixDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(6) })
+  .superRefine(validateUniqueIds);
+
+const versionFiveDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(5) })
+  .superRefine(validateUniqueIds);
+
+const versionFourDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(4) })
+  .superRefine(validateUniqueIds);
+
 const versionThreeDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(3) })
   .superRefine(validateUniqueIds);
@@ -149,6 +184,15 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 4 adds the crop of a picture. The field is optional, so a version 3
   // document keeps every picture and simply shows the whole source image.
   3: (document) => ({ ...versionThreeDocumentSchema.parse(document), schemaVersion: 4 }),
+  // Version 5 adds the native chart. A version 4 document has no chart, so it
+  // keeps every page and every object and simply has nothing to chart.
+  4: (document) => ({ ...versionFourDocumentSchema.parse(document), schemaVersion: 5 }),
+  // Version 6 adds the design provenance of an element. Older documents keep
+  // every object; relayout infers provenance for them from the rendered page.
+  5: (document) => ({ ...versionFiveDocumentSchema.parse(document), schemaVersion: 6 }),
+  // Version 7 adds the native table and the table block. A version 6 document
+  // has no table, so it keeps every page and every object.
+  6: (document) => ({ ...versionSixDocumentSchema.parse(document), schemaVersion: 7 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

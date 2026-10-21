@@ -1,5 +1,5 @@
-import type { ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, SlideId, SlideLayoutSpec, SupportedImageMimeType, TextElementStyle } from "../document-model";
-import { createSlide, inches } from "../document-model";
+import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TextElementStyle } from "../document-model";
+import { createDocument, createSlide, inches, parseMetricValue } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";
 import {
@@ -14,6 +14,7 @@ import {
   type BackgroundRhythm,
   type TemplateLayoutIntent,
 } from "./template-layouts";
+import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
 
 export type {
   AiElementRepair,
@@ -80,10 +81,33 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
     return { id, type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
+
+/** Plain deep copy of an element, safe to read from an Immer draft. */
+function cloneElement(element: SlideElement): SlideElement {
+  if (element.type === "text") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
+  if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
+  if (element.type === "chart") return { ...element, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] };
+  return { ...element, frame: { ...element.frame }, source: { ...element.source } };
+}
+
+/** Strips document block IDs before handing reviewed content back to the renderer. */
+function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | undefined {
+  if (!blocks) return undefined;
+  return blocks.map((block): AiContentBlock => {
+    if (block.type === "paragraph") return { type: "paragraph", text: block.text };
+    if (block.type === "bullet-list") return { type: "bullet-list", items: [...block.items] };
+    if (block.type === "quote") return { type: "quote", text: block.text, attribution: block.attribution };
+    if (block.type === "metric") return { type: "metric", label: block.label, value: block.value };
+    if (block.type === "timeline") return { type: "timeline", items: block.items.map((item) => ({ ...item })) };
+    if (block.type === "comparison") return { type: "comparison", leftLabel: block.leftLabel, rightLabel: block.rightLabel, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
+    return { type: "process", items: block.items.map((item) => ({ ...item })) };
+  });
+}
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
   | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; templateTheme?: AiTemplateTheme; backgroundRhythm?: BackgroundRhythm }
+  | { type: "relayout-slide"; slideId: SlideId }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -101,6 +125,8 @@ export type DocumentCommand =
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
+  | { type: "set-chart-style"; slideId: SlideId; elementId: ElementId; style: Partial<ChartElementStyle> }
+  | { type: "set-chart-kind"; slideId: SlideId; elementId: ElementId; kind: ChartKind }
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
@@ -120,6 +146,19 @@ function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
   if (style.stroke !== undefined && !HEX_COLOR_PATTERN.test(style.stroke)) throw new Error("INVALID_SHAPE_STYLE");
   if (style.strokeWidthPt !== undefined && (!Number.isFinite(style.strokeWidthPt) || style.strokeWidthPt < 0 || style.strokeWidthPt > 100)) throw new Error("INVALID_SHAPE_STYLE");
   if (style.radiusPt !== undefined && (!Number.isFinite(style.radiusPt) || style.radiusPt < 0 || style.radiusPt > 1000)) throw new Error("INVALID_SHAPE_STYLE");
+}
+
+/** The style of a chart is presentation-only, so it is guarded like the others. */
+function assertChartStyle(style: Partial<ChartElementStyle>): void {
+  if (style.fontFamily !== undefined && (typeof style.fontFamily !== "string" || !style.fontFamily.trim() || style.fontFamily.length > 100)) throw new Error("INVALID_CHART_STYLE");
+  if (style.fontSizePt !== undefined && (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)) throw new Error("INVALID_CHART_STYLE");
+  if (style.textColor !== undefined && !HEX_COLOR_PATTERN.test(style.textColor)) throw new Error("INVALID_CHART_STYLE");
+  if (style.seriesColors !== undefined) {
+    if (!Array.isArray(style.seriesColors) || style.seriesColors.length < 1 || style.seriesColors.length > 12) throw new Error("INVALID_CHART_STYLE");
+    if (style.seriesColors.some((value) => !HEX_COLOR_PATTERN.test(value))) throw new Error("INVALID_CHART_STYLE");
+  }
+  if (style.showLegend !== undefined && typeof style.showLegend !== "boolean") throw new Error("INVALID_CHART_STYLE");
+  if (style.showValueLabels !== undefined && typeof style.showValueLabels !== "boolean") throw new Error("INVALID_CHART_STYLE");
 }
 
 /**
@@ -162,6 +201,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-slide-background": return "design";
     case "set-text-style":
     case "set-shape-style":
+    case "set-chart-style":
+    case "set-chart-kind":
     case "set-image-alt-text":
     case "set-image-crop": return "design";
     case "edit-text":
@@ -174,6 +215,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     }
     case "add-text": return "design";
     case "add-image": return "design";
+    case "relayout-slide": return "design";
     case "add-slide": return "both";
     case "apply-ai-draft": return "both";
     case "apply-ai-designed-draft": return "both";
@@ -182,6 +224,64 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "move-slide": return "both";
     default: return "design";
   }
+}
+
+/**
+ * Rebuilds only the generated composition of one slide.
+ *
+ * The reviewed content and its block IDs stay untouched. Generated elements are
+ * replaced from the same content, while user images/text, locked objects and
+ * anything the legacy classifier cannot prove is generated are carried over.
+ */
+function relayoutSlide(document: PresentationDocument, slide: Slide): void {
+  const context = inferRelayoutContext(slide, document);
+  const preserved = classifyRelayoutElements(slide).preserved.map((element) => {
+    const copy = cloneElement(element);
+    copy.origin = "user";
+    return copy;
+  });
+  const blocks = toAiBlocks(slide.content.blocks);
+  const draft: AiSlideDraft = {
+    title: slide.content.title,
+    body: slide.content.body,
+    speakerNotes: slide.content.speakerNotes,
+    ...(blocks ? { blocks } : {}),
+  };
+  const temp = createDocument();
+  temp.title = document.title;
+  temp.pageSize = { ...document.pageSize };
+  const relayoutCommand: DocumentCommand = {
+    type: "apply-ai-designed-draft",
+    title: document.title,
+    slides: [draft],
+    designs: [context.design],
+    pageSize: { ...document.pageSize },
+    templateLayouts: [context.templateLayout],
+    backgroundRhythm: { coverVariants: 1, contentVariants: 1, repeatLimit: 1 },
+    ...(context.fontFamily ? { fontFamily: context.fontFamily } : {}),
+    ...(context.bodyFontFamily ? { bodyFontFamily: context.bodyFontFamily } : {}),
+    ...(document.theme ? { templateTheme: document.theme } : {}),
+  };
+  applyCommand(temp, relayoutCommand);
+  const generatedSlide = temp.slides[0];
+  if (!generatedSlide) throw new Error("RELAYOUT_FAILED");
+
+  slide.background = generatedSlide.background;
+  slide.elements = [...generatedSlide.elements, ...preserved];
+  const generatedLayout = temp.layouts?.[0];
+  if (!generatedLayout) {
+    delete slide.layoutId;
+    return;
+  }
+  const existingLayout = document.layouts?.find((layout) => layout.name === generatedLayout.name && layout.backgroundColor === generatedLayout.backgroundColor);
+  if (existingLayout) {
+    slide.layoutId = existingLayout.id;
+    return;
+  }
+  if (!document.layouts) document.layouts = [];
+  const layoutCopy = structuredClone(generatedLayout);
+  document.layouts.push(layoutCopy);
+  slide.layoutId = layoutCopy.id;
 }
 
 export function applyCommand(document: PresentationDocument, command: DocumentCommand): void {
@@ -198,8 +298,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const blocks = toContentBlocks(draft.blocks);
       slide.content = { title: draft.title, body: draft.body, ...(blocks ? { blocks } : {}), speakerNotes: draft.speakerNotes, status: "approved" };
       const title = slide.elements[0];
-      if (title?.type === "text") title.text = draft.title;
-      if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", contentRef: "body", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
+      if (title?.type === "text") {
+        title.text = draft.title;
+        title.origin = "generated";
+      }
+      if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", contentRef: "body", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, origin: "generated", text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
       return slide;
     });
     return;
@@ -255,6 +358,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const design = command.designs[index]!;
       const blocks = content.blocks ?? [];
       const hasBlock = (type: AiContentBlock["type"]) => blocks.some((block) => block.type === type);
+      const blockItems = blocks
+        .filter((block): block is Extract<AiContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
+        .flatMap((block) => block.items);
+      const items = blockItems.length > 0 ? blockItems : points(content.body);
+      const shortItems = items.every((item) => cleanPoint(item).length <= 48);
+      // The template intent must match the composition the renderer will actually
+      // produce. A short split page becomes an editorial count/quote page, and a
+      // six-point split page becomes a card grid; selecting split artwork for
+      // those pages leaves the new composition on top of two-column geometry.
+      if (design.layout === "split" && !hasBlock("comparison") && shortItems) {
+        if (items.length >= 3 && items.length <= 5) return hasBlock("quote") ? "quote" : "body";
+        if (items.length === 6) return "cards";
+      }
       if (design.layout === "cover") return "cover";
       if (design.layout === "section") return "section";
       if (design.layout === "quote" || hasBlock("quote")) return "quote";
@@ -467,27 +583,62 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text(itemText(column.items), frame(column.x + 0.035, panelTop + headerHeight + 0.015, columnWidth - 0.07, panelHeight - headerHeight - 0.03), itemSize, bodyInk, false, "left", undefined, cardLuminance));
         });
       } else if (metricBlocks.length > 0) {
-        const metrics = metricBlocks.slice(0, 6); const columns = metrics.length > 3 ? 3 : metrics.length; const rows = Math.ceil(metrics.length / columns);
+        const metrics = metricBlocks.slice(0, 6);
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
-        const cellWidth = contentBox.width / columns;
-        const cardGap = 0.03;
-        const valueSize = 30;
-        const labelSize = 15;
-        // The stat card carries a number and its label; it is sized to that
-        // pair instead of stretching over the whole placeholder, which used to
-        // leave the label stranded at the bottom of a mostly empty card.
-        const cardHeight = Math.min(0.24, contentBox.height / rows - 0.04);
-        const gridHeight = rows * cardHeight + (rows - 1) * cardGap;
-        const gridTop = contentBox.y + (contentBox.height - gridHeight) * 0.30;
-        metrics.forEach((metric, metricIndex) => {
-          const column = metricIndex % columns; const row = Math.floor(metricIndex / columns);
-          const width = cellWidth - 0.025;
-          const x = contentBox.x + column * cellWidth; const y = gridTop + row * (cardHeight + cardGap);
-          slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
-          slide.elements.push(text(metric.value, centeredBlock(metric.value, { x: x + 0.02, y: y + cardHeight * 0.10, width: width - 0.04, height: cardHeight * 0.46 }, valueSize), valueSize, design.accent, true, "center", undefined, cardLuminance));
-          slide.elements.push(text(metric.label, centeredBlock(metric.label, { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 }, labelSize), labelSize, bodyInk, false, "center", undefined, cardLuminance));
-        });
+        // The metrics of a page are the reviewed numbers of the page. When they
+        // are numbers of the same unit, they are drawn as a native chart: the
+        // exported file keeps an editable chart instead of a picture of bars.
+        const chartMetrics = metrics
+          .map((metric, metricIndex) => {
+            const parsed = parseMetricValue(metric.value);
+            const block = contentBlocks?.filter((candidate) => candidate.type === "metric")[metricIndex];
+            return parsed && block?.type === "metric" ? { blockId: block.id, label: metric.label, value: parsed.value, unit: parsed.unit } : undefined;
+          })
+          .filter((metric): metric is { blockId: string; label: string; value: number; unit: string } => Boolean(metric));
+        const sameUnit = chartMetrics.length > 0 && chartMetrics.every((metric) => metric.unit === chartMetrics[0]!.unit);
+        if (chartMetrics.length >= 2 && sameUnit) {
+          // A page with many categories reads better with horizontal bars.
+          const kind = chartMetrics.length > 4 ? "bar" : "column";
+          const chartFrame = frame(contentBox.x, contentBox.y + contentBox.height * 0.06, contentBox.width, Math.min(contentBox.height * 0.80, 0.46));
+          slide.elements.push({
+            id: crypto.randomUUID() as ElementId,
+            type: "chart",
+            contentBlockIds: chartMetrics.map((metric) => metric.blockId),
+            kind,
+            frame: chartFrame,
+            rotationMilliDegree: 0,
+            locked: false,
+            style: {
+              fontFamily: command.bodyFontFamily || command.fontFamily || "Microsoft YaHei",
+              fontSizePt: 14,
+              textColor: bodyInk,
+              seriesColors: [design.accent, accentFill, cardStroke],
+              showLegend: false,
+              showValueLabels: true,
+            },
+          });
+        } else {
+          const columns = metrics.length > 3 ? 3 : metrics.length; const rows = Math.ceil(metrics.length / columns);
+          const cellWidth = contentBox.width / columns;
+          const cardGap = 0.03;
+          const valueSize = 30;
+          const labelSize = 15;
+          // The stat card carries a number and its label; it is sized to that
+          // pair instead of stretching over the whole placeholder, which used to
+          // leave the label stranded at the bottom of a mostly empty card.
+          const cardHeight = Math.min(0.24, contentBox.height / rows - 0.04);
+          const gridHeight = rows * cardHeight + (rows - 1) * cardGap;
+          const gridTop = contentBox.y + (contentBox.height - gridHeight) * 0.30;
+          metrics.forEach((metric, metricIndex) => {
+            const column = metricIndex % columns; const row = Math.floor(metricIndex / columns);
+            const width = cellWidth - 0.025;
+            const x = contentBox.x + column * cellWidth; const y = gridTop + row * (cardHeight + cardGap);
+            slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
+            slide.elements.push(text(metric.value, centeredBlock(metric.value, { x: x + 0.02, y: y + cardHeight * 0.10, width: width - 0.04, height: cardHeight * 0.46 }, valueSize), valueSize, design.accent, true, "center", undefined, cardLuminance));
+            slide.elements.push(text(metric.label, centeredBlock(metric.label, { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 }, labelSize), labelSize, bodyInk, false, "center", undefined, cardLuminance));
+          });
+        }
       } else if (processBlock) {
         const processItems = processBlock.items.slice(0, 6);
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
@@ -632,10 +783,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const textTop = badgeY + badgeHeight + 0.03;
           slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, y, cardWidth, 0.008), design.accent));
           slide.elements.push(shape(circleFrame(badgeX, badgeY, badgeDiameter), accentFill, "ellipse"));
-          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
+          const badgeText = String(itemIndex + 1).padStart(2, "0");
+          slide.elements.push(text(badgeText, centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
           const cardTextBox = { x: x + 0.03, y: textTop, width: cardWidth - 0.06, height: Math.max(0.06, y + cardHeight - 0.03 - textTop) };
           const fittedCardSize = fittedFontSize(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height), 16, 12);
-          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, cardTextBox, fittedCardSize), fittedCardSize, "#293241", true, "left", undefined, cardLuminance));
+          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, cardTextBox, fittedCardSize), fittedCardSize, "#293241", false, "left", undefined, cardLuminance));
         });
       } else if ((design.layout === "split" || (design.layout === "cards" && items.length > 6)) && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
@@ -734,6 +886,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const body = slide.elements.find((element) => element.type === "text" && element.text === content.body);
         if (body?.type === "text") body.frame = { ...body.frame, x: (body.frame.x + Math.round(pageWidth * 0.025)) as Emu, width: Math.max(Math.round(pageWidth * 0.30), body.frame.width - Math.round(pageWidth * 0.05)) as Emu };
       }
+      // Provenance is what lets a later design-only relayout replace the
+      // generated composition without deleting anything the user added.
+      for (const element of slide.elements) element.origin = "generated";
       return slide;
     });
     return;
@@ -750,7 +905,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
         : element.type === "shape"
           ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
-          : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, source: { ...element.source } }),
+          : element.type === "chart"
+            ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] }
+            : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, source: { ...element.source } }),
     };
     document.slides.splice(sourceIndex + 1, 0, duplicate);
     return;
@@ -776,6 +933,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   const slide = document.slides.find((item) => item.id === command.slideId);
   if (!slide) throw new Error("SLIDE_NOT_FOUND");
 
+  if (command.type === "relayout-slide") {
+    relayoutSlide(document, slide);
+    return;
+  }
   if (command.type === "set-slide-background") {
     if (!HEX_COLOR_PATTERN.test(command.background)) throw new Error("INVALID_BACKGROUND_COLOR");
     slide.background = command.background;
@@ -788,6 +949,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       frame: { x: inches(1), y: inches(1.8), width: inches(4), height: inches(0.65) },
       rotationMilliDegree: 0,
       locked: false,
+      origin: "user",
       text: "新文本",
       contentRef: "decorative",
       style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#17181c", bold: false, align: "left" },
@@ -806,6 +968,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       frame: imageFrame(command.naturalWidth, command.naturalHeight),
       rotationMilliDegree: 0,
       locked: false,
+      origin: "user",
       source: { kind: "embedded", dataUrl: command.dataUrl, mimeType: command.mimeType },
       altText: command.altText,
     });
@@ -819,6 +982,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       frame: { x: inches(4), y: inches(2.4), width: inches(2.4), height: inches(1.4) },
       rotationMilliDegree: 0,
       locked: false,
+      origin: "user",
       style: { fill: "#d35230", stroke: "#7f2f1d", strokeWidthPt: 1.5, radiusPt: 12 },
     });
     return;
@@ -838,7 +1002,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       ? { ...element, id: crypto.randomUUID() as ElementId, contentRef: "decorative" as const, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
       : element.type === "shape"
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
-        : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, source: { ...element.source } };
+        : element.type === "chart"
+          ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] }
+          : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, source: { ...element.source } };
+    // A copy is user-owned even when its source was generated.
+    duplicate.origin = "user";
     slide.elements.splice(sourceIndex + 1, 0, duplicate);
     return;
   }
@@ -874,6 +1042,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "shape") throw new Error("ELEMENT_NOT_SHAPE");
     assertShapeStyle(command.style);
     element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-chart-style") {
+    if (element.type !== "chart") throw new Error("ELEMENT_NOT_CHART");
+    assertChartStyle(command.style);
+    element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-chart-kind") {
+    if (element.type !== "chart") throw new Error("ELEMENT_NOT_CHART");
+    if (command.kind !== "column" && command.kind !== "bar" && command.kind !== "line" && command.kind !== "pie") throw new Error("INVALID_CHART_KIND");
+    element.kind = command.kind;
     return;
   }
   if (command.type === "set-image-alt-text") {
