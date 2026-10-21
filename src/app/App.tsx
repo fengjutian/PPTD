@@ -356,7 +356,7 @@ export function App() {
           {templateLibrary.length > 0 && <div className="template-library"><div className="template-library-heading"><strong>已保存模板</strong><span>{templateLibrary.length} 个</span></div><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => setSelectedTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div></div>}
           <button type="button" className={`template-dropzone ${selectedTemplate ? "selected" : ""}`} onClick={handleChooseTemplate}><FileUp />{selectedTemplate ? <><strong>{selectedTemplate.name}</strong><span>{selectedTemplate.size ? `${(selectedTemplate.size / 1024 / 1024).toFixed(2)} MB · ` : ""}PowerPoint 模板已选择</span><small>点击重新选择</small></> : <><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx</small></>}</button>
           {selectedTemplate && <div className="template-status"><Check /><div><strong>模板已保存，等待解析</strong><span>文件已复制到 PPTD 模板库；母版、版式和兼容性报告将在模板解析器启用后生成。</span></div></div>}
-          <div className="template-notice"><strong>当前能力边界</strong><p>现阶段仅完成安全选取与流程衔接，尚未解析或应用模板。不会把“已选择文件”伪装成模板已经成功套用。</p></div>
+          <div className="template-notice"><strong>当前能力边界</strong><p>模板文件已经持久保存，但现阶段尚未解析或应用其中的母版与版式。不会把“已保存文件”伪装成模板已经成功套用。</p></div>
           <button type="button" className="primary-action finish-theme" onClick={() => setActiveView("editor")}>暂不使用模板，返回编辑器<ArrowRight /></button>
         </section>
       </main>}

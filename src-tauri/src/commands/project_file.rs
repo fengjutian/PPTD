@@ -333,8 +333,10 @@ fn safe_template_name(name: &str) -> String {
     let value: String = name
         .chars()
         .map(|character| {
-            if matches!(character, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
-                || character.is_control()
+            if matches!(
+                character,
+                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
+            ) || character.is_control()
             {
                 '_'
             } else {
@@ -343,13 +345,21 @@ fn safe_template_name(name: &str) -> String {
         })
         .collect();
     let value = value.trim().trim_end_matches('.');
-    if value.is_empty() { "template.pptx".into() } else { value.into() }
+    if value.is_empty() {
+        "template.pptx".into()
+    } else {
+        value.into()
+    }
 }
 
 #[tauri::command]
-pub fn import_pptx_template(app: tauri::AppHandle, source_path: String) -> Result<TemplateRecord, String> {
+pub fn import_pptx_template(
+    app: tauri::AppHandle,
+    source_path: String,
+) -> Result<TemplateRecord, String> {
     let source = validate_path(&source_path, "pptx")?;
-    let metadata = fs::metadata(&source).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+    let metadata =
+        fs::metadata(&source).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
     if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_TEMPLATE_BYTES {
         return Err("TEMPLATE_SIZE_INVALID".into());
     }
@@ -360,30 +370,62 @@ pub fn import_pptx_template(app: tauri::AppHandle, source_path: String) -> Resul
     if signature != *b"PK" {
         return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
     }
-    let imported_at = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| "SYSTEM_TIME_INVALID")?.as_millis() as u64;
-    let name = safe_template_name(source.file_name().and_then(|value| value.to_str()).unwrap_or("template.pptx"));
+    let imported_at = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "SYSTEM_TIME_INVALID")?
+        .as_millis() as u64;
+    let name = safe_template_name(
+        source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("template.pptx"),
+    );
     let id = format!("{imported_at}-{name}");
     let root = template_root(&app)?;
-    fs::create_dir_all(&root).map_err(|error| format!("TEMPLATE_DIRECTORY_CREATE_FAILED: {error}"))?;
+    fs::create_dir_all(&root)
+        .map_err(|error| format!("TEMPLATE_DIRECTORY_CREATE_FAILED: {error}"))?;
     fs::copy(&source, root.join(&id)).map_err(|error| format!("TEMPLATE_COPY_FAILED: {error}"))?;
-    Ok(TemplateRecord { id, name, size: metadata.len(), imported_at })
+    Ok(TemplateRecord {
+        id,
+        name,
+        size: metadata.len(),
+        imported_at,
+    })
 }
 
 #[tauri::command]
 pub fn list_pptx_templates(app: tauri::AppHandle) -> Result<Vec<TemplateRecord>, String> {
     let root = template_root(&app)?;
-    if !root.exists() { return Ok(Vec::new()); }
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
     let mut templates = Vec::new();
     for entry in fs::read_dir(root).map_err(|error| format!("TEMPLATE_LIST_FAILED: {error}"))? {
         let entry = entry.map_err(|error| format!("TEMPLATE_LIST_FAILED: {error}"))?;
         let id = entry.file_name().to_string_lossy().into_owned();
-        let Some((timestamp, name)) = id.split_once('-') else { continue };
-        let Ok(imported_at) = timestamp.parse::<u64>() else { continue };
-        if !name.to_ascii_lowercase().ends_with(".pptx") { continue; }
-        let metadata = entry.metadata().map_err(|error| format!("TEMPLATE_LIST_FAILED: {error}"))?;
-        if metadata.is_file() { templates.push(TemplateRecord { id, name: name.into(), size: metadata.len(), imported_at }); }
+        let Some((timestamp, name)) = id.split_once('-') else {
+            continue;
+        };
+        let Ok(imported_at) = timestamp.parse::<u64>() else {
+            continue;
+        };
+        if !name.to_ascii_lowercase().ends_with(".pptx") {
+            continue;
+        }
+        let name = name.to_owned();
+        let metadata = entry
+            .metadata()
+            .map_err(|error| format!("TEMPLATE_LIST_FAILED: {error}"))?;
+        if metadata.is_file() {
+            templates.push(TemplateRecord {
+                id,
+                name,
+                size: metadata.len(),
+                imported_at,
+            });
+        }
     }
-    templates.sort_by(|a, b| b.imported_at.cmp(&a.imported_at));
+    templates.sort_by_key(|item| std::cmp::Reverse(item.imported_at));
     Ok(templates)
 }
 

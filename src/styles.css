@@ -146,6 +146,17 @@ button { color: inherit; }
 .template-content h2, .template-content p { margin: 0; }
 .template-content h2 { font-size: 22px; }
 .template-content > div:first-child > p { margin-top: 8px; color: #858a93; font-size: 12px; }
+.template-library { margin-top: 24px; }
+.template-library-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: #d8dae0; font-size: 12px; }
+.template-library-heading span { color: #797e87; font-size: 10px; }
+.template-library > div:last-child { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.template-library button { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 9px; padding: 12px; border: 1px solid #34363d; border-radius: 8px; color: #aeb2ba; background: #202126; text-align: left; cursor: pointer; }
+.template-library button:hover, .template-library button.active { border-color: var(--ppt-accent); background: #242126; }
+.template-library button > svg { width: 18px; height: 18px; color: var(--ppt-accent-hover); }
+.template-library button > span { min-width: 0; }
+.template-library button strong, .template-library button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.template-library button strong { color: #e1e3e7; font-size: 11px; }
+.template-library button small { margin-top: 4px; color: #777c85; font-size: 9px; }
 .template-dropzone { width: 100%; min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; margin-top: 28px; border: 1px dashed #555860; border-radius: 15px; color: #d9dbe0; background: #202126; cursor: pointer; }
 .template-dropzone:hover, .template-dropzone.selected { border-color: var(--ppt-accent); background: #242126; }
 .template-dropzone > svg { width: 38px; height: 38px; margin-bottom: 5px; color: var(--ppt-accent-hover); }
@@ -275,6 +286,7 @@ button { color: inherit; }
 :root[data-theme="light"] .sticky-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 :root[data-theme="light"] .theme-applied-message { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; }
 :root[data-theme="light"] .template-dropzone { color: #24272c; background: #fff; border-color: #aeb3bb; } :root[data-theme="light"] .template-dropzone:hover, :root[data-theme="light"] .template-dropzone.selected { border-color: var(--ppt-accent); background: #fff9f7; }
+:root[data-theme="light"] .template-library-heading { color: #353a42; } :root[data-theme="light"] .template-library button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .template-library button:hover, :root[data-theme="light"] .template-library button.active { border-color: var(--ppt-accent); background: #fff8f5; } :root[data-theme="light"] .template-library button strong { color: #272b31; }
 :root[data-theme="light"] .template-status { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; } :root[data-theme="light"] .template-notice { color: #494d53; background: #fff8ed; }
 :root[data-theme="light"] .settings-card { color: #24272c; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .settings-card input { color: #24272c; background: #fff; border-color: #cfd3d9; }
 :root[data-theme="light"] .settings-tabs { border-color: #d4d7dc; } :root[data-theme="light"] .settings-tabs button:hover { color: #333840; }
