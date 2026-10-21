@@ -5,7 +5,8 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
-    time::{SystemTime, UNIX_EPOCH},
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tauri::Manager;
 use tempfile::NamedTempFile;
@@ -13,9 +14,13 @@ use zip::ZipArchive;
 
 const MAX_IMAGE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_PROJECT_ASSET_BYTES: usize = 4 * 1024 * 1024 * 1024;
+const MAX_PROJECT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_EXPORT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_TEMPLATE_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_TEMPLATE_PREVIEW_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES: usize = 2_048;
+const MAX_ARCHIVE_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
+const TEMPLATE_RENDER_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -110,6 +115,15 @@ fn validate_path(path: &str, extension: &str) -> Result<PathBuf, String> {
     if !path.is_absolute() {
         return Err("PATH_NOT_ABSOLUTE".into());
     }
+    let parent = path.parent().ok_or("INVALID_PARENT_PATH")?;
+    if !parent.exists() || !parent.is_dir() {
+        return Err("PARENT_DIRECTORY_NOT_FOUND".into());
+    }
+    let file_name = path.file_name().ok_or("INVALID_FILE_NAME")?;
+    let parent = parent
+        .canonicalize()
+        .map_err(|error| format!("PARENT_DIRECTORY_CANONICALIZE_FAILED: {error}"))?;
+    let path = parent.join(file_name);
     if path
         .extension()
         .and_then(|value| value.to_str())
@@ -118,11 +132,111 @@ fn validate_path(path: &str, extension: &str) -> Result<PathBuf, String> {
     {
         return Err("INVALID_FILE_EXTENSION".into());
     }
-    let parent = path.parent().ok_or("INVALID_PARENT_PATH")?;
-    if !parent.exists() || !parent.is_dir() {
-        return Err("PARENT_DIRECTORY_NOT_FOUND".into());
+    if path.exists()
+        && path
+            .symlink_metadata()
+            .map_err(|error| format!("FILE_METADATA_FAILED: {error}"))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err("SYMLINK_PATH_REJECTED".into());
     }
     Ok(path)
+}
+
+fn ensure_project_size(path: &Path) -> Result<(), String> {
+    let metadata = fs::metadata(path).map_err(|error| format!("PROJECT_METADATA_FAILED: {error}"))?;
+    if !metadata.is_file() {
+        return Err("PROJECT_NOT_A_FILE".into());
+    }
+    if metadata.len() > MAX_PROJECT_BYTES {
+        return Err("PROJECT_TOO_LARGE".into());
+    }
+    Ok(())
+}
+
+/// Guard against ZIP bombs and hostile entry names before any XML is parsed.
+fn validate_archive_limits(archive: &mut ZipArchive<File>) -> Result<(), String> {
+    if archive.len() > MAX_ARCHIVE_ENTRIES {
+        return Err("PPTX_ARCHIVE_TOO_MANY_ENTRIES".into());
+    }
+    let mut total = 0_u64;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| format!("PPTX_ARCHIVE_READ_FAILED: {error}"))?;
+        let name = entry.name();
+        let normalized = name.replace('\\', "/");
+        if normalized.starts_with('/')
+            || normalized
+                .split('/')
+                .any(|component| component == ".." || component == ".")
+            || normalized.contains('\0')
+        {
+            return Err("PPTX_ARCHIVE_ENTRY_PATH_INVALID".into());
+        }
+        total = total
+            .checked_add(entry.size())
+            .ok_or("PPTX_ARCHIVE_TOO_LARGE")?;
+        if total > MAX_ARCHIVE_UNCOMPRESSED_BYTES {
+            return Err("PPTX_ARCHIVE_TOO_LARGE".into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_pptx_archive(path: &Path) -> Result<(), String> {
+    let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+    validate_archive_limits(&mut archive)?;
+    for required in ["[Content_Types].xml", "ppt/presentation.xml"] {
+        if archive.by_name(required).is_err() {
+            return Err(format!("PPTX_REQUIRED_ENTRY_MISSING:{required}"));
+        }
+    }
+    Ok(())
+}
+
+fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> Result<(), String> {    let mut child = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+        ])
+        .arg(script)
+        .arg("-Source")
+        .arg(source)
+        .arg("-Output")
+        .arg(output)
+        .spawn()
+        .map_err(|error| format!("TEMPLATE_RENDERER_UNAVAILABLE: {error}"))?;
+    let deadline = Instant::now() + TEMPLATE_RENDER_TIMEOUT;
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("TEMPLATE_RENDERER_WAIT_FAILED: {error}"))?
+        {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "TEMPLATE_LAYOUT_RENDER_FAILED:{}",
+                    status.code().unwrap_or(-1)
+                ))
+            };
+        }
+        if Instant::now() >= deadline {
+            let _ = Command::new("taskkill")
+                .args(["/PID", &child.id().to_string(), "/T", "/F"])
+                .status();
+            let _ = child.kill();
+            return Err("TEMPLATE_LAYOUT_RENDER_TIMEOUT".into());
+        }
+        thread::sleep(Duration::from_millis(150));
+    }
 }
 
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -338,6 +452,7 @@ pub fn save_project(path: String, mut document: Value) -> Result<(), String> {
 #[tauri::command]
 pub fn open_project(path: String) -> Result<Value, String> {
     let path = validate_path(&path, "pptd")?;
+    ensure_project_size(&path)?;
     let file = File::open(&path).map_err(|error| format!("PROJECT_OPEN_FAILED: {error}"))?;
     let mut document: Value =
         serde_json::from_reader(file).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
@@ -371,6 +486,7 @@ pub fn load_recovery(app: tauri::AppHandle) -> Result<Option<Value>, String> {
     if !path.is_file() {
         return Ok(None);
     }
+    ensure_project_size(&path)?;
     let file = File::open(&path).map_err(|error| format!("RECOVERY_OPEN_FAILED: {error}"))?;
     let mut document: Value =
         serde_json::from_reader(file).map_err(|error| format!("RECOVERY_JSON_INVALID: {error}"))?;
@@ -452,6 +568,7 @@ pub fn import_pptx_template(
     if signature != *b"PK" {
         return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
     }
+    validate_pptx_archive(&source)?;
     let imported_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "SYSTEM_TIME_INVALID")?
@@ -532,6 +649,7 @@ pub fn get_pptx_template_preview(
     let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
     let mut archive =
         ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+    validate_archive_limits(&mut archive)?;
     for (entry_name, mime_type) in [
         ("docProps/thumbnail.jpeg", "image/jpeg"),
         ("docProps/thumbnail.jpg", "image/jpeg"),
@@ -578,6 +696,7 @@ pub async fn render_pptx_template_layouts(
         if !source.starts_with(&root) || !source.is_file() {
             return Err("TEMPLATE_NOT_FOUND".into());
         }
+        validate_pptx_archive(&source)?;
         let working =
             tempfile::tempdir().map_err(|error| format!("TEMPLATE_RENDER_TEMP_FAILED: {error}"))?;
         let working_pptx = working.path().join("template.pptx");
@@ -621,27 +740,7 @@ try {
 "#,
         )
         .map_err(|error| format!("TEMPLATE_RENDER_SCRIPT_FAILED: {error}"))?;
-        let status = Command::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-            ])
-            .arg(&script)
-            .arg("-Source")
-            .arg(&working_pptx)
-            .arg("-Output")
-            .arg(&output)
-            .status()
-            .map_err(|error| format!("TEMPLATE_RENDERER_UNAVAILABLE: {error}"))?;
-        if !status.success() {
-            return Err(format!(
-                "TEMPLATE_LAYOUT_RENDER_FAILED:{}",
-                status.code().unwrap_or(-1)
-            ));
-        }
+        run_powershell_with_timeout(&script, &working_pptx, &output)?;
         let manifest = fs::read_to_string(output.join("layouts.tsv"))
             .map_err(|error| format!("TEMPLATE_LAYOUT_MANIFEST_READ_FAILED: {error}"))?;
         let layout_names: std::collections::HashMap<usize, String> = manifest
@@ -852,6 +951,7 @@ pub fn analyze_pptx_template(
     let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
     let mut archive =
         ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+    validate_archive_limits(&mut archive)?;
     let mut slide_count = 0;
     let mut master_count = 0;
     let mut layout_count = 0;
@@ -1174,6 +1274,24 @@ mod tests {
         assert_eq!(
             open_project(path.to_string_lossy().into_owned()).unwrap(),
             value
+        );
+    }
+
+    #[test]
+    fn rejects_archive_entries_that_escape_the_extraction_root() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("hostile.pptx");
+        let file = File::create(&path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        writer
+            .start_file("../evil.xml", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"<xml/>").unwrap();
+        writer.finish().unwrap();
+        let mut archive = ZipArchive::new(File::open(&path).unwrap()).unwrap();
+        assert_eq!(
+            validate_archive_limits(&mut archive).unwrap_err(),
+            "PPTX_ARCHIVE_ENTRY_PATH_INVALID"
         );
     }
 
