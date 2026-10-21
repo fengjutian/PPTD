@@ -51,12 +51,18 @@ export type DocumentCommand =
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
 
-export function commandDomain(command: DocumentCommand): ChangeDomain | null {
+export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
     case "set-slide": return null;
-    case "edit-text": return "content";
-    case "add-text": return "both";
-    case "add-image": return "both";
+    case "edit-text":
+    case "delete-element": {
+      if (!document) return command.type === "edit-text" ? "content" : "design";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const element = slide?.elements.find((item) => item.id === command.elementId);
+      return element?.type === "text" && (element.contentRef === "title" || element.contentRef === "body") ? "content" : "design";
+    }
+    case "add-text": return "design";
+    case "add-image": return "design";
     case "add-slide": return "both";
     case "apply-ai-draft": return "both";
     case "apply-ai-designed-draft": return "both";

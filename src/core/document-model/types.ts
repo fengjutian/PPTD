@@ -24,7 +24,11 @@ export interface SlideContent {
   body: string;
   speakerNotes: string;
   status: ContentStatus;
+  /** Deterministic hash of title/body/notes; excludes review status. */
+  contentHash?: string;
 }
+
+export type TextContentRole = "title" | "body" | "decorative";
 
 interface ElementBase {
   id: ElementId;
@@ -36,6 +40,8 @@ interface ElementBase {
 export interface TextElement extends ElementBase {
   type: "text";
   text: string;
+  /** Links this visual text back to the semantic content it renders. */
+  contentRef?: TextContentRole;
   style: { fontFamily: string; fontSizePt: number; color: string; bold: boolean; align: "left" | "center" | "right" };
 }
 

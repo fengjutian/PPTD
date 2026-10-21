@@ -11,6 +11,16 @@ describe("presentation document schema", () => {
     expect(versionOneFixture.schemaVersion).toBe(1);
   });
 
+  it("rejects unknown future schema versions with a stable error", () => {
+    expect(() => parsePresentationDocument({ ...versionOneFixture, schemaVersion: 99 })).toThrow("UNSUPPORTED_SCHEMA_VERSION: 99");
+  });
+
+  it("rejects duplicate slide and element IDs", () => {
+    const document = createDocument();
+    document.slides.push(structuredClone(document.slides[0]!));
+    expect(() => presentationDocumentSchema.parse(document)).toThrow();
+  });
+
   it("accepts embedded images from supported MIME types", () => {
     const document = createDocument();
     document.slides[0]!.elements.push({

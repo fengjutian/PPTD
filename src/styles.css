@@ -225,6 +225,14 @@ button { color: inherit; }
 .upload-dialog .template-dropzone { min-height: 230px; margin-top: 24px; }
 .upload-dialog-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
 .upload-dialog-actions { gap: 10px; }
+.export-report-dialog { width: min(680px, 100%); }
+.export-report-list { max-height: 46vh; display: grid; gap: 8px; margin: 20px 0 0; padding: 0; overflow: auto; list-style: none; }
+.export-report-list li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding: 10px 12px; border: 1px solid #3b3d44; border-radius: 8px; background: #202126; }
+.export-report-list li > svg { width: 17px; height: 17px; color: #d8a55f; }
+.export-report-list li.error { border-color: #6b3940; background: #2a2022; }
+.export-report-list li.error > svg { color: #ee9199; }
+.export-report-list strong { font-size: 12px; }
+.export-report-list p { margin: 4px 0 0; color: #a3a7af; font-size: 11px; line-height: 1.5; }
 .template-picker-dialog { width: min(920px, 100%); }
 .template-picker-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 22px; color: #d8dae0; font-size: 12px; }
 .template-picker-toolbar .secondary-action { min-height: 36px; }
