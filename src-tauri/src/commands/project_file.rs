@@ -8,11 +8,13 @@ use std::{
 };
 use tauri::Manager;
 use tempfile::NamedTempFile;
+use zip::ZipArchive;
 
 const MAX_IMAGE_BYTES: usize = 256 * 1024 * 1024;
 const MAX_PROJECT_ASSET_BYTES: usize = 4 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_TEMPLATE_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_TEMPLATE_PREVIEW_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -427,6 +429,49 @@ pub fn list_pptx_templates(app: tauri::AppHandle) -> Result<Vec<TemplateRecord>,
     }
     templates.sort_by_key(|item| std::cmp::Reverse(item.imported_at));
     Ok(templates)
+}
+
+#[tauri::command]
+pub fn get_pptx_template_preview(
+    app: tauri::AppHandle,
+    template_id: String,
+) -> Result<Option<String>, String> {
+    if template_id.is_empty()
+        || template_id.contains('/')
+        || template_id.contains('\\')
+        || template_id == "."
+        || template_id == ".."
+    {
+        return Err("TEMPLATE_ID_INVALID".into());
+    }
+    let root = template_root(&app)?;
+    let path = root.join(&template_id);
+    if !path.starts_with(&root) || !path.is_file() {
+        return Err("TEMPLATE_NOT_FOUND".into());
+    }
+    let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+    let mut archive = ZipArchive::new(file)
+        .map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+    for (entry_name, mime_type) in [
+        ("docProps/thumbnail.jpeg", "image/jpeg"),
+        ("docProps/thumbnail.jpg", "image/jpeg"),
+        ("docProps/thumbnail.png", "image/png"),
+    ] {
+        let Ok(mut entry) = archive.by_name(entry_name) else { continue };
+        if entry.size() == 0 || entry.size() > MAX_TEMPLATE_PREVIEW_BYTES {
+            return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
+        }
+        let mut bytes = Vec::with_capacity(entry.size() as usize);
+        entry
+            .take(MAX_TEMPLATE_PREVIEW_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| format!("TEMPLATE_PREVIEW_READ_FAILED: {error}"))?;
+        if bytes.len() as u64 > MAX_TEMPLATE_PREVIEW_BYTES {
+            return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
+        }
+        return Ok(Some(format!("data:{mime_type};base64,{}", BASE64.encode(bytes))));
+    }
+    Ok(None)
 }
 
 #[cfg(test)]

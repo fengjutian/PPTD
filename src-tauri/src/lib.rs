@@ -23,7 +23,8 @@ pub fn run() {
             commands::project_file::clear_recovery,
             commands::project_file::write_pptx,
             commands::project_file::import_pptx_template,
-            commands::project_file::list_pptx_templates
+            commands::project_file::list_pptx_templates,
+            commands::project_file::get_pptx_template_preview
         ])
         .run(tauri::generate_context!())
         .expect("failed to run PPTD");

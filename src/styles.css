@@ -58,7 +58,7 @@ button { color: inherit; }
 .right-panel { grid-column: 4; grid-row: 2; }
 .feature-workspace { grid-column: 2 / -1; grid-row: 2; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; background: #191a1e; }
 .module-shell .feature-workspace { grid-row: 1; }
-.feature-workspace > :not(.feature-header) { min-height: 0; overflow-y: auto; }
+.feature-scroll { min-width: 0; min-height: 0; overflow-y: auto; }
 .feature-header { min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 18px 30px; border-bottom: 1px solid #303136; background: #17181b; }
 .feature-header > div:first-child { display: flex; align-items: center; gap: 13px; }
 .feature-header > div:first-child > svg { width: 25px; height: 25px; color: var(--ppt-accent); }

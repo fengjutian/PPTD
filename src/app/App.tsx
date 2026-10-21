@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, FilePlus2, FileUp, ImagePlus, Info, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
@@ -6,7 +6,7 @@ import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { generateWithMiniMax, type AiDraft } from "../services/minimax";
 import { applyTheme, loadSettings } from "../services/settings";
-import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateRecord } from "../services/project-files";
+import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
@@ -72,6 +72,9 @@ export function App() {
   const [aiBusy, setAiBusy] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
+  const [templatePreview, setTemplatePreview] = useState<string | null>();
+  const [templatePreviewBusy, setTemplatePreviewBusy] = useState(false);
+  const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
@@ -237,9 +240,26 @@ export function App() {
       const imported = await importPptxTemplate(template.path);
       setSelectedTemplate(imported);
       setTemplateLibrary(await listPptxTemplates());
+      setTemplateUploadOpen(false);
+      await handleSelectTemplate(imported);
       setTaskStatus(`模板已保存：${imported.name}`);
     } catch (error) {
       setTaskStatus(`选择模板失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleSelectTemplate = async (template: TemplateRecord) => {
+    setSelectedTemplate(template);
+    setTemplatePreview(undefined);
+    if (!isDesktopRuntime()) return;
+    setTemplatePreviewBusy(true);
+    try {
+      setTemplatePreview(await getPptxTemplatePreview(template.id));
+    } catch (error) {
+      setTemplatePreview(null);
+      setTaskStatus(`模板预览读取失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setTemplatePreviewBusy(false);
     }
   };
 
@@ -342,6 +362,7 @@ export function App() {
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
         <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再选择用户的 PPT 模板</p></div></div><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 上传模板</span></div></header>
+        <div className="feature-scroll">
         {!aiDraft ? <section className={`ai-start ${aiHistory.length ? "with-history" : ""}`}>
           {aiHistory.length > 0 && <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>}
           <div className="ai-compose-card">
@@ -357,23 +378,30 @@ export function App() {
           <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => index === activeDraftSlideIndex && <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
           <div className="sticky-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); setActiveDraftSlideIndex(0); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div></div>
         </section>}
+        </div>
       </main>}
 
       {activeView === "theme" && <main className="feature-workspace theme-workspace">
         <header className="feature-header"><div><Palette /><div><h1>PPT 模板</h1><p>上传用户模板，在内容确认后提取主题、母版和页面版式</p></div></div><div className="workflow-steps"><span className="done"><Check /> 生成草稿</span><i /><span className="done"><Check /> 编辑文字</span><i /><span className="active">3 上传模板</span></div></header>
-        <section className="template-content"><div><div className="section-kicker">POWERPOINT TEMPLATE</div><h2>上传 PPT 模板</h2><p>请选择 `.pptx` 文件。模板将用于后续视觉设计，不会覆盖已经确认的文字内容。</p></div>
-          {templateLibrary.length > 0 && <div className="template-library"><div className="template-library-heading"><strong>已保存模板</strong><span>{templateLibrary.length} 个</span></div><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => setSelectedTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div></div>}
-          <button type="button" className={`template-dropzone ${selectedTemplate ? "selected" : ""}`} onClick={handleChooseTemplate}><FileUp />{selectedTemplate ? <><strong>{selectedTemplate.name}</strong><span>{selectedTemplate.size ? `${(selectedTemplate.size / 1024 / 1024).toFixed(2)} MB · ` : ""}PowerPoint 模板已选择</span><small>点击重新选择</small></> : <><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx</small></>}</button>
-          {selectedTemplate && <div className="template-status"><Check /><div><strong>模板已保存，等待解析</strong><span>文件已复制到 PPTD 模板库；母版、版式和兼容性报告将在模板解析器启用后生成。</span></div></div>}
-          <div className="template-notice"><strong>当前能力边界</strong><p>模板文件已经持久保存，但现阶段尚未解析或应用其中的母版与版式。不会把“已保存文件”伪装成模板已经成功套用。</p></div>
+        <div className="feature-scroll">
+        <section className="template-content"><div className="template-page-heading"><div><div className="section-kicker">POWERPOINT TEMPLATE</div><h2>PPT 模板库</h2><p>选择模板查看封面预览，或上传新的 `.pptx` 模板。</p></div><button type="button" className="primary-action" onClick={() => setTemplateUploadOpen(true)}><FileUp />上传 PPT 模板</button></div>
+          <div className="template-browser">
+            <div className="template-library"><div className="template-library-heading"><strong>已保存模板</strong><span>{templateLibrary.length} 个</span></div><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板</div>}</div>
+            <div className="template-preview-panel"><div className="template-preview-heading"><strong><Eye />模板预览</strong>{selectedTemplate && <span>{selectedTemplate.name}</span>}</div><div className="template-preview-stage">{templatePreviewBusy ? <span>正在读取预览…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div></div>
+          </div>
+          {selectedTemplate && <div className="template-status"><Check /><div><strong>模板已选择</strong><span>当前显示的是 PPTX 内嵌封面；母版、版式和兼容性报告将在模板解析器启用后生成。</span></div></div>}
+          <div className="template-notice"><strong>当前能力边界</strong><p>封面预览不代表已完整解析或应用母版与版式，不会把“已保存文件”伪装成模板已经成功套用。</p></div>
           <button type="button" className="primary-action finish-theme" onClick={() => setActiveView("editor")}>暂不使用模板，返回编辑器<ArrowRight /></button>
         </section>
+        </div>
       </main>}
 
       {activeView === "settings" && <main className="feature-workspace settings-workspace">
         <header className="feature-header"><div><Settings /><div><h1>设置</h1><p>管理模型连接、安全凭据和 PPTD 应用外观</p></div></div></header>
-        <SettingsWorkspace onMessage={setTaskStatus} />
+        <div className="feature-scroll"><SettingsWorkspace onMessage={setTaskStatus} /></div>
       </main>}
+
+      {templateUploadOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTemplateUploadOpen(false); }}><section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-template-title"><div className="upload-dialog-heading"><div><FileUp /><div><h2 id="upload-template-title">上传 PPT 模板</h2><p>模板将保存到 PPTD 模板库。</p></div></div><button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}><X /></button></div><button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}><FileUp /><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx，最大 512 MB</small></button><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(false)}>取消</button></div></section></div>}
 
       {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
 
