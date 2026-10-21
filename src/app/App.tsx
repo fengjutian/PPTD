@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
@@ -244,10 +244,10 @@ export function App() {
   }, [activeSlide.id, execute, redo, redoStack.length, selected, undo, undoStack.length]);
 
   return (
-    <div className="app-shell">
-      <header className={`topbar ${activeView === "editor" ? "" : "module-topbar"}`}>
+    <div className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`}>
+      {activeView === "editor" && <header className="topbar">
         <div className="brand"><span className="brand-mark">P</span><div><strong>PPTD</strong><small>{document.title}</small></div></div>
-        {activeView === "editor" ? <><div className="toolbar-group">
+        <div className="toolbar-group">
           <ToolButton label="新建项目" onClick={handleNew}><FilePlus2 /></ToolButton><ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}><FileUp /></ToolButton><ToolButton label="保存项目" onClick={handleSave}><Save /></ToolButton>
           <span className="separator" />
           <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
@@ -259,8 +259,8 @@ export function App() {
           <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolButton>
           <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { handleImageFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </div>
-        <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button></> : <button type="button" className="back-to-editor" onClick={() => setActiveView("editor")}><ArrowLeft />返回编辑器</button>}
-      </header>
+        <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button>
+      </header>}
 
       <nav className="nav-rail" aria-label="主功能">
         <button className={activeView === "editor" ? "active" : ""} aria-current={activeView === "editor" ? "page" : undefined} title="编辑器" onClick={() => setActiveView("editor")}><LayoutDashboard /><span>编辑</span></button>
@@ -317,9 +317,10 @@ export function App() {
           <button className="primary-action" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "MiniMax 正在生成…" : "生成 PPT 草稿"}<ArrowRight /></button>
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
         </section> : <section className="draft-review">
-          <div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>后续应用模板时不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
-          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => <article className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
-          <div className="sticky-actions"><button className="secondary-action" onClick={() => setAiDraft(undefined)}>重新生成</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>
+          <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div>{aiDraft.slides.map((slide, index) => <button type="button" key={index} onClick={() => globalThis.document.getElementById(`draft-slide-${index}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</aside>
+          <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿</div><h2>审核并编辑文字</h2><p>后续应用模板时不会静默改变这里确认的内容。</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
+          <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
+          <div className="sticky-actions"><button className="secondary-action" onClick={() => setAiDraft(undefined)}>重新生成</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div></div>
         </section>}
       </main>}
 
