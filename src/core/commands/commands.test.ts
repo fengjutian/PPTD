@@ -148,6 +148,54 @@ describe("document commands", () => {
     expect(() => produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/jpeg", altText: "sample" }))).toThrow("INVALID_IMAGE_SOURCE");
   });
 
+  it("restyles text without touching reviewed content", () => {
+    const source = createDocument();
+    source.slides[0]!.content.status = "approved";
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    const contentBefore = JSON.stringify(slide.content);
+    const command = { type: "set-text-style" as const, slideId: slide.id, elementId: title.id, style: { fontSizePt: 36, color: "#112233", bold: true, align: "center" as const } };
+    expect(commandDomain(command)).toBe("design");
+    const result = produce(source, (draft) => applyCommand(draft, command));
+    expect(result.slides[0]!.elements[0]).toMatchObject({ style: { fontSizePt: 36, color: "#112233", bold: true, align: "center" } });
+    expect(JSON.stringify(result.slides[0]!.content)).toBe(contentBefore);
+    expect(result.slides[0]!.content.status).toBe("approved");
+  });
+
+  it("restyles shapes and image alt text without touching reviewed content", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const withShape = produce(source, (draft) => applyCommand(draft, { type: "add-shape", slideId: slide.id, shape: "rectangle" }));
+    const shape = withShape.slides[0]!.elements[1]!;
+    const restyled = produce(withShape, (draft) => applyCommand(draft, { type: "set-shape-style", slideId: slide.id, elementId: shape.id, style: { fill: "#00ff00", strokeWidthPt: 3, radiusPt: 20 } }));
+    expect(restyled.slides[0]!.elements[1]).toMatchObject({ style: { fill: "#00ff00", strokeWidthPt: 3, radiusPt: 20 } });
+    expect(restyled.slides[0]!.content).toEqual(withShape.slides[0]!.content);
+
+    const withImage = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "原描述" }));
+    const image = withImage.slides[0]!.elements[1]!;
+    const described = produce(withImage, (draft) => applyCommand(draft, { type: "set-image-alt-text", slideId: slide.id, elementId: image.id, altText: "新的替代文本" }));
+    expect(described.slides[0]!.elements[1]).toMatchObject({ altText: "新的替代文本" });
+    expect(described.slides[0]!.content).toEqual(withImage.slides[0]!.content);
+  });
+
+  it("rejects style values the exporter could not round-trip", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "set-text-style", slideId: slide.id, elementId: title.id, style: { color: "red" } }))).toThrow("INVALID_TEXT_STYLE");
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "set-text-style", slideId: slide.id, elementId: title.id, style: { fontSizePt: 0 } }))).toThrow("INVALID_TEXT_STYLE");
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "set-shape-style", slideId: slide.id, elementId: title.id, style: { fill: "#ffffff" } }))).toThrow("ELEMENT_NOT_SHAPE");
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "set-image-alt-text", slideId: slide.id, elementId: title.id, altText: "描述" }))).toThrow("ELEMENT_NOT_IMAGE");
+  });
+
+  it("refuses to restyle a locked element", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    const locked = produce(source, (draft) => applyCommand(draft, { type: "set-element-lock", slideId: slide.id, elementId: title.id, locked: true }));
+    expect(() => produce(locked, (draft) => applyCommand(draft, { type: "set-text-style", slideId: slide.id, elementId: title.id, style: { fontSizePt: 40 } }))).toThrow("ELEMENT_LOCKED");
+  });
+
   it("applies an AI draft as one structured document replacement", () => {
     const source = createDocument();
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-draft", title: "AI 战略", slides: [
@@ -222,6 +270,33 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
+  it("turns a five-point page into an editorial list with a pull quote", () => {
+    const source = createDocument();
+    const content = { title: "原文赏析——第二段", body: "1. 总写洞庭湖全景\n2. '衔远山,吞长江,浩浩汤汤'\n3. 描写气象万千的景色\n4. 过渡到登楼览物之情\n5. '前人之述备矣'引出下文", speakerNotes: "", blocks: [{ type: "bullet-list" as const, items: ["总写洞庭湖全景", "'衔远山,吞长江,浩浩汤汤'", "描写气象万千的景色", "过渡到登楼览物之情", "'前人之述备矣'引出下文"] }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    content.blocks[0]!.items.forEach((item) => expect(texts).toContain(item));
+    expect(texts).toContain("关键摘录");
+    expect(result.slides[0]!.elements.every((element) => element.frame.width > 0 && element.frame.height > 0)).toBe(true);
+    const panel = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.x > result.pageSize.width * 0.5 && element.frame.width > result.pageSize.width * 0.25 && element.frame.height > result.pageSize.height * 0.4);
+    expect(panel).toBeDefined();
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("keeps a bullet list when the page also carries a quote block", () => {
+    const source = createDocument();
+    const items = ["第一项", "第二项", "第三项", "第四项", "第五项"];
+    const content = { title: "重点摘录", body: items.join("\n"), speakerNotes: "", blocks: [{ type: "quote" as const, text: "先天下之忧而忧" }, { type: "bullet-list" as const, items }] };
+    const design = { layout: "quote" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "重点摘录", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    items.forEach((item) => expect(texts).toContain(item));
+    expect(texts).toContain("先天下之忧而忧");
+    expect(texts).toContain("关键摘录");
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
   it("renders a quote block with its attribution instead of a plain paragraph", () => {
     const source = createDocument();
     const content = { title: "核心观点", body: "真正的理解来自实践。", speakerNotes: "", blocks: [{ type: "quote" as const, text: "真正的理解来自实践。", attribution: "作者" }] };
@@ -242,9 +317,10 @@ describe("document commands", () => {
     expect(texts.map((element) => element.text)).toEqual(["三个重点", "01", "1", "第一项", "2", "第二项", "3", "第三项"]);
     const badge = result.slides[0]!.elements.find((element) => element.type === "shape" && element.shape === "ellipse")!;
     const firstItem = texts.find((element) => element.text === "第一项")!;
-    // The badge sits in the card's left gutter; copy must start after it
-    // instead of painting over the numeral.
-    expect(firstItem.frame.x).toBeGreaterThanOrEqual(badge.frame.x + badge.frame.width);
+    // The badge sits above the copy; text must start below the badge instead
+    // of painting over the numeral.
+    expect(firstItem.frame.y).toBeGreaterThanOrEqual(badge.frame.y + badge.frame.height);
+    expect(result.slides[0]!.elements.every((element) => element.frame.width > 0 && element.frame.height > 0)).toBe(true);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 

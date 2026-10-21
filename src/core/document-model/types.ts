@@ -40,6 +40,25 @@ export interface SlideContent {
 
 export type TextContentRole = "title" | "body" | "decorative";
 
+export type TextAlign = "left" | "center" | "right";
+
+/** Presentation-only styling of a text run. Never part of the content hash. */
+export interface TextElementStyle {
+  fontFamily: string;
+  fontSizePt: number;
+  color: string;
+  bold: boolean;
+  align: TextAlign;
+}
+
+/** Presentation-only styling of a vector shape. Never part of the content hash. */
+export interface ShapeElementStyle {
+  fill: string;
+  stroke: string;
+  strokeWidthPt: number;
+  radiusPt: number;
+}
+
 interface ElementBase {
   id: ElementId;
   frame: RectEmu;
@@ -52,13 +71,13 @@ export interface TextElement extends ElementBase {
   text: string;
   /** Links this visual text back to the semantic content it renders. */
   contentRef?: TextContentRole;
-  style: { fontFamily: string; fontSizePt: number; color: string; bold: boolean; align: "left" | "center" | "right" };
+  style: TextElementStyle;
 }
 
 export interface ShapeElement extends ElementBase {
   type: "shape";
   shape: "rectangle" | "ellipse";
-  style: { fill: string; stroke: string; strokeWidthPt: number; radiusPt: number };
+  style: ShapeElementStyle;
 }
 
 export type SupportedImageMimeType = "image/png" | "image/jpeg" | "image/webp";

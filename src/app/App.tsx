@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, LayoutDashboard, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type SlideElement, type SlideId } from "../core/document-model";
+import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type SlideElement } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
+import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
@@ -194,8 +195,6 @@ export function App() {
   const [savedRevision, setSavedRevision] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [message, setMessage] = useState<PageMessage>();
-  const [textDraft, setTextDraft] = useState<{ slideId: SlideId; elementId: ElementId; value: string }>();
-  const textDraftCancelRef = useRef(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportController = useRef<AbortController | undefined>(undefined);
@@ -256,19 +255,6 @@ export function App() {
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [dirty, document]);
-
-  const commitTransform = (field: "x" | "y" | "width" | "height" | "rotation", rawValue: string) => {
-    if (!selected) return;
-    const value = Number(rawValue);
-    if (!Number.isFinite(value)) return;
-    const frame = { ...selected.frame };
-    let rotationMilliDegree = selected.rotationMilliDegree;
-    if (field === "rotation") rotationMilliDegree = Math.round(value * 1000);
-    else frame[field] = emu(value * EMU_PER_INCH);
-    if (frame.width <= 0 || frame.height <= 0) return;
-    if (frame.x === selected.frame.x && frame.y === selected.frame.y && frame.width === selected.frame.width && frame.height === selected.frame.height && rotationMilliDegree === selected.rotationMilliDegree) return;
-    execute({ type: "transform-element", slideId: activeSlide.id, elementId: selected.id, frame, rotationMilliDegree });
-  };
 
   const handleNew = async () => {
     if (dirty && !window.confirm("当前项目还有未保存的修改，确定新建吗？")) return;
@@ -752,35 +738,14 @@ export function App() {
         </div>
       </main>
 
-      <aside className="right-panel">
-        <div className="inspector-title"><Layers3 size={18} /><span>属性</span></div>
-        {selected ? <div className="property-form">
-          <label>对象类型<input value={selected.type === "text" ? "文本" : selected.type === "image" ? "图片" : selected.shape === "ellipse" ? "椭圆" : "矩形"} disabled /></label>
-          {selected.type === "text" && <label>文本内容<textarea value={textDraft?.elementId === selected.id ? textDraft.value : selected.text} disabled={selected.locked} onChange={(event) => { textDraftCancelRef.current = false; setTextDraft({ slideId: activeSlide.id, elementId: selected.id, value: event.target.value }); }} onBlur={() => { if (textDraftCancelRef.current) { textDraftCancelRef.current = false; setTextDraft(undefined); return; } if (!textDraft) return; const draftSlide = document.slides.find((slide) => slide.id === textDraft.slideId); const draftElement = draftSlide?.elements.find((element) => element.id === textDraft.elementId); if (draftElement?.type === "text" && draftElement.text !== textDraft.value) execute({ type: "edit-text", slideId: textDraft.slideId, elementId: textDraft.elementId, text: textDraft.value }); setTextDraft(undefined); }} onKeyDown={(event) => { if (event.key === "Escape") { textDraftCancelRef.current = true; setTextDraft(undefined); event.currentTarget.blur(); } if ((event.ctrlKey || event.metaKey) && event.key === "Enter") event.currentTarget.blur(); }} /></label>}
-          <div className="property-grid"><label>X（英寸）<input key={`${selected.id}-x-${selected.frame.x}`} defaultValue={(selected.frame.x / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("x", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>Y（英寸）<input key={`${selected.id}-y-${selected.frame.y}`} defaultValue={(selected.frame.y / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("y", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
-          <div className="property-grid"><label>宽度（英寸）<input key={`${selected.id}-w-${selected.frame.width}`} defaultValue={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("width", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>高度（英寸）<input key={`${selected.id}-h-${selected.frame.height}`} defaultValue={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("height", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
-          <label>旋转（度）<input key={`${selected.id}-r-${selected.rotationMilliDegree}`} defaultValue={(selected.rotationMilliDegree / 1000).toFixed(1)} disabled={selected.locked} onBlur={(event) => commitTransform("rotation", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>
-          <div className="align-actions" aria-label="对齐到页面">
-            {([
-              ["left", "左对齐"], ["center", "水平居中"], ["right", "右对齐"],
-              ["top", "顶对齐"], ["middle", "垂直居中"], ["bottom", "底对齐"],
-            ] as const).map(([align, label]) => <button type="button" key={align} title={label} aria-label={label} disabled={selected.locked} onClick={() => execute({ type: "align-element", slideId: activeSlide.id, elementId: selected.id, align })}>{label.slice(0, 1)}</button>)}
-          </div>
-          <div className="element-actions">
-            <button disabled={selected.locked || activeSlide.elements.at(-1)?.id === selected.id} onClick={() => execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.findIndex((element) => element.id === selected.id) + 1 })}><ArrowUp />上移一层</button>
-            <button disabled={selected.locked || activeSlide.elements[0]?.id === selected.id} onClick={() => execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.findIndex((element) => element.id === selected.id) - 1 })}><ArrowDown />下移一层</button>
-            <button onClick={() => execute({ type: "set-element-lock", slideId: activeSlide.id, elementId: selected.id, locked: !selected.locked })}>{selected.locked ? <LockOpen /> : <Lock />}{selected.locked ? "解锁" : "锁定"}</button>
-            <button disabled={selected.locked} onClick={() => execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: selected.id })}><Copy />复制</button>
-            <button className="danger" disabled={selected.locked} onClick={() => execute({ type: "delete-element", slideId: activeSlide.id, elementId: selected.id })}><Trash2 />删除</button>
-          </div>
-        </div> : <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>}
-      </aside></>}
+      <InspectorPanel />
+    </>}
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
         <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>先生成和审核内容，再选择用户的 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps"><span className={!aiDraft ? "active" : "done"}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions"><button className="secondary-action" onClick={() => { setAiDraft(undefined); setActiveHistoryId(undefined); setActiveDraftSlideIndex(0); }}>新建草稿</button><button className="primary-action" disabled={!aiDraft.title.trim() || aiDraft.slides.some((slide) => !slide.title.trim())} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
-        <div className={`feature-scroll ${aiDraft ? "draft-mode" : ""}`}>
-        {!aiDraft ? <section className={`ai-start ${aiHistory.length ? "with-history" : ""}`}>
-          {aiHistory.length > 0 && <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>}
+        {!aiDraft ? <div className="ai-split">
+          <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.length === 0 ? <p className="ai-history-empty">还没有草稿</p> : aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>
+          <div className="feature-scroll ai-plan-pane">
           <div className="ai-compose-card">
           <div className="section-kicker">AI 内容规划</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成演示简报、逐页计划和可编辑的结构化内容。</p>
           <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
@@ -788,13 +753,13 @@ export function App() {
           <button className="primary-action" disabled={!aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
-        </section> : <section className="draft-review">
+          </div>
+        </div> : <div className="feature-scroll draft-mode"><section className="draft-review">
           <aside className="draft-outline" aria-label="PPT 内容大纲"><div className="draft-outline-title"><strong>PPT 内容</strong><span>{aiDraft.slides.length} 页</span></div><div className="draft-outline-list">{aiDraft.slides.map((slide, index) => <button type="button" className={activeDraftSlideIndex === index ? "active" : ""} aria-current={activeDraftSlideIndex === index ? "page" : undefined} key={index} onClick={() => setActiveDraftSlideIndex(index)}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{slide.title || "未命名页面"}</strong><p>{slide.body || "暂无正文"}</p></div></button>)}</div></aside>
           <div className="draft-review-main"><div className="draft-review-heading"><div><div className="section-kicker">内容草稿 · {aiDraft.presentationBrief.narrativeStrategy}</div><h2>审核并编辑文字</h2><p>{aiDraft.presentationBrief.coreConclusion}</p></div><label>演示文稿标题<input value={aiDraft.title} onChange={(event) => setAiDraft({ ...aiDraft, title: event.target.value })} /></label></div>
           <div className="draft-slide-list">{aiDraft.slides.map((slide, index) => index === activeDraftSlideIndex && <article id={`draft-slide-${index}`} className="draft-slide-card" key={index}><span>{String(index + 1).padStart(2, "0")}</span><div><div className="slide-plan-summary"><span>{slide.plan.visualIntent}</span><span>{slide.plan.density} density</span><p><strong>页面目的：</strong>{slide.plan.purpose}</p><p><strong>核心结论：</strong>{slide.plan.conclusion}</p></div><label>页面标题<input value={slide.title} onChange={(event) => updateAiSlide(index, "title", event.target.value)} /></label><label>正文<textarea rows={Math.max(3, slide.body.split("\n").length + 1)} value={slide.body} onChange={(event) => updateAiSlide(index, "body", event.target.value)} /></label><label>演讲备注<textarea rows={Math.max(2, slide.speakerNotes.split("\n").length + 1)} className="notes" value={slide.speakerNotes} onChange={(event) => updateAiSlide(index, "speakerNotes", event.target.value)} /></label></div></article>)}</div>
           </div>
-        </section>}
-        </div>
+        </section></div>}
       </main>}
 
       {activeView === "theme" && <main className="feature-workspace theme-workspace">

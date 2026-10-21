@@ -85,13 +85,19 @@ export function chooseSlideLayout(input: {
   body: string;
   blocks?: ContentBlock[];
 }): AiLayoutKind {
-  if (input.index === 0) return "cover";
   const blockItems = (input.blocks ?? [])
     .filter((block): block is Extract<ContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
     .flatMap((block) => block.items);
   // Blocks are the structured fact source. Body copy is the fallback for
   // legacy drafts that never produced blocks.
   const items = blockItems.length > 0 ? blockItems : splitBodyItems(input.body);
+  // A first page is only a cover when it actually carries a cover: a title
+  // plus a short subtitle. A five-point overview is a content page even when
+  // the model labels it "cover".
+  if (input.index === 0) {
+    if (items.length < 2 && input.body.trim().length <= 80) return "cover";
+    if (input.requested === "cover") return items.length >= 3 ? "cards" : items.length === 2 ? "split" : "title-body";
+  }
   const longestItem = items.reduce((longest, item) => Math.max(longest, [...item].length), 0);
   const hasBlock = (type: ContentBlock["type"]) => (input.blocks ?? []).some((block) => block.type === type);
   const intent = intentLayouts[input.visualIntent];
@@ -102,7 +108,9 @@ export function chooseSlideLayout(input: {
   if (layout === "cover") layout = "section";
   // Semantic blocks carry stronger signals than the model's layout guess.
   const hasCardBlock = hasBlock("timeline") || hasBlock("process") || hasBlock("metric");
-  if (hasBlock("quote")) layout = "quote";
+  // A quote attached to a real list is a pull quote, not a replacement for the
+  // list. Keep the list layout so the renderer can carry both.
+  if (hasBlock("quote")) layout = items.length >= 3 ? "cards" : "quote";
   else if (hasBlock("comparison")) layout = "split";
   else if (hasCardBlock) layout = "cards";
   if (layout === "quote" && input.density === "high" && !hasBlock("quote")) layout = "title-body";

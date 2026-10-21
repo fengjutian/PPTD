@@ -96,6 +96,25 @@ describe("editor history", () => {
     expect(useEditorStore.getState().selectedElementId).toBeNull();
   });
 
+  it("commits a style change as one design transaction and keeps reviewed content frozen", () => {
+    const state = useEditorStore.getState();
+    const slide = state.document.slides[0]!;
+    const title = slide.elements[0]!;
+    const originalHash = slide.content.contentHash;
+    const originalSize = title.type === "text" ? title.style.fontSizePt : 0;
+    state.execute({ type: "set-text-style", slideId: slide.id, elementId: title.id, style: { fontSizePt: 44, bold: true } });
+    const restyled = useEditorStore.getState().document.slides[0]!.elements[0]!;
+    expect(restyled.type === "text" && restyled.style.fontSizePt).toBe(44);
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
+    expect(useEditorStore.getState().document.slides[0]!.content.contentHash).toBe(originalHash);
+    expect(useEditorStore.getState().undoStack).toHaveLength(1);
+
+    useEditorStore.getState().undo();
+    const reverted = useEditorStore.getState().document.slides[0]!.elements[0]!;
+    expect(reverted.type === "text" && reverted.style.fontSizePt).toBe(originalSize);
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
+  });
+
   it("replaces a generated document as one undoable transaction", () => {
     const generated = createDocument();
     generated.title = "AI 生成文稿";

@@ -81,9 +81,23 @@ describe("content-aware layout selection", () => {
     expect(chooseSlideLayout({ index: 2, requested: "cards", visualIntent: "structured-text", density: "medium", body: sevenPoints })).toBe("split");
   });
 
+  it("does not force a five-point overview into a cover", () => {
+    const body = "1. 北宋名篇\n2. 庆历六年作\n3. 写景抒情\n4. 散文经典\n5. 语言优美";
+    expect(chooseSlideLayout({ index: 0, requested: "cover", visualIntent: "hero", density: "medium", body })).toBe("cards");
+    expect(chooseSlideLayout({ index: 0, requested: "cover", visualIntent: "hero", density: "low", body: "课程导览" })).toBe("cover");
+  });
+
   it("uses structured blocks when the body is a single summary paragraph", () => {
     const blocks = [{ type: "bullet-list" as const, items: ["第一点", "第二点", "第三点", "第四点", "第五点"] }];
     expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "structured-text", density: "medium", body: "本页有五条结论。", blocks })).toBe("cards");
+  });
+
+  it("treats a quote attached to a real list as a pull quote", () => {
+    const blocks = [
+      { type: "quote" as const, text: "先天下之忧而忧" },
+      { type: "bullet-list" as const, items: ["第一点", "第二点", "第三点", "第四点", "第五点"] },
+    ];
+    expect(chooseSlideLayout({ index: 2, requested: "quote", visualIntent: "structured-text", density: "medium", body: "本页有五个要点。", blocks })).toBe("cards");
   });
 
   it("lets quote and comparison blocks choose their own page shape", () => {

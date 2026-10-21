@@ -1,4 +1,4 @@
-import type { ContentBlock, ElementId, Emu, PresentationDocument, RectEmu, SlideId, SupportedImageMimeType } from "../document-model";
+import type { ContentBlock, ElementId, Emu, PresentationDocument, RectEmu, ShapeElementStyle, SlideId, SupportedImageMimeType, TextElementStyle } from "../document-model";
 import { createSlide, inches } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";
@@ -69,11 +69,36 @@ export type DocumentCommand =
   | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: "left" | "center" | "right" | "top" | "middle" | "bottom" }
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
+  | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
+  | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
+  | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
+
+const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */
+function assertTextStyle(style: Partial<TextElementStyle>): void {
+  const fontFamily = style.fontFamily;
+  if (fontFamily !== undefined && (typeof fontFamily !== "string" || !fontFamily.trim() || fontFamily.length > 100)) throw new Error("INVALID_TEXT_STYLE");
+  if (style.fontSizePt !== undefined && (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)) throw new Error("INVALID_TEXT_STYLE");
+  if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_TEXT_STYLE");
+  if (style.bold !== undefined && typeof style.bold !== "boolean") throw new Error("INVALID_TEXT_STYLE");
+  if (style.align !== undefined && style.align !== "left" && style.align !== "center" && style.align !== "right") throw new Error("INVALID_TEXT_STYLE");
+}
+
+function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
+  if (style.fill !== undefined && !HEX_COLOR_PATTERN.test(style.fill)) throw new Error("INVALID_SHAPE_STYLE");
+  if (style.stroke !== undefined && !HEX_COLOR_PATTERN.test(style.stroke)) throw new Error("INVALID_SHAPE_STYLE");
+  if (style.strokeWidthPt !== undefined && (!Number.isFinite(style.strokeWidthPt) || style.strokeWidthPt < 0 || style.strokeWidthPt > 100)) throw new Error("INVALID_SHAPE_STYLE");
+  if (style.radiusPt !== undefined && (!Number.isFinite(style.radiusPt) || style.radiusPt < 0 || style.radiusPt > 1000)) throw new Error("INVALID_SHAPE_STYLE");
+}
 
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
     case "set-slide": return null;
+    case "set-text-style":
+    case "set-shape-style":
+    case "set-image-alt-text": return "design";
     case "edit-text":
     case "delete-element": {
       if (!document) return command.type === "edit-text" ? "content" : "design";
@@ -184,6 +209,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
       const quoteBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
+      // A quoted line already present in the reviewed copy can carry the page
+      // as a pull quote. It is a visual emphasis of existing content, never a
+      // new claim, and gives dense list pages an editorial anchor.
+      const quotedBlock = quoteBlock?.text.trim();
+      const pullQuote = quotedBlock && quotedBlock.length >= 6 && quotedBlock.length <= 96
+        ? quotedBlock
+        : items
+          .map(cleanPoint)
+          .filter((item) => item.length >= 6 && item.length <= 48 && /[“”"'‘’「」『』]/.test(item))
+          .sort((left, right) => right.length - left.length)[0];
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
       // The rendered artwork and the placeholder geometry describe the same
       // layout, so editable text has to land on the geometry of the layout that
@@ -380,7 +415,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             slide.elements.push(text("→", frame(x + stepWidth, stepTop + stepHeight / 2 - arrowHeight / 2, stepGap, arrowHeight), 22, design.accent, true, "center", undefined, contentTextLuminance));
           }
         });
-      } else if (design.layout === "quote" || quoteBlock) {
+      } else if ((design.layout === "quote" || quoteBlock) && items.length < 3) {
         const quoteText = quoteBlock?.text ?? content.body;
         const attribution = quoteBlock?.attribution?.trim();
         if (!keepsArtwork) slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
@@ -405,6 +440,39 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             }
           }
         }
+      } else if (pullQuote && items.length >= 3 && items.length <= 5 && contentBox.width >= 0.55 && contentBox.height >= 0.35 && (design.layout === "cards" || design.layout === "title-body" || design.layout === "summary" || design.layout === "quote")) {
+        // A narrow numbered column plus one oversized pull quote. The quote is
+        // copied from the reviewed body, so this is emphasis rather than new
+        // content. It turns a sparse five-row list into an editorial page.
+        const listItems = items.slice(0, 5);
+        const listWidth = contentBox.width * 0.56;
+        const panelX = contentBox.x + contentBox.width * 0.60;
+        const panelWidth = contentBox.width * 0.37;
+        const rowGap = 0.006;
+        const rowHeight = (contentBox.height - rowGap * (listItems.length - 1)) / listItems.length;
+        const numberWidth = Math.min(0.07, listWidth * 0.16);
+        const numberSize = Math.max(16, Math.min(22, rowHeight * pageHeightIn * 72 * 0.48));
+        const itemSize = Math.max(17, Math.min(20, templateBodySize ?? 20));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        listItems.forEach((item, itemIndex) => {
+          const rowY = contentBox.y + itemIndex * (rowHeight + rowGap);
+          const cleanItem = cleanPoint(item);
+          slide.elements.push(shape(frame(contentBox.x, rowY, 0.006, rowHeight), design.accent));
+          slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), centeredBlock(String(itemIndex + 1).padStart(2, "0"), { x: contentBox.x + 0.015, y: rowY, width: numberWidth, height: rowHeight }, numberSize), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
+          const itemBox = { x: contentBox.x + numberWidth + 0.03, y: rowY, width: listWidth - numberWidth - 0.03, height: rowHeight };
+          const fittedItemSize = fittedFontSize(cleanItem, frame(itemBox.x, itemBox.y, itemBox.width, itemBox.height), itemSize, 14);
+          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, itemBox, fittedItemSize), fittedItemSize, bodyInk, false, "left", undefined, contentTextLuminance));
+          if (itemIndex < listItems.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + rowGap / 2 - 0.002, listWidth, 0.004), cardStroke));
+        });
+        slide.elements.push(shape(frame(panelX, contentBox.y, panelWidth, contentBox.height), accentFill, "rectangle"));
+        slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + 0.02, 0.12, 0.13), 62, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+        const quoteAttribution = quoteBlock?.attribution?.trim();
+        const panelQuote = quoteAttribution ? `${pullQuote}\n— ${quoteAttribution}` : pullQuote;
+        const quoteSize = panelQuote.length > 60 ? 16 : panelQuote.length > 40 ? 18 : 22;
+        slide.elements.push(text(panelQuote, centeredBlock(panelQuote, { x: panelX + 0.05, y: contentBox.y + 0.14, width: panelWidth - 0.10, height: contentBox.height * 0.58 }, quoteSize), quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+        slide.elements.push(shape(frame(panelX + 0.05, contentBox.y + contentBox.height - 0.18, panelWidth - 0.10, 0.004), "#FFFFFF"));
+        slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.145, panelWidth - 0.10, 0.06), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
       } else if (design.layout === "cards" && items.length > 1 && items.length <= 6) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
@@ -426,14 +494,21 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const rowStart = contentBox.x + (contentWidth - rowWidth) / 2;
           const x = rowStart + column * (cardWidth + columnGap); const y = gridTop + row * (cardHeight + rowGap);
           const cleanItem = cleanPoint(item);
-          const badgeDiameter = 0.42;
+          // A top-left badge frees the whole card width for copy. Placing the
+          // badge in a left gutter made the text column narrow and the card
+          // look unbalanced on portrait-ish three-column grids.
+          const badgeDiameter = 0.36;
+          const badgeWidth = badgeDiameter / pageWidthIn;
           const badgeHeight = badgeDiameter / pageHeightIn;
-          const badgeY = y + cardHeight / 2 - badgeHeight / 2;
+          const badgeX = x + 0.03;
+          const badgeY = y + 0.035;
+          const textTop = badgeY + badgeHeight + 0.03;
           slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, y, cardWidth, 0.008), design.accent));
-          slide.elements.push(shape(circleFrame(x + 0.025, badgeY, badgeDiameter), accentFill, "ellipse"));
-          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.025, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          const textLeft = x + 0.025 + badgeDiameter + 0.025;
-          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: textLeft, y: y + cardHeight * 0.16, width: cardWidth - (textLeft - x) - 0.03, height: cardHeight * 0.68 }, 16), 16, "#293241", true, "left", undefined, cardLuminance));
+          slide.elements.push(shape(circleFrame(badgeX, badgeY, badgeDiameter), accentFill, "ellipse"));
+          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
+          const cardTextBox = { x: x + 0.03, y: textTop, width: cardWidth - 0.06, height: Math.max(0.06, y + cardHeight - 0.03 - textTop) };
+          const fittedCardSize = fittedFontSize(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height), 16, 12);
+          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, cardTextBox, fittedCardSize), fittedCardSize, "#293241", true, "left", undefined, cardLuminance));
         });
       } else if ((design.layout === "split" || (design.layout === "cards" && items.length > 6)) && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
@@ -481,6 +556,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // template major font for both made dense body copy look heavy.
         if (element.contentRef !== "title" && bodyFontFamily) element.style.fontFamily = bodyFontFamily;
       }
+      // The typographic quote mark reads as two bars in many CJK UI fonts.
+      // A serif glyph keeps the pull quote looking like a quotation instead of
+      // a pair of slashes.
+      const quoteMark = slide.elements.find((element) => element.type === "text" && element.text === "“");
+      if (quoteMark?.type === "text") quoteMark.style.fontFamily = "Georgia";
       const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
       const bodyRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "body");
       for (const element of slide.elements) {
@@ -632,6 +712,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (command.align === "middle") frame.y = Math.max(0, Math.round((height - frame.height) / 2)) as Emu;
     if (command.align === "bottom") frame.y = Math.max(0, height - frame.height) as Emu;
     element.frame = frame;
+    return;
+  }
+  if (command.type === "set-text-style") {
+    if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
+    assertTextStyle(command.style);
+    element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-shape-style") {
+    if (element.type !== "shape") throw new Error("ELEMENT_NOT_SHAPE");
+    assertShapeStyle(command.style);
+    element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-image-alt-text") {
+    if (element.type !== "image") throw new Error("ELEMENT_NOT_IMAGE");
+    if (command.altText.length > 500) throw new Error("INVALID_ALT_TEXT");
+    element.altText = command.altText;
     return;
   }
   if (command.type === "delete-element") {
