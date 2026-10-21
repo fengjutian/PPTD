@@ -43,8 +43,9 @@ export function cropGeometry(crop: ImageCrop | undefined): CropGeometry {
   return {
     width: 1 / visibleWidth,
     height: 1 / visibleHeight,
-    left: -left / visibleWidth,
-    top: -top / visibleHeight,
+    // The extra zero keeps an untouched side from turning into a negative zero.
+    left: -left / visibleWidth + 0,
+    top: -top / visibleHeight + 0,
   };
 }
 

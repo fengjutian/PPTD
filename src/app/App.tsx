@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type SlideElement } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
+import { CroppedImage } from "../features/editor/CroppedImage";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { LayerList } from "../features/editor/LayerList";
 import { ContentReview } from "../features/ai/ContentReview";
@@ -165,7 +166,7 @@ function ElementView({ element, scale, selected, onSelect }: { element: SlideEle
 
   return (
     <div ref={rootRef} className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={(event) => begin("move", event)} onPointerMove={pointerMove} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}>
-      {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : <img className="image-fill" src={element.source.dataUrl} alt={element.altText} draggable={false} />}
+      {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : <CroppedImage element={element} className="image-fill" />}
       {selected && !element.locked && <>
         {RESIZE_HANDLES.map(([direction, label]) => <button key={direction} type="button" aria-label={`从${label}缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
         <button type="button" aria-label="旋转对象" className="element-rotate-handle" onPointerDown={(event) => begin("rotate", event)} />
@@ -184,7 +185,7 @@ function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<ty
       transform: `rotate(${element.rotationMilliDegree / 1000}deg)`,
     };
     if (element.type === "text") return <div className="thumbnail-element thumbnail-text" key={element.id} style={{ ...style, color: element.style.color, fontFamily: element.style.fontFamily, fontSize: Math.max(4, element.style.fontSizePt * 0.18), fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div>;
-    if (element.type === "image") return <img className="thumbnail-element thumbnail-image" key={element.id} style={style} src={element.source.dataUrl} alt="" />;
+    if (element.type === "image") return <div className="thumbnail-element thumbnail-image-frame" key={element.id} style={style}><CroppedImage element={element} className="thumbnail-image" alt="" /></div>;
     return <div className={`thumbnail-element thumbnail-shape ${element.shape}`} key={element.id} style={{ ...style, background: element.style.fill, borderColor: element.style.stroke, borderWidth: Math.max(1, element.style.strokeWidthPt * 0.3), borderRadius: element.shape === "ellipse" ? "50%" : Math.max(0, element.style.radiusPt * 0.3) }} />;
   })}{slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}</div>;
 }

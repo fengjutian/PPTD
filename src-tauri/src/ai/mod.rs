@@ -168,13 +168,15 @@ async fn post_chat(
 ///
 /// 限流与厂商侧临时故障会按退避策略重试；`transport_error` 是传输层最终失败时
 /// 使用的错误码，由调用方按阶段区分。请求超时不会重试：重试同一份大输出只会
-/// 让用户多等一轮，正确的做法是缩短单次生成规模。
+/// 让用户多等一轮，正确的做法是缩短单次生成规模。`cancel` 会在任务取消时立刻
+/// 打断在途请求，而不是等厂商把整份草稿写完。
 pub async fn chat(
     provider: &dyn ChatProvider,
     api_key: &str,
     body: &ChatRequest,
     timeout: Duration,
     transport_error: &str,
+    cancel: &CancelToken,
 ) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(timeout)
@@ -182,7 +184,12 @@ pub async fn chat(
         .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
     for attempt in 0..3_u32 {
         let payload = provider.build_request(body);
-        match post_chat(provider, &client, api_key, &payload).await {
+        let outcome = tokio::select! {
+            biased;
+            () = cancel.cancelled() => Err(ProviderFailure::Cancelled),
+            result = post_chat(provider, &client, api_key, &payload) => result,
+        };
+        match outcome {
             Ok(payload) => {
                 return provider
                     .parse_response(payload)
@@ -216,6 +223,9 @@ pub async fn chat(
                     PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
                 });
             }
+            Err(ProviderFailure::Cancelled) => {
+                return Err(REQUEST_CANCELLED_ERROR.into());
+            }
         }
         tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
     }
@@ -227,6 +237,7 @@ pub async fn vision_chat(
     api_key: &str,
     body: &VisionRequest,
     timeout: Duration,
+    cancel: &CancelToken,
 ) -> Result<String, String> {
     if !provider.supports_vision() {
         return Err(format!("AI_VISION_UNSUPPORTED:{}", provider.id()));
@@ -237,7 +248,12 @@ pub async fn vision_chat(
         .build()
         .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
     for attempt in 0..3_u32 {
-        match post_chat(provider, &client, api_key, &payload).await {
+        let outcome = tokio::select! {
+            biased;
+            () = cancel.cancelled() => Err(ProviderFailure::Cancelled),
+            result = post_chat(provider, &client, api_key, &payload) => result,
+        };
+        match outcome {
             Ok(response) => {
                 return provider
                     .parse_response(response)
@@ -269,6 +285,9 @@ pub async fn vision_chat(
                     PayloadError::Empty => "AI_EMPTY_RESPONSE".into(),
                     PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
                 })
+            }
+            Err(ProviderFailure::Cancelled) => {
+                return Err(REQUEST_CANCELLED_ERROR.into());
             }
         }
         tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;

@@ -133,6 +133,29 @@ function assertImageCrop(crop: ImageCrop): void {
   if (crop.top + crop.bottom >= 1 || crop.left + crop.right >= 1) throw new Error("INVALID_IMAGE_CROP");
 }
 
+/** The box a new picture is placed in. */
+const IMAGE_BOX = { x: 2, y: 1.7, width: 4, height: 3 } as const;
+
+/**
+ * A picture is placed in the box with the proportions of its own pixels, so it
+ * is never squeezed into a shape it does not have.
+ */
+function imageFrame(naturalWidth?: number, naturalHeight?: number): RectEmu {
+  const box = IMAGE_BOX;
+  if (!naturalWidth || !naturalHeight || !Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) {
+    return { x: inches(box.x), y: inches(box.y), width: inches(box.width), height: inches(box.height) };
+  }
+  const aspect = naturalWidth / naturalHeight;
+  const width = aspect >= box.width / box.height ? box.width : box.height * aspect;
+  const height = aspect >= box.width / box.height ? box.width / aspect : box.height;
+  return {
+    x: inches(box.x + (box.width - width) / 2),
+    y: inches(box.y + (box.height - height) / 2),
+    width: inches(width),
+    height: inches(height),
+  };
+}
+
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
     case "set-slide": return null;
@@ -780,7 +803,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     slide.elements.push({
       id: crypto.randomUUID() as ElementId,
       type: "image",
-      frame: { x: inches(2), y: inches(1.7), width: inches(4), height: inches(3) },
+      frame: imageFrame(command.naturalWidth, command.naturalHeight),
       rotationMilliDegree: 0,
       locked: false,
       source: { kind: "embedded", dataUrl: command.dataUrl, mimeType: command.mimeType },

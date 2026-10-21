@@ -2,7 +2,7 @@
 //!
 //! 命令只描述"要做什么"，不关心由哪家厂商执行；厂商选择通过 `provider` 参数传入。
 
-use crate::ai::{self, ChatMessage, ChatRequest, VisionRequest};
+use crate::ai::{self, CancelRegistry, ChatMessage, ChatRequest, VisionRequest};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::time::Duration;
@@ -14,6 +14,8 @@ pub struct GenerateRequest {
     slide_count: u8,
     model: Option<String>,
     provider: Option<String>,
+    /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
+    task_id: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -25,6 +27,8 @@ pub struct GenerateDesignRequest {
     visual_goal: serde_json::Value,
     model: Option<String>,
     provider: Option<String>,
+    /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
+    task_id: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -33,6 +37,8 @@ pub struct GenerateBriefsRequest {
     draft: serde_json::Value,
     model: Option<String>,
     provider: Option<String>,
+    /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
+    task_id: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -42,6 +48,8 @@ pub struct GenerateOutlineRequest {
     slide_count: u8,
     model: Option<String>,
     provider: Option<String>,
+    /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
+    task_id: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +61,8 @@ pub struct GenerateSlideBatchRequest {
     count: usize,
     model: Option<String>,
     provider: Option<String>,
+    /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
+    task_id: Option<u64>,
 }
 
 /// 生成阶段的请求超时。
@@ -77,6 +87,8 @@ pub struct ReviewVisualsRequest {
     slide_indexes: Vec<usize>,
     model: Option<String>,
     provider: Option<String>,
+    /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
+    task_id: Option<u64>,
     repair_hint: Option<String>,
 }
 
@@ -90,7 +102,9 @@ fn validate_review_image(value: &str) -> Result<(), String> {
 #[tauri::command]
 pub async fn review_presentation_visuals(
     request: ReviewVisualsRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
     if request.slide_images.is_empty()
         || request.slide_images.len() > 6
         || request.slide_images.len() != request.slide_indexes.len()
