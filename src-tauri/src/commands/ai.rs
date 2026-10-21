@@ -336,7 +336,8 @@ pub async fn generate_presentation_slides_batch(
     {
         return Err("AI_REQUEST_INVALID".into());
     }
-    let outline = serde_json::to_string(&request.outline).map_err(|_| "AI_BATCH_REQUEST_INVALID")?;
+    let outline =
+        serde_json::to_string(&request.outline).map_err(|_| "AI_BATCH_REQUEST_INVALID")?;
     if outline.len() > 120_000 {
         return Err("AI_BATCH_REQUEST_TOO_LARGE".into());
     }
