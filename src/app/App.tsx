@@ -9,10 +9,12 @@ import { briefsFromDraft, describeAiError, generatePresentationDesign, generateP
 import { applyTheme, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
-import { inspectRenderedTextContrast, renderPresentationForVisualReview } from "../services/presentation-renderer";
+import { inspectRenderedTextContrast, renderPresentationForVisualReview, type RenderedContrastIssue } from "../services/presentation-renderer";
 import { defaultPresentationVisualGoal, runVisualAlignmentLoop } from "../services/visual-alignment";
 import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { validatePresentationVisualQuality } from "../services/presentation-quality-gate";
+import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
+import { colorLuminance, contrastRatioAgainstLuminance } from "../core/rendering/contrast";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 
 const CANVAS_WIDTH = 960;
@@ -32,8 +34,13 @@ function ToolButton({ label, onClick, disabled, children }: { label: string; onC
   return <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
 }
 
-type ResizeDirection = "nw" | "ne" | "sw" | "se";
+type ResizeDirection = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 const MIN_ELEMENT_SIZE = emu(0.1 * EMU_PER_INCH);
+const RESIZE_HANDLES: ReadonlyArray<readonly [ResizeDirection, string]> = [
+  ["nw", "左上"], ["n", "上"], ["ne", "右上"],
+  ["w", "左"], ["e", "右"],
+  ["sw", "左下"], ["s", "下"], ["se", "右下"],
+];
 
 function resizeFrame(start: RectEmu, direction: ResizeDirection, dx: number, dy: number): RectEmu {
   let x: number = start.x;
@@ -156,7 +163,7 @@ function ElementView({ element, scale, selected, onSelect }: { element: SlideEle
     <div ref={rootRef} className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={(event) => begin("move", event)} onPointerMove={pointerMove} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}>
       {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : <img className="image-fill" src={element.source.dataUrl} alt={element.altText} draggable={false} />}
       {selected && !element.locked && <>
-        {(["nw", "ne", "sw", "se"] as const).map((direction) => <button key={direction} type="button" aria-label={`从 ${direction} 缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
+        {RESIZE_HANDLES.map(([direction, label]) => <button key={direction} type="button" aria-label={`从${label}缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
         <button type="button" aria-label="旋转对象" className="element-rotate-handle" onPointerDown={(event) => begin("rotate", event)} />
       </>}
     </div>
@@ -188,6 +195,7 @@ export function App() {
   const [zoom, setZoom] = useState(1);
   const [message, setMessage] = useState<PageMessage>();
   const [textDraft, setTextDraft] = useState<{ slideId: SlideId; elementId: ElementId; value: string }>();
+  const textDraftCancelRef = useRef(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportController = useRef<AbortController | undefined>(undefined);
@@ -200,6 +208,7 @@ export function App() {
   const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>(loadAiHistory);
   const [activeHistoryId, setActiveHistoryId] = useState<string>();
   const [aiBusy, setAiBusy] = useState(false);
+  const aiRequestId = useRef(0);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const [templatePreview, setTemplatePreview] = useState<string | null>();
@@ -363,10 +372,19 @@ export function App() {
   };
 
   const handleAiGenerate = async () => {
+    if (aiBusy) {
+      aiRequestId.current += 1;
+      setAiBusy(false);
+      setTaskStatus("已取消 AI 内容生成");
+      return;
+    }
+    const requestId = aiRequestId.current + 1;
+    aiRequestId.current = requestId;
     setAiBusy(true); setAiDraft(undefined);
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
     try {
       const draft = await generatePresentationDraft(aiTopic, aiSlideCount);
+      if (requestId !== aiRequestId.current) return;
       const id = crypto.randomUUID();
       setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0);
       setAiHistory(saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
@@ -374,11 +392,12 @@ export function App() {
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
     }
     catch (error) {
+      if (requestId !== aiRequestId.current) return;
       const detail = describeAiError(error);
       setTaskStatus(`AI 内容生成失败：${detail}`);
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成失败", { body: detail });
     }
-    finally { setAiBusy(false); }
+    finally { if (requestId === aiRequestId.current) setAiBusy(false); }
   };
 
   useEffect(() => {
@@ -431,6 +450,30 @@ export function App() {
       const templateColors = new Map(templateAnalysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]));
       const resolveTemplateColor = (value: string | null) => value?.startsWith("#") ? value : value ? templateColors.get(value.toLowerCase()) : undefined;
       setDesignProgress({ percent: 94, label: "正在渲染可编辑页面" });
+      const templateLayoutSources = hasTemplateSize
+        ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title })))
+        : [];
+      const normalizeRegion = (region: { role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }) => ({
+        role: region.role,
+        frame: {
+          x: region.x / templateAnalysis.slideWidthEmu!,
+          y: region.y / templateAnalysis.slideHeightEmu!,
+          width: region.width / templateAnalysis.slideWidthEmu!,
+          height: region.height / templateAnalysis.slideHeightEmu!,
+        },
+      });
+      // Measure the rendered artwork under each placeholder so the command layer
+      // can tell whether the template's own ink stays readable on it.
+      const backgroundProbes = new Map<number, TemplateBackgroundProbe>();
+      await Promise.all(templateLayoutSources.map(async (layout) => {
+        const render = matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name);
+        if (!render) return;
+        try {
+          backgroundProbes.set(layout.index, await probeTemplateBackground(render.dataUrl, layout.regions.map(normalizeRegion)));
+        } catch {
+          // A layout without a probe falls back to the page color.
+        }
+      }));
       const generationCommand: DocumentCommand = {
         type: "apply-ai-designed-draft",
         title: aiDraft.title,
@@ -439,7 +482,8 @@ export function App() {
         pageSize: hasTemplateSize ? { width: emu(templateAnalysis.slideWidthEmu!), height: emu(templateAnalysis.slideHeightEmu!) } : undefined,
         fontFamily: templateAnalysis.majorFont || templateAnalysis.minorFont || undefined,
         templateDecorations: hasTemplateSize ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })) : undefined,
-        templateLayouts: hasTemplateSize ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts.map((layout) => ({ ...layout, name: layout.name })) : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))).map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)?.dataUrl, decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
+        templateLayouts: hasTemplateSize ? templateLayoutSources.map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)?.dataUrl, backgroundLuminance: backgroundProbes.get(layout.index), decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ ...normalizeRegion(region), textColor: region.textColor ?? undefined, fontSizePt: region.fontSizePt ?? undefined })) })) : undefined,
+        backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
       };
       let finalDesigns: AiSlideDesign[] = design.slides;
       let visualNote = "";
@@ -472,7 +516,7 @@ export function App() {
             return designs.map((slide, slideIndex) => {
               const repair = repairs.get(slideIndex);
               if (!repair) return slide;
-              const backgroundTreatment: AiSlideDesign["backgroundTreatment"] = repair.backgroundAction === "keep" ? "none" : repair.backgroundAction === "simplify" ? "simplify" : "content-panel";
+              const backgroundTreatment: AiSlideDesign["backgroundTreatment"] = repair.backgroundAction === "keep" ? "none" : repair.backgroundAction === "simplify" ? "simplify" : "local-scrim";
               return {
                 ...slide,
                 layout: repair.layout ?? slide.layout,
@@ -480,8 +524,6 @@ export function App() {
                 obstacleRegions: repair.obstacleRegions,
                 hierarchyAction: repair.hierarchyAction,
                 backgroundTreatment,
-                titleColor: repair.backgroundAction === "replace-compatible" ? "#1F2937" : slide.titleColor,
-                bodyColor: repair.backgroundAction === "replace-compatible" ? "#1F2937" : slide.bodyColor,
                 elementRepairs: repair.elementActions,
               };
             });
@@ -501,8 +543,29 @@ export function App() {
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       let renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
       if (renderedContrastIssues.length > 0) {
-        const affectedSlides = new Set(renderedContrastIssues.map((issue) => issue.slideIndex));
-        finalDesigns = finalDesigns.map((slide, slideIndex) => affectedSlides.has(slideIndex) ? { ...slide, backgroundTreatment: "content-panel", titleColor: "#111827", bodyColor: "#293241" } : slide);
+        // Repair the ink on the artwork that actually carries the text. Painting a
+        // panel over the whole page erased the template design, which was the
+        // main reason generated decks looked like a blank sheet.
+        const affectedSlides = new Map<number, RenderedContrastIssue[]>();
+        renderedContrastIssues.forEach((issue) => affectedSlides.set(issue.slideIndex, [...(affectedSlides.get(issue.slideIndex) ?? []), issue]));
+        finalDesigns = finalDesigns.map((slide, slideIndex) => {
+          const issues = affectedSlides.get(slideIndex);
+          if (!issues) return slide;
+          const luminance = colorLuminance(issues[0]!.backgroundColor) ?? 1;
+          const onDark = (contrastRatioAgainstLuminance("#FFFFFF", luminance) ?? 0) >= (contrastRatioAgainstLuminance("#171A1F", luminance) ?? 0);
+          // The ink has to override the one the template assigned to its
+          // placeholder, otherwise the repair would be overruled by the
+          // template and the page would stay unreadable.
+          return { ...slide, backgroundTreatment: "none", inkOverride: true, titleColor: onDark ? "#FFFFFF" : "#171A1F", bodyColor: onDark ? "#DCE3EA" : "#3E4650" };
+        });
+        finalDocument = buildFinalDocument(finalDesigns);
+        renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
+      }
+      if (renderedContrastIssues.length > 0) {
+        // Still unreadable: the artwork varies too much under the text, so the
+        // text block gets its own panel instead of the whole page.
+        const stubborn = new Set(renderedContrastIssues.map((issue) => issue.slideIndex));
+        finalDesigns = finalDesigns.map((slide, slideIndex) => stubborn.has(slideIndex) ? { ...slide, backgroundTreatment: "local-scrim" } : slide);
         finalDocument = buildFinalDocument(finalDesigns);
         renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
       }
@@ -603,7 +666,11 @@ export function App() {
       }
       if (shortcut === "paste-element") {
         const sourceId = clipboardElementId.current;
-        if (!sourceId || !activeSlide.elements.some((element) => element.id === sourceId)) {
+        if (!sourceId) {
+          setTaskStatus("没有可粘贴的对象");
+          return;
+        }
+        if (!activeSlide.elements.some((element) => element.id === sourceId)) {
           setTaskStatus("剪贴板中的对象不在当前页面");
           return;
         }
@@ -688,7 +755,7 @@ export function App() {
         <div className="inspector-title"><Layers3 size={18} /><span>属性</span></div>
         {selected ? <div className="property-form">
           <label>对象类型<input value={selected.type === "text" ? "文本" : selected.type === "image" ? "图片" : selected.shape === "ellipse" ? "椭圆" : "矩形"} disabled /></label>
-          {selected.type === "text" && <label>文本内容<textarea value={textDraft?.elementId === selected.id ? textDraft.value : selected.text} disabled={selected.locked} onChange={(event) => setTextDraft({ slideId: activeSlide.id, elementId: selected.id, value: event.target.value })} onBlur={() => { if (!textDraft) return; const draftSlide = document.slides.find((slide) => slide.id === textDraft.slideId); const draftElement = draftSlide?.elements.find((element) => element.id === textDraft.elementId); if (draftElement?.type === "text" && draftElement.text !== textDraft.value) execute({ type: "edit-text", slideId: textDraft.slideId, elementId: textDraft.elementId, text: textDraft.value }); setTextDraft(undefined); }} onKeyDown={(event) => { if (event.key === "Escape") { setTextDraft(undefined); event.currentTarget.blur(); } if ((event.ctrlKey || event.metaKey) && event.key === "Enter") event.currentTarget.blur(); }} /></label>}
+          {selected.type === "text" && <label>文本内容<textarea value={textDraft?.elementId === selected.id ? textDraft.value : selected.text} disabled={selected.locked} onChange={(event) => { textDraftCancelRef.current = false; setTextDraft({ slideId: activeSlide.id, elementId: selected.id, value: event.target.value }); }} onBlur={() => { if (textDraftCancelRef.current) { textDraftCancelRef.current = false; setTextDraft(undefined); return; } if (!textDraft) return; const draftSlide = document.slides.find((slide) => slide.id === textDraft.slideId); const draftElement = draftSlide?.elements.find((element) => element.id === textDraft.elementId); if (draftElement?.type === "text" && draftElement.text !== textDraft.value) execute({ type: "edit-text", slideId: textDraft.slideId, elementId: textDraft.elementId, text: textDraft.value }); setTextDraft(undefined); }} onKeyDown={(event) => { if (event.key === "Escape") { textDraftCancelRef.current = true; setTextDraft(undefined); event.currentTarget.blur(); } if ((event.ctrlKey || event.metaKey) && event.key === "Enter") event.currentTarget.blur(); }} /></label>}
           <div className="property-grid"><label>X（英寸）<input key={`${selected.id}-x-${selected.frame.x}`} defaultValue={(selected.frame.x / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("x", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>Y（英寸）<input key={`${selected.id}-y-${selected.frame.y}`} defaultValue={(selected.frame.y / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("y", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <div className="property-grid"><label>宽度（英寸）<input key={`${selected.id}-w-${selected.frame.width}`} defaultValue={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("width", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>高度（英寸）<input key={`${selected.id}-h-${selected.frame.height}`} defaultValue={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("height", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <label>旋转（度）<input key={`${selected.id}-r-${selected.rotationMilliDegree}`} defaultValue={(selected.rotationMilliDegree / 1000).toFixed(1)} disabled={selected.locked} onBlur={(event) => commitTransform("rotation", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>
@@ -717,7 +784,7 @@ export function App() {
           <div className="section-kicker">AI 内容规划</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成演示简报、逐页计划和可编辑的结构化内容。</p>
           <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
           <label className="slide-count-field">页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
-          <button className="primary-action" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "AI 正在规划…" : "生成 PPT 草稿"}<ArrowRight /></button>
+          <button className="primary-action" disabled={!aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
         </section> : <section className="draft-review">

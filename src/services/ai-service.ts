@@ -57,7 +57,21 @@ function colorLuminance(hex: string): number {
   return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
 }
 
-/** Template colors are authoritative. AI selects structure, but cannot invent a competing palette. */
+/** Blends `foreground` towards `background` so body copy can step back one level. */
+function mixColor(foreground: string, background: string, amount: number): string {
+  const first = [foreground.slice(1, 3), foreground.slice(3, 5), foreground.slice(5, 7)].map((value) => Number.parseInt(value, 16));
+  const second = [background.slice(1, 3), background.slice(3, 5), background.slice(5, 7)].map((value) => Number.parseInt(value, 16));
+  if ([...first, ...second].some((value) => !Number.isFinite(value))) return foreground;
+  const blended = first.map((channel, index) => Math.round(channel + (second[index]! - channel) * amount));
+  return `#${blended.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+}
+
+/**
+ * Template colors are authoritative. AI selects structure, but cannot invent a
+ * competing palette. The title keeps the full strength of the template ink and
+ * the body steps one level back, so a page keeps a readable hierarchy instead of
+ * two blocks of identically coloured text.
+ */
 export function constrainDesignToTemplate(design: AiPresentationDesign, template: DesignTemplateContext): AiPresentationDesign {
   const colors = new Map(template.themeColors.map((color) => [color.name.toLowerCase(), color.value.toUpperCase()]));
   const accent = colors.get("accent1") ?? colors.get("accent2");
@@ -67,7 +81,8 @@ export function constrainDesignToTemplate(design: AiPresentationDesign, template
   const rawBackground = template.defaultBackgroundColor;
   const background = rawBackground?.startsWith("#") ? rawBackground.toUpperCase() : rawBackground ? colors.get(rawBackground.toLowerCase()) ?? light ?? "#FFFFFF" : light ?? "#FFFFFF";
   const foreground = dark ?? (colorLuminance(background) > 0.45 ? "#1F2937" : "#FFFFFF");
-  return { slides: design.slides.map((slide) => ({ ...slide, background, accent: accent ?? slide.accent, titleColor: foreground, bodyColor: foreground })) };
+  const bodyForeground = mixColor(foreground, background, colorLuminance(background) > 0.45 ? 0.22 : 0.16);
+  return { slides: design.slides.map((slide) => ({ ...slide, background, accent: accent ?? slide.accent, titleColor: foreground, bodyColor: bodyForeground })) };
 }
 /** 当前选中的厂商与模型。调用方不再关心具体厂商，由设置决定。 */
 function aiSelection(): { provider: string; model: string } {

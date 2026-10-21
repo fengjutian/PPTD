@@ -69,6 +69,10 @@ pub struct TemplateRegion {
     y: u64,
     width: u64,
     height: u64,
+    /// Ink the template designer assigned to this placeholder.
+    text_color: Option<String>,
+    /// Font size in points the template designer assigned to this placeholder.
+    font_size_pt: Option<u16>,
 }
 
 #[derive(serde::Serialize)]
@@ -853,7 +857,77 @@ fn read_zip_text(
         .map_err(|_| "PPTX_XML_ENCODING_INVALID".into())
 }
 
-fn extract_template_regions(document: &roxmltree::Document<'_>) -> Vec<TemplateRegion> {
+/// Resolves a DrawingML scheme colour against the template theme.
+fn resolve_scheme_color(
+    value: &str,
+    theme: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let lowered = value.to_ascii_lowercase();
+    let key = match lowered.as_str() {
+        "bg1" => "lt1",
+        "tx1" => "dk1",
+        "bg2" => "lt2",
+        "tx2" => "dk2",
+        other => other,
+    };
+    theme.get(key).cloned()
+}
+
+/// Reads the ink and the size the template assigned to a placeholder so that
+/// generated pages keep the template's own typography instead of a guess.
+fn extract_text_style(
+    shape: roxmltree::Node<'_, '_>,
+    theme: &std::collections::HashMap<String, String>,
+) -> (Option<String>, Option<u16>) {
+    let Some(body) = shape
+        .descendants()
+        .find(|node| node.tag_name().name() == "txBody")
+    else {
+        return (None, None);
+    };
+    let mut color = None;
+    let mut size = None;
+    for node in body.descendants() {
+        let name = node.tag_name().name();
+        if name != "rPr" && name != "defRPr" && name != "endParaRPr" {
+            continue;
+        }
+        if size.is_none() {
+            size = node
+                .attribute("sz")
+                .and_then(|value| value.parse::<u16>().ok())
+                .filter(|value| *value >= 100)
+                .map(|value| value / 100);
+        }
+        if color.is_none() {
+            let Some(fill) = node
+                .children()
+                .find(|child| child.tag_name().name() == "solidFill")
+            else {
+                continue;
+            };
+            let Some(color_node) = fill.children().find(|child| child.is_element()) else {
+                continue;
+            };
+            color = match color_node.tag_name().name() {
+                "srgbClr" => color_node.attribute("val").map(|value| format!("#{value}")),
+                "sysClr" => color_node
+                    .attribute("lastClr")
+                    .map(|value| format!("#{value}")),
+                "schemeClr" => color_node
+                    .attribute("val")
+                    .and_then(|value| resolve_scheme_color(value, theme)),
+                _ => None,
+            };
+        }
+    }
+    (color, size)
+}
+
+fn extract_template_regions(
+    document: &roxmltree::Document<'_>,
+    theme: &std::collections::HashMap<String, String>,
+) -> Vec<TemplateRegion> {
     document
         .descendants()
         .filter(|node| matches!(node.tag_name().name(), "sp" | "pic"))
@@ -893,12 +967,15 @@ fn extract_template_regions(document: &roxmltree::Document<'_>) -> Vec<TemplateR
             } else {
                 return None;
             };
+            let (text_color, font_size_pt) = extract_text_style(shape, theme);
             Some(TemplateRegion {
                 role: role.into(),
                 x,
                 y,
                 width,
                 height,
+                text_color,
+                font_size_pt,
             })
         })
         .take(32)
@@ -1045,6 +1122,7 @@ pub fn analyze_pptx_template(
     let mut theme_colors = Vec::new();
     let mut major_font = None;
     let mut minor_font = None;
+    let mut theme_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     if let Some(xml) = read_zip_text(&mut archive, "ppt/theme/theme1.xml")? {
         let document = roxmltree::Document::parse(&xml)
             .map_err(|error| format!("PPTX_THEME_XML_INVALID: {error}"))?;
@@ -1058,9 +1136,14 @@ pub fn analyze_pptx_template(
                         .attribute("val")
                         .or_else(|| value_node.attribute("lastClr"))
                     {
+                        let resolved = format!("#{value}");
+                        theme_map.insert(
+                            color.tag_name().name().to_ascii_lowercase(),
+                            resolved.clone(),
+                        );
                         theme_colors.push(TemplateThemeColor {
                             name: color.tag_name().name().to_owned(),
-                            value: format!("#{value}"),
+                            value: resolved,
                         });
                     }
                 }
@@ -1166,7 +1249,7 @@ pub fn analyze_pptx_template(
                         .map(str::to_owned)
                 })
         });
-        let regions = extract_template_regions(&document);
+        let regions = extract_template_regions(&document, &theme_map);
         let background_color = extract_background_color(&document);
         let decorations = extract_template_decorations(&document);
         slides.push(TemplateSlideSummary {
@@ -1205,7 +1288,7 @@ pub fn analyze_pptx_template(
         // Keep only placeholders explicitly declared by this layout. Copying all
         // master placeholders into every layout makes cover layouts look like
         // content layouts and causes the cover artwork to be reused everywhere.
-        let regions = extract_template_regions(&document);
+        let regions = extract_template_regions(&document, &theme_map);
         let background_color = extract_background_color(&document);
         let decorations = extract_template_decorations(&document);
         layouts.push(TemplateLayoutSummary {
@@ -1358,7 +1441,7 @@ mod tests {
           <p:sp><p:nvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="10" y="20"/><a:ext cx="30" cy="40"/></a:xfrm></p:spPr></p:sp>
         </p:spTree></p:cSld></p:sldLayout>"#;
         let document = roxmltree::Document::parse(xml).unwrap();
-        let regions = extract_template_regions(&document);
+        let regions = extract_template_regions(&document, &std::collections::HashMap::new());
         assert_eq!(regions.len(), 2);
         assert_eq!(regions[0].role, "title");
         assert_eq!(
@@ -1371,6 +1454,25 @@ mod tests {
             (100, 200, 300, 400)
         );
         assert_eq!(regions[1].role, "body");
+    }
+
+    #[test]
+    fn reads_the_ink_and_size_a_layout_assigned_to_its_placeholders() {
+        let xml = r#"<p:sldLayout xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
+          <p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></p:spPr>
+            <p:txBody><a:lstStyle><a:lvl1pPr><a:defRPr sz="2600"><a:solidFill><a:srgbClr val="273D79"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
+          </p:sp>
+          <p:sp><p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="500" y="600"/><a:ext cx="700" cy="800"/></a:xfrm></p:spPr>
+            <p:txBody><a:lstStyle><a:lvl1pPr><a:defRPr sz="1800"><a:solidFill><a:schemeClr val="bg1"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
+          </p:sp>
+        </p:spTree></p:cSld></p:sldLayout>"#;
+        let document = roxmltree::Document::parse(xml).unwrap();
+        let theme = std::collections::HashMap::from([("lt1".to_owned(), "#FFFFFF".to_owned())]);
+        let regions = extract_template_regions(&document, &theme);
+        assert_eq!(regions[0].text_color.as_deref(), Some("#273D79"));
+        assert_eq!(regions[0].font_size_pt, Some(26));
+        assert_eq!(regions[1].text_color.as_deref(), Some("#FFFFFF"));
+        assert_eq!(regions[1].font_size_pt, Some(18));
     }
 
     #[test]

@@ -58,7 +58,9 @@ export const useEditorStore = create<EditorState>((set) => ({
       const previousIndex = state.document.slides.findIndex((slide) => slide.id === state.activeSlideId);
       activeSlideId = document.slides[Math.min(previousIndex, document.slides.length - 1)]!.id;
     }
-    let selectedElementId: ElementId | null = null;
+    // Design edits on the selected element must not drop the selection, otherwise
+    // handles disappear after a drag and repeated keyboard nudges stop working.
+    let selectedElementId: ElementId | null = state.selectedElementId;
     if (command.type === "add-text" || command.type === "add-shape" || command.type === "add-image") {
       selectedElementId = document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id;
     }
@@ -68,6 +70,9 @@ export const useEditorStore = create<EditorState>((set) => ({
       selectedElementId = slide.elements[sourceIndex + 1]!.id;
     }
     if (command.type === "set-element-lock") selectedElementId = command.elementId;
+    if (command.type === "delete-element" && selectedElementId === command.elementId) selectedElementId = null;
+    if (command.type === "add-slide" || command.type === "duplicate-slide" || command.type === "delete-slide" || command.type === "move-slide" || command.type === "apply-ai-draft" || command.type === "apply-ai-designed-draft") selectedElementId = null;
+    if (selectedElementId && !document.slides.some((slide) => slide.elements.some((element) => element.id === selectedElementId))) selectedElementId = null;
     return { ...state, document, activeSlideId, selectedElementId, undoStack: pushHistory(state.undoStack, { forward, inverse }), redoStack: [] };
   }),
 

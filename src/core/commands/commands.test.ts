@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { produce } from "immer";
 import { applyCommand, commandDomain } from "./commands";
 import { createDocument, inches } from "../document-model";
+import { contrastRatio, contrastRatioAgainstLuminance } from "../rendering/contrast";
+import { estimateTextLines } from "../rendering/text-fit";
 
 describe("document commands", () => {
   it("keeps design commands out of content", () => {
@@ -12,6 +14,16 @@ describe("document commands", () => {
     const result = produce(source, (draft) => applyCommand(draft, { type: "move-element", slideId: slide.id, elementId: element.id, x: inches(2), y: inches(2) }));
     expect(commandDomain({ type: "move-element", slideId: slide.id, elementId: element.id, x: inches(2), y: inches(2) })).toBe("design");
     expect(JSON.stringify(result.slides[0]!.content)).toBe(contentBefore);
+  });
+
+  it("keeps legacy unannotated title edits and deletes in the content domain", () => {
+    const source = createDocument();
+    const legacy = structuredClone(source);
+    const slide = legacy.slides[0]!;
+    const title = slide.elements[0]!;
+    if (title.type === "text") delete title.contentRef;
+    expect(commandDomain({ type: "edit-text", slideId: slide.id, elementId: title.id, text: "兼容标题" }, legacy)).toBe("content");
+    expect(commandDomain({ type: "delete-element", slideId: slide.id, elementId: title.id }, legacy)).toBe("content");
   });
 
   it("marks approved content as changed after editing", () => {
@@ -352,6 +364,172 @@ describe("document commands", () => {
     expect(texts[0]!.frame.x).toBe(Math.round(source.pageSize.width * design.safeRegion.x));
     expect(texts.every((element) => element.frame.x >= Math.round(source.pageSize.width * design.safeRegion.x))).toBe(true);
     expect(texts.every((element) => element.frame.x + element.frame.width <= Math.round(source.pageSize.width * (design.safeRegion.x + design.safeRegion.width)) + 1)).toBe(true);
+  });
+
+  it("places editable text on the placeholder geometry of the rendered template layout", () => {
+    const source = createDocument();
+    const content = { title: "模板标题", body: "模板正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [{ index: 11, name: "内页（浅色）1", backgroundImageDataUrl: "data:image/png;base64,iVBORw0KGgo=", regions: [
+      { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 } },
+      { role: "body" as const, frame: { x: 0.052, y: 0.119, width: 0.423, height: 0.046 } },
+      { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板文稿", slides: [content], designs: [design], templateLayouts }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title)!;
+    const body = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.body)!;
+    expect(title.frame).toEqual({ x: Math.round(source.pageSize.width * 0.052), y: Math.round(source.pageSize.height * 0.030), width: Math.round(source.pageSize.width * 0.799), height: Math.round(source.pageSize.height * 0.059) });
+    // The largest body region carries the copy, not the short subtitle placeholder.
+    expect(body.frame).toEqual({ x: Math.round(source.pageSize.width * 0.052), y: Math.round(source.pageSize.height * 0.222), width: Math.round(source.pageSize.width * 0.897), height: Math.round(source.pageSize.height * 0.621) });
+  });
+
+  it("keeps the template artwork visible instead of covering the page with a panel", () => {
+    const source = createDocument();
+    const content = { title: "对比度修复", body: "正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333", backgroundTreatment: "local-scrim" as const };
+    const templateLayouts = [{ index: 11, name: "内页（浅色）1", backgroundImageDataUrl: "data:image/png;base64,iVBORw0KGgo=", regions: [
+      { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 } },
+      { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板文稿", slides: [content], designs: [design], templateLayouts }));
+    const shapes = result.slides[0]!.elements.filter((element) => element.type === "shape");
+    expect(shapes.length).toBeGreaterThan(0);
+    // The scrim hugs the text block; it must never become a full page sheet.
+    expect(shapes.every((shape) => shape.frame.width < source.pageSize.width * 0.98 && shape.frame.height < source.pageSize.height * 0.98)).toBe(true);
+    expect(result.slides[0]!.elements[0]).toMatchObject({ type: "image" });
+  });
+
+  it("uses the ink and the size the template assigned to its placeholders", () => {
+    const source = createDocument();
+    const content = { title: "模板标题", body: "模板正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [{ index: 11, name: "内页（浅色）1", regions: [
+      { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 }, textColor: "#273D79", fontSizePt: 26 },
+      { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 }, textColor: "#999A9A", fontSizePt: 18 },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板文稿", slides: [content], designs: [design], templateLayouts }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title)!;
+    const body = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.body)!;
+    expect(title.type === "text" && title.style.color).toBe("#273D79");
+    expect(title.type === "text" && title.style.fontSizePt).toBe(26);
+    expect(body.type === "text" && body.style.fontSizePt).toBe(18);
+    // The template body grey is too light to read, so the ink is corrected while
+    // the template's own size and geometry stay in place.
+    expect(body.type === "text" && body.style.color).not.toBe("#999A9A");
+    expect(body.type === "text" && contrastRatio(body.style.color, "#FFFFFF")!).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("repairs text that would be unreadable on the page it is placed on", () => {
+    const source = createDocument();
+    const content = { title: "浅底白字", body: "正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#FFFFFF", bodyColor: "#FFFFFF" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "对比度", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    expect(texts.every((element) => element.type === "text" && contrastRatio(element.style.color, "#FFFFFF")! >= 4.5)).toBe(true);
+    // The title keeps more weight than the body so the page keeps a hierarchy.
+    expect(texts[0]!.type === "text" && texts[0]!.style.color).not.toBe(texts[1]!.type === "text" && texts[1]!.style.color);
+  });
+
+  it("rotates the template artwork across pages instead of repeating one layout", () => {    const source = createDocument();
+    const slides = [
+      { title: "第一页", body: "正文一", speakerNotes: "" },
+      { title: "第二页", body: "正文二", speakerNotes: "" },
+      { title: "第三页", body: "正文三", speakerNotes: "" },
+    ];
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const regionSet = [
+      { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 } },
+      { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+    ];
+    const templateLayouts = [
+      { index: 11, name: "内页（浅色）1", backgroundImageDataUrl: "data:image/png;base64,AAAA", regions: regionSet },
+      { index: 13, name: "内页（浅色）3", backgroundImageDataUrl: "data:image/png;base64,BBBB", regions: regionSet },
+      { index: 14, name: "内页（深色）1", backgroundImageDataUrl: "data:image/png;base64,CCCC", regions: regionSet },
+    ];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版式", slides, designs: [design, design, design], templateLayouts }));
+    const backgrounds = result.slides.map((slide) => slide.elements.find((element) => element.type === "image"));
+    expect(backgrounds.map((element) => element?.type === "image" ? element.source.dataUrl : undefined)).toEqual([
+      templateLayouts[0]!.backgroundImageDataUrl,
+      templateLayouts[1]!.backgroundImageDataUrl,
+      templateLayouts[2]!.backgroundImageDataUrl,
+    ]);
+  });
+
+  it("keeps a CJK headline on one line inside the template title box", () => {
+    const source = createDocument();
+    const content = { title: "昆佰泰基因测序整体解决方案", body: "副标题", speakerNotes: "" };
+    const design = { layout: "cover" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#FFFFFF", bodyColor: "#FFFFFF" };
+    const templateLayouts = [{ index: 1, name: "封面1", backgroundImageDataUrl: "data:image/png;base64,AAAA", regions: [
+      { role: "title" as const, frame: { x: 0.084, y: 0.340, width: 0.832, height: 0.167 }, textColor: "#FFFFFF", fontSizePt: 66 },
+      { role: "body" as const, frame: { x: 0.125, y: 0.589, width: 0.750, height: 0.167 }, textColor: "#FFFFFF", fontSizePt: 28 },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design], templateLayouts }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title)!;
+    const widthPt = title.frame.width / 12_700;
+    // A CJK glyph fills a full em, so thirteen characters need thirteen times
+    // the font size. Measuring them narrower let the line wrap and pushed the
+    // second line into the artwork below the headline.
+    expect(title.type === "text" && title.style.fontSizePt * content.title.length).toBeLessThanOrEqual(widthPt);
+    expect(estimateTextLines(content.title, widthPt, title.type === "text" ? title.style.fontSizePt : 0)).toBe(1);
+  });
+
+  it("keeps the ink readable across every patch of artwork that carries it", () => {
+    const source = createDocument();
+    const content = { title: "深色版式", body: "正文内容", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [{ index: 14, name: "内页（深色）1", backgroundImageDataUrl: "data:image/png;base64,AAAA", backgroundLuminance: { title: { darkest: 0.3947, lightest: 0.5795 }, body: { darkest: 0.3993, lightest: 0.612 } }, regions: [
+      { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.806, height: 0.059 }, textColor: "#FFFFFF", fontSizePt: 26 },
+      { role: "body" as const, frame: { x: 0.052, y: 0.225, width: 0.897, height: 0.621 }, textColor: "#FFFFFF", fontSizePt: 18 },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design], templateLayouts }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    const range = templateLayouts[0]!.backgroundLuminance!.title!;
+    // The template asks for white, which cannot carry the text on that teal
+    // artwork. The ink has to hold on the darkest and on the lightest patch.
+    expect(texts.every((element) => element.type === "text" && element.style.color !== "#FFFFFF")).toBe(true);
+    expect(texts.every((element) => element.type === "text" && contrastRatioAgainstLuminance(element.style.color, range.darkest)! >= 3)).toBe(true);
+  });
+
+  it("lets a design override the ink the template assigned to its placeholders", () => {
+    const source = createDocument();
+    const content = { title: "覆盖墨色", body: "正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#101010", bodyColor: "#202020", inkOverride: true };
+    const templateLayouts = [{ index: 11, name: "内页（浅色）1", backgroundImageDataUrl: "data:image/png;base64,AAAA", regions: [
+      { role: "title" as const, frame: { x: 0.052, y: 0.030, width: 0.799, height: 0.059 }, textColor: "#273D79", fontSizePt: 26 },
+      { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 }, textColor: "#999A9A", fontSizePt: 18 },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design], templateLayouts }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title)!;
+    // Without the override the template ink wins, so a repair could never
+    // change the colour of a template page.
+    expect(title.type === "text" && title.style.color).toBe("#101010");
+  });
+
+  it("deepens a badge fill so the numerals stay readable on it", () => {
+    const source = createDocument();
+    const content = { title: "要点", body: "1. 第一项优势\n2. 第二项优势", speakerNotes: "" };
+    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#15A590", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
+    const badge = result.slides[0]!.elements.find((element) => element.type === "shape" && element.shape === "ellipse");
+    const numeral = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === "1");
+    expect(badge?.type === "shape" && contrastRatio("#FFFFFF", badge.style.fill)!).toBeGreaterThanOrEqual(4.5);
+    expect(numeral?.type === "text" && numeral.style.color).toBe("#FFFFFF");
+  });
+
+  it("sizes a stat card to the number and the label it carries", () => {
+    const source = createDocument();
+    const content = { title: "关键指标", body: "", speakerNotes: "", blocks: [{ type: "metric" as const, label: "年检测样本量", value: "38万" }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
+    const value = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === "38万");
+    const label = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === "年检测样本量");
+    const card = result.slides[0]!.elements.find((element) => element.type === "shape" && element.frame.width > source.pageSize.width * 0.5);
+    expect(card?.type === "shape").toBe(true);
+    // The card used to stretch over the whole content region and left the
+    // label stranded at the bottom of an empty panel.
+    expect(card!.type === "shape" && card!.frame.height).toBeLessThan(source.pageSize.height * 0.3);
+    expect(value!.type === "text" && label!.type === "text" && value!.frame.y).toBeGreaterThan(card!.frame.y);
+    expect(label!.type === "text" && label!.frame.y + label!.frame.height).toBeLessThanOrEqual(card!.frame.y + card!.frame.height);
   });
 
 });

@@ -1,7 +1,7 @@
 import type { PresentationDocument, Slide, TextElement } from "../core/document-model";
 
 export interface PresentationRender { slides: string[]; contactSheet: string }
-export interface RenderedContrastIssue { slideIndex: number; elementId: string; contrastRatio: number }
+export interface RenderedContrastIssue { slideIndex: number; elementId: string; contrastRatio: number; /** The sampled artwork color that carries the text. */ backgroundColor: string }
 
 function loadImage(source: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error("VISUAL_RENDER_IMAGE_FAILED")); image.src = source; });
@@ -66,17 +66,21 @@ export async function inspectRenderedTextContrast(document: PresentationDocument
       if (element.type !== "text") continue;
       const foreground = parseHexColor(element.style.color); if (!foreground) continue;
       const x = element.frame.x * sx; const y = element.frame.y * sy; const boxWidth = element.frame.width * sx; const boxHeight = element.frame.height * sy;
-      const ratios: number[] = [];
+      const samples: Array<{ ratio: number; rgb: [number, number, number] }> = [];
       for (const xFactor of [0.15, 0.5, 0.85]) for (const yFactor of [0.2, 0.5, 0.8]) {
         const sampleX = Math.max(0, Math.min(canvas.width - 1, Math.round(x + boxWidth * xFactor)));
         const sampleY = Math.max(0, Math.min(canvas.height - 1, Math.round(y + boxHeight * yFactor)));
         const pixel = context.getImageData(sampleX, sampleY, 1, 1).data;
-        ratios.push(renderedContrastRatio(foreground, [pixel[0]!, pixel[1]!, pixel[2]!]));
+        const rgb: [number, number, number] = [pixel[0]!, pixel[1]!, pixel[2]!];
+        samples.push({ ratio: renderedContrastRatio(foreground, rgb), rgb });
       }
-      ratios.sort((left, right) => left - right);
-      const representativeRatio = ratios[Math.floor(ratios.length * 0.25)]!;
+      samples.sort((left, right) => left.ratio - right.ratio);
+      const worst = samples[Math.floor(samples.length * 0.25)]!;
       const requiredRatio = element.style.fontSizePt >= 24 || element.style.bold ? 3 : 4.5;
-      if (representativeRatio < requiredRatio) issues.push({ slideIndex, elementId: element.id, contrastRatio: representativeRatio });
+      if (worst.ratio < requiredRatio) {
+        const backgroundColor = `#${worst.rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
+        issues.push({ slideIndex, elementId: element.id, contrastRatio: worst.ratio, backgroundColor });
+      }
     }
   }
   return issues;

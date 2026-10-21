@@ -18,6 +18,12 @@ describe("PPTX export", () => {
     expect(result.report.warnings.some((warning) => warning.includes("尚未完成审核"))).toBe(true);
   });
 
+  it("honors an already-aborted export signal before building the package", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(buildPptx(createDocument(), { signal: controller.signal })).rejects.toThrow("EXPORT_CANCELLED");
+  });
+
   it("exports embedded images as native picture objects", async () => {
     const document = createDocument();
     applyCommand(document, { type: "add-image", slideId: document.slides[0]!.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "sample" });

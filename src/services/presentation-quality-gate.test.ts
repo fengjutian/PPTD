@@ -18,7 +18,22 @@ describe("presentation visual quality gate", () => {
     const document = createDocument();
     const current = design({ background: "#FFFFFF", titleColor: "#FFFFFF", bodyColor: "#FFFFFF" });
     applyCommand(document, { type: "apply-ai-designed-draft", title: "quality", slides: [{ title: "Title", body: "Body", speakerNotes: "" }], designs: [current] });
+    // The command layer keeps generated text readable on its own; the gate has to
+    // catch text that became unreadable afterwards.
+    document.slides[0]!.elements.forEach((element) => {
+      if (element.type === "text") element.style = { ...element.style, color: "#FFFFFF" };
+    });
     expect(validatePresentationVisualQuality(document, [current]).issues.some((issue) => issue.issue === "low-contrast")).toBe(true);
+  });
+
+  it("judges text against the card that carries it instead of the page color", () => {
+    const document = createDocument();
+    const current = design({ layout: "cards", background: "#101010", titleColor: "#FFFFFF", bodyColor: "#111111" });
+    applyCommand(document, { type: "apply-ai-designed-draft", title: "quality", slides: [{ title: "Title", body: "1. One\n2. Two", speakerNotes: "" }], designs: [current] });
+    const report = validatePresentationVisualQuality(document, [current]);
+    // The card labels sit on white cards, so they stay readable even though the
+    // page color behind them is dark.
+    expect(report.issues.some((issue) => issue.issue === "low-contrast")).toBe(false);
   });
 
   it("keeps generated title and body outside the supplied obstacle regions", () => {

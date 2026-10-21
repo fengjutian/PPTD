@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
 import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, constrainDesignToTemplate, describeAiError, slideBriefsSchema } from "./ai-service";
+import { contrastRatio } from "../core/rendering/contrast";
 
 describe("AI structured outputs", () => {
   it("accepts a typed slide brief without presentation content", () => {
@@ -46,7 +47,12 @@ describe("AI structured outputs", () => {
   it("uses template background and palette instead of AI-invented colors", () => {
     const design = aiPresentationDesignSchema.parse({ slides: [{ layout: "title-body", background: "#FF00FF", accent: "#00FF00", titleColor: "#123456", bodyColor: "#654321" }] });
     const constrained = constrainDesignToTemplate(design, { slideWidthEmu: null, slideHeightEmu: null, majorFont: null, minorFont: null, defaultBackgroundColor: "bg1", themeColors: [{ name: "bg1", value: "#F5F1E8" }, { name: "dk1", value: "#202020" }, { name: "accent1", value: "#C04A32" }], slides: [], layouts: [] });
-    expect(constrained.slides[0]).toMatchObject({ background: "#F5F1E8", accent: "#C04A32", titleColor: "#202020", bodyColor: "#202020" });
+    expect(constrained.slides[0]).toMatchObject({ background: "#F5F1E8", accent: "#C04A32", titleColor: "#202020" });
+    // The body stays inside the template palette but steps one level back, so a
+    // page keeps a readable hierarchy instead of two identical blocks of text.
+    expect(constrained.slides[0]!.bodyColor).not.toBe("#654321");
+    expect(constrained.slides[0]!.bodyColor).not.toBe(constrained.slides[0]!.titleColor);
+    expect(contrastRatio(constrained.slides[0]!.bodyColor, "#F5F1E8")).toBeGreaterThanOrEqual(4.5);
   });
 });
 

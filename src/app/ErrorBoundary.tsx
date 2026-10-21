@@ -25,8 +25,18 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
         <p>当前文稿仍在本地内存中。请先尝试重新加载；如果问题重复出现，请保存诊断信息。</p>
         <pre>{this.state.error.message}</pre>
         <div>
-          <button type="button" className="primary-action" onClick={() => window.location.reload()}>重新加载</button>
-          <button type="button" className="secondary-action" onClick={() => void navigator.clipboard?.writeText(this.state.error?.stack ?? this.state.error?.message ?? "")}>复制诊断信息</button>
+          <button type="button" className="primary-action" onClick={() => window.location.reload()}>
+            重新加载
+          </button>
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={() =>
+              void navigator.clipboard?.writeText(this.state.error?.stack ?? this.state.error?.message ?? "")
+            }
+          >
+            复制诊断信息
+          </button>
         </div>
       </main>
     );

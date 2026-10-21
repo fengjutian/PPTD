@@ -1,0 +1,916 @@
+{
+  "slideWidthEmu": 12192000,
+  "slideHeightEmu": 6858000,
+  "theme": [
+    [
+      "dk1",
+      "#1A1A1A"
+    ],
+    [
+      "lt1",
+      "#FFFFFF"
+    ],
+    [
+      "dk2",
+      "#15A590"
+    ],
+    [
+      "lt2",
+      "#FFFFFF"
+    ],
+    [
+      "accent1",
+      "#15A590"
+    ],
+    [
+      "accent2",
+      "#273C79"
+    ],
+    [
+      "accent3",
+      "#3371A7"
+    ],
+    [
+      "accent4",
+      "#5C3C86"
+    ],
+    [
+      "accent5",
+      "#D3D3D3"
+    ],
+    [
+      "accent6",
+      "#A0A0A0"
+    ],
+    [
+      "hlink",
+      "#0563C1"
+    ],
+    [
+      "folhlink",
+      "#954F72"
+    ]
+  ],
+  "layouts": [
+    {
+      "index": 1,
+      "name": "封面1",
+      "regions": [
+        {
+          "role": "title",
+          "x": 1022957,
+          "y": 2331415,
+          "width": 10146083,
+          "height": 1142544,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 66
+        },
+        {
+          "role": "body",
+          "x": 1523999,
+          "y": 4037451,
+          "width": 9144000,
+          "height": 1142545,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 28
+        },
+        {
+          "role": "body",
+          "x": 7555283,
+          "y": 6200484,
+          "width": 4114800,
+          "height": 365125,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 1614871,
+          "y": 3696245,
+          "width": 8928000,
+          "height": 188593
+        },
+        {
+          "role": "image",
+          "x": 490255,
+          "y": 366148,
+          "width": 2654300,
+          "height": 850900
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "name": "封底1",
+      "regions": [
+        {
+          "role": "title",
+          "x": 1022957,
+          "y": 1838227,
+          "width": 7036961,
+          "height": 1635732,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 80
+        },
+        {
+          "role": "body",
+          "x": 1022957,
+          "y": 4037451,
+          "width": 7187579,
+          "height": 1142545,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 28
+        },
+        {
+          "role": "body",
+          "x": 7555283,
+          "y": 6200484,
+          "width": 4114800,
+          "height": 365125,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 758536,
+          "y": 3680022,
+          "width": 7452000,
+          "height": 108000
+        },
+        {
+          "role": "image",
+          "x": 9015783,
+          "y": 405658,
+          "width": 2654300,
+          "height": 850900
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "name": "封面2",
+      "regions": [
+        {
+          "role": "title",
+          "x": 594653,
+          "y": 2784822,
+          "width": 10146083,
+          "height": 818728,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 56
+        },
+        {
+          "role": "body",
+          "x": 594653,
+          "y": 3992600,
+          "width": 9144000,
+          "height": 444319,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 24
+        },
+        {
+          "role": "body",
+          "x": 7555283,
+          "y": 6200484,
+          "width": 4114800,
+          "height": 365125,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 594654,
+          "y": 3744075,
+          "width": 7776000,
+          "height": 108000
+        },
+        {
+          "role": "image",
+          "x": 594653,
+          "y": 345123,
+          "width": 2654300,
+          "height": 850900
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "name": "封底2",
+      "regions": [
+        {
+          "role": "title",
+          "x": 1191951,
+          "y": 1958487,
+          "width": 10246067,
+          "height": 1703630,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 80
+        },
+        {
+          "role": "body",
+          "x": 2294018,
+          "y": 4010527,
+          "width": 9144000,
+          "height": 444319,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 28
+        },
+        {
+          "role": "body",
+          "x": 758536,
+          "y": 6269779,
+          "width": 4114800,
+          "height": 365125,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 4094018,
+          "y": 3662117,
+          "width": 7344000,
+          "height": 144000
+        },
+        {
+          "role": "image",
+          "x": 594653,
+          "y": 345123,
+          "width": 2654300,
+          "height": 850900
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "name": "封面3",
+      "regions": [
+        {
+          "role": "title",
+          "x": 1524000,
+          "y": 2781728,
+          "width": 10146083,
+          "height": 818728,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 56
+        },
+        {
+          "role": "body",
+          "x": 2526083,
+          "y": 3989506,
+          "width": 9144000,
+          "height": 444319,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 24
+        },
+        {
+          "role": "body",
+          "x": 7555283,
+          "y": 6200484,
+          "width": 4114800,
+          "height": 365125,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 3775283,
+          "y": 3744075,
+          "width": 7776000,
+          "height": 108000
+        },
+        {
+          "role": "image",
+          "x": 9015783,
+          "y": 405658,
+          "width": 2654300,
+          "height": 850900
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "name": "封底3",
+      "regions": [
+        {
+          "role": "title",
+          "x": 708953,
+          "y": 1958487,
+          "width": 10246067,
+          "height": 1703630,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 80
+        },
+        {
+          "role": "body",
+          "x": 708953,
+          "y": 4010527,
+          "width": 9144000,
+          "height": 444319,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 28
+        },
+        {
+          "role": "image",
+          "x": 708953,
+          "y": 3764322,
+          "width": 7344000,
+          "height": 144000
+        },
+        {
+          "role": "body",
+          "x": 7555283,
+          "y": 6200484,
+          "width": 4114800,
+          "height": 365125,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 9015783,
+          "y": 405658,
+          "width": 2654300,
+          "height": 850900
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "name": "篇章页1",
+      "regions": [
+        {
+          "role": "title",
+          "x": 977347,
+          "y": 601681,
+          "width": 10515600,
+          "height": 1133475,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 60
+        },
+        {
+          "role": "body",
+          "x": 977346,
+          "y": 1889056,
+          "width": 5945968,
+          "height": 1500187,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 22
+        },
+        {
+          "role": "body",
+          "x": 9781200,
+          "y": 4392001,
+          "width": 2354400,
+          "height": 2400657,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 150
+        },
+        {
+          "role": "image",
+          "x": 412973,
+          "y": 799199,
+          "width": 159488,
+          "height": 5510767
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "name": "篇章页2",
+      "regions": [
+        {
+          "role": "title",
+          "x": 991073,
+          "y": 4156856,
+          "width": 10515600,
+          "height": 1133475,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 60
+        },
+        {
+          "role": "body",
+          "x": 991073,
+          "y": 5444231,
+          "width": 5877318,
+          "height": 946347,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 22
+        },
+        {
+          "role": "body",
+          "x": 9537793,
+          "y": 0,
+          "width": 2354400,
+          "height": 2400657,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 150
+        },
+        {
+          "role": "image",
+          "x": 412972,
+          "y": 799199,
+          "width": 165129,
+          "height": 5705679
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "name": "篇章页3",
+      "regions": [
+        {
+          "role": "title",
+          "x": 991073,
+          "y": 520057,
+          "width": 10515600,
+          "height": 1133475,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 60
+        },
+        {
+          "role": "body",
+          "x": 991073,
+          "y": 1807432,
+          "width": 6072336,
+          "height": 946347,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 22
+        },
+        {
+          "role": "body",
+          "x": 9424628,
+          "y": 4104221,
+          "width": 2354400,
+          "height": 2400657,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 150
+        },
+        {
+          "role": "image",
+          "x": 412972,
+          "y": 799199,
+          "width": 165129,
+          "height": 5705679
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "name": "篇章页4",
+      "regions": [
+        {
+          "role": "title",
+          "x": 991073,
+          "y": 2187041,
+          "width": 10515600,
+          "height": 1133475,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 60
+        },
+        {
+          "role": "body",
+          "x": 991074,
+          "y": 3474416,
+          "width": 5932240,
+          "height": 946347,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 22
+        },
+        {
+          "role": "body",
+          "x": 9424628,
+          "y": 4104221,
+          "width": 2354400,
+          "height": 2400657,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 150
+        },
+        {
+          "role": "image",
+          "x": 412972,
+          "y": 799199,
+          "width": 165129,
+          "height": 5705679
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "name": "内页（浅色）1",
+      "regions": [
+        {
+          "role": "title",
+          "x": 631579,
+          "y": 204475,
+          "width": 9736473,
+          "height": 404394,
+          "textColor": "#273D79",
+          "fontSizePt": 26
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 818214,
+          "width": 5157787,
+          "height": 317883,
+          "textColor": "#999A9A",
+          "fontSizePt": 18
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 1523860,
+          "width": 10931156,
+          "height": 4259256
+        },
+        {
+          "role": "image",
+          "x": 286030,
+          "y": 718321,
+          "width": 11844000,
+          "height": 28800
+        },
+        {
+          "role": "image",
+          "x": -9525,
+          "y": 157781,
+          "width": 558104,
+          "height": 1066229
+        },
+        {
+          "role": "image",
+          "x": 12092305,
+          "y": 0,
+          "width": 123940,
+          "height": 6858000
+        },
+        {
+          "role": "image",
+          "x": 10614186,
+          "y": 190252,
+          "width": 1231985,
+          "height": 394944
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "name": "内页（浅色）2",
+      "regions": [
+        {
+          "role": "title",
+          "x": 631579,
+          "y": 204475,
+          "width": 9736473,
+          "height": 404394,
+          "textColor": "#273D79",
+          "fontSizePt": 26
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 818214,
+          "width": 5157787,
+          "height": 317883,
+          "textColor": "#999A9A",
+          "fontSizePt": 18
+        },
+        {
+          "role": "image",
+          "x": 286030,
+          "y": 718321,
+          "width": 11844000,
+          "height": 28800
+        },
+        {
+          "role": "image",
+          "x": -9525,
+          "y": 157781,
+          "width": 558104,
+          "height": 1066229
+        },
+        {
+          "role": "image",
+          "x": 631825,
+          "y": 1524000,
+          "width": 5057775,
+          "height": 4292600
+        },
+        {
+          "role": "body",
+          "x": 5905500,
+          "y": 1511300,
+          "width": 5654675,
+          "height": 4343400
+        },
+        {
+          "role": "image",
+          "x": 12092305,
+          "y": 0,
+          "width": 123940,
+          "height": 6858000
+        },
+        {
+          "role": "image",
+          "x": 10614186,
+          "y": 190252,
+          "width": 1231985,
+          "height": 394944
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "name": "内页（浅色）3",
+      "regions": [
+        {
+          "role": "title",
+          "x": 631579,
+          "y": 204475,
+          "width": 9736473,
+          "height": 404394,
+          "textColor": "#273D79",
+          "fontSizePt": 26
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 818214,
+          "width": 5157787,
+          "height": 317883,
+          "textColor": "#999A9A",
+          "fontSizePt": 18
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 1523860,
+          "width": 10931156,
+          "height": 4259256
+        },
+        {
+          "role": "image",
+          "x": 286030,
+          "y": 718321,
+          "width": 11844000,
+          "height": 28800
+        },
+        {
+          "role": "image",
+          "x": -9525,
+          "y": 157781,
+          "width": 558104,
+          "height": 1066229
+        },
+        {
+          "role": "image",
+          "x": 12092305,
+          "y": 0,
+          "width": 123940,
+          "height": 6858000
+        },
+        {
+          "role": "image",
+          "x": 10614186,
+          "y": 190252,
+          "width": 1231985,
+          "height": 394944
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "name": "内页（深色）1",
+      "regions": [
+        {
+          "role": "image",
+          "x": -9525,
+          "y": 151431,
+          "width": 558104,
+          "height": 1082888
+        },
+        {
+          "role": "image",
+          "x": 286030,
+          "y": 720065,
+          "width": 11880000,
+          "height": 28800
+        },
+        {
+          "role": "title",
+          "x": 631579,
+          "y": 204475,
+          "width": 9824386,
+          "height": 404394,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 26
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 818214,
+          "width": 5157787,
+          "height": 317883,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 18
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 1544642,
+          "width": 10931156,
+          "height": 4259256,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 12092305,
+          "y": 0,
+          "width": 123940,
+          "height": 6858000
+        },
+        {
+          "role": "image",
+          "x": 10614186,
+          "y": 195434,
+          "width": 1231985,
+          "height": 394942
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "name": "内页（深色）2",
+      "regions": [
+        {
+          "role": "image",
+          "x": -9525,
+          "y": 151431,
+          "width": 558104,
+          "height": 1082888
+        },
+        {
+          "role": "image",
+          "x": 286030,
+          "y": 720065,
+          "width": 11880000,
+          "height": 28800
+        },
+        {
+          "role": "title",
+          "x": 631579,
+          "y": 204475,
+          "width": 10515600,
+          "height": 404394,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 26
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 818214,
+          "width": 5157787,
+          "height": 317883,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 18
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 1544642,
+          "width": 10931156,
+          "height": 4259256,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 12092305,
+          "y": 0,
+          "width": 123940,
+          "height": 6858000
+        },
+        {
+          "role": "image",
+          "x": 10614186,
+          "y": 195434,
+          "width": 1231985,
+          "height": 394942
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "name": "内页（深色）3",
+      "regions": [
+        {
+          "role": "image",
+          "x": -9525,
+          "y": 151431,
+          "width": 558104,
+          "height": 1082888
+        },
+        {
+          "role": "image",
+          "x": 286030,
+          "y": 720065,
+          "width": 11880000,
+          "height": 28800
+        },
+        {
+          "role": "title",
+          "x": 631579,
+          "y": 204475,
+          "width": 10515600,
+          "height": 404394,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 26
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 818214,
+          "width": 5157787,
+          "height": 317883,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 18
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 1544642,
+          "width": 10931156,
+          "height": 4259256,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 12092305,
+          "y": 0,
+          "width": 123940,
+          "height": 6858000
+        },
+        {
+          "role": "image",
+          "x": 10614186,
+          "y": 195434,
+          "width": 1231985,
+          "height": 394942
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "name": "内页（深色）4",
+      "regions": [
+        {
+          "role": "image",
+          "x": -9525,
+          "y": 151431,
+          "width": 558104,
+          "height": 1082888
+        },
+        {
+          "role": "image",
+          "x": 286030,
+          "y": 720065,
+          "width": 11880000,
+          "height": 28800
+        },
+        {
+          "role": "title",
+          "x": 631579,
+          "y": 204475,
+          "width": 10515600,
+          "height": 404394,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 26
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 818214,
+          "width": 5157787,
+          "height": 317883,
+          "textColor": "#FFFFFF",
+          "fontSizePt": 18
+        },
+        {
+          "role": "body",
+          "x": 631579,
+          "y": 1544642,
+          "width": 10931156,
+          "height": 4259256,
+          "textColor": "#FFFFFF"
+        },
+        {
+          "role": "image",
+          "x": 12092305,
+          "y": 0,
+          "width": 123940,
+          "height": 6858000
+        },
+        {
+          "role": "image",
+          "x": 10614186,
+          "y": 195434,
+          "width": 1231985,
+          "height": 394942
+        }
+      ]
+    }
+  ]
+}

@@ -292,6 +292,10 @@ button { color: inherit; }
 .element-handle.ne { right: -6px; top: -6px; cursor: nesw-resize; }
 .element-handle.sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
 .element-handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.element-handle.n { left: 50%; top: -6px; transform: translateX(-50%); cursor: ns-resize; }
+.element-handle.s { left: 50%; bottom: -6px; transform: translateX(-50%); cursor: ns-resize; }
+.element-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+.element-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
 .element-rotate-handle { position: absolute; z-index: 3; left: 50%; top: -25px; width: 11px; height: 11px; padding: 0; border: 2px solid var(--ppt-accent); border-radius: 50%; background: #fff; cursor: grab; transform: translateX(-50%); }
 .element-rotate-handle::after { content: ""; position: absolute; left: 50%; top: 11px; width: 1px; height: 12px; background: var(--ppt-accent); }
 

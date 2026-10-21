@@ -16,6 +16,13 @@ describe("content hash", () => {
     const base = hashSlideContent({ title: "标题", body: "正文", speakerNotes: "", blocks });
     expect(hashSlideContent({ title: "新标题", body: "正文", speakerNotes: "", blocks })).not.toBe(base);
     expect(hashSlideContent({ title: "标题", body: "正文", speakerNotes: "备注", blocks })).not.toBe(base);
-    expect(hashSlideContent({ title: "标题", body: "正文", speakerNotes: "", blocks: [{ id: "block-1", type: "paragraph", text: "新正文" }] })).not.toBe(base);
+    expect(
+      hashSlideContent({
+        title: "标题",
+        body: "正文",
+        speakerNotes: "",
+        blocks: [{ id: "block-1", type: "paragraph", text: "新正文" }],
+      }),
+    ).not.toBe(base);
   });
 });

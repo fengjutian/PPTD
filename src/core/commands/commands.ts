@@ -1,5 +1,31 @@
 import type { ContentBlock, ElementId, Emu, PresentationDocument, RectEmu, SlideId, SupportedImageMimeType } from "../document-model";
 import { createSlide, inches } from "../document-model";
+import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
+import { estimateTextLines } from "../rendering/text-fit";
+import {
+  planTemplateLayouts,
+  templateColumnRegions,
+  templateContentRegion,
+  templateTitleRegion,
+  type AiNormalizedRect,
+  type AiSlideDesign,
+  type AiTemplateDecoration,
+  type AiTemplateLayout,
+  type BackgroundRhythm,
+  type TemplateLayoutIntent,
+} from "./template-layouts";
+
+export type {
+  AiElementRepair,
+  AiLayoutKind,
+  AiNormalizedRect,
+  AiSlideDesign,
+  AiTemplateDecoration,
+  AiTemplateLayout,
+  AiTemplateRegion,
+  BackgroundRhythm,
+  TemplateLayoutIntent,
+} from "./template-layouts";
 
 export type ChangeDomain = "content" | "design" | "both";
 export type AiContentBlock =
@@ -25,32 +51,10 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
     return { id, type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
-export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
-export interface AiNormalizedRect { x: number; y: number; width: number; height: number }
-export type AiElementRepair =
-  | { action: "move" | "resize"; target: "title" | "body"; frame: AiNormalizedRect }
-  | { action: "restyle"; target: "title" | "body"; fontScale?: number; color?: string }
-  | { action: "changeLayout"; layout: AiLayoutKind };
-export interface AiSlideDesign {
-  layout: AiLayoutKind;
-  background: string;
-  accent: string;
-  titleColor: string;
-  bodyColor: string;
-  safeRegion?: AiNormalizedRect;
-  obstacleRegions?: AiNormalizedRect[];
-  hierarchyAction?: "keep" | "strengthen-title" | "reduce-density" | "increase-whitespace";
-  backgroundTreatment?: "none" | "content-panel" | "simplify";
-  elementRepairs?: AiElementRepair[];
-}
-export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
-export interface AiTemplateDecoration { shape: "rectangle" | "ellipse"; fill: string; frame: { x: number; y: number; width: number; height: number } }
-export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; backgroundImageDataUrl?: string; decorations?: AiTemplateDecoration[]; regions: AiTemplateRegion[] }
-
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[] }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; backgroundRhythm?: BackgroundRhythm }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -75,7 +79,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       if (!document) return command.type === "edit-text" ? "content" : "design";
       const slide = document.slides.find((item) => item.id === command.slideId);
       const element = slide?.elements.find((item) => item.id === command.elementId);
-      return element?.type === "text" && (element.contentRef === "title" || element.contentRef === "body") ? "content" : "design";
+      const legacyTitle = element?.type === "text" && !element.contentRef && slide?.elements[0]?.id === element.id;
+      return element?.type === "text" && (element.contentRef === "title" || element.contentRef === "body" || legacyTitle) ? "content" : "design";
     }
     case "add-text": return "design";
     case "add-image": return "design";
@@ -114,25 +119,51 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (command.pageSize) document.pageSize = command.pageSize;
     const pageWidth = document.pageSize.width;
     const pageHeight = document.pageSize.height;
+    const pageWidthIn = pageWidth / 914400;
+    const pageHeightIn = pageHeight / 914400;
     const frame = (x: number, y: number, width: number, height: number): RectEmu => ({ x: Math.round(x * pageWidth) as Emu, y: Math.round(y * pageHeight) as Emu, width: Math.round(width * pageWidth) as Emu, height: Math.round(height * pageHeight) as Emu });
+    // A slide is wider than it is tall, so a circle has to be sized in inches on
+    // both axes. A square in normalized coordinates is an ellipse on screen.
+    const circleFrame = (x: number, y: number, diameterInches: number): RectEmu => frame(x, y, diameterInches / pageWidthIn, diameterInches / pageHeightIn);
     const fittedFontSize = (value: string, box: RectEmu, preferredPt: number, minimumPt = 12): number => {
       const widthPt = box.width / 12_700;
       const heightPt = box.height / 12_700;
-      const paragraphs = value.split("\n");
+      // The same line estimator the quality gate uses decides whether a size
+      // fits, so a page that passes generation cannot be reported as overflow.
       for (let size = preferredPt; size >= minimumPt; size -= 1) {
-        const unitsPerLine = Math.max(1, widthPt / (size * 0.92));
-        const lineCount = paragraphs.reduce((total, paragraph) => {
-          if (!paragraph) return total + 0.55;
-          const units = [...paragraph].reduce((sum, character) => sum + (/^[\u0000-\u00ff]$/.test(character) ? 0.55 : 1), 0);
-          return total + Math.max(1, Math.ceil(units / unitsPerLine));
-        }, 0);
-        if (lineCount * size * 1.2 <= heightPt) return size;
+        if (estimateTextLines(value, widthPt, size) * size * 1.2 <= heightPt) return size;
       }
       return minimumPt;
     };
-    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right", contentRef?: "title" | "body" | "decorative") => ({ id: crypto.randomUUID() as ElementId, type: "text" as const, contentRef, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: fittedFontSize(value, box, fontSizePt), color, bold, align } });
+    // Every text element is checked against the background it actually sits on.
+    // A design that asks for dark text on dark artwork is corrected instead of
+    // being rendered as invisible copy.
+    const ink = (luminance: number) => (luminance < 0.45 ? { strong: "#FFFFFF", soft: "#DCE3EA" } : { strong: "#171A1F", soft: "#3E4650" });
+    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right", contentRef?: "title" | "body" | "decorative", background?: BackgroundRange | number) => {
+      const fitted = fittedFontSize(value, box, fontSizePt);
+      const range = typeof background === "number" ? { darkest: background, lightest: background } : background;
+      const palette = ink(range ? range.darkest : 1);
+      const large = isLargeText(fitted, bold);
+      const fallback = bold ? palette.strong : palette.soft;
+      const resolved = range ? readableTextColorOnRange(color, range, large, fallback) : readableTextColor(color, 1, large, fallback);
+      return { id: crypto.randomUUID() as ElementId, type: "text" as const, contentRef, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: fitted, color: resolved, bold, align } };
+    };
     const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle") => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: kind === "ellipse" ? 999 : 8 } });
     const points = (body: string) => body.split(/\n+|(?=\d+[.、]\s*)/).map((value) => value.trim()).filter(Boolean);
+    // The layout of every page is decided as a sequence: the deck should rotate
+    // through a small set of template layouts instead of repeating one artwork.
+    const layoutIntents: TemplateLayoutIntent[] = command.slides.map((content, index) => {
+      const design = command.designs[index]!;
+      const blocks = content.blocks ?? [];
+      const hasBlock = (type: AiContentBlock["type"]) => blocks.some((block) => block.type === type);
+      if (design.layout === "cover") return "cover";
+      if (design.layout === "section") return "section";
+      if (design.layout === "split" || hasBlock("comparison")) return "split";
+      if (design.layout === "quote") return "quote";
+      if (design.layout === "cards" || hasBlock("timeline") || hasBlock("process") || hasBlock("metric")) return "cards";
+      return "body";
+    });
+    const chosenLayouts = planTemplateLayouts({ layouts: command.templateLayouts ?? [], intents: layoutIntents, rhythm: command.backgroundRhythm });
     document.title = command.title.trim();
     document.slides = command.slides.map((content, index) => {
       const design = command.designs[index]!;
@@ -141,63 +172,46 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const contentBlocks = toContentBlocks(content.blocks);
       slide.content = { title: content.title, body: content.body, ...(contentBlocks ? { blocks: contentBlocks } : {}), speakerNotes: content.speakerNotes, status: "approved" };
       const items = points(content.body);
-      const bodySize = content.body.length > 260 ? 15 : content.body.length > 150 ? 17 : 20;
       const blocks = content.blocks ?? [];
       const timelineBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "timeline" }> => block.type === "timeline");
       const comparisonBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "comparison" }> => block.type === "comparison");
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
-      const visualLayouts = command.templateLayouts ?? [];
-      const rankedLayouts = visualLayouts.filter((layout) => layout.regions.some((region) => region.role === "title"));
-      const layoutIsCompatible = (layout: AiTemplateLayout): boolean => {
-        const title = layout.regions.find((region) => region.role === "title")?.frame;
-        const bodies = layout.regions.filter((region) => region.role === "body").map((region) => region.frame);
-        const overlaps = (left: { x: number; y: number; width: number; height: number }, right: { x: number; y: number; width: number; height: number }) => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
-        if (!title || bodies.some((body) => overlaps(title, body))) return false;
-        if (design.layout === "cover" || design.layout === "section") return true;
-        if (bodies.length === 0) return false;
-        return !((design.layout === "split" || comparisonBlock) && bodies.length < 2);
-      };
-      const layoutScore = (layout: AiTemplateLayout): number => {
-        const name = (layout.name ?? "").toLowerCase();
-        const bodies = layout.regions.filter((region) => region.role === "body").length;
-        const images = layout.regions.filter((region) => region.role === "image").length;
-        const keyword = (...values: string[]) => values.some((value) => name.includes(value));
-        if (design.layout === "cover") return (keyword("title slide", "cover", "封面", "标题幻灯片") ? 100 : 0) + (bodies === 0 ? 20 : 0) + images * 5;
-        if (design.layout === "section") return (keyword("section", "章节", "节标题") ? 100 : 0) + (bodies <= 1 ? 15 : 0);
-        if (design.layout === "split" || comparisonBlock) return (keyword("comparison", "two content", "双栏", "比较", "对比") ? 100 : 0) + Math.min(bodies, 2) * 20;
-        if (design.layout === "cards" || timelineBlock || processBlock || metricBlocks.length > 0) return (keyword("content", "卡片", "流程", "时间线") ? 30 : 0) + bodies * 15;
-        if (design.layout === "quote") return (keyword("quote", "引言", "引用") ? 100 : 0) + (bodies === 1 ? 15 : 0);
-        return (keyword("title and content", "标题和内容", "正文") ? 60 : 0) + (bodies === 1 ? 20 : 0);
-      };
-      const layoutHasSemanticGeometry = (layout: AiTemplateLayout): boolean => {
-        const bodyCount = layout.regions.filter((region) => region.role === "body").length;
-        if (design.layout === "cover" || design.layout === "section") return true;
-        if (design.layout === "split" || comparisonBlock) return bodyCount >= 2;
-        return bodyCount >= 1;
-      };
-      const chooseLayout = (layouts: AiTemplateLayout[], diversify = false) => {
-        const sorted = [...layouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index);
-        if (!diversify || sorted.length < 2) return sorted[0];
-        const bestScore = layoutScore(sorted[0]!);
-        // Only rotate layouts with the same semantic score. This produces visual
-        // rhythm without mixing cover, section and content artwork arbitrarily.
-        const alignedVariants = sorted.filter((layout) => layoutScore(layout) === bestScore).slice(0, 3);
-        return alignedVariants[index % alignedVariants.length];
-      };
-      const visualRecipe = chooseLayout(visualLayouts.filter(layoutHasSemanticGeometry), true) ?? chooseLayout(visualLayouts);
-      // Rendered template backgrounds preserve complex master artwork, but OOXML placeholder
-      // geometry is not reliable enough for editable text until inheritance is fully resolved.
-      // Keep all editable text on deterministic, non-overlapping grids in that case.
-      const recipe = visualRecipe?.backgroundImageDataUrl ? undefined : chooseLayout(rankedLayouts.filter(layoutIsCompatible));
-      slide.background = visualRecipe?.backgroundColor ?? design.background;
-      const contentTitleColor = visualRecipe?.backgroundImageDataUrl && design.backgroundTreatment !== "content-panel" ? "#FFFFFF" : design.titleColor;
-      const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
-      const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
+      // The rendered artwork and the placeholder geometry describe the same
+      // layout, so editable text has to land on the geometry of the layout that
+      // was actually chosen. Dropping the geometry whenever a background image
+      // existed is what pushed the text onto a hard coded grid and left the
+      // template design unused.
+      const recipe = chosenLayouts[index];
+      const recipeTitleRegion = recipe ? templateTitleRegion(recipe) : undefined;
+      const recipeContentRegion = recipe ? templateContentRegion(recipe) : undefined;
+      const recipeColumnRegions = recipe ? templateColumnRegions(recipe) : undefined;
+      const recipeTitle = recipeTitleRegion?.frame;
+      const recipeContent = recipeContentRegion?.frame;
+      // The template states which ink and which size each placeholder was drawn
+      // with. Using them keeps a generated page inside the template's own
+      // typography instead of substituting a guessed palette. A design that
+      // explicitly overrides the ink (the contrast repair does) wins instead,
+      // otherwise the repair could never take effect.
+      const titleInk = design.inkOverride ? design.titleColor : (recipeTitleRegion?.textColor ?? design.titleColor);
+      const bodyInk = design.inkOverride ? design.bodyColor : (recipeContentRegion?.textColor ?? design.bodyColor);
+      const templateTitleSize = recipeTitleRegion?.fontSizePt;
+      const templateBodySize = recipeContentRegion?.fontSizePt;
+      const templateColumnSize = recipeColumnRegions?.[0]?.fontSizePt;
+      const artworkTreatment = design.backgroundTreatment ?? "none";
+      const keepsArtwork = artworkTreatment !== "simplify" && Boolean(recipe?.backgroundImageDataUrl);
+      slide.background = recipe?.backgroundColor ?? design.background;
+      const pageLuminance = colorLuminance(slide.background) ?? 1;
+      // The artwork under the placeholders is a range, not a single value: the
+      // ink has to read on the patch that carries the text.
+      const titleBackground = recipe?.backgroundLuminance?.title;
+      const bodyBackground = recipe?.backgroundLuminance?.body ?? titleBackground;
+      const titleLuminance = titleBackground ?? pageLuminance;
+      const bodyLuminance = bodyBackground ?? titleBackground ?? pageLuminance;
       const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);
       const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
-      const [leftRecipe, rightRecipe] = recipeBodies;
+      const [leftRecipe, rightRecipe] = recipeColumnRegions?.map((region) => region.frame) ?? [];
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       const intersects = (left: AiNormalizedRect, right: AiNormalizedRect) => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
       const insetObstacle = (region: AiNormalizedRect): AiNormalizedRect => ({ x: Math.max(0, region.x - 0.015), y: Math.max(0, region.y - 0.015), width: Math.min(1, region.width + 0.03), height: Math.min(1, region.height + 0.03) });
@@ -224,89 +238,177 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const safeLeft = visualSafe?.x ?? 0.07; const safeRight = visualSafe ? visualSafe.x + visualSafe.width : 0.93; const safeTop = visualSafe?.y ?? 0.20; const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : 0.87;
       const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(0.17, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
       slide.elements = [];
-      if (visualRecipe?.backgroundImageDataUrl) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: visualRecipe.backgroundImageDataUrl, mimeType: "image/png" }, altText: `模板版式背景：${visualRecipe.name ?? visualRecipe.index}` });
-      if (design.backgroundTreatment === "content-panel") slide.elements.push(shape(frame(Math.max(0, safeLeft - 0.025), Math.max(0, safeTop - 0.035), Math.min(1 - Math.max(0, safeLeft - 0.025), safeRight - safeLeft + 0.05), Math.min(1 - Math.max(0, safeTop - 0.035), safeBottom - safeTop + 0.07)), "#F7F8FA"));
-      const decorations = visualRecipe?.backgroundImageDataUrl ? [] : [...(command.templateDecorations ?? []), ...(visualRecipe?.decorations ?? [])];
+      if (keepsArtwork) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe!.backgroundImageDataUrl!, mimeType: "image/png" }, altText: `模板版式背景：${recipe!.name ?? recipe!.index}` });
+      const decorations = keepsArtwork ? [] : [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])];
       decorations.forEach((decoration) => {
         if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
       });
+      // A scrim belongs to the text block only. Painting the whole page erased the
+      // template artwork and was the single biggest reason a generated deck looked
+      // like a blank sheet with a coloured border.
+      const scrimFill = design.background;
+      const scrimLuminance = colorLuminance(scrimFill) ?? 1;
+      const contentBox = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
+      const titleBox = recipeTitle ?? { x: alignmentGrid.left, y: alignmentGrid.titleY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.titleHeight };
+      if (artworkTreatment === "local-scrim") {
+        slide.elements.push(shape(frame(Math.max(0, contentBox.x - 0.02), Math.max(0, contentBox.y - 0.02), Math.min(1 - Math.max(0, contentBox.x - 0.02), contentBox.width + 0.04), Math.min(1 - Math.max(0, contentBox.y - 0.02), contentBox.height + 0.04)), scrimFill));
+      }
+      const contentTextLuminance = artworkTreatment === "local-scrim" ? scrimLuminance : bodyLuminance;
+      const cardLuminance = colorLuminance("#F3F5F7") ?? 0.9;
+      const accentLuminance = colorLuminance(design.accent) ?? pageLuminance;
+      // Badges and header bars carry white text, so the brand accent is only
+      // used as their fill when it can hold white; otherwise it is deepened
+      // instead of letting the numerals turn into unreadable ink.
+      const accentFill = fillForInk("#FFFFFF", design.accent);
+      const accentFillLuminance = colorLuminance(accentFill) ?? accentLuminance;
+      // Text is drawn from the top of its frame, so a block that has to look
+      // centred inside a slot starts half its own height above the middle of
+      // the slot. The height comes from the same line estimator the quality
+      // gate uses, so a centred block is never cut off.
+      const pointsToFraction = (points: number) => points / 72 / (pageHeight / 914400);
+      const blockHeight = (value: string, widthFraction: number, fontSizePt: number) => {
+        const widthPt = widthFraction * (pageWidth / 914400) * 72;
+        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt) * fontSizePt * 1.2);
+      };
+      const centeredBlock = (value: string, slot: { x: number; y: number; width: number; height: number }, fontSizePt: number) => {
+        const height = blockHeight(value, slot.width, fontSizePt) * 1.04;
+        return frame(slot.x, slot.y + slot.height / 2 - height / 2, slot.width, height);
+      };
       if (design.layout === "cover" && !hasDeterministicBlock) {
-        slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
-        slide.elements.push(text(content.title, frame(0.10, 0.24, 0.78, 0.28), 42, design.titleColor, true, "left"));
-        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.10, 0.56, 0.72, 0.16), 19, design.bodyColor, false, "left"));
+        const coverTitle = safeFrame(recipeTitle, [0.10, 0.24, 0.78, 0.28], 0.25, 0.04);
+        const coverBody = safeFrame(recipeContent, [0.10, 0.56, 0.72, 0.16], 0.25, 0.08);
+        if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
+        slide.elements.push(text(content.title, coverTitle, templateTitleSize ?? 42, titleInk, true, "left", undefined, titleLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, coverBody, templateBodySize ?? 19, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (design.layout === "section" && !hasDeterministicBlock) {
-        slide.elements.push(shape(frame(0, 0, 0.32, 1), design.accent));
-        slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left"));
-        slide.elements.push(text(content.title, frame(0.39, 0.30, 0.50, 0.22), 36, design.titleColor, true, "left"));
-        if (content.body.trim()) slide.elements.push(text(content.body, frame(0.39, 0.56, 0.47, 0.20), 18, design.bodyColor, false, "left"));
+        const sectionTitle = safeFrame(recipeTitle, [0.39, 0.30, 0.50, 0.22], 0.25, 0.04);
+        const sectionBody = safeFrame(recipeContent, [0.39, 0.56, 0.47, 0.20], 0.25, 0.08);
+        // The template draws its own section number into the artwork, so PPTD must
+        // not add a second one on top of it.
+        if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.32, 1), design.accent), text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left", undefined, accentLuminance));
+        slide.elements.push(text(content.title, sectionTitle, templateTitleSize ?? 36, titleInk, true, "left", undefined, titleLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, sectionBody, templateBodySize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (timelineBlock) {
         const timelineItems = timelineBlock.items.slice(0, 6);
-        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
-        const startX = 0.10; const endX = 0.90; const lineY = 0.48;
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        const startX = contentBox.x + contentBox.width * 0.05; const endX = contentBox.x + contentBox.width * 0.95;
+        const lineY = contentBox.y + contentBox.height * 0.45;
+        const itemWidth = Math.min(0.22, contentBox.width * 0.18);
         slide.elements.push(shape(frame(startX, lineY, endX - startX, 0.008), design.accent));
         timelineItems.forEach((item, itemIndex) => {
-          const x = timelineItems.length === 1 ? 0.50 : startX + itemIndex * ((endX - startX) / (timelineItems.length - 1));
+          const x = timelineItems.length === 1 ? (startX + endX) / 2 : startX + itemIndex * ((endX - startX) / (timelineItems.length - 1));
           const above = itemIndex % 2 === 0;
-          slide.elements.push(shape(frame(x - 0.012, lineY - 0.016, 0.024, 0.04), design.accent, "ellipse"));
-          slide.elements.push(text(item.label, frame(x - 0.075, above ? 0.31 : 0.55, 0.15, 0.07), 15, design.accent, true, "center"));
-          slide.elements.push(text(item.text, frame(x - 0.075, above ? 0.38 : 0.63, 0.15, 0.14), 13, design.bodyColor, false, "center"));
+          slide.elements.push(shape(circleFrame(x, lineY - 0.15 / pageHeightIn, 0.3), design.accent, "ellipse"));
+          slide.elements.push(text(item.label, frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.30 : lineY + contentBox.height * 0.11, itemWidth, contentBox.height * 0.11), 15, design.accent, true, "center", undefined, contentTextLuminance));
+          slide.elements.push(text(item.text, frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.18 : lineY + contentBox.height * 0.23, itemWidth, contentBox.height * 0.22), 13, bodyInk, false, "center", undefined, contentTextLuminance));
         });
       } else if (comparisonBlock) {
-        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        const columnWidth = contentBox.width * 0.44;
         const columns = [
-          { x: 0.07, label: comparisonBlock.leftLabel, items: comparisonBlock.leftItems },
-          { x: 0.53, label: comparisonBlock.rightLabel, items: comparisonBlock.rightItems },
+          { x: contentBox.x, label: comparisonBlock.leftLabel, items: comparisonBlock.leftItems },
+          { x: contentBox.x + contentBox.width * 0.52, label: comparisonBlock.rightLabel, items: comparisonBlock.rightItems },
         ];
+        // The panel is sized to the list it carries. Stretching it to the whole
+        // placeholder left two thirds of both columns empty.
+        const labelSize = 18; const itemSize = 16;
+        const headerHeight = pointsToFraction(labelSize * 1.2) + 0.018;
+        const itemText = (items: string[]) => items.slice(0, 7).map((item) => `• ${item}`).join("\n\n");
+        const panelHeight = Math.min(contentBox.height, headerHeight + 0.03 + Math.max(...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize))) + 0.03);
+        const panelTop = contentBox.y + (contentBox.height - panelHeight) * 0.30;
         columns.forEach((column) => {
-          slide.elements.push(shape(frame(column.x, 0.25, 0.40, 0.62), "#F3F5F7"), shape(frame(column.x, 0.25, 0.40, 0.075), design.accent));
-          slide.elements.push(text(column.label, frame(column.x + 0.025, 0.263, 0.35, 0.05), 18, "#FFFFFF", true, "center"));
-          slide.elements.push(text(column.items.slice(0, 7).map((item) => `• ${item}`).join("\n\n"), frame(column.x + 0.035, 0.36, 0.33, 0.44), 16, design.bodyColor, false, "left"));
+          slide.elements.push(shape(frame(column.x, panelTop, columnWidth, panelHeight), "#F3F5F7"), shape(frame(column.x, panelTop, columnWidth, headerHeight), accentFill));
+          slide.elements.push(text(column.label, centeredBlock(column.label, { x: column.x + 0.025, y: panelTop, width: columnWidth - 0.05, height: headerHeight }, labelSize), labelSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
+          slide.elements.push(text(itemText(column.items), frame(column.x + 0.035, panelTop + headerHeight + 0.015, columnWidth - 0.07, panelHeight - headerHeight - 0.03), itemSize, bodyInk, false, "left", undefined, cardLuminance));
         });
       } else if (metricBlocks.length > 0) {
         const metrics = metricBlocks.slice(0, 6); const columns = metrics.length > 3 ? 3 : metrics.length; const rows = Math.ceil(metrics.length / columns);
-        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        const cellWidth = contentBox.width / columns;
+        const cardGap = 0.03;
+        const valueSize = 30;
+        const labelSize = 15;
+        // The stat card carries a number and its label; it is sized to that
+        // pair instead of stretching over the whole placeholder, which used to
+        // leave the label stranded at the bottom of a mostly empty card.
+        const cardHeight = Math.min(0.24, contentBox.height / rows - 0.04);
+        const gridHeight = rows * cardHeight + (rows - 1) * cardGap;
+        const gridTop = contentBox.y + (contentBox.height - gridHeight) * 0.30;
         metrics.forEach((metric, metricIndex) => {
-          const column = metricIndex % columns; const row = Math.floor(metricIndex / columns); const width = 0.84 / columns - 0.025; const height = 0.56 / rows - 0.035; const x = 0.08 + column * (0.84 / columns); const y = 0.29 + row * (0.56 / rows);
-          slide.elements.push(shape(frame(x, y, width, height), "#F3F5F7"), text(metric.value, frame(x + 0.025, y + 0.055, width - 0.05, height * 0.42), 30, design.accent, true, "center"), text(metric.label, frame(x + 0.025, y + height * 0.58, width - 0.05, height * 0.25), 15, design.bodyColor, false, "center"));
+          const column = metricIndex % columns; const row = Math.floor(metricIndex / columns);
+          const width = cellWidth - 0.025;
+          const x = contentBox.x + column * cellWidth; const y = gridTop + row * (cardHeight + cardGap);
+          slide.elements.push(shape(frame(x, y, width, cardHeight), "#F3F5F7"));
+          slide.elements.push(text(metric.value, centeredBlock(metric.value, { x: x + 0.02, y: y + cardHeight * 0.10, width: width - 0.04, height: cardHeight * 0.46 }, valueSize), valueSize, design.accent, true, "center", undefined, cardLuminance));
+          slide.elements.push(text(metric.label, centeredBlock(metric.label, { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 }, labelSize), labelSize, bodyInk, false, "center", undefined, cardLuminance));
         });
       } else if (processBlock) {
-        const processItems = processBlock.items.slice(0, 6); const width = 0.78 / Math.max(processItems.length, 1);
-        slide.elements.push(text(content.title, frame(0.07, 0.07, 0.86, 0.12), 30, design.titleColor, true, "left"), shape(frame(0.07, 0.22, 0.12, 0.012), design.accent));
+        const processItems = processBlock.items.slice(0, 6);
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        const stepGap = 0.03;
+        const stepWidth = (contentBox.width - stepGap * Math.max(processItems.length - 1, 0)) / Math.max(processItems.length, 1);
+        const labelSize = 17; const textSize = 14; const badgeSize = 15;
+        const badgeDiameter = 0.5;
+        const badgeHeight = badgeDiameter / pageHeightIn;
+        // A step card holds a label and a sentence. Sizing it to that content
+        // keeps the row compact instead of leaving a tall empty panel.
+        const stepHeight = Math.min(0.26, contentBox.height * 0.44);
+        const stepTop = contentBox.y + (contentBox.height - stepHeight) * 0.34;
         processItems.forEach((item, itemIndex) => {
-          const x = 0.07 + itemIndex * (0.86 / processItems.length);
-          slide.elements.push(shape(frame(x, 0.35, width, 0.38), "#F3F5F7"), shape(frame(x + 0.02, 0.29, 0.055, 0.075), design.accent, "ellipse"));
-          slide.elements.push(text(String(itemIndex + 1), frame(x + 0.025, 0.302, 0.045, 0.04), 15, "#FFFFFF", true, "center"), text(item.label, frame(x + 0.025, 0.40, width - 0.05, 0.08), 17, design.titleColor, true, "center"), text(item.text, frame(x + 0.025, 0.51, width - 0.05, 0.15), 14, design.bodyColor, false, "center"));
-          if (itemIndex < processItems.length - 1) slide.elements.push(text("→", frame(x + width, 0.48, 0.86 / processItems.length - width, 0.08), 22, design.accent, true, "center"));
+          const x = contentBox.x + itemIndex * (stepWidth + stepGap);
+          const badgeY = stepTop - 0.01 - badgeHeight / 2;
+          slide.elements.push(shape(frame(x, stepTop, stepWidth, stepHeight), "#F3F5F7"), shape(circleFrame(x + 0.02, badgeY, badgeDiameter), accentFill, "ellipse"));
+          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.02, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, badgeSize), badgeSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
+          slide.elements.push(text(item.label, centeredBlock(item.label, { x: x + 0.025, y: stepTop + stepHeight * 0.12, width: stepWidth - 0.05, height: stepHeight * 0.28 }, labelSize), labelSize, titleInk, true, "center", undefined, cardLuminance));
+          slide.elements.push(text(item.text, centeredBlock(item.text, { x: x + 0.025, y: stepTop + stepHeight * 0.44, width: stepWidth - 0.05, height: stepHeight * 0.46 }, textSize), textSize, bodyInk, false, "center", undefined, cardLuminance));
+          if (itemIndex < processItems.length - 1) {
+            const arrowHeight = pointsToFraction(22 * 1.2);
+            slide.elements.push(text("→", frame(x + stepWidth, stepTop + stepHeight / 2 - arrowHeight / 2, stepGap, arrowHeight), 22, design.accent, true, "center", undefined, contentTextLuminance));
+          }
         });
       } else if (design.layout === "quote") {
-        slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.35, 0.08), 28, design.titleColor, true, "left"));
-        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.15, 0.31, 0.68, 0.46], 0.35, 0.28), Math.max(18, bodySize), design.bodyColor, false, "left"));
+        if (!keepsArtwork) slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.25, 0.04), templateTitleSize ?? 28, titleInk, true, "left", undefined, titleLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeContent, [0.15, 0.31, 0.68, 0.46], 0.25, 0.12), templateBodySize ?? 20, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (design.layout === "cards" && items.length > 1) {
-        slide.elements.push(text(content.title, frame(alignmentGrid.left, alignmentGrid.titleY, Math.max(0.40, alignmentGrid.right - alignmentGrid.left - 0.10), alignmentGrid.titleHeight), 32, contentTitleColor, true, "left"), text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, contentTitleColor, true, "right"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
         const visible = items.slice(0, 6);
         const columns = visible.length === 3 || visible.length >= 5 ? 3 : 2;
         const rows = Math.ceil(visible.length / columns);
-        const contentWidth = alignmentGrid.right - alignmentGrid.left; const contentHeight = alignmentGrid.contentBottom - alignmentGrid.contentY;
+        const contentWidth = contentBox.width; const contentHeight = contentBox.height;
         const columnGap = 0.022; const rowGap = 0.040;
-        const cardWidth = (contentWidth - columnGap * (columns - 1)) / columns; const cardHeight = rows === 1 ? 0.19 : 0.18;
-        const gridHeight = rows * cardHeight + (rows - 1) * rowGap; const gridTop = alignmentGrid.contentY + (contentHeight - gridHeight) / 2;
+        const cardWidth = (contentWidth - columnGap * (columns - 1)) / columns;
+        const cardHeight = Math.min(0.24, contentHeight / rows - 0.04);
+        const gridHeight = rows * cardHeight + (rows - 1) * rowGap;
+        const gridTop = contentBox.y + (contentHeight - gridHeight) * 0.30;
         visible.forEach((item, itemIndex) => {
           const row = Math.floor(itemIndex / columns); const column = itemIndex % columns;
           const rowItemCount = Math.min(columns, visible.length - row * columns);
           const rowWidth = rowItemCount * cardWidth + (rowItemCount - 1) * columnGap;
-          const rowStart = alignmentGrid.left + (contentWidth - rowWidth) / 2;
+          const rowStart = contentBox.x + (contentWidth - rowWidth) / 2;
           const x = rowStart + column * (cardWidth + columnGap); const y = gridTop + row * (cardHeight + rowGap);
           const cleanItem = item.replace(/^\d+[.、]\s*/, "");
-          slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), "#FFFFFF"), shape(frame(x, y, cardWidth, 0.008), design.accent), shape(frame(x + 0.025, y + 0.061, 0.032, 0.057), design.accent, "ellipse"));
-          slide.elements.push(text(String(itemIndex + 1), frame(x + 0.027, y + 0.073, 0.028, 0.030), 12, "#FFFFFF", true, "center"), text(cleanItem, frame(x + 0.075, y + 0.045, cardWidth - 0.105, 0.095), 16, "#293241", true, "left"));
+          const badgeDiameter = 0.42;
+          const badgeHeight = badgeDiameter / pageHeightIn;
+          const badgeY = y + cardHeight / 2 - badgeHeight / 2;
+          slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), "#FFFFFF"), shape(frame(x, y, cardWidth, 0.008), design.accent));
+          slide.elements.push(shape(circleFrame(x + 0.025, badgeY, badgeDiameter), accentFill, "ellipse"));
+          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.025, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
+          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: x + 0.075, y: y + cardHeight * 0.16, width: cardWidth - 0.105, height: cardHeight * 0.68 }, 16), 16, "#293241", true, "left", undefined, cardLuminance));
         });
       } else if (design.layout === "split" && items.length > 1) {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.35, 0.08), 30, design.titleColor, true, "left"), shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
-        const middle = Math.ceil(items.length / 2); slide.elements.push(text(items.slice(0, middle).join("\n\n"), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), bodySize, design.bodyColor, false, "left"), text(items.slice(middle).join("\n\n"), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), bodySize, design.bodyColor, false, "left"));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
+        const middle = Math.ceil(items.length / 2);
+        slide.elements.push(text(items.slice(0, middle).join("\n\n"), hasSafeColumns ? frame(leftRecipe!.x, leftRecipe!.y, leftRecipe!.width, leftRecipe!.height) : frame(0.08, 0.28, 0.36, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance), text(items.slice(middle).join("\n\n"), hasSafeColumns ? frame(rightRecipe!.x, rightRecipe!.y, rightRecipe!.width, rightRecipe!.height) : frame(0.57, 0.28, 0.35, 0.54), templateColumnSize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
       } else {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.35, 0.08), 30, contentTitleColor, true, "left"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
-        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
+        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeContent, [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.25, 0.12), templateBodySize ?? 20, bodyInk, false, "left", undefined, contentTextLuminance));
       }
       // Link rendered title/body text back to semantic content. Structured
       // layouts (cards, timeline items, metrics) stay decorative because one

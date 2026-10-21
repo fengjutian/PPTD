@@ -44,6 +44,7 @@ export async function buildPptx(
   if (blocking.length > 0) {
     throw new Error(`EXPORT_VALIDATION_FAILED: ${blocking.map((issue) => issue.message).join("；")}`);
   }
+  throwIfCancelled(options.signal);
 
   const pptx = new PptxGenJS();
   const layoutName = "PPTD_CUSTOM";
@@ -78,6 +79,9 @@ export async function buildPptx(
           color: color(element.style.color),
           bold: element.style.bold,
           align: element.style.align,
+          // The canvas draws text from the top of its frame; the export has to
+          // agree or the file no longer looks like what the editor shows.
+          valign: "top",
           margin: 0,
           breakLine: false,
           fit: "shrink",

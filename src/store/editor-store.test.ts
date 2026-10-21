@@ -86,6 +86,16 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 1, design: 1 });
   });
 
+  it("keeps the selected element through design edits and clears it after deletion", () => {
+    const state = useEditorStore.getState();
+    const element = state.document.slides[0]!.elements[0]!;
+    state.selectElement(element.id);
+    state.execute({ type: "move-element", slideId: state.activeSlideId, elementId: element.id, x: inches(2), y: inches(2) });
+    expect(useEditorStore.getState().selectedElementId).toBe(element.id);
+    state.execute({ type: "delete-element", slideId: state.activeSlideId, elementId: element.id });
+    expect(useEditorStore.getState().selectedElementId).toBeNull();
+  });
+
   it("replaces a generated document as one undoable transaction", () => {
     const generated = createDocument();
     generated.title = "AI 生成文稿";

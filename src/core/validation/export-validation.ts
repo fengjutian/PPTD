@@ -52,7 +52,12 @@ export async function validatePresentationForExport(
 
   for (const [slideIndex, slide] of document.slides.entries()) {
     if (slide.elements.length === 0) {
-      issues.push({ code: "empty-slide", severity: "warning", message: `第 ${slideIndex + 1} 页没有可导出对象`, slideIndex });
+      issues.push({
+        code: "empty-slide",
+        severity: "warning",
+        message: `第 ${slideIndex + 1} 页没有可导出对象`,
+        slideIndex,
+      });
     }
     if (slide.content.status !== "approved") {
       issues.push({
@@ -65,7 +70,13 @@ export async function validatePresentationForExport(
 
     for (const element of slide.elements) {
       if (seenIds.has(element.id)) {
-        issues.push({ code: "duplicate-id", severity: "error", message: "文档中存在重复的元素 ID", slideIndex, elementId: element.id });
+        issues.push({
+          code: "duplicate-id",
+          severity: "error",
+          message: "文档中存在重复的元素 ID",
+          slideIndex,
+          elementId: element.id,
+        });
       }
       seenIds.add(element.id);
 

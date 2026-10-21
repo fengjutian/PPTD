@@ -1,0 +1,172 @@
+{
+  "1": {
+    "title": {
+      "darkest": 0.1379,
+      "lightest": 0.236
+    },
+    "body": {
+      "darkest": 0.1335,
+      "lightest": 0.2032
+    }
+  },
+  "2": {
+    "title": {
+      "darkest": 0.1901,
+      "lightest": 0.2468
+    },
+    "body": {
+      "darkest": 0.1548,
+      "lightest": 0.2202
+    }
+  },
+  "3": {
+    "title": {
+      "darkest": 0.4046,
+      "lightest": 0.5491
+    },
+    "body": {
+      "darkest": 0.4144,
+      "lightest": 0.5431
+    }
+  },
+  "4": {
+    "title": {
+      "darkest": 0.4148,
+      "lightest": 0.5552
+    },
+    "body": {
+      "darkest": 0.4456,
+      "lightest": 0.5869
+    }
+  },
+  "5": {
+    "title": {
+      "darkest": 0.0521,
+      "lightest": 0.0939
+    },
+    "body": {
+      "darkest": 0.0582,
+      "lightest": 0.1003
+    }
+  },
+  "6": {
+    "title": {
+      "darkest": 0.0467,
+      "lightest": 0.08
+    },
+    "body": {
+      "darkest": 0.0491,
+      "lightest": 0.082
+    }
+  },
+  "7": {
+    "title": {
+      "darkest": 0.3943,
+      "lightest": 0.5431
+    },
+    "body": {
+      "darkest": 0.3989,
+      "lightest": 0.4677
+    }
+  },
+  "8": {
+    "title": {
+      "darkest": 0.2156,
+      "lightest": 0.3199
+    },
+    "body": {
+      "darkest": 0.291,
+      "lightest": 0.3048
+    }
+  },
+  "9": {
+    "title": {
+      "darkest": 0.0875,
+      "lightest": 0.1395
+    },
+    "body": {
+      "darkest": 0.0875,
+      "lightest": 0.113
+    }
+  },
+  "10": {
+    "title": {
+      "darkest": 0.0479,
+      "lightest": 0.0878
+    },
+    "body": {
+      "darkest": 0.1045,
+      "lightest": 0.113
+    }
+  },
+  "11": {
+    "title": {
+      "darkest": 1,
+      "lightest": 1
+    },
+    "body": {
+      "darkest": 0.9911,
+      "lightest": 1
+    }
+  },
+  "12": {
+    "title": {
+      "darkest": 1,
+      "lightest": 1
+    },
+    "body": {
+      "darkest": 1,
+      "lightest": 1
+    }
+  },
+  "13": {
+    "title": {
+      "darkest": 1,
+      "lightest": 1
+    },
+    "body": {
+      "darkest": 1,
+      "lightest": 1
+    }
+  },
+  "14": {
+    "title": {
+      "darkest": 0.3947,
+      "lightest": 0.5795
+    },
+    "body": {
+      "darkest": 0.3993,
+      "lightest": 0.612
+    }
+  },
+  "15": {
+    "title": {
+      "darkest": 0.1947,
+      "lightest": 0.3143
+    },
+    "body": {
+      "darkest": 0.1975,
+      "lightest": 0.3199
+    }
+  },
+  "16": {
+    "title": {
+      "darkest": 0.0896,
+      "lightest": 0.1606
+    },
+    "body": {
+      "darkest": 0.0896,
+      "lightest": 0.164
+    }
+  },
+  "17": {
+    "title": {
+      "darkest": 0.045,
+      "lightest": 0.0958
+    },
+    "body": {
+      "darkest": 0.045,
+      "lightest": 0.0999
+    }
+  }
+}
