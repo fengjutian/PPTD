@@ -210,6 +210,27 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text)).toEqual([content.title, content.body]);
   });
 
+  it("rotates equally suitable rendered template layouts instead of repeating one background", () => {
+    const source = createDocument();
+    const slides = [
+      { title: "第一页", body: "正文一", speakerNotes: "" },
+      { title: "第二页", body: "正文二", speakerNotes: "" },
+    ];
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const regionSet = [
+      { role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } },
+      { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.84, height: 0.55 } },
+    ];
+    const templateLayouts = [
+      { index: 1, name: "正文甲", backgroundImageDataUrl: "data:image/png;base64,AAAA", regions: regionSet },
+      { index: 2, name: "正文乙", backgroundImageDataUrl: "data:image/png;base64,BBBB", regions: regionSet },
+    ];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "多版式", slides, designs: [design, design], templateLayouts }));
+    const backgrounds = result.slides.map((slide) => slide.elements.find((element) => element.type === "image"));
+    expect(backgrounds[0]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[0]!.backgroundImageDataUrl } });
+    expect(backgrounds[1]).toMatchObject({ type: "image", source: { dataUrl: templateLayouts[1]!.backgroundImageDataUrl } });
+  });
+
   it("renders timeline blocks without parsing the body string", () => {
     const source = createDocument();
     const content = { title: "里程碑", body: "这段正文不应驱动时间线", speakerNotes: "", blocks: [{ type: "timeline" as const, items: [{ label: "第一阶段", text: "调研" }, { label: "第二阶段", text: "交付" }] }] };

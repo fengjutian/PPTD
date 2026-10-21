@@ -13,6 +13,14 @@ const CANVAS_WIDTH = 960;
 type AppView = "editor" | "ai" | "theme" | "settings";
 type PageMessage = { id: number; text: string; kind: "info" | "success" | "error" };
 type DesignProgress = { percent: number; label: string };
+type TemplateLayoutRender = { layoutIndex: number; layoutName: string; dataUrl: string };
+
+function matchTemplateLayoutRender(renders: TemplateLayoutRender[], layoutIndex: number, layoutName: string): TemplateLayoutRender | undefined {
+  const normalizedName = layoutName.trim().toLocaleLowerCase();
+  const nameMatches = renders.filter((render) => render.layoutName.trim().toLocaleLowerCase() === normalizedName);
+  if (nameMatches.length > 0) return nameMatches.sort((left, right) => Math.abs(left.layoutIndex - layoutIndex) - Math.abs(right.layoutIndex - layoutIndex))[0];
+  return renders.find((render) => render.layoutIndex === layoutIndex);
+}
 
 function ToolButton({ label, onClick, disabled, children }: { label: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode }) {
   return <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
@@ -90,7 +98,7 @@ export function App() {
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const [templatePreview, setTemplatePreview] = useState<string | null>();
   const [templateAnalysis, setTemplateAnalysis] = useState<TemplateAnalysis>();
-  const [templateLayoutRenders, setTemplateLayoutRenders] = useState<Array<{ layoutIndex: number; dataUrl: string }>>([]);
+  const [templateLayoutRenders, setTemplateLayoutRenders] = useState<TemplateLayoutRender[]>([]);
   const [templatePreviewBusy, setTemplatePreviewBusy] = useState(false);
   const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
@@ -288,7 +296,7 @@ export function App() {
         pageSize: hasTemplateSize ? { width: emu(templateAnalysis.slideWidthEmu!), height: emu(templateAnalysis.slideHeightEmu!) } : undefined,
         fontFamily: templateAnalysis.majorFont || templateAnalysis.minorFont || undefined,
         templateDecorations: hasTemplateSize ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })) : undefined,
-        templateLayouts: hasTemplateSize ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts.map((layout) => ({ ...layout, name: layout.name })) : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))).map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: templateLayoutRenders.find((render) => render.layoutIndex === layout.index)?.dataUrl, decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
+        templateLayouts: hasTemplateSize ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts.map((layout) => ({ ...layout, name: layout.name })) : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))).map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)?.dataUrl, decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
       });
       setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
       setTemplatePickerOpen(false);

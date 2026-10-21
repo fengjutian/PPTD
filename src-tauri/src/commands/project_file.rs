@@ -30,6 +30,7 @@ pub struct TemplateRecord {
 #[serde(rename_all = "camelCase")]
 pub struct TemplateLayoutRender {
     layout_index: usize,
+    layout_name: String,
     data_url: String,
 }
 
@@ -54,7 +55,7 @@ pub struct TemplateSlideSummary {
     regions: Vec<TemplateRegion>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateRegion {
     role: String,
@@ -597,6 +598,8 @@ try {
   $powerPoint.AutomationSecurity = 3
   $presentation = $powerPoint.Presentations.Open($Source, 0, 0, 0)
   $globalIndex = 0
+  $manifest = Join-Path $Output 'layouts.tsv'
+  Set-Content -LiteralPath $manifest -Value '' -Encoding UTF8
   for ($designIndex = 1; $designIndex -le $presentation.Designs.Count; $designIndex++) {
     $master = $presentation.Designs.Item($designIndex).SlideMaster
     for ($layoutIndex = 1; $layoutIndex -le $master.CustomLayouts.Count; $layoutIndex++) {
@@ -605,6 +608,7 @@ try {
       $slide = $presentation.Slides.AddSlide($presentation.Slides.Count + 1, $layout)
       $target = Join-Path $Output ("layout{0}.png" -f $globalIndex)
       $slide.Export($target, 'PNG', 1600, 900)
+      Add-Content -LiteralPath $manifest -Value ("{0}`t{1}" -f $globalIndex, $layout.Name) -Encoding UTF8
       $slide.Delete()
     }
   }
@@ -638,6 +642,13 @@ try {
                 status.code().unwrap_or(-1)
             ));
         }
+        let manifest = fs::read_to_string(output.join("layouts.tsv"))
+            .map_err(|error| format!("TEMPLATE_LAYOUT_MANIFEST_READ_FAILED: {error}"))?;
+        let layout_names: std::collections::HashMap<usize, String> = manifest
+            .lines()
+            .filter_map(|line| line.trim_start_matches('\u{feff}').split_once('\t'))
+            .filter_map(|(index, name)| index.parse::<usize>().ok().map(|index| (index, name.trim().to_owned())))
+            .collect();
         let mut renders = Vec::new();
         for index in 1..=128 {
             let path = output.join(format!("layout{index}.png"));
@@ -651,6 +662,7 @@ try {
             }
             renders.push(TemplateLayoutRender {
                 layout_index: index,
+                layout_name: layout_names.get(&index).cloned().unwrap_or_default(),
                 data_url: format!("data:image/png;base64,{}", BASE64.encode(bytes)),
             });
         }
@@ -1021,6 +1033,13 @@ pub fn analyze_pptx_template(
         });
     }
 
+    let master_regions = read_zip_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?
+        .and_then(|xml| {
+            roxmltree::Document::parse(&xml)
+                .ok()
+                .map(|document| extract_template_regions(&document))
+        })
+        .unwrap_or_default();
     let mut layouts = Vec::new();
     for number in 1..=layout_count {
         let entry_name = format!("ppt/slideLayouts/slideLayout{number}.xml");
@@ -1035,7 +1054,17 @@ pub fn analyze_pptx_template(
             .and_then(|node| node.attribute("name"))
             .unwrap_or("未命名版式")
             .to_owned();
-        let regions = extract_template_regions(&document);
+        let mut regions = extract_template_regions(&document);
+        for role in ["title", "body", "image"] {
+            if !regions.iter().any(|region| region.role == role) {
+                regions.extend(
+                    master_regions
+                        .iter()
+                        .filter(|region| region.role == role)
+                        .cloned(),
+                );
+            }
+        }
         let background_color = extract_background_color(&document);
         let decorations = extract_template_decorations(&document);
         if !regions.is_empty() {

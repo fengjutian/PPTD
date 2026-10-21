@@ -109,12 +109,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
       const rankedLayouts = command.templateLayouts?.filter((layout) => layout.regions.some((region) => region.role === "title")) ?? [];
+      const layoutIsCompatible = (layout: AiTemplateLayout): boolean => {
+        const title = layout.regions.find((region) => region.role === "title")?.frame;
+        const bodies = layout.regions.filter((region) => region.role === "body").map((region) => region.frame);
+        const overlaps = (left: { x: number; y: number; width: number; height: number }, right: { x: number; y: number; width: number; height: number }) => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
+        if (!title || bodies.some((body) => overlaps(title, body))) return false;
+        if (design.layout === "cover" || design.layout === "section") return true;
+        if (bodies.length === 0) return false;
+        return !((design.layout === "split" || comparisonBlock) && bodies.length < 2);
+      };
       const layoutScore = (layout: AiTemplateLayout): number => {
         const name = (layout.name ?? "").toLowerCase();
-        const title = layout.regions.find((region) => region.role === "title")?.frame;
-        const contentRegions = layout.regions.filter((region) => region.role === "body").map((region) => region.frame);
-        const overlaps = (left: { x: number; y: number; width: number; height: number }, right: { x: number; y: number; width: number; height: number }) => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
-        if (!title || contentRegions.some((region) => overlaps(title, region))) return -10_000;
         const bodies = layout.regions.filter((region) => region.role === "body").length;
         const images = layout.regions.filter((region) => region.role === "image").length;
         const keyword = (...values: string[]) => values.some((value) => name.includes(value));
@@ -125,9 +130,21 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (design.layout === "quote") return (keyword("quote", "引言", "引用") ? 100 : 0) + (bodies === 1 ? 15 : 0);
         return (keyword("title and content", "标题和内容", "正文") ? 60 : 0) + (bodies === 1 ? 20 : 0);
       };
-      const recipeCandidate = [...rankedLayouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index)[0];
-      const recipe = recipeCandidate && layoutScore(recipeCandidate) > -10_000 ? recipeCandidate : undefined;
-      slide.background = recipe?.backgroundColor ?? design.background;
+      const layoutHasSemanticGeometry = (layout: AiTemplateLayout): boolean => {
+        const bodyCount = layout.regions.filter((region) => region.role === "body").length;
+        if (design.layout === "cover" || design.layout === "section") return true;
+        if (design.layout === "split" || comparisonBlock) return bodyCount >= 2;
+        return bodyCount >= 1;
+      };
+      const chooseLayout = (layouts: AiTemplateLayout[]) => {
+        const sorted = [...layouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index);
+        const bestScore = sorted[0] ? layoutScore(sorted[0]) : undefined;
+        const best = bestScore === undefined ? [] : sorted.filter((layout) => layoutScore(layout) === bestScore);
+        return best.length > 0 ? best[index % best.length] : undefined;
+      };
+      const visualRecipe = chooseLayout(rankedLayouts.filter(layoutHasSemanticGeometry)) ?? chooseLayout(rankedLayouts);
+      const recipe = chooseLayout(rankedLayouts.filter(layoutIsCompatible));
+      slide.background = visualRecipe?.backgroundColor ?? design.background;
       const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
       const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
       const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);
@@ -135,8 +152,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const [leftRecipe, rightRecipe] = recipeBodies;
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       slide.elements = [];
-      if (recipe?.backgroundImageDataUrl) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe.backgroundImageDataUrl, mimeType: "image/png" }, altText: `模板版式背景：${recipe.name ?? recipe.index}` });
-      [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])].forEach((decoration) => {
+      if (visualRecipe?.backgroundImageDataUrl) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: visualRecipe.backgroundImageDataUrl, mimeType: "image/png" }, altText: `模板版式背景：${visualRecipe.name ?? visualRecipe.index}` });
+      [...(command.templateDecorations ?? []), ...(visualRecipe?.decorations ?? [])].forEach((decoration) => {
         if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
       });
       if (design.layout === "cover" && !hasDeterministicBlock) {
