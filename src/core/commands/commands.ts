@@ -1,4 +1,4 @@
-import type { ElementId, Emu, PresentationDocument, RectEmu, SlideId, SupportedImageMimeType } from "../document-model";
+import type { ContentBlock, ElementId, Emu, PresentationDocument, RectEmu, SlideId, SupportedImageMimeType } from "../document-model";
 import { createSlide, inches } from "../document-model";
 
 export type ChangeDomain = "content" | "design" | "both";
@@ -11,6 +11,20 @@ export type AiContentBlock =
   | { type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
   | { type: "process"; items: Array<{ label: string; text: string }> };
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
+
+function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] | undefined {
+  if (!blocks) return undefined;
+  return blocks.map((block): ContentBlock => {
+    const id = crypto.randomUUID();
+    if (block.type === "paragraph") return { id, type: "paragraph", text: block.text };
+    if (block.type === "bullet-list") return { id, type: "bullet-list", items: [...block.items] };
+    if (block.type === "quote") return { id, type: "quote", text: block.text, attribution: block.attribution };
+    if (block.type === "metric") return { id, type: "metric", label: block.label, value: block.value };
+    if (block.type === "timeline") return { id, type: "timeline", items: block.items.map((item) => ({ ...item })) };
+    if (block.type === "comparison") return { id, type: "comparison", leftLabel: block.leftLabel, rightLabel: block.rightLabel, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
+    return { id, type: "process", items: block.items.map((item) => ({ ...item })) };
+  });
+}
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
 export interface AiNormalizedRect { x: number; y: number; width: number; height: number }
 export type AiElementRepair =
@@ -47,6 +61,7 @@ export type DocumentCommand =
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
+  | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
@@ -84,7 +99,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     document.title = command.title.trim();
     document.slides = command.slides.map((draft, index) => {
       const slide = createSlide(index + 1);
-      slide.content = { title: draft.title, body: draft.body, speakerNotes: draft.speakerNotes, status: "approved" };
+      const blocks = toContentBlocks(draft.blocks);
+      slide.content = { title: draft.title, body: draft.body, ...(blocks ? { blocks } : {}), speakerNotes: draft.speakerNotes, status: "approved" };
       const title = slide.elements[0];
       if (title?.type === "text") title.text = draft.title;
       if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", contentRef: "body", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
@@ -121,7 +137,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const design = command.designs[index]!;
       const slide = createSlide(index + 1);
       slide.background = design.background;
-      slide.content = { ...content, status: "approved" };
+      const contentBlocks = toContentBlocks(content.blocks);
+      slide.content = { title: content.title, body: content.body, ...(contentBlocks ? { blocks: contentBlocks } : {}), speakerNotes: content.speakerNotes, status: "approved" };
       const items = points(content.body);
       const bodySize = content.body.length > 260 ? 15 : content.body.length > 150 ? 17 : 20;
       const blocks = content.blocks ?? [];
@@ -338,7 +355,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const duplicate = {
       ...source,
       id: crypto.randomUUID() as SlideId,
-      content: { ...source.content },
+      content: { ...source.content, ...(source.content.blocks ? { blocks: structuredClone(source.content.blocks) } : {}) },
       elements: source.elements.map((element) => element.type === "text"
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
         : element.type === "shape"
@@ -423,17 +440,30 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const sourceIndex = slide.elements.findIndex((item) => item.id === command.elementId);
     const offset = inches(0.2);
     const duplicate = element.type === "text"
-      ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
+      ? { ...element, id: crypto.randomUUID() as ElementId, contentRef: "decorative" as const, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
       : element.type === "shape"
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
         : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, source: { ...element.source } };
     slide.elements.splice(sourceIndex + 1, 0, duplicate);
     return;
   }
+  if (command.type === "reorder-element") {
+    const sourceIndex = slide.elements.findIndex((item) => item.id === command.elementId);
+    if (!Number.isInteger(command.toIndex) || command.toIndex < 0 || command.toIndex >= slide.elements.length) {
+      throw new Error("ELEMENT_INDEX_OUT_OF_RANGE");
+    }
+    if (sourceIndex === command.toIndex) return;
+    const [moved] = slide.elements.splice(sourceIndex, 1);
+    slide.elements.splice(command.toIndex, 0, moved!);
+    return;
+  }
   if (command.type === "delete-element") {
     if (element.type === "text") {
       if (element.contentRef === "title") slide.content.title = "";
-      if (element.contentRef === "body") slide.content.body = "";
+      if (element.contentRef === "body") {
+        slide.content.body = "";
+        slide.content.blocks = [];
+      }
     }
     slide.elements.splice(slide.elements.findIndex((item) => item.id === command.elementId), 1);
     return;
@@ -455,7 +485,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     element.text = command.text;
     const contentBound = element.contentRef === "title" || element.contentRef === "body" || (!element.contentRef && slide.elements[0]?.id === element.id);
     if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id)) slide.content.title = command.text;
-    if (element.contentRef === "body") slide.content.body = command.text;
+    if (element.contentRef === "body") {
+      slide.content.body = command.text;
+      slide.content.blocks = command.text.trim()
+        ? [{ id: slide.content.blocks?.[0]?.id ?? crypto.randomUUID(), type: "paragraph", text: command.text }]
+        : [];
+    }
     if (contentBound && slide.content.status === "approved") slide.content.status = "changed";
   }
 }

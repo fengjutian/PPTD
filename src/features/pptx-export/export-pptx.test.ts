@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { strFromU8, unzipSync } from "fflate";
 import { applyCommand } from "../../core/commands";
 import { createDocument, inches } from "../../core/document-model";
 import { buildPptx } from "./export-pptx";
@@ -24,6 +25,22 @@ describe("PPTX export", () => {
     expect(String.fromCharCode(...result.bytes.slice(0, 2))).toBe("PK");
     expect(result.report.nativeObjectCount).toBe(2);
     expect(result.report.package.valid).toBe(true);
+  });
+
+  it("preserves document z-order in the slide XML", async () => {
+    const document = createDocument();
+    const slideId = document.slides[0]!.id;
+    applyCommand(document, { type: "add-shape", slideId, shape: "rectangle" });
+    const shape = document.slides[0]!.elements[1]!;
+    applyCommand(document, { type: "move-element", slideId, elementId: shape.id, x: shape.frame.x, y: (0.1 * 914_400) as typeof shape.frame.y });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    const titleIndex = slideXml.indexOf("开始创造你的演示文稿");
+    const shapeIndex = slideXml.indexOf("D35230");
+    expect(titleIndex).toBeGreaterThan(-1);
+    expect(shapeIndex).toBeGreaterThan(-1);
+    expect(titleIndex).toBeLessThan(shapeIndex);
+    expect((slideXml.match(/<p:sp>/g) ?? []).length).toBe(2);
   });
 
   it("warns about objects outside the page without changing the document", async () => {

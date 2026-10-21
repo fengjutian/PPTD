@@ -90,5 +90,8 @@ export async function choosePptxPath(title: string): Promise<string | null> {
 }
 
 export async function writePptx(path: string, bytes: Uint8Array): Promise<void> {
-  await invoke("write_pptx", { path, bytes: Array.from(bytes) });
+  const encoded = new TextEncoder().encode(path);
+  let binary = "";
+  for (const byte of encoded) binary += String.fromCharCode(byte);
+  await invoke("write_pptx_raw", bytes, { headers: { "x-pptd-path": btoa(binary) } });
 }

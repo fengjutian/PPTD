@@ -87,6 +87,27 @@ describe("document commands", () => {
     expect(edited.slides[0]!.elements[1]).toMatchObject({ type: "text", text: "补充说明" });
   });
 
+  it("reorders elements to change z-order without changing content", () => {
+    const source = createDocument();
+    const slideId = source.slides[0]!.id;
+    const added = produce(source, (draft) => applyCommand(draft, { type: "add-shape", slideId, shape: "rectangle" }));
+    const shapeId = added.slides[0]!.elements[1]!.id;
+    const reordered = produce(added, (draft) => applyCommand(draft, { type: "reorder-element", slideId, elementId: shapeId, toIndex: 0 }));
+    expect(reordered.slides[0]!.elements[0]).toMatchObject({ id: shapeId, type: "shape" });
+    expect(reordered.slides[0]!.content).toEqual(added.slides[0]!.content);
+    expect(() => produce(added, (draft) => applyCommand(draft, { type: "reorder-element", slideId, elementId: shapeId, toIndex: 9 }))).toThrow("ELEMENT_INDEX_OUT_OF_RANGE");
+  });
+
+  it("duplicates content-bound text as decorative instead of creating a second content writer", () => {
+    const source = createDocument();
+    const slideId = source.slides[0]!.id;
+    const titleId = source.slides[0]!.elements[0]!.id;
+    const duplicated = produce(source, (draft) => applyCommand(draft, { type: "duplicate-element", slideId, elementId: titleId }));
+    const copy = duplicated.slides[0]!.elements[1]!;
+    expect(copy.type === "text" && copy.contentRef).toBe("decorative");
+    expect(duplicated.slides[0]!.content.title).toBe(source.slides[0]!.content.title);
+  });
+
   it("validates and applies element transforms", () => {
     const source = createDocument();
     const slide = source.slides[0]!;
@@ -116,6 +137,20 @@ describe("document commands", () => {
     expect(result.slides).toHaveLength(2);
     expect(result.slides[0]!.content).toMatchObject({ title: "现状", body: "市场增长\n竞争加剧", status: "approved" });
     expect(result.slides[0]!.elements).toHaveLength(2);
+  });
+
+  it("stores structured AI content blocks with stable IDs and keeps body edits consistent", () => {
+    const source = createDocument();
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-draft", title: "结构化", slides: [
+      { title: "要点", body: "甲\n乙", speakerNotes: "", blocks: [{ type: "bullet-list", items: ["甲", "乙"] }] },
+    ] }));
+    const content = result.slides[0]!.content;
+    expect(content.blocks).toHaveLength(1);
+    expect(content.blocks![0]!.id).toMatch(/^[0-9a-f-]{36}$/);
+    const bodyElement = result.slides[0]!.elements.find((element) => element.type === "text" && element.contentRef === "body")!;
+    const edited = produce(result, (draft) => applyCommand(draft, { type: "edit-text", slideId: result.slides[0]!.id, elementId: bodyElement.id, text: "新的正文" }));
+    expect(edited.slides[0]!.content.body).toBe("新的正文");
+    expect(edited.slides[0]!.content.blocks).toEqual([{ id: content.blocks![0]!.id, type: "paragraph", text: "新的正文" }]);
   });
 
   it("applies AI template design without allowing it to rewrite approved content", () => {

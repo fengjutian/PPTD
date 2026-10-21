@@ -38,10 +38,20 @@ const imageElement = base.extend({
   altText: z.string().max(500),
 });
 
+const contentBlockSchema = z.discriminatedUnion("type", [
+  z.object({ id: z.string().uuid(), type: z.literal("paragraph"), text: z.string().max(20_000) }),
+  z.object({ id: z.string().uuid(), type: z.literal("bullet-list"), items: z.array(z.string().max(2_000)).max(100) }),
+  z.object({ id: z.string().uuid(), type: z.literal("quote"), text: z.string().max(20_000), attribution: z.string().max(500).optional() }),
+  z.object({ id: z.string().uuid(), type: z.literal("metric"), label: z.string().max(1_000), value: z.string().max(1_000) }),
+  z.object({ id: z.string().uuid(), type: z.literal("timeline"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
+  z.object({ id: z.string().uuid(), type: z.literal("comparison"), leftLabel: z.string().max(1_000), rightLabel: z.string().max(1_000), leftItems: z.array(z.string().max(2_000)).max(50), rightItems: z.array(z.string().max(2_000)).max(50) }),
+  z.object({ id: z.string().uuid(), type: z.literal("process"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
+]);
+
 const slideSchema = z.object({
   id: z.string().uuid(),
   background: z.string(),
-  content: z.object({ title: z.string(), body: z.string(), speakerNotes: z.string(), status: z.enum(["draft", "review", "approved", "changed", "needs_review"]), contentHash: z.string().regex(/^[0-9a-f]{16}$/).optional() }),
+  content: z.object({ title: z.string(), body: z.string(), blocks: z.array(contentBlockSchema).max(64).optional(), speakerNotes: z.string(), status: z.enum(["draft", "review", "approved", "changed", "needs_review"]), contentHash: z.string().regex(/^[0-9a-f]{16}$/).optional() }),
   elements: z.array(z.discriminatedUnion("type", [textElement, shapeElement, imageElement])),
 });
 

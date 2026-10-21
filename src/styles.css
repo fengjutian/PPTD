@@ -250,6 +250,7 @@ button { color: inherit; }
 .design-progress-track { grid-column: 1 / -1; height: 8px; overflow: hidden; border-radius: 999px; background: #303238; }
 .design-progress-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--ppt-accent), var(--ppt-accent-hover)); transition: width .35s ease; }
 .design-progress small { grid-column: 1 / -1; color: #747983; font-size: 9px; text-align: center; }
+.design-cancel-action { grid-column: 1 / -1; justify-self: center; margin-top: 4px; }
 .left-panel { border-right: 1px solid #303136; }
 .right-panel { border-left: 1px solid #303136; }
 .panel-heading, .inspector-title { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; border-bottom: 1px solid #2c2e33; font-size: 13px; font-weight: 600; }
@@ -286,7 +287,13 @@ button { color: inherit; }
 .slide-element.shape .shape-fill { width: 100%; height: 100%; border-style: solid; }
 .slide-element.image .image-fill { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .slide-element.selected::after { content: ""; position: absolute; inset: -4px; border: 2px solid var(--ppt-accent); pointer-events: none; }
-.slide-element.selected::before { content: ""; position: absolute; width: 8px; height: 8px; right: -8px; bottom: -8px; background: white; border: 2px solid var(--ppt-accent); z-index: 2; }
+.element-handle { position: absolute; z-index: 3; width: 9px; height: 9px; padding: 0; border: 2px solid var(--ppt-accent); border-radius: 2px; background: #fff; }
+.element-handle.nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.element-handle.ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.element-handle.sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.element-handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.element-rotate-handle { position: absolute; z-index: 3; left: 50%; top: -25px; width: 11px; height: 11px; padding: 0; border: 2px solid var(--ppt-accent); border-radius: 50%; background: #fff; cursor: grab; transform: translateX(-50%); }
+.element-rotate-handle::after { content: ""; position: absolute; left: 50%; top: 11px; width: 1px; height: 12px; background: var(--ppt-accent); }
 
 .inspector-title { justify-content: flex-start; gap: 9px; }
 .property-form { height: calc(100% - 48px); padding: 16px; overflow-y: auto; }

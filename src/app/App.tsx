@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, Layers3, LayoutDashboard, Lock, LockOpen, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EMU_PER_INCH, emu, type ElementId, type SlideElement, type SlideId } from "../core/document-model";
+import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type SlideElement, type SlideId } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
@@ -32,41 +32,133 @@ function ToolButton({ label, onClick, disabled, children }: { label: string; onC
   return <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
 }
 
+type ResizeDirection = "nw" | "ne" | "sw" | "se";
+const MIN_ELEMENT_SIZE = emu(0.1 * EMU_PER_INCH);
+
+function resizeFrame(start: RectEmu, direction: ResizeDirection, dx: number, dy: number): RectEmu {
+  let x: number = start.x;
+  let y: number = start.y;
+  let width: number = start.width;
+  let height: number = start.height;
+  if (direction.includes("e")) width = Math.max(MIN_ELEMENT_SIZE, start.width + dx);
+  if (direction.includes("s")) height = Math.max(MIN_ELEMENT_SIZE, start.height + dy);
+  if (direction.includes("w")) {
+    width = Math.max(MIN_ELEMENT_SIZE, start.width - dx);
+    x = start.x + start.width - width;
+  }
+  if (direction.includes("n")) {
+    height = Math.max(MIN_ELEMENT_SIZE, start.height - dy);
+    y = start.y + start.height - height;
+  }
+  return { x: emu(x), y: emu(y), width: emu(width), height: emu(height) };
+}
+
+function normalizeRotation(value: number): number {
+  return ((Math.round(value) % 360_000) + 360_000) % 360_000;
+}
+
 function ElementView({ element, scale, selected, onSelect }: { element: SlideElement; scale: number; selected: boolean; onSelect: () => void }) {
   const execute = useEditorStore((s) => s.execute);
   const activeSlideId = useEditorStore((s) => s.activeSlideId);
-  const start = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const interaction = useRef<{
+    kind: "move" | "resize" | "rotate";
+    direction?: ResizeDirection;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    frame: RectEmu;
+    rotation: number;
+    startAngle?: number;
+  } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const frame = element.frame;
+  const [previewFrame, setPreviewFrame] = useState<RectEmu | null>(null);
+  const [previewRotation, setPreviewRotation] = useState<number | null>(null);
+  const frame = previewFrame ?? element.frame;
+  const rotation = previewRotation ?? element.rotationMilliDegree;
   const style: React.CSSProperties = {
     left: frame.x * scale + offset.x, top: frame.y * scale + offset.y,
     width: frame.width * scale, height: frame.height * scale,
-    transform: `rotate(${element.rotationMilliDegree / 1000}deg)`,
+    transform: `rotate(${rotation / 1000}deg)`,
+    touchAction: "none",
   };
 
-  const pointerDown = (event: React.PointerEvent) => {
+  const begin = (kind: "move" | "resize" | "rotate", event: React.PointerEvent, direction?: ResizeDirection) => {
     event.stopPropagation();
+    event.preventDefault();
     onSelect();
     if (element.locked) return;
-    start.current = { x: event.clientX, y: event.clientY, left: frame.x, top: frame.y };
     event.currentTarget.setPointerCapture(event.pointerId);
+    const rect = rootRef.current?.getBoundingClientRect();
+    const centerX = rect ? rect.left + rect.width / 2 : event.clientX;
+    const centerY = rect ? rect.top + rect.height / 2 : event.clientY;
+    interaction.current = {
+      kind,
+      direction,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      frame: { ...element.frame },
+      rotation: element.rotationMilliDegree,
+      startAngle: kind === "rotate" ? Math.atan2(event.clientY - centerY, event.clientX - centerX) : undefined,
+    };
   };
+
   const pointerMove = (event: React.PointerEvent) => {
-    if (!start.current) return;
-    setOffset({ x: event.clientX - start.current.x, y: event.clientY - start.current.y });
+    const current = interaction.current;
+    if (!current) return;
+    if (current.kind === "move") {
+      setOffset({ x: event.clientX - current.startX, y: event.clientY - current.startY });
+      return;
+    }
+    if (current.kind === "resize") {
+      setPreviewFrame(resizeFrame(current.frame, current.direction!, (event.clientX - current.startX) / scale, (event.clientY - current.startY) / scale));
+      return;
+    }
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX);
+    setPreviewRotation(normalizeRotation(current.rotation + ((angle - current.startAngle!) * 180) / Math.PI * 1000));
   };
-  const pointerUp = (event: React.PointerEvent) => {
-    if (!start.current) return;
-    const dx = event.clientX - start.current.x;
-    const dy = event.clientY - start.current.y;
-    start.current = null;
+
+  const finish = (event: React.PointerEvent, cancelled = false) => {
+    const current = interaction.current;
+    if (!current) return;
+    interaction.current = null;
     setOffset({ x: 0, y: 0 });
-    if (dx || dy) execute({ type: "move-element", slideId: activeSlideId, elementId: element.id, x: emu(frame.x + dx / scale), y: emu(frame.y + dy / scale) });
+    setPreviewFrame(null);
+    setPreviewRotation(null);
+    if (cancelled) return;
+    const dx = (event.clientX - current.startX) / scale;
+    const dy = (event.clientY - current.startY) / scale;
+    if (current.kind === "move") {
+      if (!dx && !dy) return;
+      execute({ type: "move-element", slideId: activeSlideId, elementId: element.id, x: emu(current.frame.x + dx), y: emu(current.frame.y + dy) });
+      return;
+    }
+    if (current.kind === "resize") {
+      const frame = resizeFrame(current.frame, current.direction!, dx, dy);
+      if (frame.width === current.frame.width && frame.height === current.frame.height && frame.x === current.frame.x && frame.y === current.frame.y) return;
+      execute({ type: "transform-element", slideId: activeSlideId, elementId: element.id, frame, rotationMilliDegree: current.rotation });
+      return;
+    }
+    const rect = rootRef.current?.getBoundingClientRect();
+    const nextRotation = rect
+      ? normalizeRotation(current.rotation + ((Math.atan2(event.clientY - (rect.top + rect.height / 2), event.clientX - (rect.left + rect.width / 2)) - current.startAngle!) * 180) / Math.PI * 1000)
+      : current.rotation;
+    if (nextRotation === current.rotation) return;
+    execute({ type: "transform-element", slideId: activeSlideId, elementId: element.id, frame: current.frame, rotationMilliDegree: nextRotation });
   };
 
   return (
-    <div className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
+    <div ref={rootRef} className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={(event) => begin("move", event)} onPointerMove={pointerMove} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}>
       {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : <img className="image-fill" src={element.source.dataUrl} alt={element.altText} draggable={false} />}
+      {selected && !element.locked && <>
+        {(["nw", "ne", "sw", "se"] as const).map((direction) => <button key={direction} type="button" aria-label={`从 ${direction} 缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
+        <button type="button" aria-label="旋转对象" className="element-rotate-handle" onPointerDown={(event) => begin("rotate", event)} />
+      </>}
     </div>
   );
 }
@@ -116,6 +208,7 @@ export function App() {
   const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [designBusy, setDesignBusy] = useState(false);
+  const designCancelRef = useRef(false);
   const [designProgress, setDesignProgress] = useState<DesignProgress>({ percent: 0, label: "等待开始" });
   const imageInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
@@ -311,6 +404,7 @@ export function App() {
 
   const generateFromDraft = async () => {
     if (!aiDraft || !selectedTemplate || !templateAnalysis) return;
+    designCancelRef.current = false;
     setDesignBusy(true);
     setDesignProgress({ percent: 8, label: "正在准备内容与模板数据" });
     setTaskStatus("AI 正在依据模板生成并渲染 PPT…");
@@ -327,6 +421,7 @@ export function App() {
       const briefs = briefsFromDraft(aiDraft);
       setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
       const design = await generatePresentationDesign(aiDraft, briefs, templateAnalysis);
+      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
       const hasTemplateSize = templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu;
@@ -358,6 +453,7 @@ export function App() {
           goal,
           contentFingerprint: () => JSON.stringify(aiDraft.slides.map((slide) => ({ title: slide.title, body: slide.body, speakerNotes: slide.speakerNotes, blocks: slide.blocks }))),
           review: async (designs, visualGoal, iteration) => {
+            if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
             setDesignProgress({ percent: 95 + iteration, label: `视觉模型正在检查第 ${iteration} 轮` });
             const render = await renderPresentationForVisualReview(makeCandidate(designs));
             const reviews = [];
@@ -399,6 +495,7 @@ export function App() {
         return candidate;
       };
       let finalDocument = buildFinalDocument(finalDesigns);
+      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       let renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
       if (renderedContrastIssues.length > 0) {
         const affectedSlides = new Set(renderedContrastIssues.map((issue) => issue.slideIndex));
@@ -406,6 +503,7 @@ export function App() {
         finalDocument = buildFinalDocument(finalDesigns);
         renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
       }
+      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       const quality = validatePresentationVisualQuality(finalDocument, finalDesigns);
       if (!quality.passed || renderedContrastIssues.length > 0) {
         const allSlideIndexes = [...quality.issues.map((issue) => issue.slideIndex), ...renderedContrastIssues.map((issue) => issue.slideIndex)];
@@ -420,8 +518,13 @@ export function App() {
       setTaskStatus(`PPT 已按模板完成 AI 设计：${selectedTemplate.name}`);
     } catch (error) {
       window.clearInterval(progressTimer);
-      setDesignProgress({ percent: 0, label: "生成失败，请重试" });
-      setTaskStatus(`AI 设计生成失败：${describeAiError(error)}`);
+      if (error instanceof Error && error.message === "AI_GENERATION_CANCELLED") {
+        setDesignProgress({ percent: 0, label: "已取消生成" });
+        setTaskStatus("已取消 AI 设计生成");
+      } else {
+        setDesignProgress({ percent: 0, label: "生成失败，请重试" });
+        setTaskStatus(`AI 设计生成失败：${describeAiError(error)}`);
+      }
     } finally {
       window.clearInterval(progressTimer);
       setDesignBusy(false);
@@ -490,11 +593,27 @@ export function App() {
       }
       if (!selected || selected.locked) return;
       event.preventDefault();
+      if (shortcut === "nudge-left" || shortcut === "nudge-right" || shortcut === "nudge-up" || shortcut === "nudge-down") {
+        const step = emu((event.shiftKey ? 0.5 : 0.1) * EMU_PER_INCH);
+        const dx = shortcut === "nudge-left" ? -step : shortcut === "nudge-right" ? step : 0;
+        const dy = shortcut === "nudge-up" ? -step : shortcut === "nudge-down" ? step : 0;
+        const x = Math.max(0, Math.min(document.pageSize.width - selected.frame.width, selected.frame.x + dx));
+        const y = Math.max(0, Math.min(document.pageSize.height - selected.frame.height, selected.frame.y + dy));
+        execute({ type: "move-element", slideId: activeSlide.id, elementId: selected.id, x: emu(x), y: emu(y) });
+        return;
+      }
+      if (shortcut === "layer-forward" || shortcut === "layer-backward") {
+        const index = activeSlide.elements.findIndex((element) => element.id === selected.id);
+        const toIndex = index + (shortcut === "layer-forward" ? 1 : -1);
+        if (toIndex < 0 || toIndex >= activeSlide.elements.length) return;
+        execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex });
+        return;
+      }
       execute({ type: shortcut, slideId: activeSlide.id, elementId: selected.id });
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeSlide.id, execute, redo, redoStack.length, selected, undo, undoStack.length]);
+  }, [activeSlide, document.pageSize.height, document.pageSize.width, execute, redo, redoStack.length, selected, undo, undoStack.length]);
 
   return (
     <div className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`}>
@@ -554,6 +673,8 @@ export function App() {
           <div className="property-grid"><label>宽度（英寸）<input key={`${selected.id}-w-${selected.frame.width}`} defaultValue={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("width", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>高度（英寸）<input key={`${selected.id}-h-${selected.frame.height}`} defaultValue={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("height", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
           <label>旋转（度）<input key={`${selected.id}-r-${selected.rotationMilliDegree}`} defaultValue={(selected.rotationMilliDegree / 1000).toFixed(1)} disabled={selected.locked} onBlur={(event) => commitTransform("rotation", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>
           <div className="element-actions">
+            <button disabled={selected.locked || activeSlide.elements.at(-1)?.id === selected.id} onClick={() => execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.findIndex((element) => element.id === selected.id) + 1 })}><ArrowUp />上移一层</button>
+            <button disabled={selected.locked || activeSlide.elements[0]?.id === selected.id} onClick={() => execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.findIndex((element) => element.id === selected.id) - 1 })}><ArrowDown />下移一层</button>
             <button onClick={() => execute({ type: "set-element-lock", slideId: activeSlide.id, elementId: selected.id, locked: !selected.locked })}>{selected.locked ? <LockOpen /> : <Lock />}{selected.locked ? "解锁" : "锁定"}</button>
             <button disabled={selected.locked} onClick={() => execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: selected.id })}><Copy />复制</button>
             <button className="danger" disabled={selected.locked} onClick={() => execute({ type: "delete-element", slideId: activeSlide.id, elementId: selected.id })}><Trash2 />删除</button>
@@ -601,7 +722,7 @@ export function App() {
 
       {templateUploadOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTemplateUploadOpen(false); }}><section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-template-title"><div className="upload-dialog-heading"><div><FileUp /><div><h2 id="upload-template-title">上传 PPT 模板</h2><p>模板将保存到 PPTD 模板库。</p></div></div><button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}><X /></button></div><button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}><FileUp /><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx，最大 512 MB</small></button><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(false)}>取消</button></div></section></div>}
 
-      {templatePickerOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!designBusy && event.target === event.currentTarget) setTemplatePickerOpen(false); }}><section className="upload-dialog template-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="template-picker-title" aria-busy={designBusy}><div className="upload-dialog-heading"><div><Palette /><div><h2 id="template-picker-title">选择 PPT 模板</h2><p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p></div></div><button type="button" aria-label="关闭模板选择窗口" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}><X /></button></div><div className="template-picker-toolbar"><strong>已保存模板</strong><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplateUploadOpen(true)}><FileUp />上传模板</button></div><div className="template-picker-body"><div className="template-library"><div>{templateLibrary.map((template) => <button type="button" disabled={designBusy} className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}</div><div className="template-preview-panel"><div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>{designBusy ? <div className="design-progress" role="status" aria-live="polite"><Sparkles /><strong>{designProgress.label}</strong><span>{designProgress.percent}%</span><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={designProgress.percent} role="progressbar"><i style={{ width: `${designProgress.percent}%` }} /></div><small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small></div> : templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-picker-summary"><span>{templateAnalysis.slideCount} 页面</span><span>{templateAnalysis.layoutCount} 版式</span><span>{templateAnalysis.themeCount} 主题</span></div>}</div></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}>取消</button><button type="button" className="primary-action" disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy} onClick={() => void generateFromDraft()}>{designBusy ? `${designProgress.percent}%` : "生成 PPT"}{!designBusy && <ArrowRight />}</button></div></section></div>}
+      {templatePickerOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!designBusy && event.target === event.currentTarget) setTemplatePickerOpen(false); }}><section className="upload-dialog template-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="template-picker-title" aria-busy={designBusy}><div className="upload-dialog-heading"><div><Palette /><div><h2 id="template-picker-title">选择 PPT 模板</h2><p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p></div></div><button type="button" aria-label="关闭模板选择窗口" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}><X /></button></div><div className="template-picker-toolbar"><strong>已保存模板</strong><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplateUploadOpen(true)}><FileUp />上传模板</button></div><div className="template-picker-body"><div className="template-library"><div>{templateLibrary.map((template) => <button type="button" disabled={designBusy} className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}</div><div className="template-preview-panel"><div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>{designBusy ? <div className="design-progress" role="status" aria-live="polite"><Sparkles /><strong>{designProgress.label}</strong><span>{designProgress.percent}%</span><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={designProgress.percent} role="progressbar"><i style={{ width: `${designProgress.percent}%` }} /></div><small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small><button type="button" className="secondary-action design-cancel-action" onClick={() => { designCancelRef.current = true; setDesignProgress({ percent: 0, label: "正在取消…" }); }}>取消生成</button></div> : templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-picker-summary"><span>{templateAnalysis.slideCount} 页面</span><span>{templateAnalysis.layoutCount} 版式</span><span>{templateAnalysis.themeCount} 主题</span></div>}</div></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}>取消</button><button type="button" className="primary-action" disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy} onClick={() => void generateFromDraft()}>{designBusy ? `${designProgress.percent}%` : "生成 PPT"}{!designBusy && <ArrowRight />}</button></div></section></div>}
 
       {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象 · ZIP {exportReport.package.entryCount} 个条目</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
 

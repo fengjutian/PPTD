@@ -8,6 +8,7 @@ use std::{
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
+use tauri::ipc::{InvokeBody, Request};
 use tauri::Manager;
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
@@ -536,6 +537,32 @@ pub fn write_pptx(path: String, bytes: Vec<u8>) -> Result<(), String> {
         return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
     }
     atomic_write(&path, &bytes)
+}
+
+/// Binary-safe export path. The JSON command above remains for tests and small
+/// callers; the UI uses this raw IPC body to avoid serializing a large byte array.
+#[tauri::command]
+pub fn write_pptx_raw(request: Request<'_>) -> Result<(), String> {
+    let encoded_path = request
+        .headers()
+        .get("x-pptd-path")
+        .and_then(|value| value.to_str().ok())
+        .ok_or("EXPORT_PATH_HEADER_MISSING")?;
+    let path = BASE64
+        .decode(encoded_path)
+        .map_err(|_| "EXPORT_PATH_HEADER_INVALID")?;
+    let path = String::from_utf8(path).map_err(|_| "EXPORT_PATH_HEADER_INVALID")?;
+    let path = validate_path(&path, "pptx")?;
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("EXPORT_BODY_NOT_RAW".into());
+    };
+    if bytes.len() > MAX_EXPORT_BYTES {
+        return Err("EXPORT_TOO_LARGE".into());
+    }
+    if !bytes.starts_with(b"PK") {
+        return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
+    }
+    atomic_write(&path, bytes)
 }
 
 fn template_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {

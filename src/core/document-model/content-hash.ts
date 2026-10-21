@@ -6,8 +6,8 @@ import type { SlideContent } from "./types";
  * Review status is excluded: approving or re-reviewing content does not change
  * the content identity that a design task must pin.
  */
-export function hashSlideContent(content: Pick<SlideContent, "title" | "body" | "speakerNotes">): string {
-  const value = JSON.stringify([content.title, content.body, content.speakerNotes]);
+export function hashSlideContent(content: Pick<SlideContent, "title" | "body" | "speakerNotes" | "blocks">): string {
+  const value = JSON.stringify([content.title, content.body, content.speakerNotes, content.blocks ?? []]);
   let hash = 14_695_981_039_346_656_037n;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= BigInt(value.charCodeAt(index));

@@ -22,6 +22,12 @@ describe("editor keyboard shortcuts", () => {
     expect(shortcut({ key: "d", ctrlKey: true })).toBe("duplicate-element");
     expect(shortcut({ key: "Delete" })).toBe("delete-element");
     expect(shortcut({ key: "Backspace" })).toBe("delete-element");
+    expect(shortcut({ key: "ArrowLeft" })).toBe("nudge-left");
+    expect(shortcut({ key: "ArrowRight" })).toBe("nudge-right");
+    expect(shortcut({ key: "ArrowUp" })).toBe("nudge-up");
+    expect(shortcut({ key: "ArrowDown" })).toBe("nudge-down");
+    expect(shortcut({ key: "]", ctrlKey: true })).toBe("layer-forward");
+    expect(shortcut({ key: "[", ctrlKey: true })).toBe("layer-backward");
   });
 
   it("does not intercept editable controls", () => {
