@@ -138,3 +138,25 @@ interface ChartElement extends ElementBase {
 `resolveChartData` 从 `slide.content.blocks` 里读回这些指标的标签和数值。只有纯数字且单位一致的指标才能成图；否则图表无法解析，导出前检查会报 `invalid-chart-data` 并阻止导出。
 
 新增图表元素使持久化格式升到第 5 版，迁移与固定样例见 `src/core/document-model/__fixtures__/v4-document.json`。详见 [0010 数值指标渲染为原生图表](decisions/0010-native-chart-for-metrics.md)。
+
+## 10. 表格元素（V0.1 已实现）
+
+表格的单元格属于内容，表格的样式属于设计。与图表同理，`TableElement` 不复制单元格，只保存它引用了哪个表格块：
+
+```ts
+interface TableElement extends ElementBase {
+  type: "table";
+  contentBlockId: string;
+  style: TableElementStyle;
+}
+```
+
+表格数据由新的内容块 `table-data` 承载，它带表头和若干行：
+
+```ts
+{ id: string; type: "table-data"; header: string[]; rows: string[][] }
+```
+
+`resolveTableData` 从 `slide.content.blocks` 里读回表头和行。块缺失、类型不对、表头为空或没有行时表格无法解析，导出前检查会报 `invalid-table-data` 并阻止导出。
+
+新增表格元素使持久化格式升到第 7 版，`6 → 7` 迁移与固定样例见 `src/core/document-model/__fixtures__/v6-document.json`。详见 [0012 表格数据渲染为原生表格](decisions/0012-native-table-for-tabular-data.md)。

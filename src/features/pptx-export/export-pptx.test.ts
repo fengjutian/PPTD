@@ -214,4 +214,44 @@ describe("PPTX export", () => {
     });
     await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
   });
+
+  it("writes a table as a native table object with the reviewed cells", async () => {
+    const document = createDocument();
+    document.slides[0]!.content.status = "approved";
+    const block = { id: crypto.randomUUID(), type: "table-data" as const, header: ["项目", "数量"], rows: [["样本量", "38万"], ["覆盖机构", "12万"]] };
+    document.slides[0]!.content.blocks = [block];
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "table",
+      contentBlockId: block.id,
+      frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(3) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true },
+    });
+    const result = await buildPptx(document);
+    const entries = unzipSync(result.bytes);
+    // A native table, not a picture of a grid: the cells stay editable.
+    const slideXml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain("<a:tbl>");
+    expect(slideXml).toContain("项目");
+    expect(slideXml).toContain("38万");
+    expect(slideXml).toContain("12万");
+    expect(result.report.nativeTableCount).toBe(1);
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("refuses to export a table whose cells are gone", async () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "table",
+      contentBlockId: crypto.randomUUID(),
+      frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(3) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true },
+    });
+    await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
+  });
 });

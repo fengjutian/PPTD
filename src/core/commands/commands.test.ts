@@ -878,6 +878,50 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "38万")).toBe(true);
   });
 
+  it("draws a table block as a native table that points at the reviewed cells", () => {
+    const source = createDocument();
+    const content = {
+      title: "检测能力",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        { type: "table-data" as const, header: ["项目", "数量"], rows: [["样本量", "38万"], ["覆盖机构", "12万"]] },
+      ],
+    };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
+    const table = result.slides[0]!.elements.find((element) => element.type === "table");
+    expect(table?.type === "table").toBe(true);
+    // The table holds no cells of its own: it points at the reviewed block, so
+    // the exported grid can never show a cell the content does not carry.
+    const blocks = result.slides[0]!.content.blocks ?? [];
+    expect(table!.type === "table" && table!.contentBlockId).toBe(blocks.find((block) => block.type === "table-data")?.id);
+    // The cells are not copied into loose text boxes either.
+    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "38万")).toBe(false);
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("keeps the table cells in the content so a design command cannot rewrite them", () => {
+    const source = createDocument();
+    const content = {
+      title: "检测能力",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        { type: "table-data" as const, header: ["项目", "数量"], rows: [["样本量", "38万"]] },
+      ],
+    };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
+    const cells = (result.slides[0]!.content.blocks ?? []).find((block) => block.type === "table-data");
+    expect(cells?.type === "table-data" && cells.rows[0]?.[1]).toBe("38万");
+    // The element keeps no copy of the cells, so the grid cannot drift away
+    // from the reviewed table.
+    const table = result.slides[0]!.elements.find((element) => element.type === "table");
+    expect(JSON.stringify(table)).not.toContain("38万");
+    expect(JSON.stringify(table)).not.toContain("样本量");
+  });
+
   it("marks generated layout elements and user additions with provenance", () => {
     const source = createDocument();
     const content = { title: "三个重点", body: "第一项\n第二项\n第三项", speakerNotes: "" };

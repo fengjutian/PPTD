@@ -4,6 +4,7 @@ import versionTwoFixture from "./__fixtures__/v2-document.json";
 import versionThreeFixture from "./__fixtures__/v3-document.json";
 import versionFourFixture from "./__fixtures__/v4-document.json";
 import versionFiveFixture from "./__fixtures__/v5-document.json";
+import versionSixFixture from "./__fixtures__/v6-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -54,8 +55,34 @@ describe("presentation document schema", () => {
     expect(versionFiveFixture.schemaVersion).toBe(5);
   });
 
-  it("accepts explicit element provenance and rejects an unknown origin", () => {
+  it("migrates the fixed version 6 fixture and invents no table", () => {
+    const migrated = parsePresentationDocument(versionSixFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.elements).toHaveLength(1);
+    // A version 6 document predates the native table, so the migration keeps
+    // every page and never turns a page into a table.
+    expect(migrated.slides[0]!.elements.some((element) => element.type === "table")).toBe(false);
+    expect(migrated.slides[0]!.elements[0]!.origin).toBe("generated");
+    expect(versionSixFixture.schemaVersion).toBe(6);
+  });
+
+  it("accepts a native table that points at a reviewed table block", () => {
     const document = createDocument();
+    const block = { id: crypto.randomUUID(), type: "table-data" as const, header: ["项目", "数值"], rows: [["样本量", "38万"]] };
+    document.slides[0]!.content.blocks = [block];
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "table",
+      contentBlockId: block.id,
+      frame: document.slides[0]!.elements[0]!.frame,
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true },
+    });
+    expect(presentationDocumentSchema.parse(document).slides[0]!.elements[1]!.type).toBe("table");
+  });
+
+  it("accepts explicit element provenance and rejects an unknown origin", () => {    const document = createDocument();
     document.slides[0]!.elements[0]!.origin = "user";
     const parsed = presentationDocumentSchema.parse(document);
     expect(parsed.slides[0]!.elements[0]!.origin).toBe("user");

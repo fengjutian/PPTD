@@ -48,10 +48,12 @@ describe("layer list", () => {
       textElement("a", ""),
       { id: "b" as ElementId, type: "shape", shape: "ellipse", frame: FRAME, rotationMilliDegree: 0, locked: false, style: { fill: "#000000", stroke: "#000000", strokeWidthPt: 0, radiusPt: 0 } },
       { id: "c" as ElementId, type: "image", frame: FRAME, rotationMilliDegree: 0, locked: false, source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" }, altText: "" },
+      { id: "d" as ElementId, type: "table", contentBlockId: "e" as never, frame: FRAME, rotationMilliDegree: 0, locked: false, style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true } },
     ]);
     const markup = renderToStaticMarkup(<LayerList slide={slide} selectedElementId={null} onSelect={() => undefined} />);
     expect(markup).toContain("文本");
     expect(markup).toContain("椭圆");
     expect(markup).toContain("图片");
+    expect(markup).toContain("表格");
   });
 });
