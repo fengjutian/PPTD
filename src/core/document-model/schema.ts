@@ -28,7 +28,7 @@ const imageElement = base.extend({
   type: z.literal("image"),
   source: z.object({
     kind: z.literal("embedded"),
-    dataUrl: z.string().max(12_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/),
+    dataUrl: z.string().max(360_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/),
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   }),
   altText: z.string().max(500),

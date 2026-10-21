@@ -93,7 +93,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "add-image") {
     const expectedPrefix = `data:${command.mimeType};base64,`;
     const payload = command.dataUrl.slice(expectedPrefix.length);
-    if (!command.dataUrl.startsWith(expectedPrefix) || command.dataUrl.length > 12_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload) || command.altText.length > 500) {
+    if (!command.dataUrl.startsWith(expectedPrefix) || command.dataUrl.length > 360_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload) || command.altText.length > 500) {
       throw new Error("INVALID_IMAGE_SOURCE");
     }
     slide.elements.push({

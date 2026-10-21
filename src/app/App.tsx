@@ -127,8 +127,8 @@ export function App() {
 
   const handleImageFile = (file: File | undefined) => {
     if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
-      setTaskStatus("图片必须是 PNG、JPEG 或 WebP，且不超过 8 MB");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 256 * 1024 * 1024) {
+      setTaskStatus("图片必须是 PNG、JPEG 或 WebP，且单个文件不超过 256 MB");
       return;
     }
     const reader = new FileReader();
