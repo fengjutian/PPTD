@@ -67,6 +67,50 @@ struct ResponseMessage {
     content: String,
 }
 
+async fn send_chat_request(
+    api_key: &str,
+    body: &ChatRequest,
+    request_error: &str,
+) -> Result<ChatResponse, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(90))
+        .build()
+        .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
+    for attempt in 0..3_u32 {
+        let response = client
+            .post(MINIMAX_CHINA_CHAT_URL)
+            .bearer_auth(api_key)
+            .json(body)
+            .send()
+            .await;
+        match response {
+            Ok(response) if response.status().is_success() => {
+                return response
+                    .json()
+                    .await
+                    .map_err(|error| format!("AI_RESPONSE_INVALID: {error}"));
+            }
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let retryable = status == 429 || status == 529 || (500..=599).contains(&status);
+                if !retryable {
+                    return Err(format!("AI_PROVIDER_HTTP_ERROR:{status}"));
+                }
+                if attempt == 2 {
+                    return Err("AI_PROVIDER_BUSY".into());
+                }
+            }
+            Err(error) => {
+                if attempt == 2 {
+                    return Err(format!("{request_error}: {error}"));
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
+    }
+    Err("AI_PROVIDER_BUSY".into())
+}
+
 #[tauri::command]
 pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_json::Value, String> {
     if request.topic.trim().is_empty()
@@ -93,20 +137,7 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
         }],
         temperature: 0.4,
     };
-    let response = reqwest::Client::new()
-        .post(MINIMAX_CHINA_CHAT_URL)
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|error| format!("MINIMAX_REQUEST_FAILED: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!("MINIMAX_HTTP_ERROR: {}", response.status()));
-    }
-    let payload: ChatResponse = response
-        .json()
-        .await
-        .map_err(|error| format!("MINIMAX_RESPONSE_INVALID: {error}"))?;
+    let payload = send_chat_request(&api_key, &body, "AI_DRAFT_REQUEST_FAILED").await?;
     let content = payload
         .choices
         .first()
@@ -177,20 +208,7 @@ pub async fn generate_slide_briefs(
         ],
         temperature: 0.2,
     };
-    let response = reqwest::Client::new()
-        .post(MINIMAX_CHINA_CHAT_URL)
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|error| format!("MINIMAX_BRIEF_REQUEST_FAILED: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!("MINIMAX_HTTP_ERROR: {}", response.status()));
-    }
-    let payload: ChatResponse = response
-        .json()
-        .await
-        .map_err(|error| format!("MINIMAX_RESPONSE_INVALID: {error}"))?;
+    let payload = send_chat_request(&api_key, &body, "AI_BRIEF_REQUEST_FAILED").await?;
     let content = payload
         .choices
         .first()
@@ -284,20 +302,7 @@ pub async fn generate_presentation_design(
         ],
         temperature: 0.25,
     };
-    let response = reqwest::Client::new()
-        .post(MINIMAX_CHINA_CHAT_URL)
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|error| format!("MINIMAX_DESIGN_REQUEST_FAILED: {error}"))?;
-    if !response.status().is_success() {
-        return Err(format!("MINIMAX_HTTP_ERROR: {}", response.status()));
-    }
-    let payload: ChatResponse = response
-        .json()
-        .await
-        .map_err(|error| format!("MINIMAX_RESPONSE_INVALID: {error}"))?;
+    let payload = send_chat_request(&api_key, &body, "AI_DESIGN_REQUEST_FAILED").await?;
     let content = payload
         .choices
         .first()

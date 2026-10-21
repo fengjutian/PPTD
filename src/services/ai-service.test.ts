@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiPresentationDesignSchema, slideBriefsSchema } from "./ai-service";
+import { aiPresentationDesignSchema, describeAiError, slideBriefsSchema } from "./ai-service";
 
 describe("MiniMax structured outputs", () => {
   it("accepts a typed slide brief without presentation content", () => {
@@ -10,5 +10,9 @@ describe("MiniMax structured outputs", () => {
 
   it("rejects arbitrary layouts from the design stage", () => {
     expect(() => aiPresentationDesignSchema.parse({ slides: [{ layout: "freeform", background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" }] })).toThrow();
+  });
+
+  it("turns provider overload errors into a retryable user message", () => {
+    expect(describeAiError("AI_PROVIDER_BUSY")).toContain("服务当前繁忙");
   });
 });

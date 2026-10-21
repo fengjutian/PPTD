@@ -4,7 +4,7 @@ import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { generatePresentationDesign, generatePresentationDraft, generateSlideBriefs, type AiDraft } from "../services/ai-service";
+import { describeAiError, generatePresentationDesign, generatePresentationDraft, generateSlideBriefs, type AiDraft } from "../services/ai-service";
 import { applyTheme, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -224,8 +224,8 @@ export function App() {
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
     }
     catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      setTaskStatus(`MiniMax 生成失败：${detail}`);
+      const detail = describeAiError(error);
+      setTaskStatus(`AI 内容生成失败：${detail}`);
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成失败", { body: detail });
     }
     finally { setAiBusy(false); }
@@ -288,7 +288,7 @@ export function App() {
     } catch (error) {
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 0, label: "生成失败，请重试" });
-      setTaskStatus(`AI 设计生成失败：${error instanceof Error ? error.message : String(error)}`);
+      setTaskStatus(`AI 设计生成失败：${describeAiError(error)}`);
     } finally {
       window.clearInterval(progressTimer);
       setDesignBusy(false);

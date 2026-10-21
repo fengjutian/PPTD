@@ -28,6 +28,16 @@ export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
 export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
 export const MINIMAX_MODELS = ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"] as const;
 
+export function describeAiError(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (detail.includes("AI_PROVIDER_BUSY")) return "AI 服务当前繁忙，系统已自动重试，请稍后再次生成";
+  if (detail.includes("AI_PROVIDER_HTTP_ERROR:401") || detail.includes("AI_PROVIDER_HTTP_ERROR:403") || detail.includes("MINIMAX_API_KEY_MISSING")) return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
+  if (detail.includes("AI_PROVIDER_HTTP_ERROR:429")) return "AI 请求过于频繁，请稍后再试";
+  if (detail.includes("timed out") || detail.includes("REQUEST_FAILED")) return "AI 服务连接超时，请检查网络后重试";
+  if (detail.includes("JSON_INVALID") || detail.includes("RESPONSE_INVALID") || detail.includes("ZodError")) return "AI 返回的数据格式不符合要求，请重新生成";
+  return detail;
+}
+
 export async function generatePresentationDraft(topic: string, slideCount: number): Promise<AiDraft> {
   const model = localStorage.getItem("pptd:minimax-model") || "MiniMax-M3";
   const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model } });
