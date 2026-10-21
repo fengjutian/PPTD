@@ -343,6 +343,7 @@ pub async fn generate_presentation_design(
 5. 每个内容页都必须使用内容区的主要面积，不得留下超过页面三分之一的连续空白；空间不足时改用双栏或卡片，而不是缩小字号。
 6. 相邻两页尽量不要使用相同版式；全篇应使用 3–5 种版式形成节奏，但不能为了变化牺牲可读性。
 7. 页面背景、强调色和文字颜色必须形成一套稳定配色。优先从模板主题色取值，并确保明显对比。
+8. 输入 blocks 是结构事实，必须优先于猜测：存在 quote 选 quote；存在 comparison 选 split；存在 timeline、process 或 metric 选 cards；bullet-list 的 3–6 个短条目选 cards，较长条目选 split。
 
 四、输出合同
 1. 仅输出一个合法 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。

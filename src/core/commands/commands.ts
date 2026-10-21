@@ -54,7 +54,7 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; backgroundRhythm?: BackgroundRhythm }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; backgroundRhythm?: BackgroundRhythm }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -159,8 +159,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const hasBlock = (type: AiContentBlock["type"]) => blocks.some((block) => block.type === type);
       if (design.layout === "cover") return "cover";
       if (design.layout === "section") return "section";
+      if (design.layout === "quote" || hasBlock("quote")) return "quote";
       if (design.layout === "split" || hasBlock("comparison")) return "split";
-      if (design.layout === "quote") return "quote";
       if (design.layout === "cards" || hasBlock("timeline") || hasBlock("process") || hasBlock("metric")) return "cards";
       return "body";
     });
@@ -172,11 +172,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.background = design.background;
       const contentBlocks = toContentBlocks(content.blocks);
       slide.content = { title: content.title, body: content.body, ...(contentBlocks ? { blocks: contentBlocks } : {}), speakerNotes: content.speakerNotes, status: "approved" };
-      const items = points(content.body);
       const blocks = content.blocks ?? [];
+      const bulletItems = blocks
+        .filter((block): block is Extract<AiContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
+        .flatMap((block) => block.items);
+      // The structured block is the fact source. Body copy is only a fallback
+      // for legacy or hand-authored drafts that do not carry blocks.
+      const items = bulletItems.length > 0 ? bulletItems : points(content.body);
       const timelineBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "timeline" }> => block.type === "timeline");
       const comparisonBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "comparison" }> => block.type === "comparison");
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
+      const quoteBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
       // The rendered artwork and the placeholder geometry describe the same
@@ -374,10 +380,31 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             slide.elements.push(text("→", frame(x + stepWidth, stepTop + stepHeight / 2 - arrowHeight / 2, stepGap, arrowHeight), 22, design.accent, true, "center", undefined, contentTextLuminance));
           }
         });
-      } else if (design.layout === "quote") {
+      } else if (design.layout === "quote" || quoteBlock) {
+        const quoteText = quoteBlock?.text ?? content.body;
+        const attribution = quoteBlock?.attribution?.trim();
         if (!keepsArtwork) slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.25, 0.04), templateTitleSize ?? 28, titleInk, true, "left", undefined, titleLuminance));
-        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeContent, [0.15, 0.31, 0.68, 0.46], 0.25, 0.12), templateBodySize ?? 20, bodyInk, false, "left", undefined, contentTextLuminance));
+        const quoteTitle = text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.25, 0.04), templateTitleSize ?? 28, titleInk, true, "left", undefined, titleLuminance);
+        slide.elements.push(quoteTitle);
+        if (quoteText.trim()) {
+          const quoteBox = safeFrame(recipeContent, [0.16, 0.30, 0.66, 0.38], 0.25, 0.12);
+          const quoteFrame = { x: quoteBox.x + Math.round(pageWidth * 0.035), y: quoteBox.y, width: Math.max(Math.round(pageWidth * 0.25), quoteBox.width - Math.round(pageWidth * 0.035)), height: quoteBox.height };
+          const quoteSize = Math.max(26, templateBodySize ?? 26);
+          const quoteElement = text(quoteText, centeredBlock(quoteText, { x: quoteFrame.x / pageWidth, y: quoteFrame.y / pageHeight, width: quoteFrame.width / pageWidth, height: quoteFrame.height / pageHeight }, quoteSize), quoteSize, bodyInk, false, "left", undefined, contentTextLuminance);
+          slide.elements.push(quoteElement);
+          const markY = quoteElement.frame.y / pageHeight - 0.065;
+          const titleBottom = quoteTitle.frame.y / pageHeight + quoteTitle.frame.height / pageHeight;
+          if (!keepsArtwork && markY > titleBottom + 0.01) {
+            const markX = Math.max(0.02, quoteFrame.x / pageWidth - 0.08);
+            slide.elements.push(text("“", frame(markX, markY, 0.07, 0.12), 60, design.accent, true, "left", undefined, contentTextLuminance));
+          }
+          if (attribution) {
+            const attributionY = quoteElement.frame.y / pageHeight + quoteElement.frame.height / pageHeight + 0.025;
+            if (attributionY < 0.90) {
+              slide.elements.push(text(`— ${attribution}`, frame(quoteFrame.x / pageWidth, attributionY, quoteFrame.width / pageWidth, Math.min(0.06, 0.96 - attributionY)), 14, bodyInk, false, "left", undefined, contentTextLuminance));
+            }
+          }
+        }
       } else if (design.layout === "cards" && items.length > 1 && items.length <= 6) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
@@ -387,9 +414,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const contentWidth = contentBox.width; const contentHeight = contentBox.height;
         const columnGap = 0.022; const rowGap = 0.040;
         const cardWidth = (contentWidth - columnGap * (columns - 1)) / columns;
-        const cardHeight = Math.min(0.24, contentHeight / rows - 0.04);
+        // A single row of cards can carry more height than a two-row grid; use
+        // that space instead of leaving the lower half of the page empty.
+        const cardHeight = Math.min(rows === 1 ? 0.30 : 0.24, contentHeight / rows - 0.04);
         const gridHeight = rows * cardHeight + (rows - 1) * rowGap;
-        const gridTop = contentBox.y + (contentHeight - gridHeight) * 0.30;
+        const gridTop = contentBox.y + (contentHeight - gridHeight) * (rows === 1 ? 0.42 : 0.30);
         visible.forEach((item, itemIndex) => {
           const row = Math.floor(itemIndex / columns); const column = itemIndex % columns;
           const rowItemCount = Math.min(columns, visible.length - row * columns);
@@ -403,7 +432,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, y, cardWidth, 0.008), design.accent));
           slide.elements.push(shape(circleFrame(x + 0.025, badgeY, badgeDiameter), accentFill, "ellipse"));
           slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.025, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: x + 0.075, y: y + cardHeight * 0.16, width: cardWidth - 0.105, height: cardHeight * 0.68 }, 16), 16, "#293241", true, "left", undefined, cardLuminance));
+          const textLeft = x + 0.025 + badgeDiameter + 0.025;
+          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: textLeft, y: y + cardHeight * 0.16, width: cardWidth - (textLeft - x) - 0.03, height: cardHeight * 0.68 }, 16), 16, "#293241", true, "left", undefined, cardLuminance));
         });
       } else if ((design.layout === "split" || (design.layout === "cards" && items.length > 6)) && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
@@ -441,11 +471,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // Link rendered title/body text back to semantic content. Structured
       // layouts (cards, timeline items, metrics) stay decorative because one
       // visual element cannot safely overwrite a multi-field content block.
+      const bodyFontFamily = command.bodyFontFamily || command.fontFamily;
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
         if (element.text === content.title) element.contentRef = "title";
         else if (content.body.trim() && element.text === content.body) element.contentRef = "body";
         else element.contentRef = "decorative";
+        // Display type for the headline, text type for running copy. Using the
+        // template major font for both made dense body copy look heavy.
+        if (element.contentRef !== "title" && bodyFontFamily) element.style.fontFamily = bodyFontFamily;
       }
       const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
       const bodyRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "body");

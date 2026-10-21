@@ -83,19 +83,31 @@ export function chooseSlideLayout(input: {
   visualIntent: SlideBrief["visualIntent"];
   density: SlideBrief["density"];
   body: string;
+  blocks?: ContentBlock[];
 }): AiLayoutKind {
   if (input.index === 0) return "cover";
-  const items = splitBodyItems(input.body);
+  const blockItems = (input.blocks ?? [])
+    .filter((block): block is Extract<ContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
+    .flatMap((block) => block.items);
+  // Blocks are the structured fact source. Body copy is the fallback for
+  // legacy drafts that never produced blocks.
+  const items = blockItems.length > 0 ? blockItems : splitBodyItems(input.body);
   const longestItem = items.reduce((longest, item) => Math.max(longest, [...item].length), 0);
+  const hasBlock = (type: ContentBlock["type"]) => (input.blocks ?? []).some((block) => block.type === type);
   const intent = intentLayouts[input.visualIntent];
   // A model often returns title-body as a safe default. When the slide brief
   // states a more specific intent, that intent wins.
   let layout: AiLayoutKind = input.requested === "cover" ? "section" : input.requested;
   if (layout === "title-body" && intent !== "title-body") layout = intent;
   if (layout === "cover") layout = "section";
-  if (layout === "quote" && input.density === "high") layout = "title-body";
-  if (layout === "split" && items.length < 2) layout = "title-body";
-  if (layout === "cards" && (items.length < 2 || items.length > 6 || longestItem > 72 || input.body.length > 420)) {
+  // Semantic blocks carry stronger signals than the model's layout guess.
+  const hasCardBlock = hasBlock("timeline") || hasBlock("process") || hasBlock("metric");
+  if (hasBlock("quote")) layout = "quote";
+  else if (hasBlock("comparison")) layout = "split";
+  else if (hasCardBlock) layout = "cards";
+  if (layout === "quote" && input.density === "high" && !hasBlock("quote")) layout = "title-body";
+  if (layout === "split" && items.length < 2 && !hasBlock("comparison")) layout = "title-body";
+  if (layout === "cards" && !hasCardBlock && (items.length < 2 || items.length > 6 || longestItem > 72 || input.body.length > 420)) {
     layout = items.length >= 2 && items.length <= 8 && input.body.length <= 560 ? "split" : "title-body";
   }
   if (layout === "title-body" && items.length >= 2) {
@@ -189,6 +201,7 @@ export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBr
           visualIntent: brief.visualIntent,
           density: brief.density,
           body: content.body,
+          blocks: content.blocks,
         }),
       };
     }),

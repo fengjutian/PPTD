@@ -81,6 +81,49 @@ describe("content-aware layout selection", () => {
     expect(chooseSlideLayout({ index: 2, requested: "cards", visualIntent: "structured-text", density: "medium", body: sevenPoints })).toBe("split");
   });
 
+  it("uses structured blocks when the body is a single summary paragraph", () => {
+    const blocks = [{ type: "bullet-list" as const, items: ["第一点", "第二点", "第三点", "第四点", "第五点"] }];
+    expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "structured-text", density: "medium", body: "本页有五条结论。", blocks })).toBe("cards");
+  });
+
+  it("lets quote and comparison blocks choose their own page shape", () => {
+    expect(chooseSlideLayout({
+      index: 2,
+      requested: "title-body",
+      visualIntent: "structured-text",
+      density: "high",
+      body: "原文",
+      blocks: [{ type: "quote" as const, text: "原文摘录", attribution: "作者" }],
+    })).toBe("quote");
+    expect(chooseSlideLayout({
+      index: 2,
+      requested: "title-body",
+      visualIntent: "structured-text",
+      density: "medium",
+      body: "方案比较",
+      blocks: [{ type: "comparison" as const, leftLabel: "甲", rightLabel: "乙", leftItems: ["稳定"], rightItems: ["快速"] }],
+    })).toBe("split");
+  });
+
+  it("keeps card-shaped blocks on a card layout even when body copy is empty", () => {
+    expect(chooseSlideLayout({
+      index: 2,
+      requested: "title-body",
+      visualIntent: "structured-text",
+      density: "medium",
+      body: "",
+      blocks: [{ type: "metric" as const, label: "增长率", value: "42%" }],
+    })).toBe("cards");
+    expect(chooseSlideLayout({
+      index: 2,
+      requested: "title-body",
+      visualIntent: "structured-text",
+      density: "medium",
+      body: "",
+      blocks: [{ type: "process" as const, items: [{ label: "分析", text: "确认目标" }, { label: "执行", text: "完成交付" }] }],
+    })).toBe("cards");
+  });
+
   it("honors a specific intent when the model falls back to title-body", () => {
     expect(chooseSlideLayout({ index: 2, requested: "title-body", visualIntent: "comparison", density: "medium", body: "方案甲\n方案乙" })).toBe("split");
     expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "quote", density: "low", body: "原文摘录" })).toBe("quote");

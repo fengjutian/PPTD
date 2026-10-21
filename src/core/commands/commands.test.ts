@@ -185,6 +185,17 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements[2]).toMatchObject({ type: "text", text: "已审核标题", style: { fontFamily: "Arial", fontSizePt: 42 } });
   });
 
+  it("keeps display type on the headline and text type on running copy", () => {
+    const source = createDocument();
+    const content = { title: "标题", body: "正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "字体", slides: [content], designs: [design], fontFamily: "Arial", bodyFontFamily: "Georgia" }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title);
+    const body = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.body);
+    expect(title?.type === "text" && title.style.fontFamily).toBe("Arial");
+    expect(body?.type === "text" && body.style.fontFamily).toBe("Georgia");
+  });
+
   it("renders a multi-point title-body page as a structured list instead of one stranded block", () => {
     const source = createDocument();
     const content = { title: "作品背景", body: "1. 作品在什么背景下创作？\n2. 作者想回应什么？\n3. 当时的社会环境如何？\n4. 作品为何采用这种形式？\n5. 它后来产生了什么影响？", speakerNotes: "" };
@@ -201,6 +212,27 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
+  it("uses a bullet-list block as the page structure even when body is a short summary", () => {
+    const source = createDocument();
+    const content = { title: "三条结论", body: "本页用三条结论回答标题。", speakerNotes: "", blocks: [{ type: "bullet-list" as const, items: ["结论一", "结论二", "结论三"] }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "三条结论", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    expect(texts).toEqual(["三条结论", "01", "结论一", "02", "结论二", "03", "结论三"]);
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("renders a quote block with its attribution instead of a plain paragraph", () => {
+    const source = createDocument();
+    const content = { title: "核心观点", body: "真正的理解来自实践。", speakerNotes: "", blocks: [{ type: "quote" as const, text: "真正的理解来自实践。", attribution: "作者" }] };
+    const design = { layout: "quote" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "核心观点", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    expect(texts).toContain("真正的理解来自实践。");
+    expect(texts).toContain("— 作者");
+    expect(result.slides[0]!.content.body).toBe(content.body);
+  });
+
   it("renders numbered content as editable cards with deterministic geometry", () => {
     const source = createDocument();
     const content = { title: "三个重点", body: "1. 第一项 2. 第二项 3. 第三项", speakerNotes: "" };
@@ -208,6 +240,11 @@ describe("document commands", () => {
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "卡片文稿", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
     expect(texts.map((element) => element.text)).toEqual(["三个重点", "01", "1", "第一项", "2", "第二项", "3", "第三项"]);
+    const badge = result.slides[0]!.elements.find((element) => element.type === "shape" && element.shape === "ellipse")!;
+    const firstItem = texts.find((element) => element.text === "第一项")!;
+    // The badge sits in the card's left gutter; copy must start after it
+    // instead of painting over the numeral.
+    expect(firstItem.frame.x).toBeGreaterThanOrEqual(badge.frame.x + badge.frame.width);
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
