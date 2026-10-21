@@ -30,6 +30,7 @@ export async function choosePptxTemplate(): Promise<{ path: string; name: string
 export const importPptxTemplate = (sourcePath: string) => invoke<TemplateRecord>("import_pptx_template", { sourcePath });
 export const listPptxTemplates = () => invoke<TemplateRecord[]>("list_pptx_templates");
 export const getPptxTemplatePreview = (templateId: string) => invoke<string | null>("get_pptx_template_preview", { templateId });
+export const renderPptxTemplateLayouts = (templateId: string) => invoke<Array<{ layoutIndex: number; dataUrl: string }>>("render_pptx_template_layouts", { templateId });
 export const analyzePptxTemplate = (templateId: string) => invoke<TemplateAnalysis>("analyze_pptx_template", { templateId });
 
 export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<string | null> {

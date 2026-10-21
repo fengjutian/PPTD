@@ -15,7 +15,7 @@ export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" 
 export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
 export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
 export interface AiTemplateDecoration { shape: "rectangle" | "ellipse"; fill: string; frame: { x: number; y: number; width: number; height: number } }
-export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; decorations?: AiTemplateDecoration[]; regions: AiTemplateRegion[] }
+export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; backgroundImageDataUrl?: string; decorations?: AiTemplateDecoration[]; regions: AiTemplateRegion[] }
 
 export type DocumentCommand =
   | { type: "add-slide" }
@@ -135,6 +135,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const [leftRecipe, rightRecipe] = recipeBodies;
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       slide.elements = [];
+      if (recipe?.backgroundImageDataUrl) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe.backgroundImageDataUrl, mimeType: "image/png" }, altText: `模板版式背景：${recipe.name ?? recipe.index}` });
       [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])].forEach((decoration) => {
         if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
       });

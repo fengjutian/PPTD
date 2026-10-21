@@ -196,6 +196,20 @@ describe("document commands", () => {
     expect(bodies[1]!.frame.x).toBe(Math.round(source.pageSize.width * 0.56));
   });
 
+  it("places a rendered complex template layout behind editable content", () => {
+    const source = createDocument();
+    const content = { title: "可编辑标题", body: "可编辑正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const backgroundImageDataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const templateLayouts = [{ index: 1, name: "标题和内容", backgroundImageDataUrl, regions: [
+      { role: "title" as const, frame: { x: 0.08, y: 0.08, width: 0.84, height: 0.12 } },
+      { role: "body" as const, frame: { x: 0.08, y: 0.28, width: 0.84, height: 0.55 } },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "复杂模板", slides: [content], designs: [design], templateLayouts }));
+    expect(result.slides[0]!.elements[0]).toMatchObject({ type: "image", locked: true, source: { dataUrl: backgroundImageDataUrl } });
+    expect(result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text)).toEqual([content.title, content.body]);
+  });
+
   it("renders timeline blocks without parsing the body string", () => {
     const source = createDocument();
     const content = { title: "里程碑", body: "这段正文不应驱动时间线", speakerNotes: "", blocks: [{ type: "timeline" as const, items: [{ label: "第一阶段", text: "调研" }, { label: "第二阶段", text: "交付" }] }] };

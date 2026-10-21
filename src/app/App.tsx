@@ -6,7 +6,7 @@ import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft } from "../services/ai-service";
 import { applyTheme, loadSettings } from "../services/settings";
-import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
+import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
@@ -90,6 +90,7 @@ export function App() {
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const [templatePreview, setTemplatePreview] = useState<string | null>();
   const [templateAnalysis, setTemplateAnalysis] = useState<TemplateAnalysis>();
+  const [templateLayoutRenders, setTemplateLayoutRenders] = useState<Array<{ layoutIndex: number; dataUrl: string }>>([]);
   const [templatePreviewBusy, setTemplatePreviewBusy] = useState(false);
   const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
@@ -287,7 +288,7 @@ export function App() {
         pageSize: hasTemplateSize ? { width: emu(templateAnalysis.slideWidthEmu!), height: emu(templateAnalysis.slideHeightEmu!) } : undefined,
         fontFamily: templateAnalysis.majorFont || templateAnalysis.minorFont || undefined,
         templateDecorations: hasTemplateSize ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })) : undefined,
-        templateLayouts: hasTemplateSize ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts.map((layout) => ({ ...layout, name: layout.name })) : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))).map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
+        templateLayouts: hasTemplateSize ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts.map((layout) => ({ ...layout, name: layout.name })) : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))).map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: templateLayoutRenders.find((render) => render.layoutIndex === layout.index)?.dataUrl, decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ role: region.role, frame: { x: region.x / templateAnalysis.slideWidthEmu!, y: region.y / templateAnalysis.slideHeightEmu!, width: region.width / templateAnalysis.slideWidthEmu!, height: region.height / templateAnalysis.slideHeightEmu! } })) })) : undefined,
       });
       setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
       setTemplatePickerOpen(false);
@@ -323,12 +324,14 @@ export function App() {
     setSelectedTemplate(template);
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
+    setTemplateLayoutRenders([]);
     if (!isDesktopRuntime()) return;
     setTemplatePreviewBusy(true);
     try {
-      const [preview, analysis] = await Promise.all([getPptxTemplatePreview(template.id), analyzePptxTemplate(template.id)]);
+      const [preview, analysis, renders] = await Promise.all([getPptxTemplatePreview(template.id), analyzePptxTemplate(template.id), renderPptxTemplateLayouts(template.id).catch((error) => { setTaskStatus(`复杂模板视觉层渲染不可用，将使用基础样式：${error instanceof Error ? error.message : String(error)}`); return []; })]);
       setTemplatePreview(preview);
       setTemplateAnalysis(analysis);
+      setTemplateLayoutRenders(renders);
     } catch (error) {
       setTemplatePreview(null);
       setTaskStatus(`模板预览读取失败：${error instanceof Error ? error.message : String(error)}`);

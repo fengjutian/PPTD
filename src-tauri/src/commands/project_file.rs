@@ -4,6 +4,7 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
+    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::Manager;
@@ -23,6 +24,13 @@ pub struct TemplateRecord {
     name: String,
     size: u64,
     imported_at: u64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateLayoutRender {
+    layout_index: usize,
+    data_url: String,
 }
 
 #[derive(serde::Serialize)]
@@ -548,6 +556,111 @@ pub fn get_pptx_template_preview(
         )));
     }
     Ok(None)
+}
+
+#[tauri::command]
+pub async fn render_pptx_template_layouts(
+    app: tauri::AppHandle,
+    template_id: String,
+) -> Result<Vec<TemplateLayoutRender>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if template_id.is_empty()
+            || template_id.contains('/')
+            || template_id.contains('\\')
+            || template_id == "."
+            || template_id == ".."
+        {
+            return Err("TEMPLATE_ID_INVALID".into());
+        }
+        let root = template_root(&app)?;
+        let source = root.join(&template_id);
+        if !source.starts_with(&root) || !source.is_file() {
+            return Err("TEMPLATE_NOT_FOUND".into());
+        }
+        let working =
+            tempfile::tempdir().map_err(|error| format!("TEMPLATE_RENDER_TEMP_FAILED: {error}"))?;
+        let working_pptx = working.path().join("template.pptx");
+        fs::copy(&source, &working_pptx)
+            .map_err(|error| format!("TEMPLATE_RENDER_COPY_FAILED: {error}"))?;
+        let output = working.path().join("renders");
+        fs::create_dir_all(&output)
+            .map_err(|error| format!("TEMPLATE_RENDER_DIRECTORY_FAILED: {error}"))?;
+        let script = working.path().join("render-layouts.ps1");
+        fs::write(
+            &script,
+            r#"param([string]$Source, [string]$Output)
+$ErrorActionPreference = 'Stop'
+$powerPoint = $null
+$presentation = $null
+try {
+  $powerPoint = New-Object -ComObject PowerPoint.Application
+  $powerPoint.AutomationSecurity = 3
+  $presentation = $powerPoint.Presentations.Open($Source, 0, 0, 0)
+  $globalIndex = 0
+  for ($designIndex = 1; $designIndex -le $presentation.Designs.Count; $designIndex++) {
+    $master = $presentation.Designs.Item($designIndex).SlideMaster
+    for ($layoutIndex = 1; $layoutIndex -le $master.CustomLayouts.Count; $layoutIndex++) {
+      $globalIndex++
+      $layout = $master.CustomLayouts.Item($layoutIndex)
+      $slide = $presentation.Slides.AddSlide($presentation.Slides.Count + 1, $layout)
+      $target = Join-Path $Output ("layout{0}.png" -f $globalIndex)
+      $slide.Export($target, 'PNG', 1600, 900)
+      $slide.Delete()
+    }
+  }
+} finally {
+  if ($presentation -ne $null) { $presentation.Close() }
+  if ($powerPoint -ne $null) { $powerPoint.Quit() }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+}
+"#,
+        )
+        .map_err(|error| format!("TEMPLATE_RENDER_SCRIPT_FAILED: {error}"))?;
+        let status = Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+            ])
+            .arg(&script)
+            .arg("-Source")
+            .arg(&working_pptx)
+            .arg("-Output")
+            .arg(&output)
+            .status()
+            .map_err(|error| format!("TEMPLATE_RENDERER_UNAVAILABLE: {error}"))?;
+        if !status.success() {
+            return Err(format!(
+                "TEMPLATE_LAYOUT_RENDER_FAILED:{}",
+                status.code().unwrap_or(-1)
+            ));
+        }
+        let mut renders = Vec::new();
+        for index in 1..=128 {
+            let path = output.join(format!("layout{index}.png"));
+            if !path.is_file() {
+                continue;
+            }
+            let bytes = fs::read(&path)
+                .map_err(|error| format!("TEMPLATE_LAYOUT_RENDER_READ_FAILED: {error}"))?;
+            if bytes.is_empty() || bytes.len() > MAX_TEMPLATE_PREVIEW_BYTES as usize {
+                return Err("TEMPLATE_LAYOUT_RENDER_SIZE_INVALID".into());
+            }
+            renders.push(TemplateLayoutRender {
+                layout_index: index,
+                data_url: format!("data:image/png;base64,{}", BASE64.encode(bytes)),
+            });
+        }
+        if renders.is_empty() {
+            return Err("TEMPLATE_LAYOUT_RENDER_EMPTY".into());
+        }
+        Ok(renders)
+    })
+    .await
+    .map_err(|error| format!("TEMPLATE_LAYOUT_RENDER_TASK_FAILED: {error}"))?
 }
 
 fn read_zip_text(
