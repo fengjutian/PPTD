@@ -92,3 +92,9 @@ WebView 仅通过窄接口调用 Tauri command。文件命令接收已规范化�
 - 设计命令对 `ContentModel` 的序列化结果保持字节级等价。
 - 保存中断后，原项目文件仍可打开；恢复区能识别较新的自动保存版本。
 - 导出失败返回可诊断错误与报告，不改变文档 revision。
+
+## 8. 模板高保真渲染边界
+
+复杂模板采用“固定视觉层 + 可编辑内容层”的双层策略。Windows 高保真模式由 Microsoft PowerPoint 渲染空白 `CustomLayout`，保留背景图片、渐变、自由形状、Logo 和复杂母版继承；输出作为锁定背景图片，标题和正文继续使用原生可编辑对象。
+
+PowerPoint 是当前高保真适配器，而不是模板功能的唯一架构依赖。长期回退顺序为 PowerPoint、LibreOffice、PPTD 内置基础解析器和安全默认布局。PowerPoint 不可用时必须显示降级原因。详细决策见 [`0002-template-rendering-adapters.md`](decisions/0002-template-rendering-adapters.md)。
