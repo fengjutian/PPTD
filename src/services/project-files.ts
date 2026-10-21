@@ -8,8 +8,9 @@ const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
 export const isDesktopRuntime = () => isTauri();
 export interface TemplateRecord { id: string; name: string; size: number; importedAt: number }
 export interface TemplateRegion { role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }
-export interface TemplateLayoutSummary { index: number; name: string; backgroundColor: string | null; regions: TemplateRegion[] }
-export interface TemplateAnalysis { slideCount: number; slideWidthEmu: number | null; slideHeightEmu: number | null; masterCount: number; layoutCount: number; themeCount: number; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; regions: TemplateRegion[] }>; layouts: TemplateLayoutSummary[]; warnings: string[] }
+export interface TemplateDecoration { shape: "rectangle" | "ellipse"; x: number; y: number; width: number; height: number; fill: string }
+export interface TemplateLayoutSummary { index: number; name: string; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }
+export interface TemplateAnalysis { slideCount: number; slideWidthEmu: number | null; slideHeightEmu: number | null; masterCount: number; layoutCount: number; themeCount: number; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; defaultDecorations: TemplateDecoration[]; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }>; layouts: TemplateLayoutSummary[]; warnings: string[] }
 
 export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument } | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");

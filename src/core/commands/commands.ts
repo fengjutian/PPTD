@@ -14,12 +14,13 @@ export interface AiSlideDraft { title: string; body: string; speakerNotes: strin
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
 export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
 export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
-export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; regions: AiTemplateRegion[] }
+export interface AiTemplateDecoration { shape: "rectangle" | "ellipse"; fill: string; frame: { x: number; y: number; width: number; height: number } }
+export interface AiTemplateLayout { index: number; name?: string; backgroundColor?: string; decorations?: AiTemplateDecoration[]; regions: AiTemplateRegion[] }
 
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; templateLayouts?: AiTemplateLayout[] }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[] }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -110,6 +111,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const rankedLayouts = command.templateLayouts?.filter((layout) => layout.regions.some((region) => region.role === "title")) ?? [];
       const layoutScore = (layout: AiTemplateLayout): number => {
         const name = (layout.name ?? "").toLowerCase();
+        const title = layout.regions.find((region) => region.role === "title")?.frame;
+        const contentRegions = layout.regions.filter((region) => region.role === "body").map((region) => region.frame);
+        const overlaps = (left: { x: number; y: number; width: number; height: number }, right: { x: number; y: number; width: number; height: number }) => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
+        if (!title || contentRegions.some((region) => overlaps(title, region))) return -10_000;
         const bodies = layout.regions.filter((region) => region.role === "body").length;
         const images = layout.regions.filter((region) => region.role === "image").length;
         const keyword = (...values: string[]) => values.some((value) => name.includes(value));
@@ -120,7 +125,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (design.layout === "quote") return (keyword("quote", "引言", "引用") ? 100 : 0) + (bodies === 1 ? 15 : 0);
         return (keyword("title and content", "标题和内容", "正文") ? 60 : 0) + (bodies === 1 ? 20 : 0);
       };
-      const recipe = [...rankedLayouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index)[0];
+      const recipeCandidate = [...rankedLayouts].sort((left, right) => layoutScore(right) - layoutScore(left) || left.index - right.index)[0];
+      const recipe = recipeCandidate && layoutScore(recipeCandidate) > -10_000 ? recipeCandidate : undefined;
       slide.background = recipe?.backgroundColor ?? design.background;
       const recipeTitle = recipe?.regions.find((region) => region.role === "title")?.frame;
       const recipeBodies = recipe?.regions.filter((region) => region.role === "body").map((region) => region.frame) ?? [];
@@ -129,6 +135,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const [leftRecipe, rightRecipe] = recipeBodies;
       const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
       slide.elements = [];
+      [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])].forEach((decoration) => {
+        if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
+      });
       if (design.layout === "cover" && !hasDeterministicBlock) {
         slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
         slide.elements.push(text(content.title, frame(0.10, 0.24, 0.78, 0.28), 42, design.titleColor, true, "left"));

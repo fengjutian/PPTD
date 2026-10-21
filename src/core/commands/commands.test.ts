@@ -167,6 +167,20 @@ describe("document commands", () => {
     expect(bodies.every((element) => element.frame.y + element.frame.height <= source.pageSize.height)).toBe(true);
   });
 
+  it("rejects a template layout whose title overlaps its body", () => {
+    const source = createDocument();
+    const content = { title: "不能重叠的标题", body: "正文内容", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const templateLayouts = [{ index: 1, name: "损坏版式", regions: [
+      { role: "title" as const, frame: { x: 0.10, y: 0.35, width: 0.70, height: 0.20 } },
+      { role: "body" as const, frame: { x: 0.08, y: 0.30, width: 0.82, height: 0.50 } },
+    ] }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "安全回退", slides: [content], designs: [design], templateLayouts }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title)!;
+    const body = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.body)!;
+    expect(title.frame.y + title.frame.height).toBeLessThanOrEqual(body.frame.y);
+  });
+
   it("selects a semantic template layout and adopts its background", () => {
     const source = createDocument();
     const content = { title: "方案对比", body: "左侧\n右侧", speakerNotes: "" };

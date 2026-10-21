@@ -42,6 +42,7 @@ pub struct TemplateSlideSummary {
     shape_count: usize,
     layout: Option<String>,
     background_color: Option<String>,
+    decorations: Vec<TemplateDecoration>,
     regions: Vec<TemplateRegion>,
 }
 
@@ -57,10 +58,22 @@ pub struct TemplateRegion {
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TemplateDecoration {
+    shape: String,
+    x: u64,
+    y: u64,
+    width: u64,
+    height: u64,
+    fill: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TemplateLayoutSummary {
     index: usize,
     name: String,
     background_color: Option<String>,
+    decorations: Vec<TemplateDecoration>,
     regions: Vec<TemplateRegion>,
 }
 
@@ -77,6 +90,7 @@ pub struct TemplateAnalysis {
     major_font: Option<String>,
     minor_font: Option<String>,
     default_background_color: Option<String>,
+    default_decorations: Vec<TemplateDecoration>,
     slides: Vec<TemplateSlideSummary>,
     layouts: Vec<TemplateLayoutSummary>,
     warnings: Vec<String>,
@@ -628,6 +642,70 @@ fn extract_background_color(document: &roxmltree::Document<'_>) -> Option<String
     }
 }
 
+fn extract_template_decorations(document: &roxmltree::Document<'_>) -> Vec<TemplateDecoration> {
+    document
+        .descendants()
+        .filter(|node| node.tag_name().name() == "sp")
+        .filter(|shape| {
+            !shape
+                .descendants()
+                .any(|node| node.tag_name().name() == "ph")
+        })
+        .filter_map(|shape| {
+            let properties = shape
+                .children()
+                .find(|node| node.tag_name().name() == "spPr")?;
+            let transform = properties
+                .descendants()
+                .find(|node| node.tag_name().name() == "xfrm")?;
+            let offset = transform
+                .children()
+                .find(|node| node.tag_name().name() == "off")?;
+            let extent = transform
+                .children()
+                .find(|node| node.tag_name().name() == "ext")?;
+            let x = offset.attribute("x")?.parse().ok()?;
+            let y = offset.attribute("y")?.parse().ok()?;
+            let width = extent.attribute("cx")?.parse().ok()?;
+            let height = extent.attribute("cy")?.parse().ok()?;
+            if width == 0 || height == 0 {
+                return None;
+            }
+            let fill_node = properties
+                .children()
+                .find(|node| node.tag_name().name() == "solidFill")?
+                .children()
+                .find(|node| node.is_element())?;
+            let fill = match fill_node.tag_name().name() {
+                "srgbClr" => fill_node.attribute("val").map(|value| format!("#{value}")),
+                "sysClr" => fill_node
+                    .attribute("lastClr")
+                    .map(|value| format!("#{value}")),
+                "schemeClr" => fill_node.attribute("val").map(str::to_owned),
+                _ => None,
+            }?;
+            let kind = properties
+                .descendants()
+                .find(|node| node.tag_name().name() == "prstGeom")
+                .and_then(|node| node.attribute("prst"));
+            Some(TemplateDecoration {
+                shape: if matches!(kind, Some("ellipse")) {
+                    "ellipse"
+                } else {
+                    "rectangle"
+                }
+                .into(),
+                x,
+                y,
+                width,
+                height,
+                fill,
+            })
+        })
+        .take(64)
+        .collect()
+}
+
 #[tauri::command]
 pub fn analyze_pptx_template(
     app: tauri::AppHandle,
@@ -810,6 +888,7 @@ pub fn analyze_pptx_template(
         });
         let regions = extract_template_regions(&document);
         let background_color = extract_background_color(&document);
+        let decorations = extract_template_decorations(&document);
         slides.push(TemplateSlideSummary {
             index: number,
             title,
@@ -824,6 +903,7 @@ pub fn analyze_pptx_template(
                 .count(),
             layout,
             background_color,
+            decorations,
             regions,
         });
     }
@@ -844,11 +924,13 @@ pub fn analyze_pptx_template(
             .to_owned();
         let regions = extract_template_regions(&document);
         let background_color = extract_background_color(&document);
+        let decorations = extract_template_decorations(&document);
         if !regions.is_empty() {
             layouts.push(TemplateLayoutSummary {
                 index: number,
                 name,
                 background_color,
+                decorations,
                 regions,
             });
         }
@@ -862,12 +944,20 @@ pub fn analyze_pptx_template(
         warnings.push("未发现 OOXML 主题定义".into());
     }
     warnings.push("动画、切换、SmartArt、视频和宏尚未解析".into());
-    let default_background_color =
-        read_zip_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?.and_then(|xml| {
-            roxmltree::Document::parse(&xml)
+    let master_xml = read_zip_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?;
+    let default_background_color = master_xml.as_ref().and_then(|xml| {
+        roxmltree::Document::parse(xml)
+            .ok()
+            .and_then(|document| extract_background_color(&document))
+    });
+    let default_decorations = master_xml
+        .as_ref()
+        .and_then(|xml| {
+            roxmltree::Document::parse(xml)
                 .ok()
-                .and_then(|document| extract_background_color(&document))
-        });
+                .map(|document| extract_template_decorations(&document))
+        })
+        .unwrap_or_default();
     Ok(TemplateAnalysis {
         slide_count,
         slide_width_emu,
@@ -879,6 +969,7 @@ pub fn analyze_pptx_template(
         major_font,
         minor_font,
         default_background_color,
+        default_decorations,
         slides,
         layouts,
         warnings,
