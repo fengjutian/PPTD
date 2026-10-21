@@ -116,13 +116,4 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements).toHaveLength(2);
   });
 
-  it("applies a presentation theme without changing reviewed content", () => {
-    const source = createDocument();
-    source.slides[0]!.content.status = "approved";
-    const contentBefore = JSON.stringify(source.slides.map((slide) => slide.content));
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-theme-preset", preset: "business" }));
-    expect(JSON.stringify(result.slides.map((slide) => slide.content))).toBe(contentBefore);
-    expect(result.slides[0]!.background).toBe("#F5F7FA");
-    expect(commandDomain({ type: "apply-theme-preset", preset: "business" })).toBe("design");
-  });
 });

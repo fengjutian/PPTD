@@ -5,7 +5,7 @@ import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { generateWithMiniMax, type AiDraft } from "../services/minimax";
 import { applyTheme, loadSettings } from "../services/settings";
-import { choosePptxPath, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
+import { choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
 const CANVAS_WIDTH = 960;
@@ -64,8 +64,10 @@ export function App() {
   const [aiSlideCount, setAiSlideCount] = useState(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
   const [aiBusy, setAiBusy] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<{ name: string; size?: number; path?: string }>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const templateInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
   const scale = CANVAS_WIDTH / document.pageSize.width;
@@ -200,6 +202,16 @@ export function App() {
     setTaskStatus("内容草稿已确认，可以开始主题优化");
   };
 
+  const handleChooseTemplate = async () => {
+    try {
+      if (!isDesktopRuntime()) { templateInputRef.current?.click(); return; }
+      const template = await choosePptxTemplate();
+      if (template) setSelectedTemplate(template);
+    } catch (error) {
+      setTaskStatus(`选择模板失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : undefined;
@@ -313,12 +325,14 @@ export function App() {
       </main>}
 
       {activeView === "theme" && <main className="feature-workspace theme-workspace">
-        <header className="feature-header"><div><Palette /><div><h1>主题优化</h1><p>仅调整视觉设计，不修改已确认的标题、正文和页面顺序</p></div></div><div className="workflow-steps"><span className="done"><Check /> 生成草稿</span><i /><span className="done"><Check /> 编辑文字</span><i /><span className="active">3 主题优化</span></div></header>
-        <section className="theme-content"><div><div className="section-kicker">视觉风格</div><h2>选择演示文稿主题</h2><p>主题以一个设计事务应用，可随时撤销。</p></div><div className="presentation-themes">
-          <button onClick={() => execute({ type: "apply-theme-preset", preset: "business" })}><span className="theme-preview business"><b /><i /><i /></span><strong>现代商务</strong><small>蓝灰配色，适合汇报与方案</small></button>
-          <button onClick={() => execute({ type: "apply-theme-preset", preset: "warm" })}><span className="theme-preview warm"><b /><i /><i /></span><strong>活力暖橙</strong><small>PPTD 品牌色，适合产品展示</small></button>
-          <button onClick={() => execute({ type: "apply-theme-preset", preset: "minimal" })}><span className="theme-preview minimal"><b /><i /><i /></span><strong>极简黑白</strong><small>高对比留白，适合观点表达</small></button>
-        </div><button className="primary-action finish-theme" onClick={() => setActiveView("editor")}>返回编辑器继续设计<ArrowRight /></button></section>
+        <header className="feature-header"><div><Palette /><div><h1>PPT 模板</h1><p>上传用户模板，在内容确认后提取主题、母版和页面版式</p></div></div><div className="workflow-steps"><span className="done"><Check /> 生成草稿</span><i /><span className="done"><Check /> 编辑文字</span><i /><span className="active">3 上传模板</span></div></header>
+        <section className="template-content"><div><div className="section-kicker">POWERPOINT TEMPLATE</div><h2>上传 PPT 模板</h2><p>请选择 `.pptx` 文件。模板将用于后续视觉设计，不会覆盖已经确认的文字内容。</p></div>
+          <button type="button" className={`template-dropzone ${selectedTemplate ? "selected" : ""}`} onClick={handleChooseTemplate}><FileUp />{selectedTemplate ? <><strong>{selectedTemplate.name}</strong><span>{selectedTemplate.size ? `${(selectedTemplate.size / 1024 / 1024).toFixed(2)} MB · ` : ""}PowerPoint 模板已选择</span><small>点击重新选择</small></> : <><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx</small></>}</button>
+          <input ref={templateInputRef} className="visually-hidden" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={(event) => { const file = event.target.files?.[0]; if (file) setSelectedTemplate({ name: file.name, size: file.size }); event.currentTarget.value = ""; }} />
+          {selectedTemplate && <div className="template-status"><Check /><div><strong>模板已就绪，等待解析</strong><span>母版、版式和兼容性报告将在模板解析器启用后生成。</span></div></div>}
+          <div className="template-notice"><strong>当前能力边界</strong><p>现阶段仅完成安全选取与流程衔接，尚未解析或应用模板。不会把“已选择文件”伪装成模板已经成功套用。</p></div>
+          <button type="button" className="primary-action finish-theme" onClick={() => setActiveView("editor")}>暂不使用模板，返回编辑器<ArrowRight /></button>
+        </section>
       </main>}
 
       <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{taskStatus && <span className="task-status">{taskStatus}</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>

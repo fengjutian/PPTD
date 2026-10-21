@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { parsePresentationDocument, type PresentationDocument } from "../core/document-model";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
+const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
 
 export const isDesktopRuntime = () => isTauri();
 
@@ -12,6 +13,13 @@ export async function chooseProjectToOpen(): Promise<{ path: string; document: P
   if (!path) return null;
   const raw = await invoke<unknown>("open_project", { path });
   return { path, document: parsePresentationDocument(raw) as PresentationDocument };
+}
+
+export async function choosePptxTemplate(): Promise<{ path: string; name: string } | null> {
+  if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
+  const path = await open({ multiple: false, directory: false, filters: pptxFilter });
+  if (!path) return null;
+  return { path, name: path.split(/[\\/]/).at(-1) || "template.pptx" };
 }
 
 export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<string | null> {
