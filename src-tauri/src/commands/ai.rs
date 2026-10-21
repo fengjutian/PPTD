@@ -202,7 +202,8 @@ pub async fn review_presentation_visuals(
         &cancel,
     )
     .await?;
-    parse_json(strip_code_fence(&content), "AI_VISION_JSON_INVALID")}
+    parse_json(strip_code_fence(&content), "AI_VISION_JSON_INVALID")
+}
 
 /// 去掉模型可能附加的 Markdown 代码围栏。
 fn strip_code_fence(content: &str) -> &str {
