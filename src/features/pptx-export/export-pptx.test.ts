@@ -56,6 +56,28 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("writes the crop of a picture into the slide XML as a source rectangle", async () => {
+    const document = createDocument();
+    const slideId = document.slides[0]!.id;
+    applyCommand(document, { type: "add-image", slideId, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "sample" });
+    const image = document.slides[0]!.elements[1]!;
+    applyCommand(document, { type: "set-image-crop", slideId, elementId: image.id, crop: { top: 0.1, bottom: 0.2, left: 0.15, right: 0 } });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain('<a:srcRect l="15000" t="10000" r="0" b="20000"/>');
+    expect(result.report.croppedImages).toBe(1);
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("leaves a picture without a crop without a source rectangle", async () => {
+    const document = createDocument();
+    applyCommand(document, { type: "add-image", slideId: document.slides[0]!.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "sample" });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).not.toContain("<a:srcRect");
+    expect(result.report.croppedImages).toBe(0);
+  });
+
   it("preserves document z-order in the slide XML", async () => {
     const document = createDocument();
     const slideId = document.slides[0]!.id;
@@ -128,5 +150,24 @@ describe("PPTX export", () => {
     const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
     expect(slideXml).toContain("<p:bg>");
     expect(result.report.masters).toEqual([]);
+  });
+
+  it("names the parts of the package so that PowerPoint can open them", async () => {
+    const result = await buildPptx(templateDocument());
+    const entries = unzipSync(result.bytes);
+    const media = Object.keys(entries).filter((name) => name.startsWith("ppt/media/") && !name.endsWith("/"));
+    expect(media.length).toBeGreaterThan(0);
+    // The name of a part is a URI segment. The layout of a Chinese template
+    // produces a media name with Chinese characters, and PowerPoint refuses to
+    // open the package with `0x808D1003`.
+    expect(media.every((name) => /^[\x21-\x7e]+$/.test(name))).toBe(true);
+    // The relationship of the layout has to point at the renamed part.
+    const layoutRels = Object.keys(entries).find((name) => /^ppt\/slideLayouts\/_rels\/.+\.rels$/.test(name));
+    expect(layoutRels).toBeDefined();
+    const rels = strFromU8(entries[layoutRels!]!);
+    expect(rels).not.toMatch(/Target="[^"]*[^\x00-\x7f]/);
+    // The layout keeps the name of the template, it is only the part that is renamed.
+    const layoutXml = Object.keys(entries).filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name)).map((name) => strFromU8(entries[name]!)).join("");
+    expect(layoutXml).toContain('name="内页（浅色）1"');
   });
 });

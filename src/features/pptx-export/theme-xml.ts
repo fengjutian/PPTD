@@ -1,4 +1,4 @@
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, strToU8 } from "fflate";
 
 /**
  * Theme colors of an exported PPTX.
@@ -11,7 +11,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
  * theme part, which is the one place PowerPoint reads theme colors from.
  */
 
-const THEME_PART = "ppt/theme/theme1.xml";
+export const THEME_PART = "ppt/theme/theme1.xml";
 
 /** The color slots of the OOXML color scheme, in the order the scheme declares them. */
 const COLOR_SLOTS = ["dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"] as const;
@@ -51,18 +51,17 @@ export function patchColorScheme(xml: string, colors: ThemeColorSlot[]): string 
 }
 
 /**
- * Writes the template palette into the theme part of an exported package.
- * The package is returned unchanged when it carries no theme part or when the
- * template declares no usable color, so a failure here can never corrupt a
- * file that would otherwise export correctly.
+ * Writes the template palette into the theme part of a package. The entries
+ * are only touched when the theme part exists and the template declares a
+ * usable color, so a failure here can never corrupt a file that would
+ * otherwise export correctly.
  */
-export function applyThemeColors(bytes: Uint8Array, colors: ThemeColorSlot[]): { bytes: Uint8Array; applied: boolean } {
-  if (colors.length === 0) return { bytes, applied: false };
-  const entries = unzipSync(bytes);
+export function patchThemeColors(entries: Record<string, Uint8Array>, colors: ThemeColorSlot[]): boolean {
+  if (colors.length === 0) return false;
   const themePart = entries[THEME_PART];
-  if (!themePart) return { bytes, applied: false };
+  if (!themePart) return false;
   const patched = patchColorScheme(strFromU8(themePart), colors);
-  if (!patched) return { bytes, applied: false };
+  if (!patched) return false;
   entries[THEME_PART] = strToU8(patched);
-  return { bytes: zipSync(entries, { level: 6 }), applied: true };
+  return true;
 }

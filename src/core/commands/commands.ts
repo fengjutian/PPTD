@@ -90,7 +90,7 @@ export type DocumentCommand =
   | { type: "set-slide"; slideId: SlideId }
   | { type: "set-slide-background"; slideId: SlideId; background: string }
   | { type: "add-text"; slideId: SlideId }
-  | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string }
+  | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string; naturalWidth?: number; naturalHeight?: number }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }

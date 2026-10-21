@@ -387,4 +387,31 @@ mod tests {
             "AI_MODEL_INVALID"
         );
     }
+
+    #[tokio::test]
+    async fn chat_gives_up_immediately_when_the_task_was_cancelled() {
+        // 取消后不应该再发出请求，也不应该等待厂商把整份草稿写完。
+        let provider = resolve(None).unwrap();
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        let body = ChatRequest {
+            model: "MiniMax-M3".into(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "取消测试".into(),
+            }],
+            temperature: 0.0,
+        };
+        let error = chat(
+            provider,
+            "unused-key",
+            &body,
+            Duration::from_secs(30),
+            "AI_TEST_REQUEST_FAILED",
+            &cancel,
+        )
+        .await
+        .expect_err("a cancelled task must not produce content");
+        assert_eq!(error, REQUEST_CANCELLED_ERROR);
+    }
 }

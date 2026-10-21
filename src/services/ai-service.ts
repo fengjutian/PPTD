@@ -207,6 +207,8 @@ export interface AiGenerationOptions {
   onProgress?: (progress: AiGenerationProgress) => void;
   /** 返回 true 时放弃本次生成，用于响应用户取消。 */
   isCancelled?: () => boolean;
+  /** 生成任务号。同一任务的所有请求共享它，取消时一并中断。 */
+  taskId?: number;
 }
 
 /** 一次请求能写完的页数上限。再少就没必要拆批。 */
@@ -229,7 +231,7 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   const { provider, model } = await aiSelection();
   if (slideCount <= SINGLE_CALL_PAGE_LIMIT) {
     options.onProgress?.({ stage: "content", completed: 0, total: 1, label: "正在生成演示草稿…" });
-    const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider } });
+    const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider, taskId: options.taskId } });
     const draft = aiDraftSchema.parse(raw);
     if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
     options.onProgress?.({ stage: "content", completed: 1, total: 1, label: "草稿已生成" });
@@ -237,7 +239,7 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   }
 
   options.onProgress?.({ stage: "outline", completed: 0, total: 1, label: "正在规划演示大纲…" });
-  const outlineRaw = await invoke<unknown>("generate_presentation_outline", { request: { topic, slideCount, model, provider } });
+  const outlineRaw = await invoke<unknown>("generate_presentation_outline", { request: { topic, slideCount, model, provider, taskId: options.taskId } });
   const outline = aiOutlineSchema.parse(outlineRaw);
   if (outline.pages.length !== slideCount) throw new Error("AI_OUTLINE_PAGE_COUNT_MISMATCH");
   assertNotCancelled(options);
@@ -250,7 +252,7 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
 
   let completed = 0;
   const batchResults = await Promise.all(batches.map(async (batch) => {
-    const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider } });
+    const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider, taskId: options.taskId } });
     const parsed = aiSlideBatchSchema.parse(raw);
     if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
     completed += 1;
@@ -276,17 +278,17 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   return draft;
 }
 
-export async function generateSlideBriefs(draft: AiDraft): Promise<SlideBrief[]> {
+export async function generateSlideBriefs(draft: AiDraft, taskId?: number): Promise<SlideBrief[]> {
   const { provider, model } = await aiSelection();
-  const raw = await invoke<unknown>("generate_slide_briefs", { request: { draft, model, provider } });
+  const raw = await invoke<unknown>("generate_slide_briefs", { request: { draft, model, provider, taskId } });
   const result = slideBriefsSchema.parse(raw);
   if (result.briefs.length !== draft.slides.length || result.briefs.some((brief, index) => brief.slideIndex !== index)) throw new Error("AI_BRIEF_SLIDE_MISMATCH");
   return result.briefs;
 }
 
-export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext, visualGoal: PresentationVisualGoal = defaultPresentationVisualGoal()): Promise<AiPresentationDesign> {
+export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext, visualGoal: PresentationVisualGoal = defaultPresentationVisualGoal(), taskId?: number): Promise<AiPresentationDesign> {
   const { provider, model } = await aiSelection();
-  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, visualGoal, model, provider } });
+  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, visualGoal, model, provider, taskId } });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   return constrainDesignToTemplate({
@@ -312,3 +314,14 @@ export const aiKeyConfigured = (providerId: string) => invoke<boolean>("ai_api_k
 export const saveAiKey = (providerId: string, apiKey: string) => invoke<void>("save_ai_api_key", { providerId, apiKey });
 export const deleteAiKey = (providerId: string) => invoke<void>("delete_ai_api_key", { providerId });
 export const testAiConnection = (providerId: string, model: string) => invoke<string>("test_ai_connection", { providerId, model });
+
+/**
+ * 取消一个生成任务。
+ *
+ * 后端会中断该任务下所有在途请求，而不是只让界面停止等待：否则模型会继续
+ * 生成一份没人要的草稿。
+ */
+export const cancelAiGeneration = (taskId: number) => invoke<boolean>("cancel_ai_generation", { taskId });
+
+/** 生成任务结束，释放后端登记。 */
+export const endAiGeneration = (taskId: number) => invoke<void>("end_ai_generation", { taskId });

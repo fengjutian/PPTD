@@ -13,6 +13,7 @@ fn application_version() -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(ai::CancelRegistry::default())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
@@ -33,6 +34,8 @@ pub fn run() {
             commands::ai::generate_slide_briefs,
             commands::ai::generate_presentation_design,
             commands::ai::review_presentation_visuals,
+            commands::ai::cancel_ai_generation,
+            commands::ai::end_ai_generation,
             commands::ai::save_ai_api_key,
             commands::ai::delete_ai_api_key,
             commands::ai::ai_api_key_configured,

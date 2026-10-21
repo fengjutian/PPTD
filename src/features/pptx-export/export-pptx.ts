@@ -1,8 +1,11 @@
 import PptxGenJS from "pptxgenjs";
-import { EMU_PER_INCH, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
+import { unzipSync, zipSync } from "fflate";
+import { EMU_PER_INCH, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
 import { isFontAvailable, validatePresentationForExport, type ExportIssue } from "../../core/validation/export-validation";
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
-import { applyThemeColors } from "./theme-xml";
+import { patchThemeColors } from "./theme-xml";
+import { normalizePackagePartNames } from "./package-parts";
+import { patchImageCrops } from "./image-crop-xml";
 
 const inch = (value: number) => value / EMU_PER_INCH;
 const color = (value: string) => value.replace(/^#/, "");
@@ -10,6 +13,8 @@ const color = (value: string) => value.replace(/^#/, "");
 export interface ExportReport {
   slideCount: number;
   nativeObjectCount: number;
+  /** Pictures that were written with a crop. */
+  croppedImages: number;
   /** Names of the slide masters written into the package. */
   masters: string[];
   /** Theme fonts written into the theme part, when the deck declares a theme. */
@@ -144,6 +149,10 @@ export async function buildPptx(
   }
 
   let nativeObjectCount = 0;
+  let croppedImageCount = 0;
+  // The crops of the pictures of every slide, in the order the pictures were
+  // added. The source rectangle of a crop is written into the slide XML later.
+  const cropsBySlide: (ImageCrop | undefined)[][] = [];
   for (const model of document.slides) {
     throwIfCancelled(options.signal);
     const master = model.layoutId ? masters.get(model.layoutId) : undefined;
@@ -151,6 +160,7 @@ export async function buildPptx(
     // A master that carries the artwork must not be covered by a page
     // background, otherwise the template image would be hidden.
     if (!master?.artwork) slide.background = { color: color(model.background) };
+    const slideCrops: (ImageCrop | undefined)[] = [];
 
     for (const element of model.elements) {
       throwIfCancelled(options.signal);
@@ -196,21 +206,29 @@ export async function buildPptx(
         });
       } else {
         slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });
+        slideCrops.push(element.crop);
+        if (element.crop) croppedImageCount += 1;
       }
       nativeObjectCount += 1;
     }
 
     slide.addNotes(model.content.speakerNotes ? model.content.speakerNotes : "");
+    cropsBySlide.push(slideCrops);
   }
 
   throwIfCancelled(options.signal);
   const result = await pptx.write({ outputType: "uint8array", compression: true });
   const written = result instanceof Uint8Array ? result : new Uint8Array(result as ArrayBuffer);
-  // The palette of the template is written into the theme part of the package.
-  // A failure there must not cost the deck its fonts and its masters, so the
-  // package is only replaced when the theme part was actually rewritten.
-  const themed = theme?.colors.length ? applyThemeColors(written, theme.colors) : { bytes: written, applied: false };
-  const bytes = themed.bytes;
+  // The palette of the template is written into the theme part of the package,
+  // and the media of a layout background is renamed to a name that can live in
+  // a URI. Both are done in one pass over the package, and both are skipped
+  // when they are not possible: a failure there must not cost the deck its
+  // fonts and its masters.
+  const entries = unzipSync(written);
+  const themeApplied = theme?.colors.length ? patchThemeColors(entries, theme.colors) : false;
+  normalizePackagePartNames(entries);
+  const _cropsApplied = patchImageCrops(entries, cropsBySlide);
+  const bytes = zipSync(entries, { level: 6 });
   const packageValidation = validatePptxPackage(bytes);
   if (!packageValidation.valid) {
     throw new Error(`EXPORT_PACKAGE_INVALID: ${packageValidation.issues.join("；")}`);
@@ -221,9 +239,10 @@ export async function buildPptx(
     report: {
       slideCount: document.slides.length,
       nativeObjectCount,
+      croppedImages: croppedImageCount,
       masters: [...masters.values()].map((plan) => plan.title),
       ...(theme ? { themeFonts: { major: theme.majorFont, minor: theme.minorFont } } : {}),
-      themeColors: themed.applied ? theme!.colors.map((slot) => slot.name) : [],
+      themeColors: themeApplied ? theme!.colors.map((slot) => slot.name) : [],
       warnings: issues.map((issue) => issue.message),
       issues,
       package: packageValidation,

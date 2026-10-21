@@ -196,6 +196,7 @@ pub async fn review_presentation_visuals(
             temperature: 0.1,
         },
         Duration::from_secs(120),
+        &cancel,
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_VISION_JSON_INVALID")
@@ -218,7 +219,11 @@ fn parse_json<T: DeserializeOwned>(content: &str, invalid_code: &str) -> Result<
 }
 
 #[tauri::command]
-pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_json::Value, String> {
+pub async fn generate_presentation(
+    request: GenerateRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
+) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
     if request.topic.trim().is_empty()
         || request.topic.chars().count() > 4_000
         || !(1..=20).contains(&request.slide_count)
@@ -272,6 +277,7 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
         &body,
         FULL_DRAFT_TIMEOUT,
         "AI_DRAFT_REQUEST_FAILED",
+        &cancel,
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_JSON_INVALID")
@@ -284,7 +290,9 @@ pub async fn generate_presentation(request: GenerateRequest) -> Result<serde_jso
 #[tauri::command]
 pub async fn generate_presentation_outline(
     request: GenerateOutlineRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
     if request.topic.trim().is_empty()
         || request.topic.chars().count() > 4_000
         || !(1..=20).contains(&request.slide_count)
@@ -328,6 +336,7 @@ pub async fn generate_presentation_outline(
         &body,
         OUTLINE_TIMEOUT,
         "AI_OUTLINE_REQUEST_FAILED",
+        &cancel,
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_OUTLINE_JSON_INVALID")
@@ -340,7 +349,9 @@ pub async fn generate_presentation_outline(
 #[tauri::command]
 pub async fn generate_presentation_slides_batch(
     request: GenerateSlideBatchRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
     if request.topic.trim().is_empty()
         || request.topic.chars().count() > 4_000
         || request.count == 0
@@ -425,6 +436,7 @@ pub async fn generate_presentation_slides_batch(
         &body,
         SLIDE_BATCH_TIMEOUT,
         "AI_BATCH_REQUEST_FAILED",
+        &cancel,
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_BATCH_JSON_INVALID")
@@ -433,7 +445,9 @@ pub async fn generate_presentation_slides_batch(
 #[tauri::command]
 pub async fn generate_slide_briefs(
     request: GenerateBriefsRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
     let draft = serde_json::to_string(&request.draft).map_err(|_| "AI_BRIEF_REQUEST_INVALID")?;
     if draft.len() > 120_000 {
         return Err("AI_BRIEF_REQUEST_TOO_LARGE".into());
@@ -486,6 +500,7 @@ pub async fn generate_slide_briefs(
         &body,
         BRIEF_TIMEOUT,
         "AI_BRIEF_REQUEST_FAILED",
+        &cancel,
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_BRIEF_JSON_INVALID")
@@ -494,7 +509,9 @@ pub async fn generate_slide_briefs(
 #[tauri::command]
 pub async fn generate_presentation_design(
     request: GenerateDesignRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
     let draft = serde_json::to_string(&request.draft).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let briefs = serde_json::to_string(&request.briefs).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let template =
@@ -581,6 +598,7 @@ pub async fn generate_presentation_design(
         &body,
         DESIGN_TIMEOUT,
         "AI_DESIGN_REQUEST_FAILED",
+        &cancel,
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_DESIGN_JSON_INVALID")
@@ -591,6 +609,7 @@ pub async fn test_ai_connection(provider_id: String, model: String) -> Result<St
     let provider = ai::resolve(Some(provider_id.as_str()))?;
     let api_key = ai::read_api_key(provider)?;
     let model = ai::resolve_model(provider, Some(model))?;
+    let cancel = ai::CancelToken::new();
     let body = ChatRequest {
         model: model.clone(),
         messages: vec![ChatMessage {
@@ -605,9 +624,22 @@ pub async fn test_ai_connection(provider_id: String, model: String) -> Result<St
         &body,
         Duration::from_secs(20),
         "AI_CONNECTION_FAILED",
+        &cancel,
     )
     .await?;
     Ok(format!("{} {} 连接成功", provider.display_name(), model))
+}
+
+/// 取消一个生成任务：中断该任务下所有在途请求。
+#[tauri::command]
+pub fn cancel_ai_generation(task_id: u64, registry: tauri::State<'_, CancelRegistry>) -> bool {
+    registry.cancel(task_id)
+}
+
+/// 生成任务结束，释放登记。
+#[tauri::command]
+pub fn end_ai_generation(task_id: u64, registry: tauri::State<'_, CancelRegistry>) {
+    registry.release(task_id);
 }
 
 #[tauri::command]

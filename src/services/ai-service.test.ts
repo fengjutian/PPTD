@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
-import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, chooseSlideLayout, constrainDesignToTemplate, describeAiError, generatePresentationDraft, slideBriefsSchema, splitBodyItems, type AiGenerationProgress } from "./ai-service";
+import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, cancelAiGeneration, chooseSlideLayout, constrainDesignToTemplate, describeAiError, generatePresentationDraft, slideBriefsSchema, splitBodyItems, type AiGenerationProgress } from "./ai-service";
 import { contrastRatio } from "../core/rendering/contrast";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => false }));
@@ -231,5 +231,25 @@ describe("多页草稿的分批编排", () => {
 
     await expect(generatePresentationDraft("主题", 12, { isCancelled: () => true })).rejects.toThrow("AI_GENERATION_CANCELLED");
     expect(vi.mocked(invoke).mock.calls.map((call) => call[0])).toEqual(["generate_presentation_outline"]);
+  });
+
+  it("把任务号带给后端，取消指令也走同一条通道", async () => {
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "generate_presentation_outline") return outlineFor(12);
+      if (command === "generate_presentation_slides_batch") {
+        const request = (args as { request: { startIndex: number; count: number } }).request;
+        return batchFor(request.startIndex, request.count);
+      }
+      if (command === "cancel_ai_generation") return true;
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    await generatePresentationDraft("主题", 12, { taskId: 42 });
+    const batchCall = vi.mocked(invoke).mock.calls.find((call) => call[0] === "generate_presentation_slides_batch");
+    expect(batchCall?.[1]).toMatchObject({ request: { taskId: 42 } });
+
+    // 取消必须打到后端：只停界面等待，模型会继续生成一份没人要的草稿。
+    await expect(cancelAiGeneration(42)).resolves.toBe(true);
+    expect(vi.mocked(invoke).mock.calls.at(-1)).toEqual(["cancel_ai_generation", { taskId: 42 }]);
   });
 });

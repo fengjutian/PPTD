@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, SendToBack, Trash2, Unlink } from "lucide-react";
-import { type Emu, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Trash2, Unlink } from "lucide-react";
+import { type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
 import { isFontAvailable } from "../../core/validation/export-validation";
@@ -113,6 +113,22 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
 
   const setShapeStyle = (style: Partial<ShapeElementStyle>) => {
     onCommand({ type: "set-shape-style", slideId, elementId: element.id, style });
+  };
+
+  const crop = element.type === "image" ? element.crop : undefined;
+
+  /**
+   * A crop cuts a fraction off one side of the source. The opposite side has to
+   * leave room for it, otherwise nothing of the picture would be left.
+   */
+  const commitCrop = (side: keyof ImageCrop, percent: number) => {
+    const current: ImageCrop = crop ?? { top: 0, bottom: 0, left: 0, right: 0 };
+    const value = Math.min(0.99, Math.max(0, percent / 100));
+    const next: ImageCrop = { ...current, [side]: value };
+    const opposite = side === "top" ? "bottom" : side === "bottom" ? "top" : side === "left" ? "right" : "left";
+    const limit = 0.99 - value;
+    if (next[opposite] > limit) next[opposite] = limit;
+    onCommand({ type: "set-image-crop", slideId, elementId: element.id, crop: next });
   };
 
   const contrast = element.type === "text" ? contrastRatio(element.style.color, background) : undefined;
@@ -274,6 +290,23 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
         <h4>图片</h4>
         <TextField label="替代文本" value={element.altText} maxLength={500} disabled={locked}
           onCommit={(altText) => onCommand({ type: "set-image-alt-text", slideId, elementId: element.id, altText })} />
+        <div className="field-label crop-label">裁剪（源图切去的比例）</div>
+        <div className="property-grid">
+          <NumberField label="上" unit="%" value={(crop?.top ?? 0) * 100} min={0} max={99} precision={0} disabled={locked}
+            onCommit={(percent) => commitCrop("top", percent)} />
+          <NumberField label="下" unit="%" value={(crop?.bottom ?? 0) * 100} min={0} max={99} precision={0} disabled={locked}
+            onCommit={(percent) => commitCrop("bottom", percent)} />
+          <NumberField label="左" unit="%" value={(crop?.left ?? 0) * 100} min={0} max={99} precision={0} disabled={locked}
+            onCommit={(percent) => commitCrop("left", percent)} />
+          <NumberField label="右" unit="%" value={(crop?.right ?? 0) * 100} min={0} max={99} precision={0} disabled={locked}
+            onCommit={(percent) => commitCrop("right", percent)} />
+        </div>
+        <div className="field-row">
+          <button type="button" className="toggle-button" disabled={locked || !crop}
+            onClick={() => onCommand({ type: "set-image-crop", slideId, elementId: element.id, crop: null })}>
+            <RotateCcw />重置裁剪
+          </button>
+        </div>
       </section>}
 
       <section className="inspector-section">

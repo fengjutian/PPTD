@@ -10,7 +10,7 @@ import { ContentReview } from "../features/ai/ContentReview";
 import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { briefsFromDraft, describeAiError, generatePresentationDesign, generatePresentationDraft, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
+import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -67,6 +67,22 @@ function resizeFrame(start: RectEmu, direction: ResizeDirection, dx: number, dy:
 
 function normalizeRotation(value: number): number {
   return ((Math.round(value) % 360_000) + 360_000) % 360_000;
+}
+
+/**
+ * Reads the pixel size of a picture so it can be placed with its own
+ * proportions. A picture that cannot be decoded is placed in the default box.
+ */
+async function readImageSize(dataUrl: string): Promise<{ width: number; height: number } | undefined> {
+  try {
+    const image = new Image();
+    image.src = dataUrl;
+    await image.decode();
+    if (!image.naturalWidth || !image.naturalHeight) return undefined;
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  } catch {
+    return undefined;
+  }
 }
 
 function ElementView({ element, scale, selected, onSelect }: { element: SlideElement; scale: number; selected: boolean; onSelect: () => void }) {
@@ -217,6 +233,8 @@ export function App() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
   const aiRequestId = useRef(0);
+  /** 后端取消用的生成任务号；一次生成任务内的所有请求共享它。 */
+  const aiTaskId = useRef(0);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const [templatePreview, setTemplatePreview] = useState<string | null>();
@@ -377,8 +395,17 @@ export function App() {
     reader.onerror = () => setTaskStatus("图片读取失败");
     reader.onload = () => {
       if (typeof reader.result !== "string") return;
-      execute({ type: "add-image", slideId: activeSlide.id, dataUrl: reader.result, mimeType: file.type as "image/png" | "image/jpeg" | "image/webp", altText: file.name });
-      setTaskStatus(`已添加图片：${file.name}`);
+      void readImageSize(reader.result).then((size) => {
+        execute({
+          type: "add-image",
+          slideId: activeSlide.id,
+          dataUrl: reader.result as string,
+          mimeType: file.type as "image/png" | "image/jpeg" | "image/webp",
+          altText: file.name,
+          ...(size ? { naturalWidth: size.width, naturalHeight: size.height } : {}),
+        });
+        setTaskStatus(`已添加图片：${file.name}`);
+      });
     };
     reader.readAsDataURL(file);
   };
@@ -388,11 +415,15 @@ export function App() {
       aiRequestId.current += 1;
       setAiBusy(false);
       setAiProgress(undefined);
+      // 真正中断后端在途请求，否则模型会继续生成一份没人要的草稿。
+      void cancelAiGeneration(aiTaskId.current).catch(() => undefined);
       setTaskStatus("已取消 AI 内容生成");
       return;
     }
     const requestId = aiRequestId.current + 1;
     aiRequestId.current = requestId;
+    aiTaskId.current += 1;
+    const taskId = aiTaskId.current;
     setAiBusy(true); setAiDraft(undefined);
     setAiProgress({ stage: "outline", completed: 0, total: 1, label: "正在准备生成…" });
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
@@ -402,6 +433,7 @@ export function App() {
           if (requestId === aiRequestId.current) setAiProgress(progress);
         },
         isCancelled: () => requestId !== aiRequestId.current,
+        taskId,
       }));
       if (requestId !== aiRequestId.current) return;
       const id = crypto.randomUUID();
@@ -421,7 +453,10 @@ export function App() {
       setTaskStatus(`AI 内容生成失败：${detail}`);
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成失败", { body: detail });
     }
-    finally { if (requestId === aiRequestId.current) { setAiBusy(false); setAiProgress(undefined); } }
+    finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+      if (requestId === aiRequestId.current) { setAiBusy(false); setAiProgress(undefined); }
+    }
   };
 
   useEffect(() => {

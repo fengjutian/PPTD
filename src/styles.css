@@ -421,6 +421,7 @@ button { color: inherit; }
 .property-form .field-stepper:hover:not(:disabled) { border-color: var(--ppt-accent); color: #fff; }
 .property-form .field-stepper:disabled { opacity: .4; cursor: default; }
 .property-form .field-error { color: #ff8d98; font-size: 10px; }
+.property-form .crop-label { margin: 6px 0 8px; }
 .property-form .color-control { gap: 6px; }
 .property-form .color-control .color-swatch { flex: 0 0 30px; width: 30px; height: 30px; padding: 2px; border-radius: 6px; cursor: pointer; }
 .property-form .color-control .color-swatch:disabled { opacity: .5; cursor: default; }
