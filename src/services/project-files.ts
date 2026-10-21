@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { presentationDocumentSchema, type PresentationDocument } from "../core/document-model";
+import { parsePresentationDocument, type PresentationDocument } from "../core/document-model";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 
@@ -11,7 +11,7 @@ export async function chooseProjectToOpen(): Promise<{ path: string; document: P
   const path = await open({ multiple: false, directory: false, filters: projectFilter });
   if (!path) return null;
   const raw = await invoke<unknown>("open_project", { path });
-  return { path, document: presentationDocumentSchema.parse(raw) as PresentationDocument };
+  return { path, document: parsePresentationDocument(raw) as PresentationDocument };
 }
 
 export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<string | null> {

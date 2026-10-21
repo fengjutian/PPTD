@@ -28,7 +28,7 @@ export function createSlide(index: number): Slide {
 export function createDocument(): PresentationDocument {
   return {
     id: uid() as DocumentId,
-    schemaVersion: 1,
+    schemaVersion: 2,
     title: "未命名演示文稿",
     pageSize: { width: inches(13.333), height: inches(7.5) },
     revisions: { document: 0, content: 0, design: 0 },

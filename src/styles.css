@@ -3,6 +3,7 @@
 body { margin: 0; min-width: 1080px; min-height: 720px; overflow: hidden; }
 button, input, textarea { font: inherit; }
 button { color: inherit; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .app-shell { height: 100vh; display: grid; grid-template: 64px 1fr 28px / 216px minmax(640px, 1fr) 252px; background: #202125; }
 .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 22px; padding: 0 16px; background: #101114; border-bottom: 1px solid #303136; box-shadow: 0 8px 30px #0004; z-index: 3; }
@@ -48,6 +49,7 @@ button { color: inherit; }
 .slide-element.text { padding: 4px 6px; display: flex; align-items: center; line-height: 1.15; }
 .slide-element.text > div { width: 100%; }
 .slide-element.shape .shape-fill { width: 100%; height: 100%; border-style: solid; }
+.slide-element.image .image-fill { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .slide-element.selected::after { content: ""; position: absolute; inset: -4px; border: 2px solid #675cff; pointer-events: none; }
 .slide-element.selected::before { content: ""; position: absolute; width: 8px; height: 8px; right: -8px; bottom: -8px; background: white; border: 2px solid #675cff; z-index: 2; }
 

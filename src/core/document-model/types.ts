@@ -45,7 +45,15 @@ export interface ShapeElement extends ElementBase {
   style: { fill: string; stroke: string; strokeWidthPt: number; radiusPt: number };
 }
 
-export type SlideElement = TextElement | ShapeElement;
+export type SupportedImageMimeType = "image/png" | "image/jpeg" | "image/webp";
+
+export interface ImageElement extends ElementBase {
+  type: "image";
+  source: { kind: "embedded"; dataUrl: string; mimeType: SupportedImageMimeType };
+  altText: string;
+}
+
+export type SlideElement = TextElement | ShapeElement | ImageElement;
 
 export interface Slide {
   id: SlideId;
@@ -56,7 +64,7 @@ export interface Slide {
 
 export interface PresentationDocument {
   id: DocumentId;
-  schemaVersion: 1;
+  schemaVersion: 2;
   title: string;
   pageSize: { width: Emu; height: Emu };
   revisions: Revisions;

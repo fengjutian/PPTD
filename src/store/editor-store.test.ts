@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createDocument } from "../core/document-model";
+import { createDocument, inches } from "../core/document-model";
 import { useEditorStore } from "./editor-store";
 
 describe("editor history", () => {
@@ -57,5 +57,17 @@ describe("editor history", () => {
     expect(state.document.revisions).toEqual({ document: 1, content: 1, design: 1 });
     state.undo();
     expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(1);
+  });
+
+  it("commits a complete transform as one design transaction", () => {
+    const state = useEditorStore.getState();
+    const element = state.document.slides[0]!.elements[0]!;
+    const frame = { x: inches(2), y: inches(2), width: inches(6), height: inches(1) };
+    state.execute({ type: "transform-element", slideId: state.activeSlideId, elementId: element.id, frame, rotationMilliDegree: 30_000 });
+    expect(useEditorStore.getState().document.slides[0]!.elements[0]).toMatchObject({ frame, rotationMilliDegree: 30_000 });
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
+    expect(useEditorStore.getState().undoStack).toHaveLength(1);
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().document.slides[0]!.elements[0]!.frame).toEqual(element.frame);
   });
 });

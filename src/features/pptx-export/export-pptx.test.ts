@@ -11,4 +11,12 @@ describe("PPTX export", () => {
     expect(String.fromCharCode(...result.bytes.slice(0, 2))).toBe("PK");
     expect(result.report).toEqual({ slideCount: 1, nativeObjectCount: 2, warnings: [] });
   });
+
+  it("exports embedded images as native picture objects", async () => {
+    const document = createDocument();
+    applyCommand(document, { type: "add-image", slideId: document.slides[0]!.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "sample" });
+    const result = await buildPptx(document);
+    expect(String.fromCharCode(...result.bytes.slice(0, 2))).toBe("PK");
+    expect(result.report.nativeObjectCount).toBe(2);
+  });
 });

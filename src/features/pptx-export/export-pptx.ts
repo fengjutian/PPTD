@@ -28,8 +28,10 @@ export async function buildPptx(document: PresentationDocument): Promise<{ bytes
       const position = { x: inch(element.frame.x), y: inch(element.frame.y), w: inch(element.frame.width), h: inch(element.frame.height), rotate: element.rotationMilliDegree / 1000 };
       if (element.type === "text") {
         slide.addText(element.text, { ...position, fontFace: element.style.fontFamily, fontSize: element.style.fontSizePt, color: color(element.style.color), bold: element.style.bold, align: element.style.align, margin: 0, breakLine: false, fit: "shrink" });
-      } else {
+      } else if (element.type === "shape") {
         slide.addShape(element.shape === "ellipse" ? pptx.ShapeType.ellipse : pptx.ShapeType.rect, { ...position, fill: { color: color(element.style.fill) }, line: { color: color(element.style.stroke), width: element.style.strokeWidthPt } });
+      } else {
+        slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });
       }
       nativeObjectCount += 1;
     }

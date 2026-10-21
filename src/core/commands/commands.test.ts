@@ -84,4 +84,23 @@ describe("document commands", () => {
     expect(edited.slides[0]!.content.title).toBe(titleBefore);
     expect(edited.slides[0]!.elements[1]).toMatchObject({ type: "text", text: "补充说明" });
   });
+
+  it("validates and applies element transforms", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = slide.elements[0]!;
+    const frame = { x: inches(2), y: inches(1), width: inches(5), height: inches(1) };
+    const transformed = produce(source, (draft) => applyCommand(draft, { type: "transform-element", slideId: slide.id, elementId: element.id, frame, rotationMilliDegree: 15_000 }));
+    expect(transformed.slides[0]!.elements[0]).toMatchObject({ frame, rotationMilliDegree: 15_000 });
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "transform-element", slideId: slide.id, elementId: element.id, frame: { ...frame, width: 0 as typeof frame.width }, rotationMilliDegree: 0 }))).toThrow("INVALID_ELEMENT_TRANSFORM");
+  });
+
+  it("adds a validated embedded image", () => {
+    const source = createDocument();
+    const slideId = source.slides[0]!.id;
+    const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+    const result = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/png", altText: "sample" }));
+    expect(result.slides[0]!.elements[1]).toMatchObject({ type: "image", source: { dataUrl, mimeType: "image/png" }, altText: "sample" });
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/jpeg", altText: "sample" }))).toThrow("INVALID_IMAGE_SOURCE");
+  });
 });

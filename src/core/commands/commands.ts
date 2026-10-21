@@ -1,4 +1,4 @@
-import type { ElementId, Emu, PresentationDocument, SlideId } from "../document-model";
+import type { ElementId, Emu, PresentationDocument, RectEmu, SlideId, SupportedImageMimeType } from "../document-model";
 import { createSlide, inches } from "../document-model";
 
 export type ChangeDomain = "content" | "design" | "both";
@@ -10,10 +10,12 @@ export type DocumentCommand =
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
   | { type: "set-slide"; slideId: SlideId }
   | { type: "add-text"; slideId: SlideId }
+  | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
+  | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
 
@@ -22,6 +24,7 @@ export function commandDomain(command: DocumentCommand): ChangeDomain | null {
     case "set-slide": return null;
     case "edit-text": return "content";
     case "add-text": return "both";
+    case "add-image": return "both";
     case "add-slide": return "both";
     case "duplicate-slide": return "both";
     case "delete-slide": return "both";
@@ -46,7 +49,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       content: { ...source.content },
       elements: source.elements.map((element) => element.type === "text"
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
-        : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }),
+        : element.type === "shape"
+          ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
+          : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, source: { ...element.source } }),
     };
     document.slides.splice(sourceIndex + 1, 0, duplicate);
     return;
@@ -85,6 +90,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (slide.content.status === "approved") slide.content.status = "changed";
     return;
   }
+  if (command.type === "add-image") {
+    const expectedPrefix = `data:${command.mimeType};base64,`;
+    const payload = command.dataUrl.slice(expectedPrefix.length);
+    if (!command.dataUrl.startsWith(expectedPrefix) || command.dataUrl.length > 12_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload) || command.altText.length > 500) {
+      throw new Error("INVALID_IMAGE_SOURCE");
+    }
+    slide.elements.push({
+      id: crypto.randomUUID() as ElementId,
+      type: "image",
+      frame: { x: inches(2), y: inches(1.7), width: inches(4), height: inches(3) },
+      rotationMilliDegree: 0,
+      locked: false,
+      source: { kind: "embedded", dataUrl: command.dataUrl, mimeType: command.mimeType },
+      altText: command.altText,
+    });
+    if (slide.content.status === "approved") slide.content.status = "changed";
+    return;
+  }
   if (command.type === "add-shape") {
     slide.elements.push({
       id: crypto.randomUUID() as ElementId,
@@ -110,7 +133,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const offset = inches(0.2);
     const duplicate = element.type === "text"
       ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
-      : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } };
+      : element.type === "shape"
+        ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
+        : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, source: { ...element.source } };
     slide.elements.splice(sourceIndex + 1, 0, duplicate);
     return;
   }
@@ -118,7 +143,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     slide.elements.splice(slide.elements.findIndex((item) => item.id === command.elementId), 1);
     return;
   }
-  if (command.type === "move-element") element.frame = { ...element.frame, x: command.x, y: command.y };
+  if (command.type === "move-element") {
+    if (!Number.isSafeInteger(command.x) || !Number.isSafeInteger(command.y)) throw new Error("INVALID_ELEMENT_TRANSFORM");
+    element.frame = { ...element.frame, x: command.x, y: command.y };
+  }
+  if (command.type === "transform-element") {
+    const values = [command.frame.x, command.frame.y, command.frame.width, command.frame.height, command.rotationMilliDegree];
+    if (!values.every(Number.isSafeInteger) || command.frame.width <= 0 || command.frame.height <= 0) {
+      throw new Error("INVALID_ELEMENT_TRANSFORM");
+    }
+    element.frame = { ...command.frame };
+    element.rotationMilliDegree = command.rotationMilliDegree;
+  }
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     element.text = command.text;

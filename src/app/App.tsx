@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, Layers3, Lock, LockOpen, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, Lock, LockOpen, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { choosePptxPath, chooseProjectToOpen, isDesktopRuntime, saveProject, writePptx } from "../services/project-files";
@@ -44,7 +44,7 @@ function ElementView({ element, scale, selected, onSelect }: { element: SlideEle
 
   return (
     <div className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}>
-      {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * 1.333, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} />}
+      {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * 1.333, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : <img className="image-fill" src={element.source.dataUrl} alt={element.altText} draggable={false} />}
     </div>
   );
 }
@@ -54,6 +54,7 @@ export function App() {
   const [projectPath, setProjectPath] = useState<string>();
   const [savedRevision, setSavedRevision] = useState(0);
   const [taskStatus, setTaskStatus] = useState<string>();
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
   const scale = CANVAS_WIDTH / document.pageSize.width;
@@ -61,6 +62,19 @@ export function App() {
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
+
+  const commitTransform = (field: "x" | "y" | "width" | "height" | "rotation", rawValue: string) => {
+    if (!selected) return;
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return;
+    const frame = { ...selected.frame };
+    let rotationMilliDegree = selected.rotationMilliDegree;
+    if (field === "rotation") rotationMilliDegree = Math.round(value * 1000);
+    else frame[field] = emu(value * EMU_PER_INCH);
+    if (frame.width <= 0 || frame.height <= 0) return;
+    if (frame.x === selected.frame.x && frame.y === selected.frame.y && frame.width === selected.frame.width && frame.height === selected.frame.height && rotationMilliDegree === selected.rotationMilliDegree) return;
+    execute({ type: "transform-element", slideId: activeSlide.id, elementId: selected.id, frame, rotationMilliDegree });
+  };
 
   const handleNew = () => {
     if (dirty && !window.confirm("当前项目还有未保存的修改，确定新建吗？")) return;
@@ -111,6 +125,22 @@ export function App() {
     } catch (error) { setTaskStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`); }
   };
 
+  const handleImageFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setTaskStatus("图片必须是 PNG、JPEG 或 WebP，且不超过 8 MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => setTaskStatus("图片读取失败");
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      execute({ type: "add-image", slideId: activeSlide.id, dataUrl: reader.result, mimeType: file.type as "image/png" | "image/jpeg" | "image/webp", altText: file.name });
+      setTaskStatus(`已添加图片：${file.name}`);
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -124,6 +154,8 @@ export function App() {
           <ToolButton label="选择"><MousePointer2 /></ToolButton><ToolButton label="文本" onClick={() => execute({ type: "add-text", slideId: activeSlide.id })}><Type /></ToolButton>
           <ToolButton label="矩形" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}><Square /></ToolButton>
           <ToolButton label="椭圆" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}><Circle /></ToolButton>
+          <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolButton>
+          <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { handleImageFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
         </div>
         <button className="export-button" onClick={handleExport}><Download size={17} /> 导出 PPTX</button>
       </header>
@@ -153,10 +185,11 @@ export function App() {
       <aside className="right-panel">
         <div className="inspector-title"><Layers3 size={18} /><span>属性</span></div>
         {selected ? <div className="property-form">
-          <label>对象类型<input value={selected.type === "text" ? "文本" : selected.shape === "ellipse" ? "椭圆" : "矩形"} disabled /></label>
+          <label>对象类型<input value={selected.type === "text" ? "文本" : selected.type === "image" ? "图片" : selected.shape === "ellipse" ? "椭圆" : "矩形"} disabled /></label>
           {selected.type === "text" && <label>文本内容<textarea value={selected.text} disabled={selected.locked} onChange={(event) => execute({ type: "edit-text", slideId: activeSlide.id, elementId: selected.id, text: event.target.value })} /></label>}
-          <div className="property-grid"><label>X<input value={(selected.frame.x / EMU_PER_INCH).toFixed(2)} disabled /></label><label>Y<input value={(selected.frame.y / EMU_PER_INCH).toFixed(2)} disabled /></label></div>
-          <div className="property-grid"><label>宽度<input value={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled /></label><label>高度<input value={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled /></label></div>
+          <div className="property-grid"><label>X（英寸）<input key={`${selected.id}-x-${selected.frame.x}`} defaultValue={(selected.frame.x / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("x", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>Y（英寸）<input key={`${selected.id}-y-${selected.frame.y}`} defaultValue={(selected.frame.y / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("y", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
+          <div className="property-grid"><label>宽度（英寸）<input key={`${selected.id}-w-${selected.frame.width}`} defaultValue={(selected.frame.width / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("width", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label><label>高度（英寸）<input key={`${selected.id}-h-${selected.frame.height}`} defaultValue={(selected.frame.height / EMU_PER_INCH).toFixed(2)} disabled={selected.locked} onBlur={(event) => commitTransform("height", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label></div>
+          <label>旋转（度）<input key={`${selected.id}-r-${selected.rotationMilliDegree}`} defaultValue={(selected.rotationMilliDegree / 1000).toFixed(1)} disabled={selected.locked} onBlur={(event) => commitTransform("rotation", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} /></label>
           <div className="element-actions">
             <button onClick={() => execute({ type: "set-element-lock", slideId: activeSlide.id, elementId: selected.id, locked: !selected.locked })}>{selected.locked ? <LockOpen /> : <Lock />}{selected.locked ? "解锁" : "锁定"}</button>
             <button disabled={selected.locked} onClick={() => execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: selected.id })}><Copy />复制</button>
