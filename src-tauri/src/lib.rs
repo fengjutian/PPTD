@@ -15,6 +15,7 @@ pub fn run() {
             commands::minimax::save_minimax_api_key,
             commands::minimax::delete_minimax_api_key,
             commands::minimax::minimax_api_key_configured,
+            commands::minimax::test_minimax_connection,
             commands::project_file::save_project,
             commands::project_file::open_project,
             commands::project_file::save_recovery,
