@@ -714,9 +714,25 @@ pub fn analyze_pptx_template(
                 .find(|node| node.tag_name().name() == family)
                 .and_then(|node| {
                     node.descendants()
-                        .find(|child| child.tag_name().name() == "ea" && child.attribute("typeface").is_some_and(|value| !value.is_empty()))
-                        .or_else(|| node.descendants().find(|child| child.tag_name().name() == "font" && matches!(child.attribute("script"), Some("Hans" | "Hant")) && child.attribute("typeface").is_some_and(|value| !value.is_empty())))
-                        .or_else(|| node.descendants().find(|child| child.tag_name().name() == "latin"))
+                        .find(|child| {
+                            child.tag_name().name() == "ea"
+                                && child
+                                    .attribute("typeface")
+                                    .is_some_and(|value| !value.is_empty())
+                        })
+                        .or_else(|| {
+                            node.descendants().find(|child| {
+                                child.tag_name().name() == "font"
+                                    && matches!(child.attribute("script"), Some("Hans" | "Hant"))
+                                    && child
+                                        .attribute("typeface")
+                                        .is_some_and(|value| !value.is_empty())
+                            })
+                        })
+                        .or_else(|| {
+                            node.descendants()
+                                .find(|child| child.tag_name().name() == "latin")
+                        })
                 })
                 .and_then(|node| node.attribute("typeface"))
                 .filter(|value| !value.is_empty())
