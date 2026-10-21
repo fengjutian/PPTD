@@ -56,6 +56,21 @@ function ElementView({ element, scale, selected, onSelect }: { element: SlideEle
   );
 }
 
+function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<typeof useEditorStore.getState>["document"]["slides"][number]; pageWidth: number; pageHeight: number }) {
+  return <div className="thumbnail-scene">{slide.elements.map((element) => {
+    const style: React.CSSProperties = {
+      left: `${element.frame.x / pageWidth * 100}%`,
+      top: `${element.frame.y / pageHeight * 100}%`,
+      width: `${element.frame.width / pageWidth * 100}%`,
+      height: `${element.frame.height / pageHeight * 100}%`,
+      transform: `rotate(${element.rotationMilliDegree / 1000}deg)`,
+    };
+    if (element.type === "text") return <div className="thumbnail-element thumbnail-text" key={element.id} style={{ ...style, color: element.style.color, fontFamily: element.style.fontFamily, fontSize: Math.max(4, element.style.fontSizePt * 0.18), fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div>;
+    if (element.type === "image") return <img className="thumbnail-element thumbnail-image" key={element.id} style={style} src={element.source.dataUrl} alt="" />;
+    return <div className={`thumbnail-element thumbnail-shape ${element.shape}`} key={element.id} style={{ ...style, background: element.style.fill, borderColor: element.style.stroke, borderWidth: Math.max(1, element.style.strokeWidthPt * 0.3), borderRadius: element.shape === "ellipse" ? "50%" : Math.max(0, element.style.radiusPt * 0.3) }} />;
+  })}{slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}</div>;
+}
+
 export function App() {
   const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
   const [projectPath, setProjectPath] = useState<string>();
@@ -330,7 +345,7 @@ export function App() {
         <div className="panel-heading"><span>页面</span><button onClick={() => execute({ type: "add-slide" })}><Plus size={16} /></button></div>
         <div className="slide-list">
           {document.slides.map((slide, index) => <div key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`}>
-            <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><div className="thumbnail"><div className="thumb-title">{slide.content.title}</div><div className="thumb-accent" /></div></button>
+            <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><div className="thumbnail"><SlideThumbnail slide={slide} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} /></div></button>
             {slide.id === activeSlide.id && <div className="thumbnail-actions">
               <button aria-label="上移页面" title="上移页面" disabled={index === 0} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index - 1 })}><ArrowUp /></button>
               <button aria-label="下移页面" title="下移页面" disabled={index === document.slides.length - 1} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index + 1 })}><ArrowDown /></button>
@@ -393,7 +408,6 @@ export function App() {
             <div className="template-library"><div className="template-library-heading"><div><strong>已保存模板</strong><span>{templateLibrary.length} 个</span></div></div><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板</div>}</div>
             <div className="template-preview-panel"><div className="template-preview-heading"><strong><Eye />模板预览</strong>{selectedTemplate && <span>{selectedTemplate.name}</span>}</div><div className="template-preview-stage">{templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-analysis"><div className="template-analysis-grid"><span><b>{templateAnalysis.slideCount}</b>页面</span><span><b>{templateAnalysis.masterCount}</b>母版</span><span><b>{templateAnalysis.layoutCount}</b>版式</span><span><b>{templateAnalysis.themeCount}</b>主题</span></div><dl><div><dt>页面尺寸</dt><dd>{templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in` : "未定义"}</dd></div><div><dt>标题字体</dt><dd>{templateAnalysis.majorFont || "未定义"}</dd></div><div><dt>正文字体</dt><dd>{templateAnalysis.minorFont || "未定义"}</dd></div></dl>{templateAnalysis.themeColors.length > 0 && <div className="template-color-row" aria-label="主题色">{templateAnalysis.themeColors.map((color) => <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />)}</div>}<div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>{templateAnalysis.slides.length > 0 && <div className="template-slide-summaries"><strong>页面结构</strong><div>{templateAnalysis.slides.map((slide) => <article key={slide.index}><b>{String(slide.index).padStart(2, "0")}</b><span><strong>{slide.title}</strong><small>{slide.textCount} 文本 · {slide.imageCount} 图片 · {slide.shapeCount} 形状{slide.layout ? ` · ${slide.layout}` : ""}</small></span></article>)}</div></div>}</div>}</div>
           </div>
-          <button type="button" className="primary-action finish-theme" onClick={() => setActiveView("editor")}>暂不使用模板，返回编辑器<ArrowRight /></button>
         </section>
         </div>
       </main>}
