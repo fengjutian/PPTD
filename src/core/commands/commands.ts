@@ -87,7 +87,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.content = { title: draft.title, body: draft.body, speakerNotes: draft.speakerNotes, status: "approved" };
       const title = slide.elements[0];
       if (title?.type === "text") title.text = draft.title;
-      if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
+      if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", contentRef: "body", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
       return slide;
     });
     return;
@@ -113,7 +113,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       }
       return minimumPt;
     };
-    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right") => ({ id: crypto.randomUUID() as ElementId, type: "text" as const, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: fittedFontSize(value, box, fontSizePt), color, bold, align } });
+    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right", contentRef?: "title" | "body" | "decorative") => ({ id: crypto.randomUUID() as ElementId, type: "text" as const, contentRef, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: fittedFontSize(value, box, fontSizePt), color, bold, align } });
     const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle") => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: kind === "ellipse" ? 999 : 8 } });
     const points = (body: string) => body.split(/\n+|(?=\d+[.、]\s*)/).map((value) => value.trim()).filter(Boolean);
     document.title = command.title.trim();
@@ -290,7 +290,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.35, 0.08), 30, contentTitleColor, true, "left"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
         if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.35, 0.28), bodySize, design.bodyColor, false, "left"));
       }
-      const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
+      // Link rendered title/body text back to semantic content. Structured\n      // layouts (cards, timeline items, metrics) stay decorative because one\n      // visual element cannot safely overwrite a multi-field content block.\n      for (const element of slide.elements) {\n        if (element.type !== "text") continue;\n        if (element.text === content.title) element.contentRef = "title";\n        else if (content.body.trim() && element.text === content.body) element.contentRef = "body";\n        else element.contentRef = "decorative";\n      }\n      const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
       const bodyRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "body");
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
@@ -368,9 +368,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       rotationMilliDegree: 0,
       locked: false,
       text: "新文本",
+      contentRef: "decorative",
       style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#17181c", bold: false, align: "left" },
     });
-    if (slide.content.status === "approved") slide.content.status = "changed";
     return;
   }
   if (command.type === "add-image") {
@@ -388,7 +388,6 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       source: { kind: "embedded", dataUrl: command.dataUrl, mimeType: command.mimeType },
       altText: command.altText,
     });
-    if (slide.content.status === "approved") slide.content.status = "changed";
     return;
   }
   if (command.type === "add-shape") {
@@ -423,6 +422,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
   if (command.type === "delete-element") {
+    if (element.type === "text") {
+      if (element.contentRef === "title") slide.content.title = "";
+      if (element.contentRef === "body") slide.content.body = "";
+    }
     slide.elements.splice(slide.elements.findIndex((item) => item.id === command.elementId), 1);
     return;
   }
@@ -441,7 +444,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     element.text = command.text;
-    if (slide.elements[0]?.id === element.id) slide.content.title = command.text;
-    if (slide.content.status === "approved") slide.content.status = "changed";
+    const contentBound = element.contentRef === "title" || element.contentRef === "body" || (!element.contentRef && slide.elements[0]?.id === element.id);
+    if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id)) slide.content.title = command.text;
+    if (element.contentRef === "body") slide.content.body = command.text;
+    if (contentBound && slide.content.status === "approved") slide.content.status = "changed";
   }
 }
