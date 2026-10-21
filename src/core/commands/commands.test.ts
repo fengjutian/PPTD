@@ -70,4 +70,18 @@ describe("document commands", () => {
     const unlocked = produce(locked, (draft) => applyCommand(draft, { type: "set-element-lock", slideId: slide.id, elementId: element.id, locked: false }));
     expect(unlocked.slides[0]!.elements[0]!.locked).toBe(false);
   });
+
+  it("adds independent text without overwriting the slide title when edited", () => {
+    const source = createDocument();
+    source.slides[0]!.content.status = "approved";
+    const slideId = source.slides[0]!.id;
+    const titleBefore = source.slides[0]!.content.title;
+    const added = produce(source, (draft) => applyCommand(draft, { type: "add-text", slideId }));
+    const addedText = added.slides[0]!.elements[1]!;
+    expect(addedText.type).toBe("text");
+    expect(added.slides[0]!.content.status).toBe("changed");
+    const edited = produce(added, (draft) => applyCommand(draft, { type: "edit-text", slideId, elementId: addedText.id, text: "补充说明" }));
+    expect(edited.slides[0]!.content.title).toBe(titleBefore);
+    expect(edited.slides[0]!.elements[1]).toMatchObject({ type: "text", text: "补充说明" });
+  });
 });

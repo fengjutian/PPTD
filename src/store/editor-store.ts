@@ -51,6 +51,9 @@ export const useEditorStore = create<EditorState>((set) => ({
       activeSlideId = document.slides[Math.min(previousIndex, document.slides.length - 1)]!.id;
     }
     let selectedElementId: ElementId | null = null;
+    if (command.type === "add-text" || command.type === "add-shape") {
+      selectedElementId = document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id;
+    }
     if (command.type === "duplicate-element") {
       const slide = document.slides.find((item) => item.id === command.slideId)!;
       const sourceIndex = state.document.slides.find((item) => item.id === command.slideId)!.elements.findIndex((item) => item.id === command.elementId);

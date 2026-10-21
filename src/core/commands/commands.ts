@@ -9,6 +9,7 @@ export type DocumentCommand =
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
   | { type: "set-slide"; slideId: SlideId }
+  | { type: "add-text"; slideId: SlideId }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
@@ -20,6 +21,7 @@ export function commandDomain(command: DocumentCommand): ChangeDomain | null {
   switch (command.type) {
     case "set-slide": return null;
     case "edit-text": return "content";
+    case "add-text": return "both";
     case "add-slide": return "both";
     case "duplicate-slide": return "both";
     case "delete-slide": return "both";
@@ -70,6 +72,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   const slide = document.slides.find((item) => item.id === command.slideId);
   if (!slide) throw new Error("SLIDE_NOT_FOUND");
 
+  if (command.type === "add-text") {
+    slide.elements.push({
+      id: crypto.randomUUID() as ElementId,
+      type: "text",
+      frame: { x: inches(1), y: inches(1.8), width: inches(4), height: inches(0.65) },
+      rotationMilliDegree: 0,
+      locked: false,
+      text: "新文本",
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#17181c", bold: false, align: "left" },
+    });
+    if (slide.content.status === "approved") slide.content.status = "changed";
+    return;
+  }
   if (command.type === "add-shape") {
     slide.elements.push({
       id: crypto.randomUUID() as ElementId,
@@ -107,7 +122,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     element.text = command.text;
-    slide.content.title = command.text;
+    if (slide.elements[0]?.id === element.id) slide.content.title = command.text;
     if (slide.content.status === "approved") slide.content.status = "changed";
   }
 }

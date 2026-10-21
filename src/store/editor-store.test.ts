@@ -47,4 +47,15 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(1);
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
   });
+
+  it("adds and selects text as one content and design transaction", () => {
+    const slideId = useEditorStore.getState().activeSlideId;
+    useEditorStore.getState().execute({ type: "add-text", slideId });
+    const state = useEditorStore.getState();
+    expect(state.document.slides[0]!.elements).toHaveLength(2);
+    expect(state.selectedElementId).toBe(state.document.slides[0]!.elements[1]!.id);
+    expect(state.document.revisions).toEqual({ document: 1, content: 1, design: 1 });
+    state.undo();
+    expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(1);
+  });
 });
