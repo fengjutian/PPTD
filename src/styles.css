@@ -410,7 +410,7 @@ button { color: inherit; }
 .property-form input[type="number"]::-webkit-outer-spin-button,
 .property-form input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .property-form input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
-.property-form .field-stepper { flex: 0 0 20px; display: grid; place-items: center; width: 20px; height: 26px; padding: 0; border: 1px solid #34363d; border-radius: 5px; background: #222429; color: #8f939b; cursor: pointer; }
+.property-form .field-stepper { flex: 0 0 18px; display: grid; place-items: center; width: 18px; height: 26px; padding: 0; border: 1px solid #34363d; border-radius: 5px; background: #222429; color: #8f939b; cursor: pointer; }
 .property-form .field-stepper svg { width: 12px; height: 12px; }
 .property-form .field-stepper:hover:not(:disabled) { border-color: var(--ppt-accent); color: #fff; }
 .property-form .field-stepper:disabled { opacity: .4; cursor: default; }

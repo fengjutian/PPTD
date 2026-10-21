@@ -69,6 +69,7 @@ const slideSchema = z.object({
   background: z.string(),
   content: z.object({ title: z.string(), body: z.string(), blocks: z.array(contentBlockSchema).max(64).optional(), speakerNotes: z.string(), status: z.enum(["draft", "review", "approved", "changed", "needs_review"]), contentHash: z.string().regex(/^[0-9a-f]{16}$/).optional() }),
   elements: z.array(z.discriminatedUnion("type", [textElement, shapeElement, imageElement])),
+  layoutId: z.string().uuid().optional(),
 });
 
 const baseDocumentSchema = z.object({
@@ -78,6 +79,8 @@ const baseDocumentSchema = z.object({
   pageSize: z.object({ width: positiveEmu, height: positiveEmu }),
   revisions: z.object({ document: z.number().int().nonnegative(), content: z.number().int().nonnegative(), design: z.number().int().nonnegative() }),
   slides: z.array(slideSchema).min(1),
+  theme: themeSchema.optional(),
+  layouts: z.array(slideLayoutSchema).max(200).optional(),
 });
 
 type DocumentShape = z.infer<typeof baseDocumentSchema>;
@@ -99,8 +102,22 @@ function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): v
   }
 }
 
+function validateLayoutReferences(document: DocumentShape, context: z.RefinementCtx): void {
+  const layoutIds = new Set((document.layouts ?? []).map((layout) => layout.id));
+  for (const [slideIndex, slide] of document.slides.entries()) {
+    if (slide.layoutId && !layoutIds.has(slide.layoutId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["slides", slideIndex, "layoutId"], message: "UNKNOWN_SLIDE_LAYOUT" });
+    }
+  }
+}
+
 export const presentationDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(CURRENT_SCHEMA_VERSION) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionTwoDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(2) })
   .superRefine(validateUniqueIds);
 
 const versionOneDocumentSchema = baseDocumentSchema
@@ -112,6 +129,10 @@ export type PresentationDocumentInput = z.infer<typeof presentationDocumentSchem
 type Migration = (document: unknown) => unknown;
 const migrations: Readonly<Record<number, Migration>> = {
   1: (document) => ({ ...versionOneDocumentSchema.parse(document), schemaVersion: 2 }),
+  // Version 3 adds the template theme and the layout binding of a slide.
+  // Both are optional, so a version 2 document keeps every page and every
+  // object and simply has no layout to export.
+  2: (document) => ({ ...versionTwoDocumentSchema.parse(document), schemaVersion: 3 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

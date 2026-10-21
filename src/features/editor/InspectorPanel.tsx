@@ -163,13 +163,13 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
           </div>
         </div>
         <div className="property-grid">
-          <NumberField label="X" unit={unitLabel(unit)} value={emuToUnit(element.frame.x, unit)} min={0} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+          <NumberField label="X" value={emuToUnit(element.frame.x, unit)} min={0} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
             onCommit={(value) => commitTransform("x", value)} />
-          <NumberField label="Y" unit={unitLabel(unit)} value={emuToUnit(element.frame.y, unit)} min={0} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+          <NumberField label="Y" value={emuToUnit(element.frame.y, unit)} min={0} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
             onCommit={(value) => commitTransform("y", value)} />
-          <NumberField label="宽度" unit={unitLabel(unit)} value={emuToUnit(element.frame.width, unit)} min={0.01} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+          <NumberField label="宽度" value={emuToUnit(element.frame.width, unit)} min={0.01} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
             onCommit={(value) => commitTransform("width", value)} />
-          <NumberField label="高度" unit={unitLabel(unit)} value={emuToUnit(element.frame.height, unit)} min={0.01} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
+          <NumberField label="高度" value={emuToUnit(element.frame.height, unit)} min={0.01} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
             onCommit={(value) => commitTransform("height", value)} />
         </div>
         <NumberField label="旋转" unit="度" value={element.rotationMilliDegree / 1000} min={-360} max={360} precision={1} step={15} disabled={locked}

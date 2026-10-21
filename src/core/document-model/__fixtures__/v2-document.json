@@ -1,0 +1,31 @@
+{
+  "id": "44444444-4444-4444-8444-444444444444",
+  "schemaVersion": 2,
+  "title": "V2 fixture",
+  "pageSize": { "width": 12191695, "height": 6858000 },
+  "revisions": { "document": 3, "content": 2, "design": 1 },
+  "slides": [
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "background": "#ffffff",
+      "content": {
+        "title": "Fixture",
+        "body": "正文",
+        "speakerNotes": "",
+        "status": "approved",
+        "contentHash": "0123456789abcdef"
+      },
+      "elements": [
+        {
+          "id": "66666666-6666-4666-8666-666666666666",
+          "type": "text",
+          "frame": { "x": 685800, "y": 594360, "width": 6858000, "height": 731520 },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "text": "Fixture",
+          "style": { "fontFamily": "Microsoft YaHei", "fontSizePt": 28, "color": "#17181c", "bold": true, "align": "left" }
+        }
+      ]
+    }
+  ]
+}
