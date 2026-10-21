@@ -10,7 +10,7 @@ export type AiContentBlock =
   | { type: "timeline"; items: Array<{ label: string; text: string }> }
   | { type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
   | { type: "process"; items: Array<{ label: string; text: string }> };
-export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[] }
+export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
 export interface AiSlideDesign { layout: AiLayoutKind; background: string; accent: string; titleColor: string; bodyColor: string }
 export interface AiTemplateRegion { role: "title" | "body" | "image"; frame: { x: number; y: number; width: number; height: number } }
@@ -108,7 +108,6 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
       const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0);
-      const useListGrid = !hasDeterministicBlock && items.length >= 3 && !["cover", "section", "quote"].includes(design.layout);
       const visualLayouts = command.templateLayouts ?? [];
       const rankedLayouts = visualLayouts.filter((layout) => layout.regions.some((region) => region.role === "title"));
       const layoutIsCompatible = (layout: AiTemplateLayout): boolean => {
@@ -219,7 +218,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.35, 0.08), 28, design.titleColor, true, "left"));
         if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeBodies[0], [0.15, 0.31, 0.68, 0.46], 0.35, 0.28), Math.max(18, bodySize), design.bodyColor, false, "left"));
-      } else if ((design.layout === "cards" && items.length > 1) || useListGrid) {
+      } else if (design.layout === "cards" && items.length > 1) {
         slide.elements.push(text(content.title, frame(alignmentGrid.left, alignmentGrid.titleY, 0.72, alignmentGrid.titleHeight), 32, contentTitleColor, true, "left"), text(String(index + 1).padStart(2, "0"), frame(0.86, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, contentTitleColor, true, "right"), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, 0.12, 0.009), design.accent));
         const visible = items.slice(0, 6);
         const columns = visible.length === 3 || visible.length >= 5 ? 3 : 2;

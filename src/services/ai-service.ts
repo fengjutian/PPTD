@@ -129,7 +129,6 @@ export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBr
       if (brief.density === "high" && layout === "quote") layout = "title-body";
       if (layout === "cards" && (pointCount < 3 || content.body.length > 360)) layout = content.body.length > 180 ? "title-body" : "split";
       if (layout === "split" && pointCount < 2) layout = "title-body";
-      if (index > 1 && layout === slides[index - 1]?.layout && ["cards", "split", "title-body"].includes(layout)) layout = layout === "title-body" ? "split" : "title-body";
       return { ...slide, layout };
     }),
   }, template);

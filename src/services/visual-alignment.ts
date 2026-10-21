@@ -15,6 +15,16 @@ export const visualReviewSchema = z.object({
   issues: z.array(z.object({ slideIndex: z.number().int().nonnegative(), severity: z.enum(["error", "warning"]), issue: z.enum(["weak-hierarchy", "poor-contrast", "visual-imbalance", "background-conflict", "misalignment", "excessive-empty-space", "repetitive-layout"]), elementIds: z.array(z.string()).default([]), suggestion: z.string().min(1).max(500) })).max(100),
 });
 export type VisualReview = z.infer<typeof visualReviewSchema>;
+export const visualRepairPlanSchema = z.object({
+  repairs: z.array(z.object({
+    slideIndex: z.number().int().nonnegative(),
+    layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]).optional(),
+    backgroundAction: z.enum(["keep", "replace-compatible", "simplify"]).default("keep"),
+    hierarchyAction: z.enum(["keep", "strengthen-title", "reduce-density", "increase-whitespace"]).default("keep"),
+    reason: z.string().min(1).max(500),
+  })).max(20),
+});
+export type VisualRepairPlan = z.infer<typeof visualRepairPlanSchema>;
 export interface VisualAlignmentResult<T> { value: T; review: VisualReview; iterations: number; stopReason: "target-reached" | "stagnated" | "iteration-limit" }
 
 export async function runVisualAlignmentLoop<T>(options: { initial: T; goal: PresentationVisualGoal; contentFingerprint: (value: T) => string; review: (value: T, goal: PresentationVisualGoal, iteration: number) => Promise<VisualReview>; repair: (value: T, review: VisualReview, goal: PresentationVisualGoal) => Promise<T>; maxIterations?: number }): Promise<VisualAlignmentResult<T>> {
@@ -36,3 +46,7 @@ export async function runVisualAlignmentLoop<T>(options: { initial: T; goal: Pre
 }
 
 export const defaultPresentationVisualGoal = (): PresentationVisualGoal => ({ style: "editorial", mood: "modern", density: "medium", alignment: "left-grid", backgroundRhythm: { coverVariants: 1, contentVariants: 3, repeatLimit: 2 }, minimumScores: { overall: 85, hierarchy: 82, alignment: 90, readability: 88, consistency: 85 } });
+
+export function affectedSlideIndexes(review: VisualReview): number[] {
+  return [...new Set(review.issues.filter((issue) => issue.severity === "error" || review.overallScore < 85).map((issue) => issue.slideIndex))].sort((left, right) => left - right);
+}
