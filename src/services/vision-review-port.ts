@@ -46,11 +46,16 @@ export class TauriVisionReviewPort implements VisionReviewPort {
         return normalizeVisualReview(result, indexes);
       } catch (error) {
         lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
         // 取消不是失败：立刻放弃，不再重试一次。
-        if (error instanceof Error && error.message.includes("AI_REQUEST_CANCELLED")) throw error;
+        if (message.includes("AI_REQUEST_CANCELLED")) throw error;
+        // 超时说明这一次请求的规模超出预算，4xx 说明请求本身不合法。
+        // 这两类错误重试一次只会让用户多等一轮，收益为零。
+        if (message.includes("AI_REQUEST_TIMEOUT") || /AI_PROVIDER_HTTP_ERROR:4\d\d/.test(message)) break;
       }
     }
-    throw new Error("AI_VISION_REVIEW_RETRY_EXHAUSTED", { cause: lastError });
+    // 保留真实原因：用户看到的降级提示必须能指出是超时、鉴权还是返回不合法。
+    throw new Error(`AI_VISION_REVIEW_FAILED:${lastError instanceof Error ? lastError.message : String(lastError)}`);
   }
 
   async planRepairs(review: VisualReview, _goal: PresentationVisualGoal): Promise<VisualRepairPlan> {

@@ -124,8 +124,8 @@ fn validate_model(model: &str) -> Result<(), String> {
 
 /// 厂商请求失败时的分类，用于区分是否值得重试。
 enum ProviderFailure {
-    /// 厂商返回了 HTTP 状态码。
-    Status(u16),
+    /// 厂商返回了 HTTP 状态码，附带厂商自己给出的原因。
+    Status(u16, String),
     /// 网络或传输层失败。`timed_out` 标记请求是被超时切断的。
     Transport { detail: String, timed_out: bool },
     /// 响应体结构不符合预期。
@@ -156,12 +156,44 @@ async fn post_chat(
         })?;
     let status = response.status().as_u16();
     if !(200..300).contains(&status) {
-        return Err(ProviderFailure::Status(status));
+        return Err(ProviderFailure::Status(
+            status,
+            provider_error_detail(response).await,
+        ));
     }
     response
         .json()
         .await
         .map_err(|error| ProviderFailure::Payload(PayloadError::Invalid(error.to_string())))
+}
+
+/// 厂商失败时通常会说明原因（错误码加一句提示）。
+///
+/// 只取 `base_resp` 里的稳定错误码和提示，不把响应正文原样回传：
+/// 响应体可能带上请求内容，而请求里包含用户正文。
+async fn provider_error_detail(response: reqwest::Response) -> String {
+    let Ok(bytes) = response.bytes().await else {
+        return String::new();
+    };
+    let text = String::from_utf8_lossy(&bytes[..bytes.len().min(4096)]);
+    let Ok(payload) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return String::new();
+    };
+    let Some(base) = payload.get("base_resp") else {
+        return String::new();
+    };
+    let code = base.get("status_code").and_then(serde_json::Value::as_i64);
+    let message = base
+        .get("status_msg")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .trim();
+    match (code, message.is_empty()) {
+        (Some(code), true) => format!(":{code}"),
+        (Some(code), false) => format!(":{code} {message}"),
+        (None, false) => format!(": {message}"),
+        (None, true) => String::new(),
+    }
 }
 
 /// 发送一次对话请求并返回助手正文。
@@ -198,10 +230,10 @@ pub async fn chat(
                         PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
                     });
             }
-            Err(ProviderFailure::Status(status)) => {
+            Err(ProviderFailure::Status(status, detail)) => {
                 let retryable = status == 429 || status == 529 || (500..=599).contains(&status);
                 if !retryable {
-                    return Err(format!("AI_PROVIDER_HTTP_ERROR:{status}"));
+                    return Err(format!("AI_PROVIDER_HTTP_ERROR:{status}{detail}"));
                 }
                 if attempt == 2 {
                     return Err("AI_PROVIDER_BUSY".into());
@@ -262,15 +294,15 @@ pub async fn vision_chat(
                         PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
                     })
             }
-            Err(ProviderFailure::Status(status))
+            Err(ProviderFailure::Status(status, _))
                 if status == 429 || status == 529 || (500..=599).contains(&status) =>
             {
                 if attempt == 2 {
                     return Err("AI_PROVIDER_BUSY".into());
                 }
             }
-            Err(ProviderFailure::Status(status)) => {
-                return Err(format!("AI_PROVIDER_HTTP_ERROR:{status}"))
+            Err(ProviderFailure::Status(status, detail)) => {
+                return Err(format!("AI_PROVIDER_HTTP_ERROR:{status}{detail}"))
             }
             Err(ProviderFailure::Transport { detail, timed_out }) => {
                 if timed_out {

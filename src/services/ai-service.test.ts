@@ -26,8 +26,13 @@ describe("AI structured outputs", () => {
     expect(describeAiError("AI_PROVIDER_HTTP_ERROR:401")).toContain("API Key");
   });
 
-  it("explains that a failed visual quality gate blocks the generated deck", () => {
-    expect(describeAiError("AI_VISUAL_QUALITY_GATE_FAILED: 第 2 页仍有 3 个排版问题")).toContain("已阻止进入编辑器");
+  it("explains that a failed visual quality gate still keeps the generated deck", () => {
+    expect(describeAiError("AI_VISUAL_QUALITY_GATE_FAILED: 第 2 页仍有 3 个排版问题")).toContain("未通过视觉质量检查");
+  });
+
+  it("explains why the visual review was skipped instead of hiding the cause", () => {
+    expect(describeAiError("AI_VISION_REVIEW_FAILED:AI_REQUEST_TIMEOUT")).toContain("视觉评审不可用");
+    expect(describeAiError("AI_VISION_REVIEW_FAILED:AI_REQUEST_TIMEOUT")).toContain("AI_REQUEST_TIMEOUT");
   });
 
   it("maps an unusable provider payload to a regeneration hint", () => {

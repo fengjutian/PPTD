@@ -5,6 +5,7 @@ import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { CroppedImage } from "../features/editor/CroppedImage";
 import { ChartView } from "../features/editor/ChartView";
+import { TableView } from "../features/editor/TableView";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { LayerList } from "../features/editor/LayerList";
 import { ContentReview } from "../features/ai/ContentReview";
@@ -15,12 +16,10 @@ import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, 
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
-import { inspectRenderedTextContrast, renderPresentationForVisualReview, type RenderedContrastIssue } from "../services/presentation-renderer";
-import { defaultPresentationVisualGoal, runVisualAlignmentLoop } from "../services/visual-alignment";
+import { defaultPresentationVisualGoal } from "../services/visual-alignment";
+import { runDesignQualityStage, summarizeQualityIssues } from "../services/design-quality-stage";
 import { TauriVisionReviewPort } from "../services/vision-review-port";
-import { validatePresentationVisualQuality } from "../services/presentation-quality-gate";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
-import { colorLuminance, contrastRatioAgainstLuminance } from "../core/rendering/contrast";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 
 const CANVAS_WIDTH = 960;
@@ -183,7 +182,7 @@ function ElementView({ element, slide, scale, selected, onSelect }: { element: S
 
   return (
     <div ref={rootRef} className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={(event) => begin("move", event)} onPointerMove={pointerMove} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}>
-      {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : element.type === "image" ? <CroppedImage element={element} className="image-fill" /> : <ChartView element={element} slide={slide} scale={scale} />}
+      {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : element.type === "image" ? <CroppedImage element={element} className="image-fill" /> : element.type === "chart" ? <ChartView element={element} slide={slide} scale={scale} /> : <TableView element={element} slide={slide} scale={scale} />}
       {selected && !element.locked && <>
         {RESIZE_HANDLES.map(([direction, label]) => <button key={direction} type="button" aria-label={`从${label}缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
         <button type="button" aria-label="旋转对象" className="element-rotate-handle" onPointerDown={(event) => begin("rotate", event)} />
@@ -204,6 +203,7 @@ function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<ty
     if (element.type === "text") return <div className="thumbnail-element thumbnail-text" key={element.id} style={{ ...style, color: element.style.color, fontFamily: element.style.fontFamily, fontSize: Math.max(4, element.style.fontSizePt * 0.18), fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div>;
     if (element.type === "image") return <div className="thumbnail-element thumbnail-image-frame" key={element.id} style={style}><CroppedImage element={element} className="thumbnail-image" alt="" /></div>;
     if (element.type === "chart") return <div className="thumbnail-element thumbnail-chart" key={element.id} style={style}><ChartView element={element} slide={slide} scale={0.18} compact /></div>;
+    if (element.type === "table") return <div className="thumbnail-element thumbnail-table" key={element.id} style={style}><TableView element={element} slide={slide} scale={0.18} compact /></div>;
     return <div className={`thumbnail-element thumbnail-shape ${element.shape}`} key={element.id} style={{ ...style, background: element.style.fill, borderColor: element.style.stroke, borderWidth: Math.max(1, element.style.strokeWidthPt * 0.3), borderRadius: element.shape === "ellipse" ? "50%" : Math.max(0, element.style.radiusPt * 0.3) }} />;
   })}{slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}</div>;
 }
@@ -610,105 +610,38 @@ export function App() {
         },
         backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
       };
-      let finalDesigns: AiSlideDesign[] = design.slides;
-      let visualNote = "";
-      try {
-        const goal = defaultPresentationVisualGoal();
-        const vision = new TauriVisionReviewPort();
-        const makeCandidate = (designs: AiSlideDesign[]) => {
-          const candidate = structuredClone(document);
-          applyCommand(candidate, { ...generationCommand, designs });
-          return candidate;
-        };
-        const aligned = await runVisualAlignmentLoop({
-          initial: finalDesigns,
-          goal,
-          contentFingerprint: () => JSON.stringify(aiDraft.slides.map((slide) => ({ title: slide.title, body: slide.body, speakerNotes: slide.speakerNotes, blocks: slide.blocks }))),
-          review: async (designs, visualGoal, iteration) => {
-            if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-            setDesignProgress({ percent: 95 + iteration, label: `视觉模型正在检查第 ${iteration} 轮` });
-            const render = await renderPresentationForVisualReview(makeCandidate(designs));
-            // 逐页评审按每批 6 页切分。串行会让 20 页文稿排四队带图请求，
-            // 每一队都要等上一队跑完；并行后墙钟时间接近单批耗时。
-            const reviewBatches: number[][] = [];
-            for (let start = 0; start < render.slides.length; start += 6) {
-              reviewBatches.push(render.slides.slice(start, start + 6).map((_, offset) => start + offset));
-            }
-            const reviews = await Promise.all(reviewBatches.map((indexes) => vision.review(render, visualGoal, indexes, taskId)));
-            return { overallScore: Math.min(...reviews.map((item) => item.overallScore)), hierarchyScore: Math.min(...reviews.map((item) => item.hierarchyScore)), alignmentScore: Math.min(...reviews.map((item) => item.alignmentScore)), readabilityScore: Math.min(...reviews.map((item) => item.readabilityScore)), consistencyScore: Math.min(...reviews.map((item) => item.consistencyScore)), issues: reviews.flatMap((item) => item.issues), slideGuidance: reviews.flatMap((item) => item.slideGuidance) };
-          },
-          repair: async (designs, review, visualGoal) => {
-            const plan = await vision.planRepairs(review, visualGoal);
-            const repairs = new Map(plan.repairs.map((repair) => [repair.slideIndex, repair]));
-            return designs.map((slide, slideIndex) => {
-              const repair = repairs.get(slideIndex);
-              if (!repair) return slide;
-              const backgroundTreatment: AiSlideDesign["backgroundTreatment"] = repair.backgroundAction === "keep" ? "none" : repair.backgroundAction === "simplify" ? "simplify" : "local-scrim";
-              return {
-                ...slide,
-                layout: repair.layout ?? slide.layout,
-                safeRegion: repair.safeRegion ?? slide.safeRegion,
-                obstacleRegions: repair.obstacleRegions,
-                hierarchyAction: repair.hierarchyAction,
-                backgroundTreatment,
-                elementRepairs: repair.elementActions,
-              };
-            });
-          },
-        });
-        finalDesigns = aligned.value;
-        visualNote = `视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`;
-      } catch (visionError) {
-        visualNote = `视觉评审降级：${visionError instanceof Error ? visionError.message : String(visionError)}`;
-      }
       const buildFinalDocument = (designs: AiSlideDesign[]) => {
         const candidate = structuredClone(document);
         applyCommand(candidate, { ...generationCommand, designs });
         return candidate;
       };
-      let finalDocument = buildFinalDocument(finalDesigns);
+      // 视觉评审、像素对比度和质量门都只做判断与修复。任何一步出错都只降级，
+      // 不会把已经生成的 PPT 一起丢掉。
+      const stage = await runDesignQualityStage({
+        initialDesigns: design.slides,
+        buildDocument: buildFinalDocument,
+        goal: defaultPresentationVisualGoal(),
+        contentFingerprint: () => JSON.stringify(aiDraft.slides.map((slide) => ({ title: slide.title, body: slide.body, speakerNotes: slide.speakerNotes, blocks: slide.blocks }))),
+        vision: new TauriVisionReviewPort(),
+        taskId,
+        isCancelled: () => designCancelRef.current,
+        onProgress: (label, percent) => setDesignProgress({ percent, label }),
+      });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-      let renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
-      if (renderedContrastIssues.length > 0) {
-        // Repair the ink on the artwork that actually carries the text. Painting a
-        // panel over the whole page erased the template design, which was the
-        // main reason generated decks looked like a blank sheet.
-        const affectedSlides = new Map<number, RenderedContrastIssue[]>();
-        renderedContrastIssues.forEach((issue) => affectedSlides.set(issue.slideIndex, [...(affectedSlides.get(issue.slideIndex) ?? []), issue]));
-        finalDesigns = finalDesigns.map((slide, slideIndex) => {
-          const issues = affectedSlides.get(slideIndex);
-          if (!issues) return slide;
-          const luminance = colorLuminance(issues[0]!.backgroundColor) ?? 1;
-          const onDark = (contrastRatioAgainstLuminance("#FFFFFF", luminance) ?? 0) >= (contrastRatioAgainstLuminance("#171A1F", luminance) ?? 0);
-          // The ink has to override the one the template assigned to its
-          // placeholder, otherwise the repair would be overruled by the
-          // template and the page would stay unreadable.
-          return { ...slide, backgroundTreatment: "none", inkOverride: true, titleColor: onDark ? "#FFFFFF" : "#171A1F", bodyColor: onDark ? "#DCE3EA" : "#3E4650" };
-        });
-        finalDocument = buildFinalDocument(finalDesigns);
-        renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
-      }
-      if (renderedContrastIssues.length > 0) {
-        // Still unreadable: the artwork varies too much under the text, so the
-        // text block gets its own panel instead of the whole page.
-        const stubborn = new Set(renderedContrastIssues.map((issue) => issue.slideIndex));
-        finalDesigns = finalDesigns.map((slide, slideIndex) => stubborn.has(slideIndex) ? { ...slide, backgroundTreatment: "local-scrim" } : slide);
-        finalDocument = buildFinalDocument(finalDesigns);
-        renderedContrastIssues = await inspectRenderedTextContrast(finalDocument);
-      }
-      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-      const quality = validatePresentationVisualQuality(finalDocument, finalDesigns);
-      if (!quality.passed || renderedContrastIssues.length > 0) {
-        const allSlideIndexes = [...quality.issues.map((issue) => issue.slideIndex), ...renderedContrastIssues.map((issue) => issue.slideIndex)];
-        const pages = [...new Set(allSlideIndexes.map((index) => index + 1))].join("、");
-        throw new Error(`AI_VISUAL_QUALITY_GATE_FAILED: 第 ${pages} 页仍有 ${quality.issues.length + renderedContrastIssues.length} 个排版问题`);
-      }
+      const finalDocument = stage.document;
+      const visualNote = stage.notes.join("；");
+      // 质量门未过时文档照常产出：问题被逐条列出，PPT 不会因为报错而消失。
       replaceDocument(finalDocument, "both");
-      setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
       setTemplatePickerOpen(false);
-      setActiveView("editor");
-      if (visualNote) window.setTimeout(() => setTaskStatus(visualNote), 50);
-      setTaskStatus(`PPT 已按模板完成 AI 设计：${selectedTemplate.name}`);
+      if (stage.passed) {
+        setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
+        setActiveView("editor");
+        setTaskStatus(`PPT 已按模板完成 AI 设计：${selectedTemplate.name}`);
+        if (visualNote) window.setTimeout(() => setTaskStatus(visualNote), 50);
+      } else {
+        setDesignProgress({ percent: 100, label: "生成完成，存在待调整的排版问题" });
+        setTaskStatus(`PPT 已生成，但质量门发现 ${stage.issues.length} 个排版问题：${summarizeQualityIssues(stage.issues)}。可在左侧「编辑」中调整后再导出。`);
+      }
     } catch (error) {
       window.clearInterval(progressTimer);
       const message = error instanceof Error ? error.message : String(error);
@@ -938,7 +871,7 @@ export function App() {
 
       {templatePickerOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!designBusy && event.target === event.currentTarget) setTemplatePickerOpen(false); }}><section className="upload-dialog template-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="template-picker-title" aria-busy={designBusy}><div className="upload-dialog-heading"><div><Palette /><div><h2 id="template-picker-title">选择 PPT 模板</h2><p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p></div></div><button type="button" aria-label="关闭模板选择窗口" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}><X /></button></div><div className="template-picker-toolbar"><strong>已保存模板</strong><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplateUploadOpen(true)}><FileUp />上传模板</button></div><div className="template-picker-body"><div className="template-library"><div>{templateLibrary.map((template) => <button type="button" disabled={designBusy} className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}</div><div className="template-preview-panel"><div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>{designBusy ? <div className="design-progress" role="status" aria-live="polite"><Sparkles /><strong>{designProgress.label}</strong><span>{designProgress.percent}%</span><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={designProgress.percent} role="progressbar"><i style={{ width: `${designProgress.percent}%` }} /></div><small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small><button type="button" className="secondary-action design-cancel-action" onClick={() => { designCancelRef.current = true; setDesignProgress({ percent: 0, label: "正在取消…" }); void cancelAiGeneration(designTaskId.current).catch(() => undefined); }}>取消生成</button></div> : templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-picker-summary"><span>{templateAnalysis.slideCount} 页面</span><span>{templateAnalysis.layoutCount} 版式</span><span>{templateAnalysis.themeCount} 主题</span></div>}</div></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}>取消</button><button type="button" className="primary-action" disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy} onClick={() => void generateFromDraft()}>{designBusy ? `${designProgress.percent}%` : "生成 PPT"}{!designBusy && <ArrowRight />}</button></div></section></div>}
 
-      {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象{exportReport.nativeChartCount > 0 ? ` · ${exportReport.nativeChartCount} 个原生图表` : ""} · ZIP {exportReport.package.entryCount} 个条目{exportReport.masters.length > 0 ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）` : ""}{exportReport.themeColors.length > 0 ? ` · 主题色 ${exportReport.themeColors.join("、")}` : ""}</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
+      {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象{exportReport.nativeChartCount > 0 ? ` · ${exportReport.nativeChartCount} 个原生图表` : ""}{exportReport.nativeTableCount > 0 ? ` · ${exportReport.nativeTableCount} 个原生表格` : ""} · ZIP {exportReport.package.entryCount} 个条目{exportReport.masters.length > 0 ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）` : ""}{exportReport.themeColors.length > 0 ? ` · 主题色 ${exportReport.themeColors.join("、")}` : ""}</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
 
       {newDraftConfirmOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewDraftConfirmOpen(false); }}><section className="upload-dialog new-draft-dialog" role="dialog" aria-modal="true" aria-labelledby="new-draft-title"><div className="upload-dialog-heading"><div><FilePlus2 /><div><h2 id="new-draft-title">新建草稿？</h2><p>当前草稿会先保存到制作历史，新草稿从空白主题开始。</p></div></div><button type="button" aria-label="关闭新建草稿窗口" onClick={() => setNewDraftConfirmOpen(false)}><X /></button></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setNewDraftConfirmOpen(false)}>取消</button><button type="button" className="primary-action" onClick={confirmNewDraft}><FilePlus2 />新建空白草稿</button></div></section></div>}
 

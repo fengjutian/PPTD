@@ -12,6 +12,7 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("timeline"), items: z.array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) })).min(1).max(10) }),
   z.object({ type: z.literal("comparison"), leftLabel: z.string().min(1).max(100), rightLabel: z.string().min(1).max(100), leftItems: z.array(z.string().min(1).max(500)).max(8), rightItems: z.array(z.string().min(1).max(500)).max(8) }),
   z.object({ type: z.literal("process"), items: z.array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) })).min(1).max(10) }),
+  z.object({ type: z.literal("table-data"), header: z.array(z.string().min(1).max(100)).min(1).max(10), rows: z.array(z.array(z.string().max(500)).max(10)).min(1).max(20) }),
 ]);
 const slidePlanSchema = z.object({
   purpose: z.string().min(1).max(300),
@@ -185,7 +186,8 @@ async function aiSelection(): Promise<{ provider: string; model: string }> {
 
 export function describeAiError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
-  if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED")) return `生成结果未通过视觉质量检查，已阻止进入编辑器。${detail.split(": ").slice(1).join(": ")}`;
+  if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED")) return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
+  if (detail.includes("AI_VISION_REVIEW_FAILED")) return `视觉评审不可用：${detail.split(":").slice(1).join(":").trim() || "模型未返回可用结果"}。已跳过视觉评审，改用确定性校验。`;
   if (detail.includes("AI_REQUEST_CANCELLED") || detail.includes("AI_GENERATION_CANCELLED")) return "已取消本次生成";
   if (detail.includes("AI_REQUEST_TIMEOUT")) return "AI 生成超时，请减少页数后重试";
   if (detail.includes("AI_PROVIDER_BUSY")) return "AI 服务当前繁忙，系统已自动重试，请稍后再次生成";

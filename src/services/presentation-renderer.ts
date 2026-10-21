@@ -1,10 +1,15 @@
-import { formatChartValue, resolveChartData, type ChartElement, type PresentationDocument, type Slide, type TextElement } from "../core/document-model";
+import { formatChartValue, resolveChartData, resolveTableData, type ChartElement, type PresentationDocument, type Slide, type TableElement, type TextElement } from "../core/document-model";
 
 export interface PresentationRender { slides: string[]; contactSheet: string }
 export interface RenderedContrastIssue { slideIndex: number; elementId: string; contrastRatio: number; /** The sampled artwork color that carries the text. */ backgroundColor: string }
 
 function loadImage(source: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error("VISUAL_RENDER_IMAGE_FAILED")); image.src = source; });
+}
+
+/** 只有底图解码失败可以降级，其余渲染故障必须暴露出来。 */
+function isImageRenderFailure(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("VISUAL_RENDER_IMAGE_FAILED");
 }
 
 function wrapText(context: CanvasRenderingContext2D, text: string, width: number): string[] {
@@ -19,7 +24,7 @@ function wrapText(context: CanvasRenderingContext2D, text: string, width: number
   return lines;
 }
 
-async function renderSlide(document: PresentationDocument, slide: Slide, width: number, includeText = true): Promise<HTMLCanvasElement> {
+async function renderSlide(document: PresentationDocument, slide: Slide, width: number, includeText = true, tolerateImageErrors = false): Promise<HTMLCanvasElement> {
   const height = Math.round(width * document.pageSize.height / document.pageSize.width);
   const canvas = window.document.createElement("canvas"); canvas.width = width; canvas.height = height;
   const context = canvas.getContext("2d"); if (!context) throw new Error("VISUAL_RENDER_CONTEXT_UNAVAILABLE");
@@ -29,10 +34,19 @@ async function renderSlide(document: PresentationDocument, slide: Slide, width: 
     if (!includeText && element.type === "text") continue;
     const x = element.frame.x * sx; const y = element.frame.y * sy; const w = element.frame.width * sx; const h = element.frame.height * sy;
     context.save(); context.translate(x + w / 2, y + h / 2); context.rotate(element.rotationMilliDegree * Math.PI / 180_000); context.translate(-w / 2, -h / 2);
-    if (element.type === "image") { const image = await loadImage(element.source.dataUrl); context.drawImage(image, 0, 0, w, h); }
+    if (element.type === "image") {
+      try {
+        const image = await loadImage(element.source.dataUrl);
+        context.drawImage(image, 0, 0, w, h);
+      } catch (error) {
+        // 评审图可以缺一张底图，整段质检不能因为一张图解码失败就中断。
+        if (!tolerateImageErrors || !isImageRenderFailure(error)) throw error;
+      }
+    }
     if (element.type === "shape") { context.fillStyle = element.style.fill; if (element.shape === "ellipse") { context.beginPath(); context.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); context.fill(); } else { context.beginPath(); context.roundRect(0, 0, w, h, element.style.radiusPt); context.fill(); } }
     if (element.type === "text") drawText(context, element, w, h, sx);
     if (element.type === "chart") drawChart(context, element, slide, w, h);
+    if (element.type === "table") drawTable(context, element, slide, w, h);
     context.restore();
   }
   return canvas;
@@ -54,12 +68,23 @@ export function renderedContrastRatio(foreground: [number, number, number], back
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
+export interface RenderedContrastReport { issues: RenderedContrastIssue[]; /** 底图无法渲染、无法采样对比度的页面。 */ unreadableSlides: number[] }
+
 /** Samples the actual rendered pixels beneath text, including template artwork and panels. */
-export async function inspectRenderedTextContrast(document: PresentationDocument, width = 640): Promise<RenderedContrastIssue[]> {
+export async function inspectRenderedTextContrast(document: PresentationDocument, width = 640): Promise<RenderedContrastReport> {
   const issues: RenderedContrastIssue[] = [];
+  const unreadableSlides: number[] = [];
   for (let slideIndex = 0; slideIndex < document.slides.length; slideIndex += 1) {
     const slide = document.slides[slideIndex]!;
-    const canvas = await renderSlide(document, slide, width, false);
+    let canvas: HTMLCanvasElement;
+    try {
+      canvas = await renderSlide(document, slide, width, false);
+    } catch (error) {
+      // 底图解码失败的页面跳过对比度检查，而不是让整段质检失败。
+      if (!isImageRenderFailure(error)) throw error;
+      unreadableSlides.push(slideIndex);
+      continue;
+    }
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("VISUAL_RENDER_CONTEXT_UNAVAILABLE");
     const sx = canvas.width / document.pageSize.width; const sy = canvas.height / document.pageSize.height;
@@ -84,7 +109,7 @@ export async function inspectRenderedTextContrast(document: PresentationDocument
       }
     }
   }
-  return issues;
+  return { issues, unreadableSlides };
 }
 
 /**
@@ -116,6 +141,40 @@ function drawChart(context: CanvasRenderingContext2D, element: ChartElement, sli
   });
 }
 
+/**
+ * Draws a native table as a grid for the visual review.
+ *
+ * The review sees a picture of the page, so a table has to be drawn here as
+ * well. The cells come from the same reviewed table block the export reads, so
+ * the reviewer judges the cells that will be in the file.
+ */
+function drawTable(context: CanvasRenderingContext2D, element: TableElement, slide: Slide, width: number, height: number): void {
+  const resolved = resolveTableData(slide, element);
+  if (!resolved) return;
+  const columnCount = resolved.header.length;
+  const rowCount = resolved.rows.length + 1;
+  const columnWidth = width / columnCount;
+  const rowHeight = height / rowCount;
+  const fontSize = Math.max(9, Math.min(rowHeight * 0.6, element.style.fontSizePt * height / 400));
+  context.font = `${fontSize}px "${element.style.fontFamily}"`;
+  context.textBaseline = "middle";
+  context.textAlign = "left";
+  const cell = (text: string, x: number, y: number, fill: string, ink: string, bold: boolean) => {
+    context.fillStyle = fill;
+    context.fillRect(x, y, columnWidth, rowHeight);
+    context.strokeStyle = element.style.borderColor;
+    context.lineWidth = Math.max(1, height * 0.002);
+    context.strokeRect(x, y, columnWidth, rowHeight);
+    context.fillStyle = ink;
+    context.font = `${bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
+    context.fillText(text.slice(0, 12), x + columnWidth * 0.05, y + rowHeight / 2);
+  };
+  resolved.header.forEach((text, index) => cell(text, index * columnWidth, 0, element.style.headerFill, element.style.headerTextColor, true));
+  resolved.rows.forEach((row, rowIndex) => {
+    row.slice(0, columnCount).forEach((text, cellIndex) => cell(text, cellIndex * columnWidth, (rowIndex + 1) * rowHeight, "#FFFFFF", element.style.bodyTextColor, element.style.firstColumnBold && cellIndex === 0));
+  });
+}
+
 function drawText(context: CanvasRenderingContext2D, element: TextElement, width: number, height: number, scale: number): void {
   const fontSize = element.style.fontSizePt * scale * 914_400 / 72;
   context.font = `${element.style.bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
@@ -126,7 +185,7 @@ function drawText(context: CanvasRenderingContext2D, element: TextElement, width
 }
 
 export async function renderPresentationForVisualReview(document: PresentationDocument, width = 1280): Promise<PresentationRender> {
-  const canvases = await Promise.all(document.slides.map((slide) => renderSlide(document, slide, width)));
+  const canvases = await Promise.all(document.slides.map((slide) => renderSlide(document, slide, width, true, true)));
   const slides = canvases.map((canvas) => canvas.toDataURL("image/jpeg", 0.88));
   const thumbWidth = 320; const thumbHeight = Math.round(thumbWidth * document.pageSize.height / document.pageSize.width); const columns = Math.min(4, canvases.length); const rows = Math.ceil(canvases.length / columns);
   const sheet = window.document.createElement("canvas"); sheet.width = columns * thumbWidth; sheet.height = rows * thumbHeight;
