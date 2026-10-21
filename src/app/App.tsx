@@ -1,7 +1,8 @@
-import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, Lock, LockOpen, MousePointer2, Plus, Redo2, Save, Square, Trash2, Type, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Copy, Download, FilePlus2, FileUp, ImagePlus, Layers3, Lock, LockOpen, MousePointer2, Plus, Redo2, Save, Sparkles, Square, Trash2, Type, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type SlideElement } from "../core/document-model";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
+import { generateWithMiniMax, type AiDraft } from "../services/minimax";
 import { choosePptxPath, chooseProjectToOpen, clearRecovery, isDesktopRuntime, loadRecovery, saveProject, saveRecovery, writePptx } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 
@@ -55,6 +56,11 @@ export function App() {
   const [projectPath, setProjectPath] = useState<string>();
   const [savedRevision, setSavedRevision] = useState(0);
   const [taskStatus, setTaskStatus] = useState<string>();
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiSlideCount, setAiSlideCount] = useState(6);
+  const [aiDraft, setAiDraft] = useState<AiDraft>();
+  const [aiBusy, setAiBusy] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
@@ -171,6 +177,13 @@ export function App() {
     reader.readAsDataURL(file);
   };
 
+  const handleAiGenerate = async () => {
+    setAiBusy(true); setAiDraft(undefined);
+    try { setAiDraft(await generateWithMiniMax(aiTopic, aiSlideCount)); }
+    catch (error) { setTaskStatus(`MiniMax 生成失败：${error instanceof Error ? error.message : String(error)}`); }
+    finally { setAiBusy(false); }
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : undefined;
@@ -213,6 +226,7 @@ export function App() {
           <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
         </div>
         <div className="toolbar-group insert-tools">
+          <ToolButton label="MiniMax AI 生成" onClick={() => setAiOpen(true)} disabled={!isDesktopRuntime()}><Sparkles /></ToolButton>
           <ToolButton label="选择"><MousePointer2 /></ToolButton><ToolButton label="文本" onClick={() => execute({ type: "add-text", slideId: activeSlide.id })}><Type /></ToolButton>
           <ToolButton label="矩形" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}><Square /></ToolButton>
           <ToolButton label="椭圆" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}><Circle /></ToolButton>
@@ -261,6 +275,14 @@ export function App() {
       </aside>
 
       <footer className="statusbar"><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{taskStatus && <span className="task-status">{taskStatus}</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom">75%</span></footer>
+      {aiOpen && <div className="ai-overlay" role="dialog" aria-modal="true"><div className="ai-panel">
+        <div className="ai-heading"><div><Sparkles /><strong>MiniMax AI</strong><span>生成结构化演示文稿草稿</span></div><button onClick={() => setAiOpen(false)} aria-label="关闭"><X /></button></div>
+        <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报" /></label>
+        <label>页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
+        <button className="ai-generate" disabled={aiBusy || !aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "MiniMax 正在生成…" : "生成草稿"}</button>
+        {aiDraft && <div className="ai-preview"><h3>{aiDraft.title}</h3>{aiDraft.slides.map((slide, index) => <div key={index}><b>{index + 1}. {slide.title}</b><p>{slide.body}</p></div>)}<button className="ai-apply" onClick={() => { execute({ type: "apply-ai-draft", title: aiDraft.title, slides: aiDraft.slides }); setAiOpen(false); setAiDraft(undefined); }}>确认并替换当前文稿</button></div>}
+        <small>应用前不会修改当前文稿。Key 仅从 MINIMAX_API_KEY 环境变量读取。</small>
+      </div></div>}
     </div>
   );
 }

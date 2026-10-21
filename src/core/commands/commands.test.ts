@@ -103,4 +103,16 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements[1]).toMatchObject({ type: "image", source: { dataUrl, mimeType: "image/png" }, altText: "sample" });
     expect(() => produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/jpeg", altText: "sample" }))).toThrow("INVALID_IMAGE_SOURCE");
   });
+
+  it("applies an AI draft as one structured document replacement", () => {
+    const source = createDocument();
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-draft", title: "AI 战略", slides: [
+      { title: "现状", body: "市场增长\n竞争加剧", speakerNotes: "说明背景" },
+      { title: "行动", body: "聚焦产品", speakerNotes: "说明计划" },
+    ] }));
+    expect(result.title).toBe("AI 战略");
+    expect(result.slides).toHaveLength(2);
+    expect(result.slides[0]!.content).toMatchObject({ title: "现状", body: "市场增长\n竞争加剧", status: "draft" });
+    expect(result.slides[0]!.elements).toHaveLength(2);
+  });
 });

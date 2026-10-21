@@ -11,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             application_version,
+            commands::minimax::generate_presentation,
             commands::project_file::save_project,
             commands::project_file::open_project,
             commands::project_file::save_recovery,

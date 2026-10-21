@@ -95,5 +95,20 @@ button { color: inherit; }
 .task-status + .saved-dot { margin-left: 0; }
 .saved-dot.dirty { color: #e6ae62; }
 .zoom { min-width: 40px; text-align: right; color: #c6c8cd; }
+.ai-overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 30px; background: #07080bcc; backdrop-filter: blur(7px); }
+.ai-panel { width: min(680px, 94vw); max-height: 86vh; overflow-y: auto; padding: 22px; border: 1px solid #3a3c42; border-radius: 14px; background: #18191d; box-shadow: 0 30px 90px #000b; }
+.ai-heading { display: flex; justify-content: space-between; margin-bottom: 20px; }
+.ai-heading > div { display: grid; grid-template-columns: 24px auto; align-items: center; gap: 4px 8px; }
+.ai-heading svg { color: var(--ppt-accent); } .ai-heading span { grid-column: 2; color: #858991; font-size: 12px; }
+.ai-heading button { border: 0; background: transparent; cursor: pointer; }
+.ai-panel label { display: grid; gap: 7px; margin: 12px 0; color: #a8abb2; font-size: 12px; }
+.ai-panel textarea, .ai-panel input { color: #f2f2f3; background: #222429; border: 1px solid #3b3d44; border-radius: 8px; padding: 10px; }
+.ai-panel textarea { min-height: 110px; resize: vertical; }
+.ai-generate, .ai-apply { width: 100%; padding: 10px; border: 0; border-radius: 8px; background: var(--ppt-accent); color: white; font-weight: 700; cursor: pointer; }
+.ai-generate:disabled { opacity: .45; cursor: default; }
+.ai-preview { margin: 18px 0; padding: 16px; border: 1px solid #34363d; border-radius: 10px; background: #121316; }
+.ai-preview > div { padding: 9px 0; border-top: 1px solid #292b30; }
+.ai-preview p { margin: 5px 0; color: #aaaeb6; font-size: 12px; white-space: pre-wrap; }
+.ai-apply { margin-top: 12px; } .ai-panel small { color: #737780; }
 
 @media (max-width: 1250px) { .app-shell { grid-template-columns: 180px minmax(620px, 1fr) 220px; } .workspace { padding: 54px 36px; } .slide-canvas { transform: scale(.82); } }

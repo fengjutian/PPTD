@@ -2,9 +2,11 @@ import type { ElementId, Emu, PresentationDocument, RectEmu, SlideId, SupportedI
 import { createSlide, inches } from "../document-model";
 
 export type ChangeDomain = "content" | "design" | "both";
+export interface AiSlideDraft { title: string; body: string; speakerNotes: string }
 
 export type DocumentCommand =
   | { type: "add-slide" }
+  | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
@@ -26,6 +28,7 @@ export function commandDomain(command: DocumentCommand): ChangeDomain | null {
     case "add-text": return "both";
     case "add-image": return "both";
     case "add-slide": return "both";
+    case "apply-ai-draft": return "both";
     case "duplicate-slide": return "both";
     case "delete-slide": return "both";
     case "move-slide": return "both";
@@ -37,6 +40,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "set-slide") return;
   if (command.type === "add-slide") {
     document.slides.push(createSlide(document.slides.length + 1));
+    return;
+  }
+  if (command.type === "apply-ai-draft") {
+    if (!command.title.trim() || command.slides.length < 1 || command.slides.length > 20) throw new Error("AI_DRAFT_INVALID");
+    document.title = command.title.trim();
+    document.slides = command.slides.map((draft, index) => {
+      const slide = createSlide(index + 1);
+      slide.content = { title: draft.title, body: draft.body, speakerNotes: draft.speakerNotes, status: "draft" };
+      const title = slide.elements[0];
+      if (title?.type === "text") title.text = draft.title;
+      if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
+      return slide;
+    });
     return;
   }
   if (command.type === "duplicate-slide") {
