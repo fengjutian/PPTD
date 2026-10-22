@@ -196,6 +196,18 @@ export function templateRectsOverlap(left: AiNormalizedRect, right: AiNormalized
   return left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
 }
 
+/**
+ * Whether the template already prints something in the footer band.
+ *
+ * A slide-number, date or footer placeholder arrives as a thin text-bearing
+ * shape at the bottom of the layout. The analyzer has no role for it, so it is
+ * read as a body region; drawing a generated page number on top of it would
+ * print two numbers on the same line.
+ */
+export function templateLayoutHasFooterMarker(layout: AiTemplateLayout): boolean {
+  return layout.regions.some((region) => region.frame.y >= 0.9 && region.frame.height <= 0.09);
+}
+
 /** A layout is unusable when its title collides with one of its own body placeholders. */
 export function templateRegionsCollide(layout: AiTemplateLayout): boolean {
   const title = templateTitleRegion(layout);

@@ -88,6 +88,28 @@ export const CONTENT_REGION = {
   blockVerticalAnchor: 0.5,
 } as const;
 
+/**
+ * The type scale of the two structural blocks an editorial page can carry: the
+ * numbered rail of points and the pull-quote panel beside it.
+ *
+ * A rail numeral is an index, not body copy. It reads as a step above the
+ * points it numbers; a numeral the same size as the copy turns the column into
+ * a list with stray digits in it. The quote is a display object: it never drops
+ * below running copy, and it never grows past the title of the page.
+ */
+export const PANEL_TYPE_SCALE = {
+  /** A rail numeral is this much larger than the copy of its row. */
+  railNumberRatio: 1.2,
+  railNumberMinPt: 16,
+  railNumberMaxPt: 24,
+  /** The smallest size a pull quote may take. */
+  quoteMinPt: 18,
+  /** The largest size a pull quote may take; the title stays the biggest object. */
+  quoteMaxPt: 30,
+  /** The caption that names a panel. */
+  labelPt: 13,
+} as const;
+
 /** The standard 16:9 page, in EMU. */
 const STANDARD_PAGE_WIDTH_EMU = 12_192_000;
 const STANDARD_PAGE_HEIGHT_EMU = 6_858_000;

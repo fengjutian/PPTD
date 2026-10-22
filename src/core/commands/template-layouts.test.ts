@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planTemplateLayouts, templateLayoutCandidates, type AiTemplateLayout } from "./template-layouts";
+import { planTemplateLayouts, templateLayoutCandidates, templateLayoutHasFooterMarker, type AiTemplateLayout } from "./template-layouts";
 
 const region = (role: "title" | "body" | "image", x: number, y: number, width: number, height: number) => ({ role, frame: { x, y, width, height } });
 
@@ -48,5 +48,14 @@ describe("template layout selection", () => {
     ];
     const chosen = planTemplateLayouts({ layouts, intents: ["cover", "cover"], rhythm: { coverVariants: 1, contentVariants: 3, repeatLimit: 2 } });
     expect(chosen.map((layout) => layout?.index)).toEqual([1, 1]);
+  });
+
+  it("sees a footer already declared by the template", () => {
+    expect(templateLayoutHasFooterMarker(contentLayout(11, "内页"))).toBe(false);
+    const withFooter: AiTemplateLayout = {
+      ...contentLayout(12, "内页带页脚"),
+      regions: [...contentLayout(12, "内页带页脚").regions, region("body", 0.86, 0.93, 0.08, 0.035)],
+    };
+    expect(templateLayoutHasFooterMarker(withFooter)).toBe(true);
   });
 });

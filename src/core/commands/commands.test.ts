@@ -839,6 +839,87 @@ describe("document commands", () => {
     expect(label?.style.fontSizePt).toBeGreaterThanOrEqual((point?.style.fontSizePt ?? 0) * 1.2);
   });
 
+  it("numbers the pages of a generated deck but not a one-page draft or a cover", () => {
+    const source = createDocument();
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const pages = [
+      { title: "第一页", body: "第一页正文", speakerNotes: "" },
+      { title: "第二页", body: "第二页正文", speakerNotes: "" },
+    ];
+    const deck = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: pages, designs: [design, design] }));
+    const textsOf = (index: number) => deck.slides[index]!.elements.filter((element) => element.type === "text").map((element) => element.text);
+    expect(textsOf(0)).toContain("01 / 02");
+    expect(textsOf(1)).toContain("02 / 02");
+    expect(textsOf(0)).toContain("岳阳楼记");
+
+    const single = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "单页", slides: [pages[0]!], designs: [design] }));
+    expect(single.slides[0]!.elements.some((element) => element.type === "text" && element.text === "01 / 01")).toBe(false);
+
+    const cover = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "封面", slides: pages, designs: [{ ...design, layout: "cover" as const }, design] }));
+    expect(cover.slides[0]!.elements.some((element) => element.type === "text" && element.text === "01 / 02")).toBe(false);
+  });
+
+  it("names the section the page belongs to in the footer", () => {
+    const source = createDocument();
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const pages = [
+      { title: "第一部分 洞庭湖", body: "", speakerNotes: "" },
+      { title: "岳阳楼记", body: "正文", speakerNotes: "" },
+    ];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "教学课件", slides: pages, designs: [{ ...design, layout: "section" as const }, design] }));
+    const footer = result.slides[1]!.elements.filter((element) => element.type === "text" && element.frame.y > result.pageSize.height * 0.9).map((element) => element.text);
+    expect(footer).toEqual(["第一部分 洞庭湖", "02 / 02"]);
+  });
+
+  it("leaves the page number to a template that already prints one", () => {
+    const source = createDocument();
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const pages = [
+      { title: "第一页", body: "第一页正文", speakerNotes: "" },
+      { title: "第二页", body: "第二页正文", speakerNotes: "" },
+    ];
+    const layout = {
+      index: 0,
+      name: "内页",
+      backgroundColor: "#FFFFFF",
+      regions: [
+        { role: "title" as const, frame: { x: 0.07, y: 0.08, width: 0.86, height: 0.10 } },
+        { role: "body" as const, frame: { x: 0.07, y: 0.22, width: 0.86, height: 0.60 } },
+        { role: "body" as const, frame: { x: 0.86, y: 0.93, width: 0.08, height: 0.035 } },
+      ],
+    };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板页脚", slides: pages, designs: [design, design], templateLayouts: [layout] }));
+    expect(result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "01 / 02")).toBe(false);
+  });
+
+  it("drops a small ornament that runs across the title and keeps a panel that carries the page", () => {
+    const source = createDocument();
+    const content = { title: "岳阳楼记", body: "正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const decorations = [
+      { shape: "rectangle" as const, fill: "#FF00AA", frame: { x: 0.06, y: 0.12, width: 0.03, height: 0.05 } },
+      { shape: "rectangle" as const, fill: "#EEF2F6", frame: { x: 0, y: 0, width: 0.12, height: 1 } },
+    ];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "装饰", slides: [content], designs: [design], templateDecorations: decorations }));
+    const fills = result.slides[0]!.elements.filter((element) => element.type === "shape").map((element) => element.style.fill);
+    expect(fills).not.toContain("#FF00AA");
+    expect(fills).toContain("#EEF2F6");
+  });
+
+  it("keeps the rail numeral and the pull quote above running copy", () => {
+    const source = createDocument();
+    const items = ["总写洞庭湖全景", "'衔远山，吞长江，浩浩汤汤'", "描写气象万千的景色", "过渡到登楼览物之情", "'前人之述备矣'"];
+    const content = { title: "原文赏析", body: items.join("\n"), speakerNotes: "", blocks: [{ type: "quote" as const, text: "先天下之忧而忧，后天下之乐而乐" }, { type: "bullet-list" as const, items }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    const number = texts.find((element) => element.text === "01");
+    const point = texts.find((element) => element.text === items[0]);
+    expect(number?.style.fontSizePt).toBeGreaterThanOrEqual((point?.style.fontSizePt ?? 0) * 1.15);
+    const quote = texts.find((element) => element.text.includes("先天下"));
+    expect(quote?.style.fontSizePt).toBeGreaterThanOrEqual(18);
+  });
+
   it("keeps every reviewed step of a timeline and of a process", () => {
     const source = createDocument();
     const steps = Array.from({ length: 8 }, (_, index) => ({ label: `阶段${index + 1}`, text: `说明${index + 1}` }));

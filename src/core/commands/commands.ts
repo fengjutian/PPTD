@@ -7,6 +7,7 @@ import {
   planTemplateLayouts,
   templateColumnRegions,
   templateContentRegion,
+  templateLayoutHasFooterMarker,
   templateTitleRegion,
   type AiElementRepair,
   type AiNormalizedRect,
@@ -17,7 +18,7 @@ import {
   type TemplateLayoutIntent,
 } from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
-import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, stripListPrefix } from "./layout-capacity";
+import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, PANEL_TYPE_SCALE, stripListPrefix } from "./layout-capacity";
 import { coverCrop } from "../rendering/image-fit";
 import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, resolvePageDesign, type CompositionFacts } from "./design-intent";
 import { planDeckCompositions } from "./deck-composition";
@@ -504,8 +505,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // A design that asks for dark text on dark artwork is corrected instead of
     // being rendered as invisible copy.
     const ink = (luminance: number) => (luminance < 0.45 ? { strong: "#FFFFFF", soft: "#DCE3EA" } : { strong: "#171A1F", soft: "#3E4650" });
-    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right", contentRef?: "title" | "body" | "decorative", background?: BackgroundRange | number) => {
-      const fitted = fittedFontSize(value, box, fontSizePt);
+    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right", contentRef?: "title" | "body" | "decorative", background?: BackgroundRange | number, minimumPt = 12) => {
+      const fitted = fittedFontSize(value, box, fontSizePt, minimumPt);
       const range = typeof background === "number" ? { darkest: background, lightest: background } : background;
       const palette = ink(range ? range.darkest : 1);
       const large = isLargeText(fitted, bold);
@@ -674,10 +675,6 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(CONTENT_REGION.contentTopOffset, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
       slide.elements = [];
       if (keepsArtwork) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", placement: "layout-background", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe!.backgroundImageDataUrl!, mimeType: "image/png" }, altText: `模板版式背景：${recipe!.name ?? recipe!.index}` });
-      const decorations = keepsArtwork ? [] : [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])];
-      decorations.forEach((decoration) => {
-        if (isSafeRegion(decoration.frame, 0.001, 0.001)) slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
-      });
       // A scrim belongs to the text block only. Painting the whole page erased the
       // template artwork and was the single biggest reason a generated deck looked
       // like a blank sheet with a coloured border.
@@ -685,6 +682,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const scrimLuminance = colorLuminance(scrimFill) ?? 1;
       const contentRegion = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
       const titleBox = recipeTitle ?? { x: alignmentGrid.left, y: alignmentGrid.titleY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.titleHeight };
+      // Template ornaments are painted before the copy, so an ornament that runs
+      // across the title sits under the glyphs and reads as a printing accident.
+      // A small shape that overlaps the title box is dropped; a large panel
+      // behind the title is a background and is kept.
+      const titleGuard = { x: titleBox.x - 0.004, y: titleBox.y - 0.004, width: titleBox.width + 0.008, height: titleBox.height + 0.008 };
+      const decorationCovers = (decoration: AiTemplateDecoration): number => {
+        const width = Math.min(decoration.frame.x + decoration.frame.width, titleGuard.x + titleGuard.width) - Math.max(decoration.frame.x, titleGuard.x);
+        const height = Math.min(decoration.frame.y + decoration.frame.height, titleGuard.y + titleGuard.height) - Math.max(decoration.frame.y, titleGuard.y);
+        if (width <= 0 || height <= 0) return 0;
+        return (width * height) / Math.max(1e-6, decoration.frame.width * decoration.frame.height);
+      };
+      const decorations = keepsArtwork ? [] : [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])];
+      decorations.forEach((decoration) => {
+        if (!isSafeRegion(decoration.frame, 0.001, 0.001)) return;
+        const area = decoration.frame.width * decoration.frame.height;
+        if (area < 0.06 && decorationCovers(decoration) > 0.2) return;
+        slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
+      });
       // A picture takes its own place on the page and the text moves out of its
       // way. The image is never laid over the copy: a page where the text is
       // unreadable under a picture is worse than a page without a picture.
@@ -1076,7 +1091,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const flowFontPt = listFlow.fontSizePt;
         const rowGapPt = listFlow.gapPt;
         const flowHeightFraction = (points: number) => points / (pageHeightIn * 72);
-        const numberSize = Math.max(16, Math.min(22, flowFontPt * 1.05));
+        const numberSize = Math.max(PANEL_TYPE_SCALE.railNumberMinPt, Math.min(PANEL_TYPE_SCALE.railNumberMaxPt, flowFontPt * PANEL_TYPE_SCALE.railNumberRatio));
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         listFlow.rows.forEach((row, itemIndex) => {
@@ -1085,9 +1100,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(shape(frame(contentBox.x, rowY, 0.006, rowHeight), design.accent));
           // The number sits on the first line of its row, so the column of
           // numbers reads as one straight line even when the rows below it
-          // need a second line. Its own line box is the height of one line
-          // of the row, so a larger number does not push it down.
-          const numberLineHeight = flowHeightFraction(row.fontSizePt * 1.25);
+          // need a second line. Its box is one line of its own size: a numeral
+          // that is a step above the copy needs a taller line, and squeezing it
+          // into the row's line box was what shrank it back to body size.
+          const numberLineHeight = flowHeightFraction(numberSize * 1.25);
           const numberBox = { x: contentBox.x + 0.015, y: rowY, width: numberWidth, height: numberLineHeight };
           slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), frame(numberBox.x, numberBox.y, numberBox.width, numberBox.height), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
           const itemBox = { x: contentBox.x + numberWidth + 0.03, y: rowY, width: listWidth - numberWidth - 0.03, height: rowHeight };
@@ -1111,7 +1127,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // The height is one line of the mark, so the fitting step of the text
           // helper does not shrink it either.
           const markHeightPt = markSize * 1.25;
-          const labelHeightPt = 12 * 1.25;
+          const labelHeightPt = PANEL_TYPE_SCALE.labelPt * 1.25;
           const markTopPt = 8;
           const labelBottomMarginPt = 10;
           const labelTopPt = panelHeightPt - labelHeightPt - labelBottomMarginPt;
@@ -1125,7 +1141,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // the panel and produced quotes of three different sizes. The size
           // is also capped: a pull quote is a display object, but a quote that
           // is set larger than the title of the page takes over the page.
-          const quoteSizes = [30, 28, 26, 24, 22, 20, 18, 16, 14];
+          const quoteSizes = [30, 28, 26, 24, 22, 20, 18].filter((size) => size >= PANEL_TYPE_SCALE.quoteMinPt && size <= PANEL_TYPE_SCALE.quoteMaxPt);
           let quoteSize = quoteSizes[quoteSizes.length - 1]!;
           let quoteHeightPt = 0;
           for (const size of quoteSizes) {
@@ -1145,7 +1161,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const rulePt = labelTopPt - 12;
           const ruleY = contentBox.y + rulePt / pageHeightPt;
           slide.elements.push(shape(frame(panelX + 0.05, ruleY, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + labelTopPt / pageHeightPt, panelWidth - 0.10, labelHeightPt / pageHeightPt), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + labelTopPt / pageHeightPt, panelWidth - 0.10, labelHeightPt / pageHeightPt), PANEL_TYPE_SCALE.labelPt, "#FFFFFF", true, "left", undefined, accentFillLuminance));
         } else {
           const countText = String(items.length).padStart(2, "0");
           // The numeral is the anchor, so measure its own block and place the
@@ -1162,7 +1178,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text(countText, countFrame, countSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(shape(frame(panelX + 0.05, countBottom + 0.02, panelWidth - 0.10, 0.004), "#FFFFFF"));
           slide.elements.push(text("项要点", frame(panelX + 0.05, labelY, panelWidth - 0.10, labelHeight), labelSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-          slide.elements.push(text("本页要点", frame(panelX + 0.05, footerY, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("本页要点", frame(panelX + 0.05, footerY, panelWidth - 0.10, 0.06), PANEL_TYPE_SCALE.labelPt, "#FFFFFF", false, "left", undefined, accentFillLuminance));
         }
       } else if (composition === "grid" && items.length > 1 && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
@@ -1379,6 +1395,36 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           if (element.type !== "text" || element.text === content.title) continue;
           if (content.body.trim() && element.text === content.body) emphasisTarget(element, emphasis.body);
         }
+      }
+      // Page numbers are part of the generated design, not of the reviewed copy:
+      // they are added after the composition so no layout branch has to remember
+      // them. A one-page draft has nothing to number, a cover or a section page
+      // carries its own mark, and a template that already declares the footer as
+      // busy keeps it. The footer never sits on top of the copy: it uses the
+      // margin below the safe area.
+      const footerBand = { x: 0, y: 0.94, width: 1, height: 0.06 };
+      const footerClaimed = obstacles.some((obstacle) => intersects(footerBand, obstacle));
+      const templateFooter = recipe ? templateLayoutHasFooterMarker(recipe) : false;
+      if (command.slides.length > 1 && design.layout !== "cover" && design.layout !== "section" && !footerClaimed && !templateFooter) {
+        const pageLabel = `${String(index + 1).padStart(2, "0")} / ${String(command.slides.length).padStart(2, "0")}`;
+        // The left side names the section the page belongs to, not the deck:
+        // a 20-page deck whose footer repeats the deck title on every page says
+        // nothing about where the reader is. Without sections it falls back to
+        // the deck title.
+        let sectionLabel: string | undefined;
+        for (let sectionIndex = index; sectionIndex >= 0; sectionIndex -= 1) {
+          if (command.designs[sectionIndex]?.layout !== "section") continue;
+          const sectionTitle = command.slides[sectionIndex]?.title.trim();
+          if (sectionTitle) {
+            sectionLabel = sectionTitle;
+            break;
+          }
+        }
+        const titleChars = [...(sectionLabel ?? command.title.trim())];
+        const deckLabel = titleChars.length > 30 ? `${titleChars.slice(0, 29).join("")}…` : titleChars.join("");
+        const footerInk = readableTextColor("#5F6B76", pageLuminance, false, bodyInk);
+        slide.elements.push({ ...text(deckLabel, frame(alignmentGrid.left, 0.947, 0.55, 0.03), 10, footerInk, false, "left", "decorative", pageLuminance, 8), origin: "generated" });
+        slide.elements.push({ ...text(pageLabel, frame(alignmentGrid.right - 0.16, 0.947, 0.16, 0.03), 10, footerInk, false, "right", "decorative", pageLuminance, 8), origin: "generated" });
       }
       // Provenance is what lets a later design-only relayout replace the
       // generated composition without deleting anything the user added.
