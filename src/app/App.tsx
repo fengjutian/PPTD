@@ -262,7 +262,7 @@ export function App() {
   const setTaskStatus = (text?: string) => setMessage(text ? { id: Date.now(), text, kind: /失败|错误|无效|必须|不可用/.test(text) ? "error" : /完成|成功|已保存|已添加|已打开|已新建|已恢复|已确认/.test(text) ? "success" : "info" } : undefined);
   const [activeView, setActiveView] = useState<AppView>("editor");
   const [aiTopic, setAiTopic] = useState("");
-  const [aiSlideCount, setAiSlideCount] = useState(6);
+  const [aiSlideCount, setAiSlideCount] = useState<number | "">(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
   const [activeDraftSlideIndex, setActiveDraftSlideIndex] = useState(0);
   const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>([]);
@@ -519,6 +519,11 @@ export function App() {
       setTaskStatus("已取消 AI 内容生成");
       return;
     }
+    if (aiSlideCount === "" || aiSlideCount < 1) {
+      setTaskStatus("页数必须是大于 0 的整数");
+      return;
+    }
+    const requestedSlideCount = aiSlideCount;
     const requestId = aiRequestId.current + 1;
     aiRequestId.current = requestId;
     aiTaskId.current += 1;
@@ -539,7 +544,7 @@ export function App() {
         if (requestId !== aiRequestId.current || progress.taskId !== taskId) return;
         setAiStreamProgress(mergeStreamProgress(totals, progress));
       }).catch(() => undefined);
-      const draft = withSlideIds(await generatePresentationDraft(aiTopic, aiSlideCount, {
+      const draft = withSlideIds(await generatePresentationDraft(aiTopic, requestedSlideCount, {
         onProgress: (progress) => {
           if (requestId === aiRequestId.current) setAiProgress(progress);
         },
@@ -555,7 +560,7 @@ export function App() {
       setAiContentHistoryRevision((value) => value + 1);
       setAiDraft(draft); setActiveHistoryId(id); selectAiDraftSlide(0); setAiSaveState("saved");
       try {
-        setAiHistory(await saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
+        setAiHistory(await saveAiHistory({ id, topic: aiTopic, slideCount: requestedSlideCount, draft }));
         setTaskStatus("AI 已完成 PPT 草稿生成");
       } catch (error) {
         setTaskStatus(`AI 草稿已生成，但历史保存失败：${error instanceof Error ? error.message : String(error)}`);
@@ -910,7 +915,7 @@ export function App() {
           ? 12
           : 12 + Math.round((88 * aiProgress.completed) / Math.max(1, aiProgress.total)),
         aiStreamProgress
-          ? 12 + Math.round((88 * aiStreamProgress.pages) / Math.max(1, aiSlideCount))
+          ? 12 + Math.round((88 * aiStreamProgress.pages) / Math.max(1, aiSlideCount || 1))
           : 0,
       )
     : 0;
@@ -1263,8 +1268,8 @@ export function App() {
           <div className="ai-compose-card">
           <div className="section-kicker">AI 内容规划</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成演示简报、逐页计划和可编辑的结构化内容。</p>
           <label><span className="topic-field-heading"><span>主题与要求</span><button type="button" className="link-action topic-polish-action" disabled={!aiTopic.trim() || aiPolishing || aiBusy} onClick={() => void handlePolishAiTopic()}><Wand2 />{aiPolishing ? "润色中…" : "AI 润色"}</button></span><textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
-          <label className="slide-count-field">页数<input type="number" min="1" step="1" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.trunc(Number(event.target.value)) || 1))} /></label>
-          <button className="primary-action" disabled={!aiTopic.trim() || aiPolishing} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
+          <label className="slide-count-field">页数<input type="number" min="1" step="1" value={aiSlideCount} onChange={(event) => { const value = event.target.value; setAiSlideCount(value === "" ? "" : Math.max(1, Math.trunc(Number(value)) || 1)); }} onBlur={() => { if (aiSlideCount === "") setAiSlideCount(1); }} /></label>
+          <button className="primary-action" disabled={!aiTopic.trim() || aiPolishing || aiSlideCount === ""} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
           {aiBusy && aiProgress && <div className="ai-generation-progress" role="status" aria-live="polite"><strong>{aiGenerationLabel}</strong><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={aiGenerationPercent} role="progressbar"><i style={{ width: `${aiGenerationPercent}%` }} /></div><span>生成中可随时点击“取消生成”停止本次任务</span></div>}
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
