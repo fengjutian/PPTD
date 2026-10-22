@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Trash2, Unlink } from "lucide-react";
-import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle } from "../../core/document-model";
+import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
 import { isFontAvailable } from "../../core/validation/export-validation";
@@ -63,6 +63,7 @@ export interface InspectorPanelViewProps {
 export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, unit, onUnitChange, aspectLocked, onToggleAspectLock, onCommand }: InspectorPanelViewProps) {
   const [textDraft, setTextDraft] = useState<string>();
   const [fontAvailable, setFontAvailable] = useState(true);
+  const [selection, setSelection] = useState<{ start: number; end: number }>();
   const textDraftCancelRef = useRef(false);
   const locked = element.locked;
   const fontFamily = element.type === "text" ? element.style.fontFamily : "";
@@ -113,6 +114,32 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
     onCommand({ type: "set-text-style", slideId, elementId: element.id, style });
   };
 
+  /**
+   * The selection of the text field addresses a range of the copy, so the
+   * emphasis lands on exactly the words the user picked.
+   */
+  const readSelection = (target: HTMLTextAreaElement) => {
+    if (target.selectionStart === target.selectionEnd) {
+      setSelection(undefined);
+      return;
+    }
+    setSelection({ start: target.selectionStart, end: target.selectionEnd });
+  };
+
+  /** Whether the whole selection is already bold. */
+  const selectionIsBold = element.type === "text" && selection
+    ? (() => {
+      const overlapping = textFragments(element.text, element.runs).filter((fragment) => fragment.start < selection.end && fragment.end > selection.start);
+      if (overlapping.length === 0) return element.style.bold;
+      return overlapping.every((fragment) => resolveFragmentStyle(element.style, fragment.style).bold);
+    })()
+    : false;
+
+  /** The emphasised fragments, so the user can see what is already marked. */
+  const emphasised = element.type === "text"
+    ? textFragments(element.text, element.runs).filter((fragment) => Object.keys(fragment.style).length > 0)
+    : [];
+
   const setShapeStyle = (style: Partial<ShapeElementStyle>) => {
     onCommand({ type: "set-shape-style", slideId, elementId: element.id, style });
   };
@@ -150,6 +177,9 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
               textDraftCancelRef.current = false;
               setTextDraft(event.target.value);
             }}
+            onSelect={(event) => readSelection(event.currentTarget)}
+            onKeyUp={(event) => readSelection(event.currentTarget)}
+            onClick={(event) => readSelection(event.currentTarget)}
             onBlur={commitText}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -158,9 +188,32 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
                 event.currentTarget.blur();
               }
               if ((event.ctrlKey || event.metaKey) && event.key === "Enter") event.currentTarget.blur();
+              if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b" && selection) {
+                // The usual shortcut of a text editor: bold the picked words.
+                event.preventDefault();
+                onCommand(selectionIsBold
+                  ? { type: "clear-text-emphasis", slideId, elementId: element.id, start: selection.start, end: selection.end }
+                  : { type: "set-text-emphasis", slideId, elementId: element.id, start: selection.start, end: selection.end, style: { bold: true } });
+              }
             }}
           />
         </label>
+        <div className="field-row">
+          <button type="button" className="toggle-button" disabled={locked || !selection}
+            onClick={() => {
+              if (!selection) return;
+              onCommand(selectionIsBold
+                ? { type: "clear-text-emphasis", slideId, elementId: element.id, start: selection.start, end: selection.end }
+                : { type: "set-text-emphasis", slideId, elementId: element.id, start: selection.start, end: selection.end, style: { bold: true } });
+            }}>
+            <Bold />{selectionIsBold ? "取消加粗" : "加粗所选"}
+          </button>
+          <button type="button" className="toggle-button" disabled={locked || emphasised.length === 0}
+            onClick={() => onCommand({ type: "clear-text-emphasis", slideId, elementId: element.id, start: 0, end: element.text.length })}>
+            清除全部强调
+          </button>
+        </div>
+        {emphasised.length > 0 && <p className="inspector-hint">已强调 {emphasised.length} 处：{emphasised.map((fragment) => fragment.text).join(" / ")}</p>}
       </section>}
 
       <section className="inspector-section">

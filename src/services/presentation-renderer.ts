@@ -1,4 +1,4 @@
-import { formatChartValue, resolveChartData, resolveTableData, type ChartElement, type PresentationDocument, type Slide, type TableElement, type TextElement } from "../core/document-model";
+import { formatChartValue, resolveChartData, resolveFragmentStyle, resolveTableData, textFragments, type ChartElement, type PresentationDocument, type Slide, type TableElement, type TextElement } from "../core/document-model";
 
 export interface PresentationRender { slides: string[]; contactSheet: string }
 export interface RenderedContrastIssue { slideIndex: number; elementId: string; contrastRatio: number; /** The sampled artwork color that carries the text. */ backgroundColor: string }
@@ -175,13 +175,89 @@ function drawTable(context: CanvasRenderingContext2D, element: TableElement, sli
   });
 }
 
+/** A character of a text with the style it is drawn with. */
+interface StyledCharacter {
+  character: string;
+  bold: boolean;
+  color: string;
+}
+
+/** The characters of the text with the style of the fragment they belong to. */
+function styledCharacters(element: TextElement): StyledCharacter[] {
+  const characters: StyledCharacter[] = [];
+  for (const fragment of textFragments(element.text, element.runs)) {
+    const style = resolveFragmentStyle(element.style, fragment.style);
+    for (const character of fragment.text) {
+      characters.push({ character, bold: style.bold, color: style.color });
+    }
+  }
+  return characters;
+}
+
+/**
+ * Draws a text with its styled fragments.
+ *
+ * The review sees a picture of the page, so a text with emphasised words has
+ * to be drawn here as well. The fragments come from the same runs the export
+ * reads, so the reviewer judges the emphasis that will be in the file.
+ */
 function drawText(context: CanvasRenderingContext2D, element: TextElement, width: number, height: number, scale: number): void {
   const fontSize = element.style.fontSizePt * scale * 914_400 / 72;
-  context.font = `${element.style.bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
-  context.fillStyle = element.style.color; context.textBaseline = "top"; context.textAlign = element.style.align;
-  const x = element.style.align === "center" ? width / 2 : element.style.align === "right" ? width : 0;
+  const fontFor = (bold: boolean) => `${bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
+  const characters = styledCharacters(element);
+  // Greedy wrap: the characters that fit on one line stay together, and a line
+  // break in the copy always starts a new line.
+  const lines: StyledCharacter[][] = [];
+  let line: StyledCharacter[] = [];
+  let lineWidth = 0;
+  for (const styled of characters) {
+    if (styled.character === "\n") {
+      if (line.length > 0) lines.push(line);
+      line = [];
+      lineWidth = 0;
+      continue;
+    }
+    context.font = fontFor(styled.bold);
+    const advance = context.measureText(styled.character).width;
+    if (line.length > 0 && lineWidth + advance > width) {
+      lines.push(line);
+      line = [];
+      lineWidth = 0;
+    }
+    line.push(styled);
+    lineWidth += advance;
+  }
+  if (line.length > 0) lines.push(line);
   const lineHeight = fontSize * 1.25;
-  wrapText(context, element.text, width).slice(0, Math.max(1, Math.floor(height / lineHeight))).forEach((line, index) => context.fillText(line, x, index * lineHeight));
+  context.textBaseline = "top";
+  context.textAlign = "left";
+  lines.slice(0, Math.max(1, Math.floor(height / lineHeight))).forEach((lineCharacters, lineIndex) => {
+    const measure = (charactersOnLine: StyledCharacter[]) => charactersOnLine.reduce((sum, styled) => {
+      context.font = fontFor(styled.bold);
+      return sum + context.measureText(styled.character).width;
+    }, 0);
+    const total = measure(lineCharacters);
+    let x = element.style.align === "center" ? (width - total) / 2 : element.style.align === "right" ? width - total : 0;
+    const y = lineIndex * lineHeight;
+    let buffer = "";
+    let bufferStyle = lineCharacters[0]!;
+    const flush = () => {
+      if (!buffer) return;
+      context.font = fontFor(bufferStyle.bold);
+      context.fillStyle = bufferStyle.color;
+      context.fillText(buffer, x, y);
+      x += context.measureText(buffer).width;
+      buffer = "";
+    };
+    for (const styled of lineCharacters) {
+      if (styled.bold !== bufferStyle.bold || styled.color !== bufferStyle.color) {
+        flush();
+        bufferStyle = styled;
+      }
+      buffer += styled.character;
+    }
+    flush();
+  });
 }
 
 export async function renderPresentationForVisualReview(document: PresentationDocument, width = 1280): Promise<PresentationRender> {

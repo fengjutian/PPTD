@@ -1,6 +1,6 @@
 import PptxGenJS from "pptxgenjs";
 import { unzipSync, zipSync } from "fflate";
-import { EMU_PER_INCH, resolveChartData, resolveTableData, type ChartElement, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
+import { EMU_PER_INCH, resolveChartData, resolveFragmentStyle, resolveTableData, textFragments, type ChartElement, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
 import { isFontAvailable, validatePresentationForExport, type ExportIssue } from "../../core/validation/export-validation";
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
 import { patchThemeColors } from "./theme-xml";
@@ -193,7 +193,7 @@ export async function buildPptx(
       };
 
       if (element.type === "text") {
-        slide.addText(element.text, {
+        const textOptions = {
           ...position,
           fontFace: element.style.fontFamily,
           fontSize: element.style.fontSizePt,
@@ -206,7 +206,25 @@ export async function buildPptx(
           margin: 0,
           breakLine: false,
           fit: "shrink",
-        });
+        };
+        // A text with styled fragments is written as real runs, so the emphasis
+        // stays editable in PowerPoint instead of being flattened into the
+        // style of the whole box.
+        if (element.runs && element.runs.length > 0) {
+          slide.addText(textFragments(element.text, element.runs).map((fragment) => {
+            const style = resolveFragmentStyle(element.style, fragment.style);
+            return {
+              text: fragment.text,
+              options: {
+                bold: style.bold,
+                color: color(style.color),
+                ...(style.underline ? { underline: { style: "sng" as const } } : {}),
+              },
+            };
+          }), textOptions);
+        } else {
+          slide.addText(element.text, textOptions);
+        }
       } else if (element.type === "shape") {
         const type = shapeType(pptx, element);
         slide.addShape(type, {

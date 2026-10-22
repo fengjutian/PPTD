@@ -105,12 +105,31 @@ export interface ChartElement extends ElementBase {
   style: ChartElementStyle;
 }
 
+/**
+ * A styled fragment of a text element.
+ *
+ * The fragment is addressed by its offsets in the text of the element, so the
+ * copy itself stays in the content and the run only carries presentation. A
+ * run therefore cannot introduce a word the content does not carry.
+ */
+export interface TextRun {
+  /** Offset of the first character of the fragment, in UTF-16 code units. */
+  start: number;
+  /** Offset behind the last character of the fragment. */
+  end: number;
+  bold?: boolean;
+  color?: string;
+  underline?: boolean;
+}
+
 export interface TextElement extends ElementBase {
   type: "text";
   text: string;
   /** Links this visual text back to the semantic content it renders. */
   contentRef?: TextContentRole;
   style: TextElementStyle;
+  /** Presentation-only fragments of the text. Absent means one uniform style. */
+  runs?: TextRun[];
 }
 
 export interface ShapeElement extends ElementBase {

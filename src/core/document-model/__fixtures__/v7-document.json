@@ -1,0 +1,41 @@
+{
+  "id": "aaaaaaaa-aaaa-7aaa-8aaa-aaaaaaaaaaaa",
+  "schemaVersion": 7,
+  "title": "V7 fixture",
+  "pageSize": { "width": 12191695, "height": 6858000 },
+  "revisions": { "document": 11, "content": 7, "design": 6 },
+  "theme": {
+    "name": "Template",
+    "majorFont": "Microsoft YaHei",
+    "minorFont": "Microsoft YaHei",
+    "colors": [{ "name": "accent1", "value": "#C04A32" }]
+  },
+  "layouts": [{ "id": "bbbbbbbb-bbbb-7bbb-8bbb-bbbbbbbbbbbb", "name": "Content", "backgroundColor": "#ffffff" }],
+  "slides": [
+    {
+      "id": "cccccccc-cccc-7ccc-8ccc-cccccccccccc",
+      "background": "#ffffff",
+      "layoutId": "bbbbbbbb-bbbb-7bbb-8bbb-bbbbbbbbbbbb",
+      "content": {
+        "title": "Fixture",
+        "body": "Body",
+        "speakerNotes": "",
+        "status": "approved",
+        "contentHash": "0123456789abcdef"
+      },
+      "elements": [
+        {
+          "id": "dddddddd-dddd-7ddd-8ddd-dddddddddddd",
+          "type": "text",
+          "frame": { "x": 685800, "y": 594360, "width": 6858000, "height": 731520 },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "generated",
+          "text": "Fixture",
+          "contentRef": "title",
+          "style": { "fontFamily": "Microsoft YaHei", "fontSizePt": 28, "color": "#17181c", "bold": true, "align": "left" }
+        }
+      ]
+    }
+  ]
+}

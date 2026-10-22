@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CURRENT_SCHEMA_VERSION = 7 as const;
+export const CURRENT_SCHEMA_VERSION = 8 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -14,6 +14,8 @@ const base = z.object({
   origin: z.enum(["generated", "user"]).optional(),
 });
 
+const hexColor = z.string().regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i);
+
 const textElement = base.extend({
   type: z.literal("text"),
   text: z.string(),
@@ -22,6 +24,10 @@ const textElement = base.extend({
     fontFamily: z.string().min(1), fontSizePt: z.number().positive(), color: z.string(), bold: z.boolean(),
     align: z.enum(["left", "center", "right"]),
   }),
+  runs: z.array(z.object({
+    start: z.number().int().nonnegative(), end: z.number().int().positive(),
+    bold: z.boolean().optional(), color: hexColor.optional(), underline: z.boolean().optional(),
+  })).max(200).optional(),
 });
 
 const shapeElement = base.extend({
@@ -49,8 +55,6 @@ const imageElement = base.extend({
   crop: imageCropSchema.optional(),
   placement: z.enum(["content", "layout-background"]).optional(),
 });
-
-const hexColor = z.string().regex(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i);
 
 const tableElement = base.extend({
   type: z.literal("table"),
@@ -148,6 +152,10 @@ export const presentationDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionSevenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(7) })
+  .superRefine(validateUniqueIds);
+
 const versionSixDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(6) })
   .superRefine(validateUniqueIds);
@@ -193,6 +201,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 7 adds the native table and the table block. A version 6 document
   // has no table, so it keeps every page and every object.
   6: (document) => ({ ...versionSixDocumentSchema.parse(document), schemaVersion: 7 }),
+  // Version 8 adds the styled fragments of a text element. The field is
+  // optional, so a version 7 document keeps every page and simply renders one
+  // uniform style per text box.
+  7: (document) => ({ ...versionSevenDocumentSchema.parse(document), schemaVersion: 8 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

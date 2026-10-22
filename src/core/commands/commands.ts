@@ -1,5 +1,5 @@
-import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
-import { createDocument, createSlide, inches, parseMetricValue } from "../document-model";
+import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle, TextRun } from "../document-model";
+import { createDocument, createSlide, inches, parseMetricValue, applyTextRun, subtractTextRange, type TextRunStyle } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";
 import {
@@ -101,7 +101,7 @@ function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
 
 /** Plain deep copy of an element, safe to read from an Immer draft. */
 function cloneElement(element: SlideElement): SlideElement {
-  if (element.type === "text") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
+  if (element.type === "text") return { ...element, frame: { ...element.frame }, style: { ...element.style }, ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}) };
   if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
   if (element.type === "chart") return { ...element, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] };
   if (element.type === "table") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
@@ -143,6 +143,8 @@ export type DocumentCommand =
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
+  | { type: "set-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number; style: TextRunStyle }
+  | { type: "clear-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number }
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
   | { type: "set-chart-style"; slideId: SlideId; elementId: ElementId; style: Partial<ChartElementStyle> }
   | { type: "set-chart-kind"; slideId: SlideId; elementId: ElementId; kind: ChartKind }
@@ -159,6 +161,32 @@ function assertTextStyle(style: Partial<TextElementStyle>): void {
   if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_TEXT_STYLE");
   if (style.bold !== undefined && typeof style.bold !== "boolean") throw new Error("INVALID_TEXT_STYLE");
   if (style.align !== undefined && style.align !== "left" && style.align !== "center" && style.align !== "right") throw new Error("INVALID_TEXT_STYLE");
+}
+
+/** The style of a run is presentation-only, so it is guarded like the others. */
+function assertTextRunStyle(style: TextRunStyle): void {
+  if (style.bold !== undefined && typeof style.bold !== "boolean") throw new Error("INVALID_TEXT_EMPHASIS");
+  if (style.underline !== undefined && typeof style.underline !== "boolean") throw new Error("INVALID_TEXT_EMPHASIS");
+  if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_TEXT_EMPHASIS");
+}
+
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
+}
+
+/**
+ * A run addresses a range of the text of the element, so the range has to stay
+ * inside the text and may not cut a surrogate pair in half: a fragment that
+ * starts in the middle of a character would export as a broken glyph.
+ */
+function assertTextRange(text: string, start: number, end: number): void {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length) throw new Error("INVALID_TEXT_EMPHASIS");
+  if (start > 0 && isHighSurrogate(text.charCodeAt(start - 1)) && isLowSurrogate(text.charCodeAt(start))) throw new Error("INVALID_TEXT_EMPHASIS");
+  if (end < text.length && isHighSurrogate(text.charCodeAt(end - 1)) && isLowSurrogate(text.charCodeAt(end))) throw new Error("INVALID_TEXT_EMPHASIS");
 }
 
 function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
@@ -233,6 +261,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-slide": return null;
     case "set-slide-background": return "design";
     case "set-text-style":
+    case "set-text-emphasis":
+    case "clear-text-emphasis":
     case "set-shape-style":
     case "set-chart-style":
     case "set-chart-kind":
@@ -965,7 +995,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       id: crypto.randomUUID() as SlideId,
       content: { ...source.content, ...(source.content.blocks ? { blocks: cloneContentBlocks(source.content.blocks) } : {}) },
       elements: source.elements.map((element) => element.type === "text"
-        ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
+        ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style }, ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}) }
         : element.type === "shape"
           ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
           : element.type === "chart"
@@ -1064,7 +1094,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const sourceIndex = slide.elements.findIndex((item) => item.id === command.elementId);
     const offset = inches(0.2);
     const duplicate = element.type === "text"
-      ? { ...element, id: crypto.randomUUID() as ElementId, contentRef: "decorative" as const, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
+      ? { ...element, id: crypto.randomUUID() as ElementId, contentRef: "decorative" as const, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style }, ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}) }
       : element.type === "shape"
         ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
         : element.type === "chart"
@@ -1103,6 +1133,20 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     assertTextStyle(command.style);
     element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-text-emphasis") {
+    if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
+    assertTextRunStyle(command.style);
+    assertTextRange(element.text, command.start, command.end);
+    element.runs = applyTextRun(element.runs, command.start, command.end, command.style);
+    return;
+  }
+  if (command.type === "clear-text-emphasis") {
+    if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
+    assertTextRange(element.text, command.start, command.end);
+    const remaining = subtractTextRange(element.runs, command.start, command.end);
+    element.runs = remaining.length > 0 ? remaining : undefined;
     return;
   }
   if (command.type === "set-shape-style") {
@@ -1171,6 +1215,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     element.text = command.text;
+    // The fragments address ranges of the old copy, so they would point at the
+    // wrong words once the copy changed. Dropping them keeps the emphasis
+    // honest instead of highlighting something the reviewer did not select.
+    element.runs = undefined;
     const contentBound = element.contentRef === "title" || element.contentRef === "body" || (!element.contentRef && slide.elements[0]?.id === element.id);
     if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id)) slide.content.title = command.text;
     if (element.contentRef === "body") {

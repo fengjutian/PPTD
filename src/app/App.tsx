@@ -5,6 +5,7 @@ import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { CroppedImage } from "../features/editor/CroppedImage";
 import { ChartView } from "../features/editor/ChartView";
+import { RichText } from "../features/editor/RichText";
 import { TableView } from "../features/editor/TableView";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { LayerList } from "../features/editor/LayerList";
@@ -182,7 +183,7 @@ function ElementView({ element, slide, scale, selected, onSelect }: { element: S
 
   return (
     <div ref={rootRef} className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={(event) => begin("move", event)} onPointerMove={pointerMove} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}>
-      {element.type === "text" ? <div style={{ fontFamily: element.style.fontFamily, fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72, color: element.style.color, fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : element.type === "image" ? <CroppedImage element={element} className="image-fill" /> : element.type === "chart" ? <ChartView element={element} slide={slide} scale={scale} /> : <TableView element={element} slide={slide} scale={scale} />}
+      {element.type === "text" ? <RichText element={element} scale={scale} /> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : element.type === "image" ? <CroppedImage element={element} className="image-fill" /> : element.type === "chart" ? <ChartView element={element} slide={slide} scale={scale} /> : <TableView element={element} slide={slide} scale={scale} />}
       {selected && !element.locked && <>
         {RESIZE_HANDLES.map(([direction, label]) => <button key={direction} type="button" aria-label={`从${label}缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
         <button type="button" aria-label="旋转对象" className="element-rotate-handle" onPointerDown={(event) => begin("rotate", event)} />
@@ -200,7 +201,7 @@ function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<ty
       height: `${element.frame.height / pageHeight * 100}%`,
       transform: `rotate(${element.rotationMilliDegree / 1000}deg)`,
     };
-    if (element.type === "text") return <div className="thumbnail-element thumbnail-text" key={element.id} style={{ ...style, color: element.style.color, fontFamily: element.style.fontFamily, fontSize: Math.max(4, element.style.fontSizePt * 0.18), fontWeight: element.style.bold ? 700 : 400, textAlign: element.style.align }}>{element.text}</div>;
+    if (element.type === "text") return <div className="thumbnail-element thumbnail-text" key={element.id} style={style}><RichText element={element} scale={0.18} /></div>;
     if (element.type === "image") return <div className="thumbnail-element thumbnail-image-frame" key={element.id} style={style}><CroppedImage element={element} className="thumbnail-image" alt="" /></div>;
     if (element.type === "chart") return <div className="thumbnail-element thumbnail-chart" key={element.id} style={style}><ChartView element={element} slide={slide} scale={0.18} compact /></div>;
     if (element.type === "table") return <div className="thumbnail-element thumbnail-table" key={element.id} style={style}><TableView element={element} slide={slide} scale={0.18} compact /></div>;
