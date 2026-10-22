@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 const HEX_PATTERN = /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -33,12 +33,18 @@ interface NumberFieldProps {
 /**
  * Numeric input that refuses to swallow bad input. Invalid values stay in the
  * field with an inline message instead of silently reverting to the old value.
+ *
+ * The label can be dragged sideways to change the value. The drag is kept in
+ * the field until the pointer is released, so a long drag is one command and
+ * one undo step instead of one per pixel.
  */
 export function NumberField({ label, value, unit, min, max, precision = 2, step, disabled, onCommit }: NumberFieldProps) {
   const [draft, setDraft] = useState(() => formatNumber(value, precision));
   const [error, setError] = useState<string>();
   const [dirty, setDirty] = useState(false);
+  const [scrubbing, setScrubbing] = useState<number>();
   const draftRef = useRef(draft);
+  const scrubRef = useRef<{ startX: number; startValue: number; last: number } | null>(null);
 
   useEffect(() => {
     if (dirty) return;
@@ -90,41 +96,84 @@ export function NumberField({ label, value, unit, min, max, precision = 2, step,
     onCommit(next);
   };
 
+  const beginScrub = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (disabled || step === undefined) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    scrubRef.current = { startX: event.clientX, startValue: value, last: value };
+    setScrubbing(value);
+  };
+
+  const moveScrub = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    const start = scrubRef.current;
+    if (!start || step === undefined) return;
+    // Four pixels of drag are one step; Shift multiplies the step, Alt divides it.
+    const pixels = event.clientX - start.startX;
+    const steps = Math.round(pixels / 4) * (event.shiftKey ? 10 : 1) / (event.altKey ? 10 : 1);
+    let next = start.startValue + steps * step;
+    if (min !== undefined) next = Math.max(min, next);
+    if (max !== undefined) next = Math.min(max, next);
+    start.last = next;
+    setScrubbing(next);
+  };
+
+  const endScrub = () => {
+    const start = scrubRef.current;
+    scrubRef.current = null;
+    setScrubbing(undefined);
+    if (!start || start.last === start.startValue) return;
+    // One drag is one command, so one undo step takes the whole drag back.
+    onCommit(start.last);
+  };
+
+  const shown = scrubbing === undefined ? draft : formatNumber(scrubbing, precision);
+
   return (
     <label className="field">
-      <span className="field-label">{label}</span>
+      <span
+        className={`field-label${step === undefined ? "" : " scrubbable"}`}
+        onPointerDown={step === undefined ? undefined : beginScrub}
+        onPointerMove={step === undefined ? undefined : moveScrub}
+        onPointerUp={step === undefined ? undefined : endScrub}
+        onPointerCancel={step === undefined ? undefined : endScrub}
+        title={step === undefined ? undefined : "按住左右拖动改值，Shift 加速，Alt 微调"}
+      >
+        {label}
+      </span>
       <span className="field-control">
         {step !== undefined && <button type="button" className="field-stepper" aria-label={`${label} 减少 ${step}`} disabled={disabled}
           onClick={() => stepBy(-step)}>
           <ChevronDown />
         </button>}
-        <input
-          type="number"
-          inputMode="decimal"
-          step={step}
-          className={error ? "invalid" : undefined}
-          value={draft}
-          disabled={disabled}
-          aria-invalid={error ? true : undefined}
-          onChange={(event) => { update(event.target.value); setError(undefined); }}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
-            if (event.key === "Escape") {
-              const restored = formatNumber(value, precision);
-              draftRef.current = restored;
-              setDraft(restored);
-              setError(undefined);
-              setDirty(false);
-              event.currentTarget.blur();
-            }
-          }}
-        />
+        <span className="field-input">
+          <input
+            type="number"
+            inputMode="decimal"
+            step={step}
+            className={error ? "invalid" : undefined}
+            value={shown}
+            disabled={disabled}
+            aria-invalid={error ? true : undefined}
+            onChange={(event) => { update(event.target.value); setError(undefined); }}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+              if (event.key === "Escape") {
+                const restored = formatNumber(value, precision);
+                draftRef.current = restored;
+                setDraft(restored);
+                setError(undefined);
+                setDirty(false);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          {unit && <span className="field-unit">{unit}</span>}
+        </span>
         {step !== undefined && <button type="button" className="field-stepper" aria-label={`${label} 增加 ${step}`} disabled={disabled}
           onClick={() => stepBy(step)}>
           <ChevronUp />
         </button>}
-        {unit && <span className="field-unit">{unit}</span>}
       </span>
       {error && <small className="field-error">{error}</small>}
     </label>
@@ -136,11 +185,13 @@ interface ColorFieldProps {
   value: string;
   /** Renders on its own row so the hex value stays readable in a narrow panel. */
   wide?: boolean;
+  /** The colors of the template, offered as one click. */
+  swatches?: readonly string[];
   disabled?: boolean;
   onCommit: (hex: string) => void;
 }
 
-export function ColorField({ label, value, wide, disabled, onCommit }: ColorFieldProps) {
+export function ColorField({ label, value, wide, swatches, disabled, onCommit }: ColorFieldProps) {
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string>();
   const [dirty, setDirty] = useState(false);
@@ -169,6 +220,8 @@ export function ColorField({ label, value, wide, disabled, onCommit }: ColorFiel
     onCommit(normalized);
   };
 
+  const current = normalizeHexColor(value) ?? "";
+
   return (
     <label className={wide ? "field field-wide" : "field"}>
       <span className="field-label">{label}</span>
@@ -185,25 +238,42 @@ export function ColorField({ label, value, wide, disabled, onCommit }: ColorFiel
             onCommit(next);
           }}
         />
-        <input
-          className={error ? "invalid" : undefined}
-          value={draft}
-          disabled={disabled}
-          aria-invalid={error ? true : undefined}
-          onChange={(event) => { update(event.target.value); setError(undefined); }}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
-            if (event.key === "Escape") {
-              draftRef.current = value;
-              setDraft(value);
-              setError(undefined);
-              setDirty(false);
-              event.currentTarget.blur();
-            }
-          }}
-        />
+        <span className="field-input">
+          <input
+            className={error ? "invalid" : undefined}
+            value={draft}
+            disabled={disabled}
+            aria-invalid={error ? true : undefined}
+            onChange={(event) => { update(event.target.value); setError(undefined); }}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+              if (event.key === "Escape") {
+                draftRef.current = value;
+                setDraft(value);
+                setError(undefined);
+                setDirty(false);
+                event.currentTarget.blur();
+              }
+            }}
+          />
+        </span>
       </span>
+      {swatches && swatches.length > 0 && <span className="color-swatches">
+        {swatches.map((color) => (
+          <button
+            type="button"
+            key={color}
+            className={`color-chip${color.toLowerCase() === current ? " active" : ""}`}
+            style={{ background: color }}
+            title={color}
+            aria-label={`使用颜色 ${color}`}
+            aria-pressed={color.toLowerCase() === current}
+            disabled={disabled}
+            onClick={() => { update(color); setError(undefined); onCommit(color); }}
+          />
+        ))}
+      </span>}
       {error && <small className="field-error">{error}</small>}
     </label>
   );

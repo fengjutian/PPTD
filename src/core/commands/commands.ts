@@ -122,6 +122,26 @@ function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | unde
     return { type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
+/** The horizontal place of an object on the page. */
+export type HorizontalAlign = "left" | "center" | "right";
+/** The vertical place of an object on the page. */
+export type VerticalAlign = "top" | "middle" | "bottom";
+/**
+ * Where an object is placed on the page.
+ *
+ * A single axis moves one direction and leaves the other one alone; both axes
+ * together place the object in a corner, in the middle or on an edge of the
+ * page. Both are one intent, so both are one command and one undo step.
+ */
+export type AlignTarget =
+  | HorizontalAlign
+  | VerticalAlign
+  | { horizontal?: HorizontalAlign; vertical?: VerticalAlign };
+
+/** The axis each single direction belongs to. */
+const HORIZONTAL_ALIGN: Record<string, HorizontalAlign | undefined> = { left: "left", center: "center", right: "right" };
+const VERTICAL_ALIGN: Record<string, VerticalAlign | undefined> = { top: "top", middle: "middle", bottom: "bottom" };
+
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
@@ -139,7 +159,7 @@ export type DocumentCommand =
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
-  | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: "left" | "center" | "right" | "top" | "middle" | "bottom" }
+  | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: AlignTarget }
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
@@ -154,8 +174,7 @@ export type DocumentCommand =
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
 
-/** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */
-function assertTextStyle(style: Partial<TextElementStyle>): void {
+/** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */function assertTextStyle(style: Partial<TextElementStyle>): void {
   const fontFamily = style.fontFamily;
   if (fontFamily !== undefined && (typeof fontFamily !== "string" || !fontFamily.trim() || fontFamily.length > 100)) throw new Error("INVALID_TEXT_STYLE");
   if (style.fontSizePt !== undefined && (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)) throw new Error("INVALID_TEXT_STYLE");
@@ -1186,12 +1205,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "align-element") {
     const { width, height } = document.pageSize;
     const frame = { ...element.frame };
-    if (command.align === "left") frame.x = 0 as Emu;
-    if (command.align === "center") frame.x = Math.max(0, Math.round((width - frame.width) / 2)) as Emu;
-    if (command.align === "right") frame.x = Math.max(0, width - frame.width) as Emu;
-    if (command.align === "top") frame.y = 0 as Emu;
-    if (command.align === "middle") frame.y = Math.max(0, Math.round((height - frame.height) / 2)) as Emu;
-    if (command.align === "bottom") frame.y = Math.max(0, height - frame.height) as Emu;
+    const target = command.align;
+    const horizontal = typeof target === "string" ? HORIZONTAL_ALIGN[target] : target.horizontal;
+    const vertical = typeof target === "string" ? VERTICAL_ALIGN[target] : target.vertical;
+    if (horizontal === "left") frame.x = 0 as Emu;
+    if (horizontal === "center") frame.x = Math.max(0, Math.round((width - frame.width) / 2)) as Emu;
+    if (horizontal === "right") frame.x = Math.max(0, width - frame.width) as Emu;
+    if (vertical === "top") frame.y = 0 as Emu;
+    if (vertical === "middle") frame.y = Math.max(0, Math.round((height - frame.height) / 2)) as Emu;
+    if (vertical === "bottom") frame.y = Math.max(0, height - frame.height) as Emu;
     element.frame = frame;
     return;
   }

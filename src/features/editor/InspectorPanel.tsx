@@ -1,5 +1,5 @@
-import { memo, useEffect, useRef, useState } from "react";
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Square, Trash2, Type, Unlink } from "lucide-react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { AlignCenterHorizontal, AlignLeft, AlignRight, ArrowDown, ArrowUp, Bold, BringToFront, ChevronDown, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Square, Trash2, Type, Unlink } from "lucide-react";
 import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
@@ -8,27 +8,26 @@ import { textLikelyOverflows } from "../../core/rendering/text-fit";
 import { useEditorStore } from "../../store/editor-store";
 import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
+import { AlignGrid, type AlignCell } from "./AlignGrid";
+import { ElementPreview } from "./ElementPreview";
 
 const FONT_OPTIONS = ["Microsoft YaHei", "Source Han Serif SC", "Noto Serif SC", "SimSun", "SimHei", "KaiTi", "FangSong", "Arial", "Calibri", "Times New Roman", "Georgia"] as const;
 
 const ROTATION_PRESETS = [0, 90, 180, 270] as const;
 
-const HORIZONTAL_ALIGN = [
-  { align: "left", label: "左对齐", Icon: AlignLeft },
-  { align: "center", label: "水平居中", Icon: AlignCenterHorizontal },
-  { align: "right", label: "右对齐", Icon: AlignRight },
-] as const;
-
-const VERTICAL_ALIGN = [
-  { align: "top", label: "顶对齐", Icon: AlignStartVertical },
-  { align: "middle", label: "垂直居中", Icon: AlignCenterVertical },
-  { align: "bottom", label: "底对齐", Icon: AlignEndVertical },
-] as const;
-
 const TEXT_ALIGN = [
   { align: "left", label: "左对齐", Icon: AlignLeft },
   { align: "center", label: "文字居中", Icon: AlignCenterHorizontal },
   { align: "right", label: "右对齐", Icon: AlignRight },
+] as const;
+
+/**
+ * The colors a page can be painted with when the deck has no template yet.
+ * With a template the palette of the template is used instead.
+ */
+export const DEFAULT_PALETTE = [
+  "#000000", "#7F7F7F", "#C0C0C0", "#FFFFFF",
+  "#D35230", "#2B579A", "#217346", "#C2660F", "#7030A0", "#0F8B8D",
 ] as const;
 
 function elementTypeLabel(element: SlideElement): string {
@@ -54,14 +53,39 @@ export interface InspectorPanelViewProps {
   /** When on, changing one edge scales the other edge by the same ratio. */
   aspectLocked: boolean;
   onToggleAspectLock: () => void;
+  /** The colors of the template, offered next to every color field. */
+  palette?: readonly string[];
   onCommand: (command: DocumentCommand) => void;
+}
+
+/**
+ * One group of properties.
+ *
+ * The groups can be folded away, because the panel of a text object is longer
+ * than the window. The head of a group sticks to the top of the panel while
+ * the group scrolls by, so the user always knows where the fields belong.
+ */
+function InspectorSection({ title, tools, children }: { title: string; tools?: ReactNode; children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <section className={`inspector-section${open ? "" : " folded"}`}>
+      <div className="section-head">
+        <button type="button" className="section-toggle" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+          <ChevronDown className={open ? "" : "folded"} />
+          <h4>{title}</h4>
+        </button>
+        {tools}
+      </div>
+      {open && <div className="section-body">{children}</div>}
+    </section>
+  );
 }
 
 /**
  * Presentation of the inspector for one element. It only emits commands, so the
  * same markup can be rendered without a store and asserted in tests.
  */
-export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, unit, onUnitChange, aspectLocked, onToggleAspectLock, onCommand }: InspectorPanelViewProps) {
+export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, unit, onUnitChange, aspectLocked, onToggleAspectLock, palette, onCommand }: InspectorPanelViewProps) {
   const [textDraft, setTextDraft] = useState<string>();
   const [fontAvailable, setFontAvailable] = useState(true);
   const [selection, setSelection] = useState<{ start: number; end: number }>();
@@ -173,8 +197,7 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
     <div className="property-form">
       <PageProperties slideId={slideId} background={background} pageSize={pageSize} unit={unit} onCommand={onCommand} />
 
-      {element.type === "text" && <section className="inspector-section">
-        <h4>内容</h4>
+      {element.type === "text" && <InspectorSection title="内容">
         <label className="field">
           <span className="field-label">文本内容</span>
           <textarea
@@ -221,25 +244,23 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
           </button>
         </div>
         {emphasised.length > 0 && <p className="inspector-hint">已强调 {emphasised.length} 处：{emphasised.map((fragment) => fragment.text).join(" / ")}</p>}
-      </section>}
+      </InspectorSection>}
 
-      <section className="inspector-section">
-        <div className="section-head">
-          <h4>位置与尺寸</h4>
-          <div className="section-tools">
-            <div className="segmented compact" role="group" aria-label="长度单位">
-              <button type="button" className={unit === "inch" ? "active" : undefined}
-                aria-pressed={unit === "inch"} onClick={() => onUnitChange("inch")}>英寸</button>
-              <button type="button" className={unit === "cm" ? "active" : undefined}
-                aria-pressed={unit === "cm"} onClick={() => onUnitChange("cm")}>厘米</button>
-            </div>
-            <button type="button" className={`icon-button ${aspectLocked ? "active" : ""}`} disabled={locked}
-              title={aspectLocked ? "已锁定宽高比" : "锁定宽高比"} aria-label="锁定宽高比" aria-pressed={aspectLocked}
-              onClick={onToggleAspectLock}>
-              {aspectLocked ? <Unlink /> : <Link2 />}
-            </button>
+      <InspectorSection title="位置与尺寸" tools={
+        <div className="section-tools">
+          <div className="segmented compact" role="group" aria-label="长度单位">
+            <button type="button" className={unit === "inch" ? "active" : undefined}
+              aria-pressed={unit === "inch"} onClick={() => onUnitChange("inch")}>英寸</button>
+            <button type="button" className={unit === "cm" ? "active" : undefined}
+              aria-pressed={unit === "cm"} onClick={() => onUnitChange("cm")}>厘米</button>
           </div>
+          <button type="button" className={`icon-button ${aspectLocked ? "active" : ""}`} disabled={locked}
+            title={aspectLocked ? "已锁定宽高比" : "锁定宽高比"} aria-label="锁定宽高比" aria-pressed={aspectLocked}
+            onClick={onToggleAspectLock}>
+            {aspectLocked ? <Unlink /> : <Link2 />}
+          </button>
         </div>
+      }>
         <div className="property-grid">
           <NumberField label="X" value={emuToUnit(element.frame.x, unit)} min={0} step={unit === "cm" ? 0.1 : 0.05} disabled={locked}
             onCommit={(value) => commitTransform("x", value)} />
@@ -260,42 +281,26 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             </button>
           ))}
         </div>
-      </section>
+      </InspectorSection>
 
-      <section className="inspector-section">
-        <h4>对齐（相对页面）</h4>
-        <div className="align-group">
-          <span className="align-group-label">水平</span>
-          <div className="align-actions">
-            {HORIZONTAL_ALIGN.map(({ align, label, Icon }) => (
-              <button type="button" key={align} title={label} aria-label={label} disabled={locked}
-                onClick={() => onCommand({ type: "align-element", slideId, elementId: element.id, align })}>
-                <Icon />
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="align-group">
-          <span className="align-group-label">垂直</span>
-          <div className="align-actions">
-            {VERTICAL_ALIGN.map(({ align, label, Icon }) => (
-              <button type="button" key={align} title={label} aria-label={label} disabled={locked}
-                onClick={() => onCommand({ type: "align-element", slideId, elementId: element.id, align })}>
-                <Icon />
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
+      <InspectorSection title="对齐（相对页面）">
+        <AlignGrid disabled={locked} onAlign={(cell: AlignCell) => onCommand({
+          type: "align-element",
+          slideId,
+          elementId: element.id,
+          align: cell.single
+            ? (cell.horizontal === "center" ? cell.vertical : cell.horizontal)
+            : { horizontal: cell.horizontal, vertical: cell.vertical },
+        })} />
+      </InspectorSection>
 
-      {element.type === "text" && <section className="inspector-section">
-        <h4>文字外观</h4>
+      {element.type === "text" && <InspectorSection title="文字外观">
         <SelectField label="字体" value={element.style.fontFamily} options={FONT_OPTIONS} disabled={locked}
           onCommit={(fontFamily) => setTextStyle({ fontFamily })} />
         <div className="property-grid">
           <NumberField label="字号" unit="pt" value={element.style.fontSizePt} min={4} max={400} precision={1} disabled={locked}
             onCommit={(fontSizePt) => setTextStyle({ fontSizePt })} />
-          <ColorField label="颜色" value={element.style.color} wide disabled={locked}
+          <ColorField label="颜色" value={element.style.color} wide swatches={palette} disabled={locked}
             onCommit={(color) => setTextStyle({ color })} />
         </div>
         <div className="field-row">
@@ -340,29 +345,27 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             <span>“{fontFamily}”在本机不可用，导出后将由查看端的替代字体渲染，版式可能变化。</span>
           </div>
         </div>}
-      </section>}
+      </InspectorSection>}
 
-      {element.type === "shape" && <section className="inspector-section">
-        <h4>形状外观</h4>
+      {element.type === "shape" && <InspectorSection title="形状外观">
         <div className="property-grid">
-          <ColorField label="填充" value={element.style.fill} wide disabled={locked}
+          <ColorField label="填充" value={element.style.fill} wide swatches={palette} disabled={locked}
             onCommit={(fill) => setShapeStyle({ fill })} />
-          <ColorField label="描边" value={element.style.stroke} wide disabled={locked}
+          <ColorField label="描边" value={element.style.stroke} wide swatches={palette} disabled={locked}
             onCommit={(stroke) => setShapeStyle({ stroke })} />
           <NumberField label="描边宽度" unit="pt" value={element.style.strokeWidthPt} min={0} max={100} precision={1} disabled={locked}
             onCommit={(strokeWidthPt) => setShapeStyle({ strokeWidthPt })} />
           {element.shape === "rectangle" && <NumberField label="圆角" unit="pt" value={element.style.radiusPt} min={0} max={1000} precision={1} disabled={locked}
             onCommit={(radiusPt) => setShapeStyle({ radiusPt })} />}
         </div>
-      </section>}
+      </InspectorSection>}
 
-      {element.type === "chart" && <section className="inspector-section">
-        <h4>图表</h4>
+      {element.type === "chart" && <InspectorSection title="图表">
         <div className="property-grid">
           <SelectField label="类型" value={element.kind} disabled={locked}
             options={["column", "bar", "line", "pie"]}
             onCommit={(kind) => onCommand({ type: "set-chart-kind", slideId, elementId: element.id, kind: kind as ChartKind })} />
-          <ColorField label="系列颜色" value={element.style.seriesColors[0] ?? "#3366CC"} disabled={locked}
+          <ColorField label="系列颜色" value={element.style.seriesColors[0] ?? "#3366CC"} swatches={palette} disabled={locked}
             onCommit={(color) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { seriesColors: [color, ...element.style.seriesColors.slice(1)] } })} />
           <NumberField label="字号" unit="pt" value={element.style.fontSizePt} min={4} max={400} precision={0} disabled={locked}
             onCommit={(fontSizePt) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { fontSizePt } })} />
@@ -374,23 +377,22 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             onChange={(event) => onCommand({ type: "set-chart-style", slideId, elementId: element.id, style: { showLegend: event.target.checked } })} />显示图例</label>
         </div>
         <p className="inspector-hint">图表的数值来自本页已审核的指标，导出后在 PowerPoint 中仍是可编辑的图表对象。</p>
-      </section>}
+      </InspectorSection>}
 
-      {element.type === "table" && <section className="inspector-section">
-        <h4>表格</h4>
+      {element.type === "table" && <InspectorSection title="表格">
         <div className="property-grid">
           <SelectField label="字体" value={element.style.fontFamily} disabled={locked}
             options={FONT_OPTIONS}
             onCommit={(fontFamily) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { fontFamily } })} />
           <NumberField label="字号" unit="pt" value={element.style.fontSizePt} min={4} max={400} precision={0} disabled={locked}
             onCommit={(fontSizePt) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { fontSizePt } })} />
-          <ColorField label="表头填充" value={element.style.headerFill} wide disabled={locked}
+          <ColorField label="表头填充" value={element.style.headerFill} wide swatches={palette} disabled={locked}
             onCommit={(headerFill) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { headerFill } })} />
-          <ColorField label="表头文字" value={element.style.headerTextColor} wide disabled={locked}
+          <ColorField label="表头文字" value={element.style.headerTextColor} wide swatches={palette} disabled={locked}
             onCommit={(headerTextColor) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { headerTextColor } })} />
-          <ColorField label="正文文字" value={element.style.bodyTextColor} wide disabled={locked}
+          <ColorField label="正文文字" value={element.style.bodyTextColor} wide swatches={palette} disabled={locked}
             onCommit={(bodyTextColor) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { bodyTextColor } })} />
-          <ColorField label="边框" value={element.style.borderColor} wide disabled={locked}
+          <ColorField label="边框" value={element.style.borderColor} wide swatches={palette} disabled={locked}
             onCommit={(borderColor) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { borderColor } })} />
         </div>
         <div className="field-row">
@@ -398,10 +400,9 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             onChange={(event) => onCommand({ type: "set-table-style", slideId, elementId: element.id, style: { firstColumnBold: event.target.checked } })} />首列加粗</label>
         </div>
         <p className="inspector-hint">表格的单元格来自本页已审核的表格数据，导出后在 PowerPoint 中仍是可编辑的表格对象。</p>
-      </section>}
+      </InspectorSection>}
 
-      {element.type === "image" && <section className="inspector-section">
-        <h4>图片</h4>
+      {element.type === "image" && <InspectorSection title="图片">
         <TextField label="替代文本" value={element.altText} maxLength={500} disabled={locked}
           onCommit={(altText) => onCommand({ type: "set-image-alt-text", slideId, elementId: element.id, altText })} />
         <div className="field-label crop-label">裁剪（源图切去的比例）</div>
@@ -421,10 +422,9 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             <RotateCcw />重置裁剪
           </button>
         </div>
-      </section>}
+      </InspectorSection>}
 
-      <section className="inspector-section">
-        <h4>排列</h4>
+      <InspectorSection title="排列">
         <div className="element-actions arrange">
           <button disabled={locked || elementIndex >= elementCount - 1}
             onClick={() => onCommand({ type: "reorder-element", slideId, elementId: element.id, toIndex: elementIndex + 1 })}>
@@ -443,7 +443,7 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             <SendToBack />置于底层
           </button>
         </div>
-      </section>
+      </InspectorSection>
     </div>
     {/*
       The actions of the selected object stay in sight: the panel of a text
