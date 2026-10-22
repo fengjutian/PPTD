@@ -10,7 +10,7 @@ import { ColorField, NumberField, SelectField, TextField } from "./inspector-fie
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
 import { AlignGrid, type AlignCell } from "./AlignGrid";
 import { ElementPreview } from "./ElementPreview";
-import { DEFAULT_PALETTE } from "./inspector-palette";
+import { paletteSwatches } from "./inspector-palette";
 
 const FONT_OPTIONS = ["Microsoft YaHei", "Source Han Serif SC", "Noto Serif SC", "SimSun", "SimHei", "KaiTi", "FangSong", "Arial", "Calibri", "Times New Roman", "Georgia"] as const;
 
@@ -518,7 +518,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
   const [aspectLocked, setAspectLocked] = useState(false);
   // The colors of the template are offered next to every color field. A deck
   // without a template falls back to the default colors.
-  const palette: readonly string[] = document.theme?.colors.map((color) => color.value) ?? DEFAULT_PALETTE;
+  const palette = paletteSwatches(document.theme?.colors);
 
   return (
     <aside className="right-panel">

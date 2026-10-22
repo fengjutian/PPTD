@@ -924,15 +924,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const markTopPt = 8;
           const labelBottomMarginPt = 10;
           const labelTopPt = panelHeightPt - labelHeightPt - labelBottomMarginPt;
-          // The quote sits directly under the mark. The room that is left
-          // collects above the rule at the bottom of the panel, so the panel
-          // reads as one block instead of a mark, a hole and a quote.
-          const quoteTopPt = markTopPt + markHeightPt + 4;
-          const quoteAreaPt = Math.max(20, labelTopPt - 14 - quoteTopPt);
+          // The quote sits under the mark and is centred in the room that is left
+          // above the rule, so the panel reads as one block instead of a
+          // mark, a hole and a quote.
+          const quoteAreaTopPt = markTopPt + markHeightPt + 4;
+          const quoteAreaPt = Math.max(20, labelTopPt - 14 - quoteAreaTopPt);
           // The font size is the largest one whose quote still fits the area.
           // Picking it by the length of the text instead ignored the width of
-          // the panel and produced quotes of three different sizes.
-          const quoteSizes = [22, 20, 18, 16, 14];
+          // the panel and produced quotes of three different sizes. The size
+          // is also capped: a pull quote is a display object, but a quote that
+          // is set larger than the title of the page takes over the page.
+          const quoteSizes = [30, 28, 26, 24, 22, 20, 18, 16, 14];
           let quoteSize = quoteSizes[quoteSizes.length - 1]!;
           let quoteHeightPt = 0;
           for (const size of quoteSizes) {
@@ -942,14 +944,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             quoteHeightPt = height;
             if (height <= quoteAreaPt) break;
           }
+          const quoteTopPt = quoteAreaTopPt + Math.max(0, (quoteAreaPt - quoteHeightPt) / 2);
           const quoteFrame = frame(panelX + 0.05, contentBox.y + quoteTopPt / pageHeightPt, panelWidth - 0.10, quoteHeightPt / pageHeightPt);
           slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.20, markHeightPt / pageHeightPt), markSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(text(panelQuote, quoteFrame, quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
           // The rule and the label keep their place under the quote, so the
-          // panel always ends the same way.
-          const ruleY = contentBox.y + labelTopPt / pageHeightPt;
-          slide.elements.push(shape(frame(panelX + 0.05, ruleY - 0.006, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("关键摘录", frame(panelX + 0.05, ruleY, panelWidth - 0.10, labelHeightPt / pageHeightPt), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          // panel always ends the same way. The rule keeps a clear distance
+          // above the label: too close and the line cuts through the text.
+          const rulePt = labelTopPt - 12;
+          const ruleY = contentBox.y + rulePt / pageHeightPt;
+          slide.elements.push(shape(frame(panelX + 0.05, ruleY, panelWidth - 0.10, 0.004), "#FFFFFF"));
+          slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + labelTopPt / pageHeightPt, panelWidth - 0.10, labelHeightPt / pageHeightPt), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
         } else {
           const countText = String(items.length).padStart(2, "0");
           // The numeral is the anchor, so measure its own block and place the

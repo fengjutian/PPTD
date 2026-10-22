@@ -1,16 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-
-const HEX_PATTERN = /^#?(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-/** Normalizes `#abc` / `abc` / `#aabbcc` into the `#aabbcc` form the schema and exporter accept. */
-function normalizeHexColor(raw: string): string | undefined {
-  const value = raw.trim();
-  if (!HEX_PATTERN.test(value)) return undefined;
-  const hex = value.startsWith("#") ? value.slice(1) : value;
-  const full = hex.length === 3 ? hex.split("").map((char) => char + char).join("") : hex;
-  return `#${full.toLowerCase()}`;
-}
+import { normalizeHexColor } from "./inspector-color";
 
 function formatNumber(value: number, precision: number): string {
   if (!Number.isFinite(value)) return "0";
