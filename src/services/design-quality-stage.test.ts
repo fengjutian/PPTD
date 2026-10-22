@@ -18,7 +18,12 @@ const design = (overrides: Partial<AiSlideDesign> = {}): AiSlideDesign => ({
 
 const buildDocument = (designs: AiSlideDesign[]): PresentationDocument => {
   const document = createDocument();
-  applyCommand(document, { type: "apply-ai-designed-draft", title: "质检", slides: [{ title: "标题", body: "正文", speakerNotes: "" }], designs });
+  applyCommand(document, {
+    type: "apply-ai-designed-draft",
+    title: "质检",
+    slides: [{ title: "标题", body: "正文", speakerNotes: "" }],
+    designs,
+  });
   return document;
 };
 
@@ -29,7 +34,16 @@ const passingReview: VisualReview = {
   readabilityScore: 90,
   consistencyScore: 90,
   issues: [],
-  slideGuidance: [{ slideIndex: 0, safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 }, logoRegions: [], busyRegions: [], focalPoint: { x: 0.5, y: 0.5 }, recommendedLayout: "title-body" }],
+  slideGuidance: [
+    {
+      slideIndex: 0,
+      safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 },
+      logoRegions: [],
+      busyRegions: [],
+      focalPoint: { x: 0.5, y: 0.5 },
+      recommendedLayout: "title-body",
+    },
+  ],
 };
 
 const visionPort = (review: () => Promise<VisualReview>): VisionReviewPort => ({
@@ -38,7 +52,10 @@ const visionPort = (review: () => Promise<VisualReview>): VisionReviewPort => ({
   planRepairs: async () => ({ repairs: [] }),
 });
 
-const renderStub = async () => ({ slides: ["data:image/jpeg;base64,AA=="], contactSheet: "data:image/jpeg;base64,AA==" });
+const renderStub = async () => ({
+  slides: ["data:image/jpeg;base64,AA=="],
+  contactSheet: "data:image/jpeg;base64,AA==",
+});
 const contrastStub = async () => ({ issues: [], unreadableSlides: [] as number[] });
 
 describe("设计质检阶段", () => {
@@ -48,7 +65,9 @@ describe("设计质检阶段", () => {
       buildDocument,
       goal: defaultPresentationVisualGoal(),
       contentFingerprint: () => "content",
-      vision: visionPort(async () => { throw new Error("AI_VISION_REVIEW_FAILED:AI_REQUEST_TIMEOUT"); }),
+      vision: visionPort(async () => {
+        throw new Error("AI_VISION_REVIEW_FAILED:AI_REQUEST_TIMEOUT");
+      }),
       taskId: 1,
       isCancelled: () => false,
       renderForReview: renderStub,
@@ -85,17 +104,19 @@ describe("设计质检阶段", () => {
   });
 
   it("用户取消时立即中止，不被降级逻辑吞掉", async () => {
-    await expect(runDesignQualityStage({
-      initialDesigns: [design()],
-      buildDocument,
-      goal: defaultPresentationVisualGoal(),
-      contentFingerprint: () => "content",
-      vision: visionPort(async () => passingReview),
-      taskId: 1,
-      isCancelled: () => true,
-      renderForReview: renderStub,
-      inspectContrast: contrastStub,
-    })).rejects.toThrow("AI_GENERATION_CANCELLED");
+    await expect(
+      runDesignQualityStage({
+        initialDesigns: [design()],
+        buildDocument,
+        goal: defaultPresentationVisualGoal(),
+        contentFingerprint: () => "content",
+        vision: visionPort(async () => passingReview),
+        taskId: 1,
+        isCancelled: () => true,
+        renderForReview: renderStub,
+        inspectContrast: contrastStub,
+      }),
+    ).rejects.toThrow("AI_GENERATION_CANCELLED");
   });
 
   it("像素采样不可用时降级为无对比度问题，而不是中断生成", async () => {
@@ -108,7 +129,9 @@ describe("设计质检阶段", () => {
       taskId: 1,
       isCancelled: () => false,
       renderForReview: renderStub,
-      inspectContrast: async () => { throw new Error("VISUAL_RENDER_CONTEXT_UNAVAILABLE"); },
+      inspectContrast: async () => {
+        throw new Error("VISUAL_RENDER_CONTEXT_UNAVAILABLE");
+      },
     });
 
     expect(result.degraded).toBe(true);
@@ -127,7 +150,9 @@ describe("设计质检阶段", () => {
       isCancelled: () => false,
       renderForReview: renderStub,
       inspectContrast: contrastStub,
-      validateQuality: () => { throw new Error("QUALITY_GATE_FAILED"); },
+      validateQuality: () => {
+        throw new Error("QUALITY_GATE_FAILED");
+      },
     });
 
     // passed 为 false 表示"没检查完"，文档仍然产出。
@@ -146,13 +171,21 @@ describe("设计质检阶段", () => {
       contentFingerprint: () => "content",
       vision: {
         available: true,
-        review: async (render) => { reviewed.push(render.slides); return passingReview; },
+        review: async (render) => {
+          reviewed.push(render.slides);
+          return passingReview;
+        },
         planRepairs: async () => ({ repairs: [] }),
       },
       taskId: 1,
       isCancelled: () => false,
-      renderForReview: async () => { throw new Error("画布渲染不应被调用"); },
-      renderRealPptxForReview: async () => ({ slides: ["data:image/jpeg;base64,UkVBTA=="], contactSheet: "data:image/jpeg;base64,U0hFRVQ=" }),
+      renderForReview: async () => {
+        throw new Error("画布渲染不应被调用");
+      },
+      renderRealPptxForReview: async () => ({
+        slides: ["data:image/jpeg;base64,UkVBTA=="],
+        contactSheet: "data:image/jpeg;base64,U0hFRVQ=",
+      }),
       inspectContrast: contrastStub,
     });
 
@@ -171,7 +204,9 @@ describe("设计质检阶段", () => {
       taskId: 1,
       isCancelled: () => false,
       renderForReview: renderStub,
-      renderRealPptxForReview: async () => { throw new Error("REVIEW_RASTERER_UNAVAILABLE:program not found"); },
+      renderRealPptxForReview: async () => {
+        throw new Error("REVIEW_RASTERER_UNAVAILABLE:program not found");
+      },
       inspectContrast: contrastStub,
     });
 

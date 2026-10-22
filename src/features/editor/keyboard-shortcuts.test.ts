@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { resolveEditorShortcut, type ShortcutInput } from "./keyboard-shortcuts";
 
-const shortcut = (overrides: Partial<ShortcutInput>): EditorShortcutResult => resolveEditorShortcut({
-  key: "",
-  ctrlKey: false,
-  metaKey: false,
-  shiftKey: false,
-  ...overrides,
-});
+const shortcut = (overrides: Partial<ShortcutInput>): EditorShortcutResult =>
+  resolveEditorShortcut({
+    key: "",
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    ...overrides,
+  });
 
 type EditorShortcutResult = ReturnType<typeof resolveEditorShortcut>;
 

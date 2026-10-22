@@ -131,7 +131,9 @@ export function gridTargets(pageExtent: number, gridSize: number): SnapTarget[] 
 
 /** 把参考线转成吸附目标。 */
 export function guideTargets(guides: readonly SnapGuide[], axis: SnapAxis): SnapTarget[] {
-  return guides.filter((guide) => guide.axis === axis).map((guide) => ({ position: guide.position, tier: TARGET_TIER.guide }));
+  return guides
+    .filter((guide) => guide.axis === axis)
+    .map((guide) => ({ position: guide.position, tier: TARGET_TIER.guide }));
 }
 
 /**

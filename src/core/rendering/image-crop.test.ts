@@ -27,7 +27,11 @@ describe("image crop", () => {
   });
 
   it("writes the source rectangle in the units OOXML expects", () => {
-    expect(cropSourceRect({ top: 0.1, bottom: 0.2, left: 0.15, right: 0.25 }))
-      .toEqual({ l: 15000, t: 10000, r: 25000, b: 20000 });
+    expect(cropSourceRect({ top: 0.1, bottom: 0.2, left: 0.15, right: 0.25 })).toEqual({
+      l: 15000,
+      t: 10000,
+      r: 25000,
+      b: 20000,
+    });
   });
 });

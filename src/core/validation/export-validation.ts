@@ -1,4 +1,10 @@
-import { EMU_PER_INCH, resolveChartData, resolveTableData, type PresentationDocument, type SlideElement } from "../document-model";
+import {
+  EMU_PER_INCH,
+  resolveChartData,
+  resolveTableData,
+  type PresentationDocument,
+  type SlideElement,
+} from "../document-model";
 import { textLikelyOverflows } from "../rendering/text-fit";
 
 export type ExportIssueCode =

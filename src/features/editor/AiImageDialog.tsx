@@ -40,8 +40,20 @@ export function AiImageDialogView({ busy, error, onClose, onGenerate }: AiImageD
   const trimmed = prompt.trim();
 
   return (
-    <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) onClose(); }}>
-      <section className="upload-dialog ai-image-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-image-title" aria-busy={busy}>
+    <div
+      className="upload-dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (!busy && event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="upload-dialog ai-image-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ai-image-title"
+        aria-busy={busy}
+      >
         <div className="upload-dialog-heading">
           <div>
             <Sparkles />
@@ -50,7 +62,9 @@ export function AiImageDialogView({ busy, error, onClose, onGenerate }: AiImageD
               <p>描述画面内容，生成一张可以放进这一页的图片。</p>
             </div>
           </div>
-          <button type="button" aria-label="关闭 AI 配图窗口" onClick={onClose} disabled={busy}><X /></button>
+          <button type="button" aria-label="关闭 AI 配图窗口" onClick={onClose} disabled={busy}>
+            <X />
+          </button>
         </div>
 
         <label className="ai-image-field">
@@ -84,12 +98,33 @@ export function AiImageDialogView({ busy, error, onClose, onGenerate }: AiImageD
           </div>
         </div>
 
-        {error && <p className="ai-image-error" role="alert">{error}</p>}
+        {error && (
+          <p className="ai-image-error" role="alert">
+            {error}
+          </p>
+        )}
 
         <div className="upload-dialog-actions">
-          <button type="button" className="secondary-action" onClick={onClose} disabled={busy}>取消</button>
-          <button type="button" className="primary-action" disabled={busy || !trimmed} onClick={() => onGenerate(trimmed, role)}>
-            {busy ? <><Loader2 className="spin" />生成中</> : <><ImagePlus />生成配图</>}
+          <button type="button" className="secondary-action" onClick={onClose} disabled={busy}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="primary-action"
+            disabled={busy || !trimmed}
+            onClick={() => onGenerate(trimmed, role)}
+          >
+            {busy ? (
+              <>
+                <Loader2 className="spin" />
+                生成中
+              </>
+            ) : (
+              <>
+                <ImagePlus />
+                生成配图
+              </>
+            )}
           </button>
         </div>
       </section>

@@ -23,10 +23,19 @@ export async function loadAiHistory(): Promise<AiHistoryEntry[]> {
   return parseHistory(await loadStoredAiHistory());
 }
 
-export async function saveAiHistory(entry: { id: string; topic: string; slideCount: number; draft: AiDraft }): Promise<AiHistoryEntry[]> {
+export async function saveAiHistory(entry: {
+  id: string;
+  topic: string;
+  slideCount: number;
+  draft: AiDraft;
+}): Promise<AiHistoryEntry[]> {
   // A draft is saved while it is still being reviewed, so partially emptied
   // fields are normal here. Sanitizing keeps the next load from dropping the
   // whole entry because the storage schema requires present fields.
-  const next: AiHistoryEntry = { ...entry, draft: sanitizeDraftForSave(entry.draft), updatedAt: new Date().toISOString() };
+  const next: AiHistoryEntry = {
+    ...entry,
+    draft: sanitizeDraftForSave(entry.draft),
+    updatedAt: new Date().toISOString(),
+  };
   return parseHistory(await saveStoredAiHistory(next));
 }

@@ -15,12 +15,14 @@ const design = {
 
 function designedDocument(blocks: AiContentBlock[]) {
   const source = createDocument();
-  return produce(source, (draft) => applyCommand(draft, {
-    type: "apply-ai-designed-draft",
-    title: "回归测试",
-    slides: [{ title: "指标", body: "", speakerNotes: "", blocks }],
-    designs: [design],
-  }));
+  return produce(source, (draft) =>
+    applyCommand(draft, {
+      type: "apply-ai-designed-draft",
+      title: "回归测试",
+      slides: [{ title: "指标", body: "", speakerNotes: "", blocks }],
+      designs: [design],
+    }),
+  );
 }
 
 describe("design-only relayout", () => {
@@ -28,8 +30,26 @@ describe("design-only relayout", () => {
     const document = designedDocument([{ type: "paragraph", text: "第一点\n第二点\n第三点" }]);
     const slide = structuredClone(document).slides[0]!;
     slide.elements.push(
-      { id: crypto.randomUUID() as never, type: "text", contentRef: "decorative", text: "第一点", frame: { x: inches(0.1), y: inches(0.1), width: inches(1), height: inches(0.1) }, rotationMilliDegree: 0, locked: false, style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" } },
-      { id: crypto.randomUUID() as never, type: "text", contentRef: "decorative", text: "手工备注", frame: { x: inches(0.2), y: inches(0.3), width: inches(1), height: inches(0.1) }, rotationMilliDegree: 0, locked: false, style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" } },
+      {
+        id: crypto.randomUUID() as never,
+        type: "text",
+        contentRef: "decorative",
+        text: "第一点",
+        frame: { x: inches(0.1), y: inches(0.1), width: inches(1), height: inches(0.1) },
+        rotationMilliDegree: 0,
+        locked: false,
+        style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" },
+      },
+      {
+        id: crypto.randomUUID() as never,
+        type: "text",
+        contentRef: "decorative",
+        text: "手工备注",
+        frame: { x: inches(0.2), y: inches(0.3), width: inches(1), height: inches(0.1) },
+        rotationMilliDegree: 0,
+        locked: false,
+        style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" },
+      },
     );
     // Strip provenance to mimic a document written before the marker existed.
     for (const element of slide.elements) delete element.origin;
@@ -44,7 +64,9 @@ describe("design-only relayout", () => {
     const before = slide.elements.find((element) => element.type === "text" && element.contentRef === "title");
     expect(before?.type).toBe("text");
     const result = produce(document, (draft) => applyCommand(draft, { type: "relayout-slide", slideId: slide.id }));
-    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    const title = result.slides[0]!.elements.find(
+      (element) => element.type === "text" && element.contentRef === "title",
+    );
     expect(title?.type).toBe("text");
     if (title?.type !== "text" || before?.type !== "text") return;
     expect(title.style.color).toBe(before.style.color);
@@ -64,15 +86,16 @@ describe("design-only relayout", () => {
     const resultChart = resultSlide.elements.find((element) => element.type === "chart");
     expect(resultChart?.type).toBe("chart");
     if (resultChart?.type !== "chart") return;
-    const metricIds = resultSlide.content.blocks?.filter((block) => block.type === "metric").map((block) => block.id) ?? [];
+    const metricIds =
+      resultSlide.content.blocks?.filter((block) => block.type === "metric").map((block) => block.id) ?? [];
     expect(resultChart.contentBlockIds).toEqual(metricIds);
-    expect(resultSlide.elements.some((element) => element.type === "chart" && element.contentBlockIds.length === 0)).toBe(false);
+    expect(
+      resultSlide.elements.some((element) => element.type === "chart" && element.contentBlockIds.length === 0),
+    ).toBe(false);
   });
 
   it("keeps a native table pointing at the reviewed table block", () => {
-    const document = designedDocument([
-      { type: "table-data", header: ["项目", "数值"], rows: [["完成率", "92%"]] },
-    ]);
+    const document = designedDocument([{ type: "table-data", header: ["项目", "数值"], rows: [["完成率", "92%"]] }]);
     const slide = document.slides[0]!;
     const table = slide.elements.find((element) => element.type === "table");
     expect(table?.type).toBe("table");
@@ -97,13 +120,15 @@ describe("design-only relayout", () => {
       content: before.revisions.content,
       design: before.revisions.design + 1,
     });
-    expect(after.slides[0]!.content).toEqual(expect.objectContaining({
-      title: before.slides[0]!.content.title,
-      body: before.slides[0]!.content.body,
-      blocks: before.slides[0]!.content.blocks,
-      speakerNotes: before.slides[0]!.content.speakerNotes,
-      status: before.slides[0]!.content.status,
-    }));
+    expect(after.slides[0]!.content).toEqual(
+      expect.objectContaining({
+        title: before.slides[0]!.content.title,
+        body: before.slides[0]!.content.body,
+        blocks: before.slides[0]!.content.blocks,
+        speakerNotes: before.slides[0]!.content.speakerNotes,
+        status: before.slides[0]!.content.status,
+      }),
+    );
 
     useEditorStore.getState().undo();
     expect(useEditorStore.getState().document.revisions).toEqual(before.revisions);

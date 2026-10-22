@@ -1,4 +1,16 @@
-import { ArrowDown, ArrowUp, CheckCheck, CircleAlert, Copy, Plus, Redo2, RotateCcw, Trash2, Undo2, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CheckCheck,
+  CircleAlert,
+  Copy,
+  Plus,
+  Redo2,
+  RotateCcw,
+  Trash2,
+  Undo2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { AiDraft, AiVisualAssetIntent, ContentBlock } from "../../services/ai-service";
 import {
@@ -94,7 +106,17 @@ function DraftNotes({ index, value, onChange }: { index: number; value: string; 
   );
 }
 
-function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string; items: string[]; max: number; onChange: (items: string[]) => void }) {
+function ItemListEditor({
+  ariaLabel,
+  items,
+  max,
+  onChange,
+}: {
+  ariaLabel: string;
+  items: string[];
+  max: number;
+  onChange: (items: string[]) => void;
+}) {
   const listRef = useRef<HTMLDivElement>(null);
   // Focus has to move after React commits the new row, so the follow-up focus
   // is scheduled instead of applied to a node that is not rendered yet.
@@ -126,14 +148,29 @@ function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
             placeholder="输入要点（Enter 新增下一条）"
             value={item}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? event.target.value : value)))}
+            onChange={(event) =>
+              onChange(items.map((value, itemIndex) => (itemIndex === index ? event.target.value : value)))
+            }
           />
-          <button type="button" className="icon-action" aria-label={`删除${ariaLabel}第 ${index + 1} 条`} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}>
+          <button
+            type="button"
+            className="icon-action"
+            aria-label={`删除${ariaLabel}第 ${index + 1} 条`}
+            onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+          >
             <X />
           </button>
         </div>
       ))}
-      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => { onChange([...items, ""]); focusRow(items.length); }}>
+      <button
+        type="button"
+        className="link-action block-add"
+        disabled={items.length >= max}
+        onClick={() => {
+          onChange([...items, ""]);
+          focusRow(items.length);
+        }}
+      >
         <Plus />
         添加一条
       </button>
@@ -141,7 +178,17 @@ function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
   );
 }
 
-function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string; items: Array<{ label: string; text: string }>; max: number; onChange: (items: Array<{ label: string; text: string }>) => void }) {
+function PairListEditor({
+  ariaLabel,
+  items,
+  max,
+  onChange,
+}: {
+  ariaLabel: string;
+  items: Array<{ label: string; text: string }>;
+  max: number;
+  onChange: (items: Array<{ label: string; text: string }>) => void;
+}) {
   const listRef = useRef<HTMLDivElement>(null);
   const focusRow = (index: number) => {
     window.requestAnimationFrame(() => {
@@ -173,7 +220,13 @@ function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
             placeholder="阶段"
             value={item.label}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? { ...value, label: event.target.value } : value)))}
+            onChange={(event) =>
+              onChange(
+                items.map((value, itemIndex) =>
+                  itemIndex === index ? { ...value, label: event.target.value } : value,
+                ),
+              )
+            }
           />
           <input
             aria-label={`${ariaLabel}第 ${index + 1} 条说明`}
@@ -182,14 +235,31 @@ function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
             placeholder="说明"
             value={item.text}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? { ...value, text: event.target.value } : value)))}
+            onChange={(event) =>
+              onChange(
+                items.map((value, itemIndex) => (itemIndex === index ? { ...value, text: event.target.value } : value)),
+              )
+            }
           />
-          <button type="button" className="icon-action" aria-label={`删除${ariaLabel}第 ${index + 1} 条`} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}>
+          <button
+            type="button"
+            className="icon-action"
+            aria-label={`删除${ariaLabel}第 ${index + 1} 条`}
+            onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+          >
             <X />
           </button>
         </div>
       ))}
-      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => { onChange([...items, { label: "", text: "" }]); focusRow(items.length); }}>
+      <button
+        type="button"
+        className="link-action block-add"
+        disabled={items.length >= max}
+        onClick={() => {
+          onChange([...items, { label: "", text: "" }]);
+          focusRow(items.length);
+        }}
+      >
         <Plus />
         添加一条
       </button>
@@ -223,7 +293,9 @@ function TableEditor({
   };
   const focusCell = (row: number, column: number) => {
     window.requestAnimationFrame(() => {
-      tableRef.current?.querySelector<HTMLInputElement>(`input[data-cell-row="${row}"][data-cell-column="${column}"]`)?.focus();
+      tableRef.current
+        ?.querySelector<HTMLInputElement>(`input[data-cell-row="${row}"][data-cell-column="${column}"]`)
+        ?.focus();
     });
   };
 
@@ -233,7 +305,7 @@ function TableEditor({
     onChange({
       ...block,
       header: Array.from({ length: Math.max(block.header.length, column + 1) }, (_, cellIndex) =>
-        cellIndex === column ? value : block.header[cellIndex] ?? "",
+        cellIndex === column ? value : (block.header[cellIndex] ?? ""),
       ),
     });
   // A row may arrive shorter than the header, so editing one cell pads the row
@@ -242,7 +314,11 @@ function TableEditor({
     onChange({
       ...block,
       rows: block.rows.map((cells, rowIndex) =>
-        rowIndex === row ? Array.from({ length: columnCount }, (_, cellIndex) => (cellIndex === column ? value : cells[cellIndex] ?? "")) : cells,
+        rowIndex === row
+          ? Array.from({ length: columnCount }, (_, cellIndex) =>
+              cellIndex === column ? value : (cells[cellIndex] ?? ""),
+            )
+          : cells,
       ),
     });
   const addColumn = () => {
@@ -347,11 +423,21 @@ function TableEditor({
         </tbody>
       </table>
       <div className="table-actions">
-        <button type="button" className="link-action" disabled={columnCount >= TABLE_REVIEW_MAX_COLUMNS} onClick={addColumn}>
+        <button
+          type="button"
+          className="link-action"
+          disabled={columnCount >= TABLE_REVIEW_MAX_COLUMNS}
+          onClick={addColumn}
+        >
           <Plus />
           添加一列
         </button>
-        <button type="button" className="link-action" disabled={block.rows.length >= TABLE_REVIEW_MAX_ROWS} onClick={addRow}>
+        <button
+          type="button"
+          className="link-action"
+          disabled={block.rows.length >= TABLE_REVIEW_MAX_ROWS}
+          onClick={addRow}
+        >
           <Plus />
           添加一行
         </button>
@@ -370,12 +456,26 @@ function TableEditor({
  * the renderer draws. Editing only the body string here used to flatten a
  * metric, comparison or timeline page into a bullet list.
  */
-function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: number; blocks: ContentBlock[]; notes: readonly SlideCapacityNote[]; onChange: (blocks: ContentBlock[], separateHistory?: boolean) => void }) {
+function BlockEditor({
+  slideIndex,
+  blocks,
+  notes,
+  onChange,
+}: {
+  slideIndex: number;
+  blocks: ContentBlock[];
+  notes: readonly SlideCapacityNote[];
+  onChange: (blocks: ContentBlock[], separateHistory?: boolean) => void;
+}) {
   const [pendingDelete, setPendingDelete] = useState<number | undefined>(undefined);
   const [addType, setAddType] = useState<ContentBlock["type"]>("paragraph");
-  const replace = (index: number, block: ContentBlock) => onChange(blocks.map((current, currentIndex) => (currentIndex === index ? block : current)));
+  const replace = (index: number, block: ContentBlock) =>
+    onChange(blocks.map((current, currentIndex) => (currentIndex === index ? block : current)));
   const remove = (index: number) => {
-    onChange(blocks.filter((_, currentIndex) => currentIndex !== index), true);
+    onChange(
+      blocks.filter((_, currentIndex) => currentIndex !== index),
+      true,
+    );
     setPendingDelete(undefined);
   };
   const move = (index: number, offset: -1 | 1) => {
@@ -389,13 +489,20 @@ function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: numb
   };
   const pageLabel = `第 ${slideIndex + 1} 页`;
   const addBlock = () => {
-    const next: ContentBlock = addType === "paragraph" ? { type: "paragraph", text: "" }
-      : addType === "bullet-list" ? { type: "bullet-list", items: [""] }
-        : addType === "quote" ? { type: "quote", text: "" }
-          : addType === "metric" ? { type: "metric", label: "", value: "" }
-            : addType === "timeline" || addType === "process" ? { type: addType, items: [{ label: "", text: "" }] }
-              : addType === "comparison" ? { type: "comparison", leftLabel: "", rightLabel: "", leftItems: [""], rightItems: [""] }
-                : { type: "table-data", header: [""], rows: [[""]] };
+    const next: ContentBlock =
+      addType === "paragraph"
+        ? { type: "paragraph", text: "" }
+        : addType === "bullet-list"
+          ? { type: "bullet-list", items: [""] }
+          : addType === "quote"
+            ? { type: "quote", text: "" }
+            : addType === "metric"
+              ? { type: "metric", label: "", value: "" }
+              : addType === "timeline" || addType === "process"
+                ? { type: addType, items: [{ label: "", text: "" }] }
+                : addType === "comparison"
+                  ? { type: "comparison", leftLabel: "", rightLabel: "", leftItems: [""], rightItems: [""] }
+                  : { type: "table-data", header: [""], rows: [[""]] };
     onChange([...blocks, next], true);
   };
   return (
@@ -403,19 +510,52 @@ function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: numb
       {blocks.map((block, index) => {
         const typeLabel = blockTypeLabels[block.type];
         return (
-          <section className={`block-row ${block.type}`} key={`${block.type}-${index}`} aria-label={`${pageLabel}的${typeLabel}`}>
+          <section
+            className={`block-row ${block.type}`}
+            key={`${block.type}-${index}`}
+            aria-label={`${pageLabel}的${typeLabel}`}
+          >
             <header className="block-row-header">
               <span className="block-type">{typeLabel}</span>
               <span className="block-order-actions" role="group" aria-label={`${pageLabel}的${typeLabel}排序`}>
-                <button type="button" className="icon-action" disabled={index === 0} aria-label={`上移${pageLabel}的${typeLabel}`} onClick={() => move(index, -1)}><ArrowUp /></button>
-                <button type="button" className="icon-action" disabled={index === blocks.length - 1} aria-label={`下移${pageLabel}的${typeLabel}`} onClick={() => move(index, 1)}><ArrowDown /></button>
+                <button
+                  type="button"
+                  className="icon-action"
+                  disabled={index === 0}
+                  aria-label={`上移${pageLabel}的${typeLabel}`}
+                  onClick={() => move(index, -1)}
+                >
+                  <ArrowUp />
+                </button>
+                <button
+                  type="button"
+                  className="icon-action"
+                  disabled={index === blocks.length - 1}
+                  aria-label={`下移${pageLabel}的${typeLabel}`}
+                  onClick={() => move(index, 1)}
+                >
+                  <ArrowDown />
+                </button>
               </span>
-              {pendingDelete === index ? <span className="block-delete-confirm" role="group" aria-label={`确认删除${pageLabel}的${typeLabel}`}>
-                <button type="button" className="link-action danger" onClick={() => remove(index)}>确认删除</button>
-                <button type="button" className="link-action" onClick={() => setPendingDelete(undefined)}>取消</button>
-              </span> : <button type="button" className="icon-action" aria-label={`删除${pageLabel}的${typeLabel}`} onClick={() => setPendingDelete(index)}>
-                <X />
-              </button>}
+              {pendingDelete === index ? (
+                <span className="block-delete-confirm" role="group" aria-label={`确认删除${pageLabel}的${typeLabel}`}>
+                  <button type="button" className="link-action danger" onClick={() => remove(index)}>
+                    确认删除
+                  </button>
+                  <button type="button" className="link-action" onClick={() => setPendingDelete(undefined)}>
+                    取消
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="icon-action"
+                  aria-label={`删除${pageLabel}的${typeLabel}`}
+                  onClick={() => setPendingDelete(index)}
+                >
+                  <X />
+                </button>
+              )}
             </header>
             <CapacityNotes notes={notes.filter((note) => note.blockIndex === index)} label={`${pageLabel}的排版预检`} />
             {block.type === "paragraph" && (
@@ -448,7 +588,12 @@ function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: numb
               </>
             )}
             {block.type === "bullet-list" && (
-              <ItemListEditor ariaLabel={`${pageLabel}要点`} items={block.items} max={12} onChange={(items) => replace(index, { ...block, items })} />
+              <ItemListEditor
+                ariaLabel={`${pageLabel}要点`}
+                items={block.items}
+                max={12}
+                onChange={(items) => replace(index, { ...block, items })}
+              />
             )}
             {block.type === "metric" && (
               <div className="block-pair-row">
@@ -469,7 +614,12 @@ function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: numb
               </div>
             )}
             {(block.type === "timeline" || block.type === "process") && (
-              <PairListEditor ariaLabel={`${pageLabel}${typeLabel}`} items={block.items} max={10} onChange={(items) => replace(index, { ...block, items })} />
+              <PairListEditor
+                ariaLabel={`${pageLabel}${typeLabel}`}
+                items={block.items}
+                max={10}
+                onChange={(items) => replace(index, { ...block, items })}
+              />
             )}
             {block.type === "comparison" && (
               <div className="comparison-columns">
@@ -482,7 +632,12 @@ function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: numb
                     value={block.leftLabel}
                     onChange={(event) => replace(index, { ...block, leftLabel: event.target.value })}
                   />
-                  <ItemListEditor ariaLabel={`${pageLabel}左侧要点`} items={block.leftItems} max={8} onChange={(leftItems) => replace(index, { ...block, leftItems })} />
+                  <ItemListEditor
+                    ariaLabel={`${pageLabel}左侧要点`}
+                    items={block.leftItems}
+                    max={8}
+                    onChange={(leftItems) => replace(index, { ...block, leftItems })}
+                  />
                 </div>
                 <div className="comparison-column">
                   <input
@@ -493,7 +648,12 @@ function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: numb
                     value={block.rightLabel}
                     onChange={(event) => replace(index, { ...block, rightLabel: event.target.value })}
                   />
-                  <ItemListEditor ariaLabel={`${pageLabel}右侧要点`} items={block.rightItems} max={8} onChange={(rightItems) => replace(index, { ...block, rightItems })} />
+                  <ItemListEditor
+                    ariaLabel={`${pageLabel}右侧要点`}
+                    items={block.rightItems}
+                    max={8}
+                    onChange={(rightItems) => replace(index, { ...block, rightItems })}
+                  />
                 </div>
               </div>
             )}
@@ -504,15 +664,25 @@ function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: numb
         );
       })}
       <div className="block-add-row">
-        <select aria-label={`${pageLabel}新增内容块类型`} value={addType} onChange={(event) => setAddType(event.target.value as ContentBlock["type"])}>
-          {Object.entries(blockTypeLabels).map(([type, label]) => <option key={type} value={type}>{label}</option>)}
+        <select
+          aria-label={`${pageLabel}新增内容块类型`}
+          value={addType}
+          onChange={(event) => setAddType(event.target.value as ContentBlock["type"])}
+        >
+          {Object.entries(blockTypeLabels).map(([type, label]) => (
+            <option key={type} value={type}>
+              {label}
+            </option>
+          ))}
         </select>
-        <button type="button" className="link-action" disabled={blocks.length >= 20} onClick={addBlock}><Plus />添加内容块</button>
+        <button type="button" className="link-action" disabled={blocks.length >= 20} onClick={addBlock}>
+          <Plus />
+          添加内容块
+        </button>
       </div>
     </div>
   );
 }
-
 
 export function ContentReview({
   draft,
@@ -549,14 +719,27 @@ export function ContentReview({
   // The capacity notes are measured from the same copy the renderer lays out,
   // so they are computed once per draft as well.
   const slideNotes = useMemo(() => draft.slides.map((slide, index) => slideCapacityNotes(slide, index)), [draft]);
-  const originalSlidesById = useMemo(() => new Map((originalDraft?.slides ?? []).flatMap((slide) => slide.id ? [[slide.id, slide] as const] : [])), [originalDraft]);
-  const editedIndexes = useMemo(() => draft.slides.flatMap((slide, index) => {
-    if (!originalDraft) return [];
-    const original = slide.id ? originalSlidesById.get(slide.id) : undefined;
-    return !original || isSlideEdited(slide, original) ? [index] : [];
-  }), [draft, originalDraft, originalSlidesById]);
-  const reviewedIndexes = useMemo(() => draft.slides.flatMap((slide, index) => slide.reviewed ? [index] : []), [draft]);
-  const issueIndexes = useMemo(() => [...new Set(issues.flatMap((issue) => issue.indexes))].sort((left, right) => left - right), [issues]);
+  const originalSlidesById = useMemo(
+    () => new Map((originalDraft?.slides ?? []).flatMap((slide) => (slide.id ? [[slide.id, slide] as const] : []))),
+    [originalDraft],
+  );
+  const editedIndexes = useMemo(
+    () =>
+      draft.slides.flatMap((slide, index) => {
+        if (!originalDraft) return [];
+        const original = slide.id ? originalSlidesById.get(slide.id) : undefined;
+        return !original || isSlideEdited(slide, original) ? [index] : [];
+      }),
+    [draft, originalDraft, originalSlidesById],
+  );
+  const reviewedIndexes = useMemo(
+    () => draft.slides.flatMap((slide, index) => (slide.reviewed ? [index] : [])),
+    [draft],
+  );
+  const issueIndexes = useMemo(
+    () => [...new Set(issues.flatMap((issue) => issue.indexes))].sort((left, right) => left - right),
+    [issues],
+  );
 
   // Keep the active outline row visible while the reader scrolls the cards.
   // Updating scrollTop directly avoids moving any other scroll container.
@@ -572,7 +755,10 @@ export function ContentReview({
 
   const goToSlide = (index: number, focus: "title" | "outline" = "title") => {
     onActiveIndexChange(index);
-    if (focus === "title") window.requestAnimationFrame(() => document.getElementById(`draft-slide-title-${index}`)?.focus({ preventScroll: true }));
+    if (focus === "title")
+      window.requestAnimationFrame(() =>
+        document.getElementById(`draft-slide-title-${index}`)?.focus({ preventScroll: true }),
+      );
   };
 
   // The outline is one tab stop with arrow-key movement, so a ten page draft
@@ -588,7 +774,7 @@ export function ContentReview({
     goToSlide(next);
   };
   const goToNextUnreviewed = () => {
-    const unreviewed = draft.slides.flatMap((slide, index) => slide.reviewed ? [] : [index]);
+    const unreviewed = draft.slides.flatMap((slide, index) => (slide.reviewed ? [] : [index]));
     if (unreviewed.length === 0) return;
     goToSlide(unreviewed.find((index) => index > activeIndex) ?? unreviewed[0]!);
   };
@@ -601,18 +787,21 @@ export function ContentReview({
   };
 
   return (
-    <section className="draft-review" onKeyDownCapture={(event) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
-      if (event.shiftKey) {
-        if (!canRedo) return;
+    <section
+      className="draft-review"
+      onKeyDownCapture={(event) => {
+        if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
+        if (event.shiftKey) {
+          if (!canRedo) return;
+          event.preventDefault();
+          onRedo();
+          return;
+        }
+        if (!canUndo) return;
         event.preventDefault();
-        onRedo();
-        return;
-      }
-      if (!canUndo) return;
-      event.preventDefault();
-      onUndo();
-    }}>
+        onUndo();
+      }}
+    >
       <aside className="draft-outline" aria-label="PPT 内容大纲">
         <div className="draft-outline-title">
           <div>
@@ -649,7 +838,11 @@ export function ContentReview({
                 <div>
                   <strong className={missing ? "missing" : ""}>{slide.title.trim() || "未命名页面"}</strong>
                   <small className={missing || empty ? "missing" : ""}>
-                    {missing ? "缺少标题" : empty ? "还没有内容" : `${slideStat.points} 条要点 · ${slideStat.characters} 字`}
+                    {missing
+                      ? "缺少标题"
+                      : empty
+                        ? "还没有内容"
+                        : `${slideStat.points} 条要点 · ${slideStat.characters} 字`}
                   </small>
                   {!missing && !empty && slideStat.preview && <p>{slideStat.preview}</p>}
                   {warned && (
@@ -670,12 +863,18 @@ export function ContentReview({
       <div className="draft-review-main">
         <div className="draft-review-heading">
           <div>
-            <div className="section-kicker">内容草稿 · {narrativeStrategyLabels[draft.presentationBrief.narrativeStrategy]}</div>
+            <div className="section-kicker">
+              内容草稿 · {narrativeStrategyLabels[draft.presentationBrief.narrativeStrategy]}
+            </div>
             <h2>审核并编辑文字</h2>
             <p className="draft-review-meta">
               {draft.slides.length} 页 · {metrics.characters} 字 · {metrics.points} 条要点
-              {editedIndexes.length > 0 && <span className="draft-edited-summary">{editedIndexes.length} 页已修改</span>}
-              <span className="draft-reviewed-summary">{reviewedIndexes.length}/{draft.slides.length} 页已审核</span>
+              {editedIndexes.length > 0 && (
+                <span className="draft-edited-summary">{editedIndexes.length} 页已修改</span>
+              )}
+              <span className="draft-reviewed-summary">
+                {reviewedIndexes.length}/{draft.slides.length} 页已审核
+              </span>
               <span className={`draft-save-state ${saveState}`} role="status">
                 {saveState === "saving" ? "保存中…" : "已自动保存"}
               </span>
@@ -683,11 +882,60 @@ export function ContentReview({
           </div>
           <div className="draft-heading-actions">
             <div className="draft-history-actions" role="group" aria-label="内容编辑历史">
-              {issueIndexes.length > 0 && <button type="button" className="secondary-action icon-only draft-next-issue" aria-label="下一处问题" title="下一处问题" onClick={goToNextIssue}><CircleAlert /></button>}
-              {reviewedIndexes.length < draft.slides.length && <button type="button" className="secondary-action icon-only" aria-label="下一未审核页" title="下一未审核页" onClick={goToNextUnreviewed}><ArrowDown /></button>}
-              {reviewedIndexes.length < draft.slides.length && <button type="button" className="secondary-action icon-only" aria-label="全部标记已审核" title="全部标记已审核" disabled={issues.some((issue) => issue.blocking)} onClick={onReviewAllSlides}><CheckCheck /></button>}
-              <button type="button" className="secondary-action icon-only" aria-label="撤销" title="撤销" disabled={!canUndo} onClick={onUndo}><Undo2 /></button>
-              <button type="button" className="secondary-action icon-only" aria-label="重做" title="重做" disabled={!canRedo} onClick={onRedo}><Redo2 /></button>
+              {issueIndexes.length > 0 && (
+                <button
+                  type="button"
+                  className="secondary-action icon-only draft-next-issue"
+                  aria-label="下一处问题"
+                  title="下一处问题"
+                  onClick={goToNextIssue}
+                >
+                  <CircleAlert />
+                </button>
+              )}
+              {reviewedIndexes.length < draft.slides.length && (
+                <button
+                  type="button"
+                  className="secondary-action icon-only"
+                  aria-label="下一未审核页"
+                  title="下一未审核页"
+                  onClick={goToNextUnreviewed}
+                >
+                  <ArrowDown />
+                </button>
+              )}
+              {reviewedIndexes.length < draft.slides.length && (
+                <button
+                  type="button"
+                  className="secondary-action icon-only"
+                  aria-label="全部标记已审核"
+                  title="全部标记已审核"
+                  disabled={issues.some((issue) => issue.blocking)}
+                  onClick={onReviewAllSlides}
+                >
+                  <CheckCheck />
+                </button>
+              )}
+              <button
+                type="button"
+                className="secondary-action icon-only"
+                aria-label="撤销"
+                title="撤销"
+                disabled={!canUndo}
+                onClick={onUndo}
+              >
+                <Undo2 />
+              </button>
+              <button
+                type="button"
+                className="secondary-action icon-only"
+                aria-label="重做"
+                title="重做"
+                disabled={!canRedo}
+                onClick={onRedo}
+              >
+                <Redo2 />
+              </button>
             </div>
             <label className="draft-title-field">
               演示文稿标题
@@ -730,7 +978,9 @@ export function ContentReview({
             if (index !== activeIndex) return null;
             const slideStat = slideStats[index]!;
             const notes = slideNotes[index] ?? [];
-            const imageIssues = issues.filter((issue) => issue.kind.startsWith("image-") && issue.indexes.includes(index));
+            const imageIssues = issues.filter(
+              (issue) => issue.kind.startsWith("image-") && issue.indexes.includes(index),
+            );
             const missing = !slide.title.trim();
             const empty = !slideHasContent(slide);
             const original = slide.id ? originalSlidesById.get(slide.id) : undefined;
@@ -745,7 +995,9 @@ export function ContentReview({
                 aria-labelledby={`draft-slide-heading-${index}`}
                 key={slide.id ?? index}
               >
-                <h3 id={`draft-slide-heading-${index}`} className="visually-hidden">第 {index + 1} 页</h3>
+                <h3 id={`draft-slide-heading-${index}`} className="visually-hidden">
+                  第 {index + 1} 页
+                </h3>
                 <header className="draft-slide-header">
                   <span className="draft-slide-number" aria-hidden="true">
                     {String(index + 1).padStart(2, "0")}
@@ -768,7 +1020,10 @@ export function ContentReview({
                         标题不能为空
                       </small>
                     )}
-                    <CapacityNotes notes={notes.filter((note) => note.scope === "title")} label={`第 ${index + 1} 页标题的排版预检`} />
+                    <CapacityNotes
+                      notes={notes.filter((note) => note.scope === "title")}
+                      label={`第 ${index + 1} 页标题的排版预检`}
+                    />
                   </div>
                   <div className="draft-slide-tools">
                     <span className="draft-slide-status-line">
@@ -776,20 +1031,71 @@ export function ContentReview({
                       {edited && <b className="draft-edited-badge">已修改</b>}
                     </span>
                     <div className="draft-page-actions" role="group" aria-label={`第 ${index + 1} 页页面操作`}>
-                      <button type="button" className="link-action icon-action" aria-label={`上移第 ${index + 1} 页`} title="上移页面" disabled={index === 0} onClick={() => onMoveSlide(index, index - 1)}><ArrowUp /></button>
-                      <button type="button" className="link-action icon-action" aria-label={`下移第 ${index + 1} 页`} title="下移页面" disabled={index === draft.slides.length - 1} onClick={() => onMoveSlide(index, index + 1)}><ArrowDown /></button>
-                      <button type="button" className="link-action icon-action" aria-label={`复制第 ${index + 1} 页`} title="复制页面" onClick={() => onDuplicateSlide(index)}><Copy /></button>
+                      <button
+                        type="button"
+                        className="link-action icon-action"
+                        aria-label={`上移第 ${index + 1} 页`}
+                        title="上移页面"
+                        disabled={index === 0}
+                        onClick={() => onMoveSlide(index, index - 1)}
+                      >
+                        <ArrowUp />
+                      </button>
+                      <button
+                        type="button"
+                        className="link-action icon-action"
+                        aria-label={`下移第 ${index + 1} 页`}
+                        title="下移页面"
+                        disabled={index === draft.slides.length - 1}
+                        onClick={() => onMoveSlide(index, index + 1)}
+                      >
+                        <ArrowDown />
+                      </button>
+                      <button
+                        type="button"
+                        className="link-action icon-action"
+                        aria-label={`复制第 ${index + 1} 页`}
+                        title="复制页面"
+                        onClick={() => onDuplicateSlide(index)}
+                      >
+                        <Copy />
+                      </button>
                       {confirmingDelete ? (
                         <>
-                          <button type="button" className="link-action danger-action" onClick={() => { onDeleteSlide(index); setPendingPageDelete(undefined); }}>确认删除</button>
-                          <button type="button" className="link-action" onClick={() => setPendingPageDelete(undefined)}>取消</button>
+                          <button
+                            type="button"
+                            className="link-action danger-action"
+                            onClick={() => {
+                              onDeleteSlide(index);
+                              setPendingPageDelete(undefined);
+                            }}
+                          >
+                            确认删除
+                          </button>
+                          <button type="button" className="link-action" onClick={() => setPendingPageDelete(undefined)}>
+                            取消
+                          </button>
                         </>
                       ) : (
-                        <button type="button" className="link-action icon-action" aria-label={`删除第 ${index + 1} 页`} title={draft.slides.length <= 1 ? "至少保留一页" : "删除页面"} disabled={draft.slides.length <= 1} onClick={() => setPendingPageDelete(slide.id)}><Trash2 /></button>
+                        <button
+                          type="button"
+                          className="link-action icon-action"
+                          aria-label={`删除第 ${index + 1} 页`}
+                          title={draft.slides.length <= 1 ? "至少保留一页" : "删除页面"}
+                          disabled={draft.slides.length <= 1}
+                          onClick={() => setPendingPageDelete(slide.id)}
+                        >
+                          <Trash2 />
+                        </button>
                       )}
                     </div>
                     {canUndoRestore ? (
-                      <button type="button" className="link-action" title="撤销刚才的恢复操作，回到恢复前的内容" onClick={() => onUndoRestore(index)}>
+                      <button
+                        type="button"
+                        className="link-action"
+                        title="撤销刚才的恢复操作，回到恢复前的内容"
+                        onClick={() => onUndoRestore(index)}
+                      >
                         <Undo2 />
                         撤销恢复
                       </button>
@@ -798,15 +1104,24 @@ export function ContentReview({
                         type="button"
                         className="link-action"
                         disabled={!edited || !original}
-                        title={original ? "恢复本页 AI 生成的原始文字；此操作也可通过顶部撤销按钮回退" : "新增或复制的页面没有对应的 AI 原稿"}
+                        title={
+                          original
+                            ? "恢复本页 AI 生成的原始文字；此操作也可通过顶部撤销按钮回退"
+                            : "新增或复制的页面没有对应的 AI 原稿"
+                        }
                         onClick={() => onRestoreSlide(index)}
                       >
                         <RotateCcw />
                         恢复 AI 原稿
                       </button>
                     )}
-                    <button type="button" className={`review-toggle ${slide.reviewed ? "reviewed" : ""}`} aria-pressed={slide.reviewed}
-                      disabled={missing || empty} onClick={() => onSlideReviewedChange(index, !slide.reviewed)}>
+                    <button
+                      type="button"
+                      className={`review-toggle ${slide.reviewed ? "reviewed" : ""}`}
+                      aria-pressed={slide.reviewed}
+                      disabled={missing || empty}
+                      onClick={() => onSlideReviewedChange(index, !slide.reviewed)}
+                    >
                       {slide.reviewed ? "已审核" : "标记已审核"}
                     </button>
                   </div>
@@ -819,7 +1134,10 @@ export function ContentReview({
                   </small>
                 )}
 
-                <CapacityNotes notes={notes.filter((note) => note.blockIndex === undefined && note.scope !== "title")} label={`第 ${index + 1} 页的排版预检`} />
+                <CapacityNotes
+                  notes={notes.filter((note) => note.blockIndex === undefined && note.scope !== "title")}
+                  label={`第 ${index + 1} 页的排版预检`}
+                />
 
                 <details className="slide-plan">
                   <summary>
@@ -856,7 +1174,12 @@ export function ContentReview({
                           <input
                             type="checkbox"
                             checked={slide.plan.visualAsset.enabled}
-                            onChange={(event) => onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, enabled: event.target.checked })}
+                            onChange={(event) =>
+                              onSlideVisualAssetChange(index, {
+                                ...slide.plan.visualAsset!,
+                                enabled: event.target.checked,
+                              })
+                            }
                           />
                           这一页配图
                         </label>
@@ -864,9 +1187,18 @@ export function ContentReview({
                           aria-label={`第 ${index + 1} 页配图角色`}
                           value={slide.plan.visualAsset.role}
                           disabled={!slide.plan.visualAsset.enabled}
-                          onChange={(event) => onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, role: event.target.value as AiVisualAssetIntent["role"] })}
+                          onChange={(event) =>
+                            onSlideVisualAssetChange(index, {
+                              ...slide.plan.visualAsset!,
+                              role: event.target.value as AiVisualAssetIntent["role"],
+                            })
+                          }
                         >
-                          {Object.entries(visualAssetRoleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          {Object.entries(visualAssetRoleLabels).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <textarea
@@ -877,9 +1209,13 @@ export function ContentReview({
                         rows={2}
                         disabled={!slide.plan.visualAsset.enabled}
                         value={slide.plan.visualAsset.prompt}
-                        onChange={(event) => onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, prompt: event.target.value })}
+                        onChange={(event) =>
+                          onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, prompt: event.target.value })
+                        }
                       />
-                      <p className="visual-asset-hint">只描述画面本身，不要写标题或正文文字——生成的文字在演示里几乎总是错的。</p>
+                      <p className="visual-asset-hint">
+                        只描述画面本身，不要写标题或正文文字——生成的文字在演示里几乎总是错的。
+                      </p>
                       {imageIssues.length > 0 && (
                         <ul className="visual-asset-issues" aria-label={`第 ${index + 1} 页的配图问题`}>
                           {imageIssues.map((issue) => (
@@ -895,7 +1231,12 @@ export function ContentReview({
                 )}
 
                 {slide.blocks.length > 0 ? (
-                  <BlockEditor slideIndex={index} blocks={slide.blocks} notes={notes} onChange={(blocks, separateHistory) => onSlideBlocksChange(index, blocks, separateHistory)} />
+                  <BlockEditor
+                    slideIndex={index}
+                    blocks={slide.blocks}
+                    notes={notes}
+                    onChange={(blocks, separateHistory) => onSlideBlocksChange(index, blocks, separateHistory)}
+                  />
                 ) : (
                   <label className="draft-body-field">
                     正文

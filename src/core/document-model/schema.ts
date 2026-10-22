@@ -22,28 +22,46 @@ const textElement = base.extend({
   text: z.string(),
   contentRef: z.enum(["title", "body", "decorative"]).optional(),
   style: z.object({
-    fontFamily: z.string().min(1), fontSizePt: z.number().positive(), color: z.string(), bold: z.boolean(),
+    fontFamily: z.string().min(1),
+    fontSizePt: z.number().positive(),
+    color: z.string(),
+    bold: z.boolean(),
     align: z.enum(["left", "center", "right"]),
   }),
-  runs: z.array(z.object({
-    start: z.number().int().nonnegative(), end: z.number().int().positive(),
-    bold: z.boolean().optional(), color: hexColor.optional(), underline: z.boolean().optional(),
-  })).max(200).optional(),
+  runs: z
+    .array(
+      z.object({
+        start: z.number().int().nonnegative(),
+        end: z.number().int().positive(),
+        bold: z.boolean().optional(),
+        color: hexColor.optional(),
+        underline: z.boolean().optional(),
+      }),
+    )
+    .max(200)
+    .optional(),
 });
 
 const shapeElement = base.extend({
   type: z.literal("shape"),
   shape: z.enum(["rectangle", "ellipse"]),
-  style: z.object({ fill: z.string(), stroke: z.string(), strokeWidthPt: z.number().nonnegative(), radiusPt: z.number().nonnegative() }),
+  style: z.object({
+    fill: z.string(),
+    stroke: z.string(),
+    strokeWidthPt: z.number().nonnegative(),
+    radiusPt: z.number().nonnegative(),
+  }),
 });
 
 /** A crop cuts a fraction off each side of the source image, so the visible region never vanishes. */
-const imageCropSchema = z.object({
-  top: z.number().min(0).max(0.99),
-  bottom: z.number().min(0).max(0.99),
-  left: z.number().min(0).max(0.99),
-  right: z.number().min(0).max(0.99),
-}).refine((crop) => crop.top + crop.bottom < 1 && crop.left + crop.right < 1, { message: "IMAGE_CROP_EMPTY" });
+const imageCropSchema = z
+  .object({
+    top: z.number().min(0).max(0.99),
+    bottom: z.number().min(0).max(0.99),
+    left: z.number().min(0).max(0.99),
+    right: z.number().min(0).max(0.99),
+  })
+  .refine((crop) => crop.top + crop.bottom < 1 && crop.left + crop.right < 1, { message: "IMAGE_CROP_EMPTY" });
 
 const imageElement = base.extend({
   type: z.literal("image"),
@@ -51,11 +69,15 @@ const imageElement = base.extend({
     kind: z.literal("embedded"),
     // Either an inline data URL (legacy / not-yet-saved) or a content-addressed
     // asset reference written by the desktop backend when the picture is stored.
-    dataUrl: z.string().max(360_000_000).refine(
-      (value) => /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(value)
-        || /^asset:\/\/[a-f0-9]{64}\.(png|jpg|webp)$/.test(value),
-      { message: "INVALID_IMAGE_DATA_URL" },
-    ),
+    dataUrl: z
+      .string()
+      .max(360_000_000)
+      .refine(
+        (value) =>
+          /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(value) ||
+          /^asset:\/\/[a-f0-9]{64}\.(png|jpg|webp)$/.test(value),
+        { message: "INVALID_IMAGE_DATA_URL" },
+      ),
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   }),
   altText: z.string().max(500),
@@ -67,8 +89,12 @@ const tableElement = base.extend({
   type: z.literal("table"),
   contentBlockId: z.string().uuid(),
   style: z.object({
-    fontFamily: z.string().min(1), fontSizePt: z.number().positive(),
-    headerFill: hexColor, headerTextColor: hexColor, bodyTextColor: hexColor, borderColor: hexColor,
+    fontFamily: z.string().min(1),
+    fontSizePt: z.number().positive(),
+    headerFill: hexColor,
+    headerTextColor: hexColor,
+    bodyTextColor: hexColor,
+    borderColor: hexColor,
     firstColumnBold: z.boolean(),
   }),
 });
@@ -78,8 +104,12 @@ const chartElement = base.extend({
   contentBlockIds: z.array(z.string().uuid()).min(1).max(32),
   kind: z.enum(["column", "bar", "line", "pie"]),
   style: z.object({
-    fontFamily: z.string().min(1), fontSizePt: z.number().positive(), textColor: hexColor,
-    seriesColors: z.array(hexColor).min(1).max(12), showLegend: z.boolean(), showValueLabels: z.boolean(),
+    fontFamily: z.string().min(1),
+    fontSizePt: z.number().positive(),
+    textColor: hexColor,
+    seriesColors: z.array(hexColor).min(1).max(12),
+    showLegend: z.boolean(),
+    showValueLabels: z.boolean(),
   }),
 });
 
@@ -96,13 +126,15 @@ const themeSchema = z.object({
   majorFont: z.string().min(1).max(200),
   minorFont: z.string().min(1).max(200),
   colors: z.array(z.object({ name: z.string().min(1).max(64), value: hexColor })).max(64),
-  textStyles: z.object({
-    display: textStyleTokenSchema.optional(),
-    title: textStyleTokenSchema.optional(),
-    subtitle: textStyleTokenSchema.optional(),
-    body: textStyleTokenSchema.optional(),
-    caption: textStyleTokenSchema.optional(),
-  }).optional(),
+  textStyles: z
+    .object({
+      display: textStyleTokenSchema.optional(),
+      title: textStyleTokenSchema.optional(),
+      subtitle: textStyleTokenSchema.optional(),
+      body: textStyleTokenSchema.optional(),
+      caption: textStyleTokenSchema.optional(),
+    })
+    .optional(),
 });
 
 const slideLayoutSchema = z.object({
@@ -114,19 +146,64 @@ const slideLayoutSchema = z.object({
 const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ id: z.string().uuid(), type: z.literal("paragraph"), text: z.string().max(20_000) }),
   z.object({ id: z.string().uuid(), type: z.literal("bullet-list"), items: z.array(z.string().max(2_000)).max(100) }),
-  z.object({ id: z.string().uuid(), type: z.literal("quote"), text: z.string().max(20_000), attribution: z.string().max(500).optional() }),
-  z.object({ id: z.string().uuid(), type: z.literal("metric"), label: z.string().max(1_000), value: z.string().max(1_000) }),
-  z.object({ id: z.string().uuid(), type: z.literal("timeline"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
-  z.object({ id: z.string().uuid(), type: z.literal("comparison"), leftLabel: z.string().max(1_000), rightLabel: z.string().max(1_000), leftItems: z.array(z.string().max(2_000)).max(50), rightItems: z.array(z.string().max(2_000)).max(50) }),
-  z.object({ id: z.string().uuid(), type: z.literal("process"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
-  z.object({ id: z.string().uuid(), type: z.literal("table-data"), header: z.array(z.string().max(200)).min(1).max(TABLE_MAX_COLUMNS), rows: z.array(z.array(z.string().max(500)).min(1).max(TABLE_MAX_COLUMNS)).min(1).max(TABLE_MAX_ROWS) }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("quote"),
+    text: z.string().max(20_000),
+    attribution: z.string().max(500).optional(),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("metric"),
+    label: z.string().max(1_000),
+    value: z.string().max(1_000),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("timeline"),
+    items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("comparison"),
+    leftLabel: z.string().max(1_000),
+    rightLabel: z.string().max(1_000),
+    leftItems: z.array(z.string().max(2_000)).max(50),
+    rightItems: z.array(z.string().max(2_000)).max(50),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("process"),
+    items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal("table-data"),
+    header: z.array(z.string().max(200)).min(1).max(TABLE_MAX_COLUMNS),
+    rows: z
+      .array(z.array(z.string().max(500)).min(1).max(TABLE_MAX_COLUMNS))
+      .min(1)
+      .max(TABLE_MAX_ROWS),
+  }),
 ]);
 
 const slideSchema = z.object({
   id: z.string().uuid(),
   background: z.string(),
-  content: z.object({ title: z.string(), body: z.string(), blocks: z.array(contentBlockSchema).max(64).optional(), speakerNotes: z.string(), status: z.enum(["draft", "review", "approved", "changed", "needs_review"]), contentHash: z.string().regex(/^[0-9a-f]{16}$/).optional() }),
-  elements: z.array(z.discriminatedUnion("type", [textElement, shapeElement, imageElement, chartElement, tableElement])),
+  content: z.object({
+    title: z.string(),
+    body: z.string(),
+    blocks: z.array(contentBlockSchema).max(64).optional(),
+    speakerNotes: z.string(),
+    status: z.enum(["draft", "review", "approved", "changed", "needs_review"]),
+    contentHash: z
+      .string()
+      .regex(/^[0-9a-f]{16}$/)
+      .optional(),
+  }),
+  elements: z.array(
+    z.discriminatedUnion("type", [textElement, shapeElement, imageElement, chartElement, tableElement]),
+  ),
   layoutId: z.string().uuid().optional(),
 });
 
@@ -135,7 +212,11 @@ const baseDocumentSchema = z.object({
   schemaVersion: z.number().int(),
   title: z.string().min(1),
   pageSize: z.object({ width: positiveEmu, height: positiveEmu }),
-  revisions: z.object({ document: z.number().int().nonnegative(), content: z.number().int().nonnegative(), design: z.number().int().nonnegative() }),
+  revisions: z.object({
+    document: z.number().int().nonnegative(),
+    content: z.number().int().nonnegative(),
+    design: z.number().int().nonnegative(),
+  }),
   slides: z.array(slideSchema).min(1),
   theme: themeSchema.optional(),
   layouts: z.array(slideLayoutSchema).max(200).optional(),
@@ -148,12 +229,20 @@ function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): v
   const elementIds = new Set<string>();
   for (const [slideIndex, slide] of document.slides.entries()) {
     if (slideIds.has(slide.id)) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["slides", slideIndex, "id"], message: "DUPLICATE_SLIDE_ID" });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["slides", slideIndex, "id"],
+        message: "DUPLICATE_SLIDE_ID",
+      });
     }
     slideIds.add(slide.id);
     for (const [elementIndex, element] of slide.elements.entries()) {
       if (elementIds.has(element.id)) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ["slides", slideIndex, "elements", elementIndex, "id"], message: "DUPLICATE_ELEMENT_ID" });
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slides", slideIndex, "elements", elementIndex, "id"],
+          message: "DUPLICATE_ELEMENT_ID",
+        });
       }
       elementIds.add(element.id);
     }
@@ -164,7 +253,11 @@ function validateLayoutReferences(document: DocumentShape, context: z.Refinement
   const layoutIds = new Set((document.layouts ?? []).map((layout) => layout.id));
   for (const [slideIndex, slide] of document.slides.entries()) {
     if (slide.layoutId && !layoutIds.has(slide.layoutId)) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["slides", slideIndex, "layoutId"], message: "UNKNOWN_SLIDE_LAYOUT" });
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["slides", slideIndex, "layoutId"],
+        message: "UNKNOWN_SLIDE_LAYOUT",
+      });
     }
   }
 }

@@ -6,7 +6,7 @@
  * 这种页面一眼看上去就是机器排的：全篇的标点宽度不统一，中英文之间没有
  * 呼吸感，是"AI PPT 一眼假"里最容易被忽略却最扎眼的一项。
  *
- * 规范化不是无脑替换。英文句子里��数字千分位里的半角逗号必须原样保留：
+ * 规范化不是无脑替换。英文句子里和数字千分位里的半角逗号必须原样保留：
  * "12,345" 不是标点，"Revenue, net" 也不是。判断依据是**相邻字符**：
  * 半角标点的两侧只要有一侧是中文，它就是中文语境里的标点，该转全角；
  * 两侧都是拉丁字母或数字，它就是西文语境里的标点，不该动。
@@ -26,11 +26,7 @@ const PAIRS = lexicon.punctuation.pairs as Record<string, string>;
 /** 是不是中文字符（含中日韩统一表意文字与扩展 A）。 */
 function isCjk(character: string): boolean {
   const code = character.codePointAt(0) ?? 0;
-  return (
-    (code >= 0x4e00 && code <= 0x9fff) ||
-    (code >= 0x3400 && code <= 0x4dbf) ||
-    (code >= 0xf900 && code <= 0xfaff)
-  );
+  return (code >= 0x4e00 && code <= 0x9fff) || (code >= 0x3400 && code <= 0x4dbf) || (code >= 0xf900 && code <= 0xfaff);
 }
 
 /**

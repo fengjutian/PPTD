@@ -8,16 +8,53 @@ import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
 
-export const narrativeStrategySchema = z.enum(["management-report", "proposal", "retrospective", "training", "product-launch", "fundraising", "general"]);
+export const narrativeStrategySchema = z.enum([
+  "management-report",
+  "proposal",
+  "retrospective",
+  "training",
+  "product-launch",
+  "fundraising",
+  "general",
+]);
 export const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("paragraph"), text: z.string().min(1).max(2000) }),
   z.object({ type: z.literal("bullet-list"), items: z.array(z.string().min(1).max(500)).min(1).max(12) }),
-  z.object({ type: z.literal("quote"), text: z.string().min(1).max(2000), attribution: z.string().max(300).optional() }),
+  z.object({
+    type: z.literal("quote"),
+    text: z.string().min(1).max(2000),
+    attribution: z.string().max(300).optional(),
+  }),
   z.object({ type: z.literal("metric"), label: z.string().min(1).max(300), value: z.string().min(1).max(100) }),
-  z.object({ type: z.literal("timeline"), items: z.array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) })).min(1).max(10) }),
-  z.object({ type: z.literal("comparison"), leftLabel: z.string().min(1).max(100), rightLabel: z.string().min(1).max(100), leftItems: z.array(z.string().min(1).max(500)).max(8), rightItems: z.array(z.string().min(1).max(500)).max(8) }),
-  z.object({ type: z.literal("process"), items: z.array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) })).min(1).max(10) }),
-  z.object({ type: z.literal("table-data"), header: z.array(z.string().min(1).max(100)).min(1).max(10), rows: z.array(z.array(z.string().max(500)).max(10)).min(1).max(20) }),
+  z.object({
+    type: z.literal("timeline"),
+    items: z
+      .array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) }))
+      .min(1)
+      .max(10),
+  }),
+  z.object({
+    type: z.literal("comparison"),
+    leftLabel: z.string().min(1).max(100),
+    rightLabel: z.string().min(1).max(100),
+    leftItems: z.array(z.string().min(1).max(500)).max(8),
+    rightItems: z.array(z.string().min(1).max(500)).max(8),
+  }),
+  z.object({
+    type: z.literal("process"),
+    items: z
+      .array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) }))
+      .min(1)
+      .max(10),
+  }),
+  z.object({
+    type: z.literal("table-data"),
+    header: z.array(z.string().min(1).max(100)).min(1).max(10),
+    rows: z
+      .array(z.array(z.string().max(500)).max(10))
+      .min(1)
+      .max(20),
+  }),
 ]);
 /**
  * 一页想配什么图。
@@ -38,15 +75,60 @@ export type AiVisualAssetIntent = z.infer<typeof visualAssetIntentSchema>;
 const slidePlanSchema = z.object({
   purpose: z.string().min(1).max(300),
   conclusion: z.string().min(1).max(300),
-  visualIntent: z.enum(["hero", "quote", "timeline", "comparison", "process", "data-chart", "image-story", "summary", "structured-text"]),
+  visualIntent: z.enum([
+    "hero",
+    "quote",
+    "timeline",
+    "comparison",
+    "process",
+    "data-chart",
+    "image-story",
+    "summary",
+    "structured-text",
+  ]),
   density: z.enum(["low", "medium", "high"]),
   visualAsset: visualAssetIntentSchema.optional(),
 });
-const legacySlidePlan = { purpose: "传达本页已审核内容", conclusion: "以本页标题和正文为准", visualIntent: "structured-text" as const, density: "medium" as const };
+const legacySlidePlan = {
+  purpose: "传达本页已审核内容",
+  conclusion: "以本页标题和正文为准",
+  visualIntent: "structured-text" as const,
+  density: "medium" as const,
+};
 export const aiDraftSchema = z.object({
   title: z.string().min(1).max(200),
-  presentationBrief: z.object({ objective: z.string().min(1).max(500), audience: z.string().min(1).max(300), scenario: z.string().min(1).max(300), expectedAction: z.string().min(1).max(500), coreConclusion: z.string().min(1).max(500), narrativeStrategy: narrativeStrategySchema, assumptions: z.array(z.string().max(500)).max(10) }).default({ objective: "清晰传达演示主题", audience: "未指定受众", scenario: "通用演示", expectedAction: "理解演示内容", coreConclusion: "以演示文稿标题和逐页内容为准", narrativeStrategy: "general", assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"] }),
-  slides: z.array(z.object({ id: z.string().min(1).optional(), title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), reviewed: z.boolean().optional(), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1),
+  presentationBrief: z
+    .object({
+      objective: z.string().min(1).max(500),
+      audience: z.string().min(1).max(300),
+      scenario: z.string().min(1).max(300),
+      expectedAction: z.string().min(1).max(500),
+      coreConclusion: z.string().min(1).max(500),
+      narrativeStrategy: narrativeStrategySchema,
+      assumptions: z.array(z.string().max(500)).max(10),
+    })
+    .default({
+      objective: "清晰传达演示主题",
+      audience: "未指定受众",
+      scenario: "通用演示",
+      expectedAction: "理解演示内容",
+      coreConclusion: "以演示文稿标题和逐页内容为准",
+      narrativeStrategy: "general",
+      assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"],
+    }),
+  slides: z
+    .array(
+      z.object({
+        id: z.string().min(1).optional(),
+        title: z.string().min(1).max(200),
+        body: z.string().max(4000),
+        speakerNotes: z.string().max(4000),
+        reviewed: z.boolean().optional(),
+        plan: slidePlanSchema.default(legacySlidePlan),
+        blocks: z.array(contentBlockSchema).max(20).default([]),
+      }),
+    )
+    .min(1),
 });
 export type AiDraft = z.infer<typeof aiDraftSchema>;
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
@@ -54,20 +136,66 @@ export type ContentBlock = z.infer<typeof contentBlockSchema>;
 /** 大纲阶段只产出标题与简报，正文由分批阶段补齐。 */
 export const aiOutlineSchema = z.object({
   title: z.string().min(1).max(200),
-  presentationBrief: z.object({ objective: z.string().min(1).max(500), audience: z.string().min(1).max(300), scenario: z.string().min(1).max(300), expectedAction: z.string().min(1).max(500), coreConclusion: z.string().min(1).max(500), narrativeStrategy: narrativeStrategySchema, assumptions: z.array(z.string().max(500)).max(10) }).default({ objective: "清晰传达演示主题", audience: "未指定受众", scenario: "通用演示", expectedAction: "理解演示内容", coreConclusion: "以演示文稿标题和逐页内容为准", narrativeStrategy: "general", assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"] }),
-  pages: z.array(z.object({ index: z.number().int().min(0), title: z.string().min(1).max(200), purpose: z.string().min(1).max(300) })).min(1),
+  presentationBrief: z
+    .object({
+      objective: z.string().min(1).max(500),
+      audience: z.string().min(1).max(300),
+      scenario: z.string().min(1).max(300),
+      expectedAction: z.string().min(1).max(500),
+      coreConclusion: z.string().min(1).max(500),
+      narrativeStrategy: narrativeStrategySchema,
+      assumptions: z.array(z.string().max(500)).max(10),
+    })
+    .default({
+      objective: "清晰传达演示主题",
+      audience: "未指定受众",
+      scenario: "通用演示",
+      expectedAction: "理解演示内容",
+      coreConclusion: "以演示文稿标题和逐页内容为准",
+      narrativeStrategy: "general",
+      assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"],
+    }),
+  pages: z
+    .array(
+      z.object({
+        index: z.number().int().min(0),
+        title: z.string().min(1).max(200),
+        purpose: z.string().min(1).max(300),
+      }),
+    )
+    .min(1),
 });
 export type AiOutline = z.infer<typeof aiOutlineSchema>;
 
 export const aiSlideBatchSchema = z.object({
-  slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1),
+  slides: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(200),
+        body: z.string().max(4000),
+        speakerNotes: z.string().max(4000),
+        plan: slidePlanSchema.default(legacySlidePlan),
+        blocks: z.array(contentBlockSchema).max(20).default([]),
+      }),
+    )
+    .min(1),
 });
 export type AiSlideBatch = z.infer<typeof aiSlideBatchSchema>;
 export const slideBriefSchema = z.object({
   slideIndex: z.number().int().min(0),
   purpose: z.string().min(1).max(300),
   conclusion: z.string().min(1).max(300),
-  visualIntent: z.enum(["hero", "quote", "timeline", "comparison", "process", "data-chart", "image-story", "summary", "structured-text"]),
+  visualIntent: z.enum([
+    "hero",
+    "quote",
+    "timeline",
+    "comparison",
+    "process",
+    "data-chart",
+    "image-story",
+    "summary",
+    "structured-text",
+  ]),
   density: z.enum(["low", "medium", "high"]),
 });
 export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).min(1) });
@@ -76,46 +204,64 @@ export type SlideBrief = z.infer<typeof slideBriefSchema>;
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
   return draft.slides.map((slide, slideIndex) => ({ slideIndex, ...slide.plan }));
 }
-const aiPaletteRoleSchema = z.enum(["surface", "surface-alt", "accent-1", "accent-2", "accent-3", "primary", "secondary", "inverse", "template-default"]);
+const aiPaletteRoleSchema = z.enum([
+  "surface",
+  "surface-alt",
+  "accent-1",
+  "accent-2",
+  "accent-3",
+  "primary",
+  "secondary",
+  "inverse",
+  "template-default",
+]);
 export const aiPresentationDesignSchema = z.object({
-  slides: z.array(z.object({
-    layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
-    background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-    accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-    titleColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-    bodyColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-    /**
-     * The composition family of the page. The renderer checks the request
-     * against the reviewed content, so an impossible request is refused
-     * instead of producing a page that cannot carry its own content.
-     */
-    composition: z.enum(["auto", "stacked", "columns", "grid", "editorial"]).optional(),
-    /** Which level of the hierarchy carries the weight of the page. */
-    emphasis: z.enum(["balanced", "title-dominant", "body-dominant"]).optional(),
-    /** How much white space the page is willing to spend. */
-    densityTarget: z.enum(["airy", "balanced", "compact"]).optional(),
-    /**
-     * The slots of the template palette the page paints itself with. The model
-     * picks a slot instead of a colour value, so the deck stays inside the
-     * palette of its template and the choice still has an effect.
-     */
-    palette: z.object({
-      background: aiPaletteRoleSchema.optional(),
-      accent: aiPaletteRoleSchema.optional(),
-      title: aiPaletteRoleSchema.optional(),
-      body: aiPaletteRoleSchema.optional(),
-    }).optional(),
-    /**
-     * Whether this page carries a picture. The model says yes or no and
-     * describes the picture; the renderer decides where it goes.
-     */
-    visualAsset: z.object({
-      enabled: z.boolean(),
-      /** What the picture shows. It describes the scene, never the wording. */
-      prompt: z.string().max(600).optional(),
-      role: z.enum(["hero", "side", "band"]).optional(),
-    }).optional(),
-  })).min(1),
+  slides: z
+    .array(
+      z.object({
+        layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
+        background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+        accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+        titleColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+        bodyColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+        /**
+         * The composition family of the page. The renderer checks the request
+         * against the reviewed content, so an impossible request is refused
+         * instead of producing a page that cannot carry its own content.
+         */
+        composition: z.enum(["auto", "stacked", "columns", "grid", "editorial"]).optional(),
+        /** Which level of the hierarchy carries the weight of the page. */
+        emphasis: z.enum(["balanced", "title-dominant", "body-dominant"]).optional(),
+        /** How much white space the page is willing to spend. */
+        densityTarget: z.enum(["airy", "balanced", "compact"]).optional(),
+        /**
+         * The slots of the template palette the page paints itself with. The model
+         * picks a slot instead of a colour value, so the deck stays inside the
+         * palette of its template and the choice still has an effect.
+         */
+        palette: z
+          .object({
+            background: aiPaletteRoleSchema.optional(),
+            accent: aiPaletteRoleSchema.optional(),
+            title: aiPaletteRoleSchema.optional(),
+            body: aiPaletteRoleSchema.optional(),
+          })
+          .optional(),
+        /**
+         * Whether this page carries a picture. The model says yes or no and
+         * describes the picture; the renderer decides where it goes.
+         */
+        visualAsset: z
+          .object({
+            enabled: z.boolean(),
+            /** What the picture shows. It describes the scene, never the wording. */
+            prompt: z.string().max(600).optional(),
+            role: z.enum(["hero", "side", "band"]).optional(),
+          })
+          .optional(),
+      }),
+    )
+    .min(1),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
 type AiLayoutKind = z.infer<typeof aiPresentationDesignSchema>["slides"][number]["layout"];
@@ -133,7 +279,10 @@ const intentLayouts: Record<SlideBrief["visualIntent"], AiLayoutKind> = {
 
 /** Splits reviewed body copy into the visual units the page actually carries. */
 export function splitBodyItems(body: string): string[] {
-  return body.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((value) => value.trim()).filter(Boolean);
+  return body
+    .split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/)
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -166,7 +315,12 @@ export function chooseSlideLayout(input: {
   // here also prevents the hero intent from being converted to a section page,
   // which used to dump the whole list into one small text box.
   if (input.index === 0) {
-    if (items.length <= LAYOUT_CAPACITY.coverMaxItems && input.body.trim().length <= LAYOUT_CAPACITY.coverBodyLength && !hasBlock("quote")) return "cover";
+    if (
+      items.length <= LAYOUT_CAPACITY.coverMaxItems &&
+      input.body.trim().length <= LAYOUT_CAPACITY.coverBodyLength &&
+      !hasBlock("quote")
+    )
+      return "cover";
     if (hasBlock("quote") && items.length < LAYOUT_CAPACITY.cardsGridMinItems) return "quote";
     if (items.length >= LAYOUT_CAPACITY.cardsGridMinItems) return "cards";
     if (items.length === LAYOUT_CAPACITY.splitMinItems) return "split";
@@ -187,28 +341,74 @@ export function chooseSlideLayout(input: {
   else if (hasBlock("comparison")) layout = "split";
   else if (hasCardBlock) layout = "cards";
   if (layout === "quote" && input.density === "high" && !hasBlock("quote")) layout = "title-body";
-  if (layout === "split" && items.length < LAYOUT_CAPACITY.splitMinItems && !hasBlock("comparison")) layout = "title-body";
-  if (layout === "cards" && !hasCardBlock && (items.length < LAYOUT_CAPACITY.cardsMinItems || items.length > LAYOUT_CAPACITY.cardsMaxItems || longestItem > LAYOUT_CAPACITY.cardItemLengthLimit || input.body.length > LAYOUT_CAPACITY.cardBodyLengthLimit)) {
-    layout = items.length >= LAYOUT_CAPACITY.splitMinItems && items.length <= LAYOUT_CAPACITY.splitMaxItems && input.body.length <= LAYOUT_CAPACITY.splitBodyLength ? "split" : "title-body";
+  if (layout === "split" && items.length < LAYOUT_CAPACITY.splitMinItems && !hasBlock("comparison"))
+    layout = "title-body";
+  if (
+    layout === "cards" &&
+    !hasCardBlock &&
+    (items.length < LAYOUT_CAPACITY.cardsMinItems ||
+      items.length > LAYOUT_CAPACITY.cardsMaxItems ||
+      longestItem > LAYOUT_CAPACITY.cardItemLengthLimit ||
+      input.body.length > LAYOUT_CAPACITY.cardBodyLengthLimit)
+  ) {
+    layout =
+      items.length >= LAYOUT_CAPACITY.splitMinItems &&
+      items.length <= LAYOUT_CAPACITY.splitMaxItems &&
+      input.body.length <= LAYOUT_CAPACITY.splitBodyLength
+        ? "split"
+        : "title-body";
   }
   if (layout === "title-body" && items.length >= LAYOUT_CAPACITY.splitMinItems) {
-    const cardEligible = items.length >= LAYOUT_CAPACITY.cardsGridMinItems && items.length <= LAYOUT_CAPACITY.cardsMaxItems && longestItem <= LAYOUT_CAPACITY.cardItemLength && input.body.length <= LAYOUT_CAPACITY.cardBodyLength;
+    const cardEligible =
+      items.length >= LAYOUT_CAPACITY.cardsGridMinItems &&
+      items.length <= LAYOUT_CAPACITY.cardsMaxItems &&
+      longestItem <= LAYOUT_CAPACITY.cardItemLength &&
+      input.body.length <= LAYOUT_CAPACITY.cardBodyLength;
     layout = cardEligible ? "cards" : "split";
   }
   return layout;
 }
 
-export interface DesignTemplateContext { slideWidthEmu: number | null; slideHeightEmu: number | null; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }>; layouts: Array<{ index: number; name: string; backgroundColor: string | null; regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }> }> }
+export interface DesignTemplateContext {
+  slideWidthEmu: number | null;
+  slideHeightEmu: number | null;
+  themeColors: Array<{ name: string; value: string }>;
+  majorFont: string | null;
+  minorFont: string | null;
+  defaultBackgroundColor: string | null;
+  slides: Array<{
+    index: number;
+    title: string;
+    textCount: number;
+    imageCount: number;
+    shapeCount: number;
+    layout: string | null;
+    backgroundColor: string | null;
+    regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }>;
+  }>;
+  layouts: Array<{
+    index: number;
+    name: string;
+    backgroundColor: string | null;
+    regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }>;
+  }>;
+}
 
 function colorLuminance(hex: string): number {
-  const channels = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((value) => Number.parseInt(value, 16) / 255).map((value) => value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  const channels = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)]
+    .map((value) => Number.parseInt(value, 16) / 255)
+    .map((value) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
   return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
 }
 
 /** Blends `foreground` towards `background` so body copy can step back one level. */
 function mixColor(foreground: string, background: string, amount: number): string {
-  const first = [foreground.slice(1, 3), foreground.slice(3, 5), foreground.slice(5, 7)].map((value) => Number.parseInt(value, 16));
-  const second = [background.slice(1, 3), background.slice(3, 5), background.slice(5, 7)].map((value) => Number.parseInt(value, 16));
+  const first = [foreground.slice(1, 3), foreground.slice(3, 5), foreground.slice(5, 7)].map((value) =>
+    Number.parseInt(value, 16),
+  );
+  const second = [background.slice(1, 3), background.slice(3, 5), background.slice(5, 7)].map((value) =>
+    Number.parseInt(value, 16),
+  );
   if ([...first, ...second].some((value) => !Number.isFinite(value))) return foreground;
   const blended = first.map((channel, index) => Math.round(channel + (second[index]! - channel) * amount));
   return `#${blended.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
@@ -244,7 +444,11 @@ function templatePalette(template: DesignTemplateContext): TemplatePalette {
   const light = colors.get("lt1") ?? colors.get("lt2");
   const dark = colors.get("dk1") ?? colors.get("dk2");
   const rawBackground = template.defaultBackgroundColor;
-  const background = rawBackground?.startsWith("#") ? rawBackground.toUpperCase() : rawBackground ? colors.get(rawBackground.toLowerCase()) ?? light ?? "#FFFFFF" : light ?? "#FFFFFF";
+  const background = rawBackground?.startsWith("#")
+    ? rawBackground.toUpperCase()
+    : rawBackground
+      ? (colors.get(rawBackground.toLowerCase()) ?? light ?? "#FFFFFF")
+      : (light ?? "#FFFFFF");
   const foreground = dark ?? (colorLuminance(background) > 0.45 ? "#1F2937" : "#FFFFFF");
   return {
     background,
@@ -264,7 +468,7 @@ function templatePalette(template: DesignTemplateContext): TemplatePalette {
  */
 function deriveInk(palette: TemplatePalette, background: string): DerivedInk {
   const onLight = (colorLuminance(background) ?? 1) > 0.45;
-  const ink = onLight ? palette.primary : palette.surfaces[0] ?? "#FFFFFF";
+  const ink = onLight ? palette.primary : (palette.surfaces[0] ?? "#FFFFFF");
   return { ink, secondary: mixColor(ink, background, onLight ? 0.22 : 0.16) };
 }
 
@@ -310,12 +514,16 @@ function roleColor(role: AiPaletteRole | undefined, palette: TemplatePalette, de
  * picks no slot keeps the colours of the template, which is what the previous
  * behaviour did.
  */
-export function constrainDesignToTemplate(design: AiPresentationDesign, template: DesignTemplateContext): AiPresentationDesign {
+export function constrainDesignToTemplate(
+  design: AiPresentationDesign,
+  template: DesignTemplateContext,
+): AiPresentationDesign {
   const palette = templatePalette(template);
   if (!palette.hasColors) return design;
   return {
     slides: design.slides.map((slide) => {
-      const background = roleColor(slide.palette?.background, palette, deriveInk(palette, palette.background)) ?? palette.background;
+      const background =
+        roleColor(slide.palette?.background, palette, deriveInk(palette, palette.background)) ?? palette.background;
       // The inks are derived from the background the page actually uses, not
       // from the background the template defaults to.
       const derived = deriveInk(palette, background);
@@ -325,8 +533,10 @@ export function constrainDesignToTemplate(design: AiPresentationDesign, template
       // mistake, so it falls back to the ink that reads.
       const chosenTitle = roleColor(slide.palette?.title, palette, derived);
       const chosenBody = roleColor(slide.palette?.body, palette, derived);
-      const titleColor = chosenTitle && (colorContrastRatio(chosenTitle, background) ?? 0) >= 4.5 ? chosenTitle : derived.ink;
-      const bodyColor = chosenBody && (colorContrastRatio(chosenBody, background) ?? 0) >= 4.5 ? chosenBody : derived.secondary;
+      const titleColor =
+        chosenTitle && (colorContrastRatio(chosenTitle, background) ?? 0) >= 4.5 ? chosenTitle : derived.ink;
+      const bodyColor =
+        chosenBody && (colorContrastRatio(chosenBody, background) ?? 0) >= 4.5 ? chosenBody : derived.secondary;
       return { ...slide, background, accent, titleColor, bodyColor };
     }),
   };
@@ -339,15 +549,28 @@ async function aiSelection(): Promise<{ provider: string; model: string }> {
 
 export function describeAiError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
-  if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED")) return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
-  if (detail.includes("AI_VISION_REVIEW_FAILED")) return `视觉评审不可用：${detail.split(":").slice(1).join(":").trim() || "模型未返回可用结果"}。已跳过视觉评审，改用确定性校验。`;
+  if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED"))
+    return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
+  if (detail.includes("AI_VISION_REVIEW_FAILED"))
+    return `视觉评审不可用：${detail.split(":").slice(1).join(":").trim() || "模型未返回可用结果"}。已跳过视觉评审，改用确定性校验。`;
   if (detail.includes("AI_REQUEST_CANCELLED") || detail.includes("AI_GENERATION_CANCELLED")) return "已取消本次生成";
   if (detail.includes("AI_REQUEST_TIMEOUT")) return "AI 生成超时，请减少页数后重试";
   if (detail.includes("AI_PROVIDER_BUSY")) return "AI 服务当前繁忙，系统已自动重试，请稍后再次生成";
-  if (detail.includes("AI_PROVIDER_HTTP_ERROR:401") || detail.includes("AI_PROVIDER_HTTP_ERROR:403") || detail.includes("AI_API_KEY_MISSING")) return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
+  if (
+    detail.includes("AI_PROVIDER_HTTP_ERROR:401") ||
+    detail.includes("AI_PROVIDER_HTTP_ERROR:403") ||
+    detail.includes("AI_API_KEY_MISSING")
+  )
+    return "AI 服务凭据无效或未配置，请在设置中检查 API Key";
   if (detail.includes("AI_PROVIDER_HTTP_ERROR:429")) return "AI 请求过于频繁，请稍后再试";
   if (detail.includes("timed out") || detail.includes("REQUEST_FAILED")) return "AI 服务连接超时，请检查网络后重试";
-  if (detail.includes("JSON_INVALID") || detail.includes("RESPONSE_INVALID") || detail.includes("EMPTY_RESPONSE") || detail.includes("ZodError")) return "AI 返回的数据格式不符合要求，请重新生成";
+  if (
+    detail.includes("JSON_INVALID") ||
+    detail.includes("RESPONSE_INVALID") ||
+    detail.includes("EMPTY_RESPONSE") ||
+    detail.includes("ZodError")
+  )
+    return "AI 返回的数据格式不符合要求，请重新生成";
   return detail;
 }
 
@@ -374,7 +597,9 @@ export interface AiGenerationStreamProgress {
  *
  * 返回的取消函数必须在生成结束时调用，否则监听会一直挂着。
  */
-export function listenAiGenerationProgress(handler: (progress: AiGenerationStreamProgress) => void): Promise<UnlistenFn> {
+export function listenAiGenerationProgress(
+  handler: (progress: AiGenerationStreamProgress) => void,
+): Promise<UnlistenFn> {
   return listen<AiGenerationStreamProgress>("ai-generation-progress", (event) => handler(event.payload));
 }
 
@@ -422,11 +647,17 @@ function assertNotCancelled(options: AiGenerationOptions): void {
  * 草稿重写一遍，用户等待时间成倍放大。因此页数较多时改为"先出大纲、再分批写
  * 正文"：大纲输出很小，几秒内返回；正文分批并行，墙钟时间接近单批耗时。
  */
-export async function generatePresentationDraft(topic: string, slideCount: number, options: AiGenerationOptions = {}): Promise<AiDraft> {
+export async function generatePresentationDraft(
+  topic: string,
+  slideCount: number,
+  options: AiGenerationOptions = {},
+): Promise<AiDraft> {
   const { provider, model } = await aiSelection();
   if (slideCount <= SINGLE_CALL_PAGE_LIMIT) {
     options.onProgress?.({ stage: "content", completed: 0, total: 1, label: "正在生成演示草稿…" });
-    const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true } });
+    const raw = await invoke<unknown>("generate_presentation", {
+      request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true },
+    });
     const draft = aiDraftSchema.parse(raw);
     if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
     options.onProgress?.({ stage: "content", completed: 1, total: 1, label: "草稿已生成" });
@@ -435,7 +666,9 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   }
 
   options.onProgress?.({ stage: "outline", completed: 0, total: 1, label: "正在规划演示大纲…" });
-  const outlineRaw = await invoke<unknown>("generate_presentation_outline", { request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true } });
+  const outlineRaw = await invoke<unknown>("generate_presentation_outline", {
+    request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true },
+  });
   const outline = aiOutlineSchema.parse(outlineRaw);
   if (outline.pages.length !== slideCount) throw new Error("AI_OUTLINE_PAGE_COUNT_MISMATCH");
   assertNotCancelled(options);
@@ -454,14 +687,32 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   for (let offset = 0; offset < batches.length; offset += concurrency) {
     assertNotCancelled(options);
     const group = batches.slice(offset, offset + concurrency);
-    const results = await Promise.all(group.map(async (batch) => {
-      const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider, taskId: options.taskId, streamProgress: true } });
-      const parsed = aiSlideBatchSchema.parse(raw);
-      if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
-      completed += 1;
-      options.onProgress?.({ stage: "content", completed, total: batches.length, label: `正在生成正文（${completed}/${batches.length} 批）` });
-      return parsed.slides;
-    }));
+    const results = await Promise.all(
+      group.map(async (batch) => {
+        const raw = await invoke<unknown>("generate_presentation_slides_batch", {
+          request: {
+            topic,
+            outline,
+            startIndex: batch.startIndex,
+            count: batch.count,
+            model,
+            provider,
+            taskId: options.taskId,
+            streamProgress: true,
+          },
+        });
+        const parsed = aiSlideBatchSchema.parse(raw);
+        if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
+        completed += 1;
+        options.onProgress?.({
+          stage: "content",
+          completed,
+          total: batches.length,
+          label: `正在生成正文（${completed}/${batches.length} 批）`,
+        });
+        return parsed.slides;
+      }),
+    );
     batchResults.push(...results);
   }
 
@@ -494,7 +745,8 @@ export async function generateSlideBriefs(draft: AiDraft, taskId?: number): Prom
   const { provider, model } = await aiSelection();
   const raw = await invoke<unknown>("generate_slide_briefs", { request: { draft, model, provider, taskId } });
   const result = slideBriefsSchema.parse(raw);
-  if (result.briefs.length !== draft.slides.length || result.briefs.some((brief, index) => brief.slideIndex !== index)) throw new Error("AI_BRIEF_SLIDE_MISMATCH");
+  if (result.briefs.length !== draft.slides.length || result.briefs.some((brief, index) => brief.slideIndex !== index))
+    throw new Error("AI_BRIEF_SLIDE_MISMATCH");
   return result.briefs;
 }
 
@@ -504,35 +756,47 @@ export interface AiPresentationDesignOptions {
   taskId?: number;
 }
 
-export async function generatePresentationDesign(draft: AiDraft, briefs: SlideBrief[], template: DesignTemplateContext, options: AiPresentationDesignOptions = {}): Promise<AiPresentationDesign> {
+export async function generatePresentationDesign(
+  draft: AiDraft,
+  briefs: SlideBrief[],
+  template: DesignTemplateContext,
+  options: AiPresentationDesignOptions = {},
+): Promise<AiPresentationDesign> {
   const { provider, model } = await aiSelection();
   const visualGoal = options.visualGoal ?? defaultPresentationVisualGoal();
-  const raw = await invoke<unknown>("generate_presentation_design", { request: { draft, briefs, template, visualGoal, model, provider, taskId: options.taskId } });
+  const raw = await invoke<unknown>("generate_presentation_design", {
+    request: { draft, briefs, template, visualGoal, model, provider, taskId: options.taskId },
+  });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
-  return constrainDesignToTemplate({
-    slides: design.slides.map((slide, index) => {
-      const content = draft.slides[index]!;
-      const brief = briefs[index]!;
-      return {
-        ...slide,
-        layout: chooseSlideLayout({
-          index,
-          requested: slide.layout,
-          visualIntent: brief.visualIntent,
-          density: brief.density,
-          body: content.body,
-          blocks: content.blocks,
-        }),
-      };
-    }),
-  }, template);
+  return constrainDesignToTemplate(
+    {
+      slides: design.slides.map((slide, index) => {
+        const content = draft.slides[index]!;
+        const brief = briefs[index]!;
+        return {
+          ...slide,
+          layout: chooseSlideLayout({
+            index,
+            requested: slide.layout,
+            visualIntent: brief.visualIntent,
+            density: brief.density,
+            body: content.body,
+            blocks: content.blocks,
+          }),
+        };
+      }),
+    },
+    template,
+  );
 }
 
 export const aiKeyConfigured = (providerId: string) => invoke<boolean>("ai_api_key_configured", { providerId });
-export const saveAiKey = (providerId: string, apiKey: string) => invoke<void>("save_ai_api_key", { providerId, apiKey });
+export const saveAiKey = (providerId: string, apiKey: string) =>
+  invoke<void>("save_ai_api_key", { providerId, apiKey });
 export const deleteAiKey = (providerId: string) => invoke<void>("delete_ai_api_key", { providerId });
-export const testAiConnection = (providerId: string, model: string) => invoke<string>("test_ai_connection", { providerId, model });
+export const testAiConnection = (providerId: string, model: string) =>
+  invoke<string>("test_ai_connection", { providerId, model });
 
 /**
  * 取消一个生成任务。

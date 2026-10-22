@@ -23,7 +23,13 @@
           "rotationMilliDegree": 0,
           "locked": false,
           "text": "Fixture",
-          "style": { "fontFamily": "Microsoft YaHei", "fontSizePt": 28, "color": "#17181c", "bold": true, "align": "left" }
+          "style": {
+            "fontFamily": "Microsoft YaHei",
+            "fontSizePt": 28,
+            "color": "#17181c",
+            "bold": true,
+            "align": "left"
+          }
         }
       ]
     }

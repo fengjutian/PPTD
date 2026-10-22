@@ -67,7 +67,9 @@ describe("slide scene", () => {
     const slide = slideWithText();
     const scale = sceneScale(240, PAGE_WIDTH);
     const markup = renderToStaticMarkup(
-      <SlideElementFrame element={slide.elements[0]!} scale={scale}><span /></SlideElementFrame>,
+      <SlideElementFrame element={slide.elements[0]!} scale={scale}>
+        <span />
+      </SlideElementFrame>,
     );
     expect(Number(/left:([\d.]+)px/.exec(markup)![1])).toBeCloseTo(914_400 * scale, 6);
     expect(Number(/top:([\d.]+)px/.exec(markup)![1])).toBeCloseTo(914_400 * scale, 6);

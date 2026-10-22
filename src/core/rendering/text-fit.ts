@@ -62,7 +62,9 @@ export function textLikelyOverflows(element: TextElement): boolean {
   const widthPt = element.frame.width / 12_700;
   const heightPt = element.frame.height / 12_700;
   return (
-    estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) * element.style.fontSizePt * 1.2 >
+    estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) *
+      element.style.fontSizePt *
+      1.2 >
     heightPt * 1.08
   );
 }

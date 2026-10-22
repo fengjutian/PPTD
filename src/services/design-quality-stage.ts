@@ -2,7 +2,12 @@ import { colorLuminance, contrastRatioAgainstLuminance } from "../core/rendering
 import type { AiSlideDesign } from "../core/commands/commands";
 import type { PresentationDocument } from "../core/document-model";
 import { validatePresentationVisualQuality, type PresentationQualityIssue } from "./presentation-quality-gate";
-import { inspectRenderedTextContrast, renderPresentationForVisualReview, type RenderedContrastIssue, type RenderedContrastReport } from "./presentation-renderer";
+import {
+  inspectRenderedTextContrast,
+  renderPresentationForVisualReview,
+  type RenderedContrastIssue,
+  type RenderedContrastReport,
+} from "./presentation-renderer";
 import { runVisualAlignmentLoop, type PresentationVisualGoal, type VisualReview } from "./visual-alignment";
 import type { VisionReviewPort } from "./vision-review-port";
 
@@ -33,7 +38,10 @@ export interface DesignQualityStageOptions {
   /** 采样文字下方真实像素。测试可替换。 */
   inspectContrast?: (document: PresentationDocument) => Promise<RenderedContrastReport>;
   /** 确定性质量门。测试可替换。 */
-  validateQuality?: (document: PresentationDocument, designs: AiSlideDesign[]) => { passed: boolean; issues: PresentationQualityIssue[] };
+  validateQuality?: (
+    document: PresentationDocument,
+    designs: AiSlideDesign[],
+  ) => { passed: boolean; issues: PresentationQualityIssue[] };
 }
 
 export interface DesignQualityStageResult {
@@ -145,7 +153,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
             realRenderFailure = error instanceof Error ? error.message : String(error);
           }
         }
-        const render = real ?? await renderForReview(document);
+        const render = real ?? (await renderForReview(document));
         reviewSource = real ? "真实 PPTX" : "画布预览";
         // 逐页评审按每批 6 页切分。串行会让 20 页文稿排四队带图请求，
         // 每一队都要等上一队跑完；并行后墙钟时间接近单批耗时。
@@ -153,7 +161,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         for (let start = 0; start < render.slides.length; start += REVIEW_BATCH_SIZE) {
           batches.push(render.slides.slice(start, start + REVIEW_BATCH_SIZE).map((_, offset) => start + offset));
         }
-        const reviews = await Promise.all(batches.map((indexes) => options.vision.review(render, goal, indexes, options.taskId)));
+        const reviews = await Promise.all(
+          batches.map((indexes) => options.vision.review(render, goal, indexes, options.taskId)),
+        );
         return mergeReviews(reviews);
       },
       repair: async (current, review, goal) => {
@@ -169,7 +179,12 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         return current.map((slide, slideIndex) => {
           const repair = repairs.get(slideIndex);
           if (!repair) return slide;
-          const backgroundTreatment: AiSlideDesign["backgroundTreatment"] = repair.backgroundAction === "keep" ? "none" : repair.backgroundAction === "simplify" ? "simplify" : "local-scrim";
+          const backgroundTreatment: AiSlideDesign["backgroundTreatment"] =
+            repair.backgroundAction === "keep"
+              ? "none"
+              : repair.backgroundAction === "simplify"
+                ? "simplify"
+                : "local-scrim";
           return {
             ...slide,
             layout: repair.layout ?? slide.layout,
@@ -216,20 +231,32 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let contrast = await inspectContrast(document);
   if (contrast.unreadableSlides.length > 0) {
     degraded = true;
-    notes.push(`第 ${contrast.unreadableSlides.map((index) => index + 1).join("、")} 页底图无法渲染，未做像素对比度检查`);
+    notes.push(
+      `第 ${contrast.unreadableSlides.map((index) => index + 1).join("、")} 页底图无法渲染，未做像素对比度检查`,
+    );
   }
   if (contrast.issues.length > 0) {
     // 修复真正承载文字的那层底图上的墨色。整页盖一层板会抹掉模板设计，
     // 那正是生成稿看起来像白纸的主因。
     const affectedSlides = new Map<number, RenderedContrastIssue[]>();
-    contrast.issues.forEach((issue) => affectedSlides.set(issue.slideIndex, [...(affectedSlides.get(issue.slideIndex) ?? []), issue]));
+    contrast.issues.forEach((issue) =>
+      affectedSlides.set(issue.slideIndex, [...(affectedSlides.get(issue.slideIndex) ?? []), issue]),
+    );
     designs = designs.map((slide, slideIndex) => {
       const issues = affectedSlides.get(slideIndex);
       if (!issues) return slide;
       const luminance = colorLuminance(issues[0]!.backgroundColor) ?? 1;
-      const onDark = (contrastRatioAgainstLuminance("#FFFFFF", luminance) ?? 0) >= (contrastRatioAgainstLuminance("#171A1F", luminance) ?? 0);
+      const onDark =
+        (contrastRatioAgainstLuminance("#FFFFFF", luminance) ?? 0) >=
+        (contrastRatioAgainstLuminance("#171A1F", luminance) ?? 0);
       // 墨色必须压过模板给占位符指定的颜色，否则修复会被模板覆盖，页面依旧不可读。
-      return { ...slide, backgroundTreatment: "none", inkOverride: true, titleColor: onDark ? "#FFFFFF" : "#171A1F", bodyColor: onDark ? "#DCE3EA" : "#3E4650" };
+      return {
+        ...slide,
+        backgroundTreatment: "none",
+        inkOverride: true,
+        titleColor: onDark ? "#FFFFFF" : "#171A1F",
+        bodyColor: onDark ? "#DCE3EA" : "#3E4650",
+      };
     });
     document = options.buildDocument(designs);
     contrast = await inspectContrast(document);
@@ -237,7 +264,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   if (contrast.issues.length > 0) {
     // 仍然不可读：底图在文字下方变化太大，改为给文字块单独加一层底板。
     const stubborn = new Set(contrast.issues.map((issue) => issue.slideIndex));
-    designs = designs.map((slide, slideIndex) => (stubborn.has(slideIndex) ? { ...slide, backgroundTreatment: "local-scrim" } : slide));
+    designs = designs.map((slide, slideIndex) =>
+      stubborn.has(slideIndex) ? { ...slide, backgroundTreatment: "local-scrim" } : slide,
+    );
     document = options.buildDocument(designs);
     contrast = await inspectContrast(document);
   }
@@ -260,9 +289,11 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   const passed = gatePassed && issues.length === 0;
   if (!passed) {
     const pages = [...new Set(issues.map((issue) => issue.slideIndex + 1))].join("、");
-    notes.push(issues.length > 0
-      ? `质量门发现 ${issues.length} 个问题，涉及第 ${pages} 页`
-      : "质量门未能完成检查，问题清单不完整");
+    notes.push(
+      issues.length > 0
+        ? `质量门发现 ${issues.length} 个问题，涉及第 ${pages} 页`
+        : "质量门未能完成检查，问题清单不完整",
+    );
   }
   return { designs, document, notes, issues, passed, degraded };
 }

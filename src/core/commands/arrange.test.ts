@@ -20,10 +20,7 @@ describe("arrange geometry", () => {
   });
 
   it("aligns to the group bounds, not to the page", () => {
-    const frames = [
-      rect(inches(1), inches(1), inches(1), inches(1)),
-      rect(inches(3), inches(4), inches(2), inches(1)),
-    ];
+    const frames = [rect(inches(1), inches(1), inches(1), inches(1)), rect(inches(3), inches(4), inches(2), inches(1))];
     const reference = unionFrame(frames)!;
     const aligned = alignFrames(frames, reference, { horizontal: "left" });
     expect(aligned[0]!.x).toBe(reference.x);
@@ -34,10 +31,7 @@ describe("arrange geometry", () => {
   });
 
   it("aligns the right edges to the group right edge", () => {
-    const frames = [
-      rect(inches(1), inches(1), inches(1), inches(1)),
-      rect(inches(3), inches(4), inches(2), inches(1)),
-    ];
+    const frames = [rect(inches(1), inches(1), inches(1), inches(1)), rect(inches(3), inches(4), inches(2), inches(1))];
     const reference = unionFrame(frames)!;
     const aligned = alignFrames(frames, reference, { horizontal: "right" });
     expect(aligned[0]!.x + aligned[0]!.width).toBe(reference.x + reference.width);
@@ -45,10 +39,7 @@ describe("arrange geometry", () => {
   });
 
   it("centers every element on the group center line", () => {
-    const frames = [
-      rect(inches(1), inches(1), inches(1), inches(1)),
-      rect(inches(3), inches(4), inches(2), inches(1)),
-    ];
+    const frames = [rect(inches(1), inches(1), inches(1), inches(1)), rect(inches(3), inches(4), inches(2), inches(1))];
     const reference = unionFrame(frames)!;
     const aligned = alignFrames(frames, reference, { horizontal: "center" });
     const center = reference.x + Math.round(reference.width / 2);
@@ -77,8 +68,18 @@ describe("arrange geometry", () => {
   });
 
   it("counts overlapping frames as selected", () => {
-    expect(framesIntersect(rect(inches(0), inches(0), inches(1), inches(1)), rect(inches(0.5), inches(0.5), inches(1), inches(1)))).toBe(true);
-    expect(framesIntersect(rect(inches(0), inches(0), inches(1), inches(1)), rect(inches(2), inches(2), inches(1), inches(1)))).toBe(false);
+    expect(
+      framesIntersect(
+        rect(inches(0), inches(0), inches(1), inches(1)),
+        rect(inches(0.5), inches(0.5), inches(1), inches(1)),
+      ),
+    ).toBe(true);
+    expect(
+      framesIntersect(
+        rect(inches(0), inches(0), inches(1), inches(1)),
+        rect(inches(2), inches(2), inches(1), inches(1)),
+      ),
+    ).toBe(false);
   });
 
   it("selects every element the marquee touches", () => {

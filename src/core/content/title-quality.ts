@@ -30,11 +30,7 @@ const CONNECTORS: readonly string[] = lexicon.titleRules.connectors;
 const REPEATED_PATTERN_THRESHOLD: number = lexicon.titleRules.repeatedPatternThreshold;
 
 /** 标题的问题分类。 */
-export type TitleIssueKind =
-  | "column-name"
-  | "column-composition"
-  | "question-lead"
-  | "empty-tail";
+export type TitleIssueKind = "column-name" | "column-composition" | "question-lead" | "empty-tail";
 
 /** 一条标题问题的中文说明，用于审核界面。 */
 const ISSUE_LABELS: Record<TitleIssueKind, string> = {
@@ -101,7 +97,9 @@ function normalize(title: string): string {
 /** 标题是不是某个栏目名，或者"栏目名 + 后缀"。 */
 function isColumnName(title: string): boolean {
   if (COLUMN_NAMES.includes(title)) return true;
-  return COLUMN_SUFFIXES.some((suffix) => title.endsWith(suffix) && COLUMN_NAMES.includes(title.slice(0, -suffix.length)));
+  return COLUMN_SUFFIXES.some(
+    (suffix) => title.endsWith(suffix) && COLUMN_NAMES.includes(title.slice(0, -suffix.length)),
+  );
 }
 
 /**

@@ -9,18 +9,44 @@ import { EMU_PER_INCH, resolveTableData, type Slide, type TableElement } from ".
  * reviewed table block of the page, never from a copy inside the element, so
  * the canvas cannot show a cell the content does not carry.
  */
-export function TableView({ element, slide, scale, compact = false }: { element: TableElement; slide: Slide; scale: number; compact?: boolean }) {
+export function TableView({
+  element,
+  slide,
+  scale,
+  compact = false,
+}: {
+  element: TableElement;
+  slide: Slide;
+  scale: number;
+  compact?: boolean;
+}) {
   const resolved = useMemo(() => resolveTableData(slide, element), [slide, element]);
-  const fontSize = Math.max(4, element.style.fontSizePt * scale * EMU_PER_INCH / 72);
+  const fontSize = Math.max(4, (element.style.fontSizePt * scale * EMU_PER_INCH) / 72);
   if (!resolved) {
-    return <div className="table-view table-missing" style={{ fontSize, color: element.style.bodyTextColor }}>表格数据缺失</div>;
+    return (
+      <div className="table-view table-missing" style={{ fontSize, color: element.style.bodyTextColor }}>
+        表格数据缺失
+      </div>
+    );
   }
   return (
-    <table className={`table-view${compact ? " compact" : ""}`} style={{ fontFamily: element.style.fontFamily, fontSize, borderColor: element.style.borderColor }}>
+    <table
+      className={`table-view${compact ? " compact" : ""}`}
+      style={{ fontFamily: element.style.fontFamily, fontSize, borderColor: element.style.borderColor }}
+    >
       <thead>
         <tr>
           {resolved.header.map((cell, index) => (
-            <th key={`${cell}-${index}`} style={{ background: element.style.headerFill, color: element.style.headerTextColor, borderColor: element.style.borderColor }}>{cell}</th>
+            <th
+              key={`${cell}-${index}`}
+              style={{
+                background: element.style.headerFill,
+                color: element.style.headerTextColor,
+                borderColor: element.style.borderColor,
+              }}
+            >
+              {cell}
+            </th>
           ))}
         </tr>
       </thead>

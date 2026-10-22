@@ -1,5 +1,9 @@
 import { TABLE_MAX_COLUMNS } from "../../core/document-model/table-data";
-import { assessLayoutCapacity, type CapacityBlockFacts, type LayoutCapacityNote } from "../../core/commands/layout-capacity";
+import {
+  assessLayoutCapacity,
+  type CapacityBlockFacts,
+  type LayoutCapacityNote,
+} from "../../core/commands/layout-capacity";
 import { describeTitleSkeleton, findRepeatedTitlePatterns, analyzeTitle } from "../../core/content/title-quality";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
 import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
@@ -97,7 +101,9 @@ export function countSlidePoints(slide: DraftSlide): number {
 
 function firstPoint(slide: DraftSlide): string {
   const blocks = sanitizeBlocks(slide.blocks);
-  const bulletList = blocks.find((block): block is Extract<ContentBlock, { type: "bullet-list" }> => block.type === "bullet-list");
+  const bulletList = blocks.find(
+    (block): block is Extract<ContentBlock, { type: "bullet-list" }> => block.type === "bullet-list",
+  );
   const raw = bulletList?.items[0] ?? splitBodyItems(slide.body)[0] ?? "";
   return raw.replace(/^\s*(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*/, "").trim();
 }
@@ -148,11 +154,21 @@ export function slideCapacityNotes(slide: DraftSlide, index: number): SlideCapac
       case "comparison": {
         const leftItems = block.leftItems.filter((item) => item.trim());
         const rightItems = block.rightItems.filter((item) => item.trim());
-        return { index: blockIndex, type: block.type, itemCount: leftItems.length + rightItems.length, leftItems, rightItems };
+        return {
+          index: blockIndex,
+          type: block.type,
+          itemCount: leftItems.length + rightItems.length,
+          leftItems,
+          rightItems,
+        };
       }
       case "timeline":
       case "process":
-        return { index: blockIndex, type: block.type, itemCount: block.items.filter((item) => item.label.trim() || item.text.trim()).length };
+        return {
+          index: blockIndex,
+          type: block.type,
+          itemCount: block.items.filter((item) => item.label.trim() || item.text.trim()).length,
+        };
       default:
         return { index: blockIndex, type: block.type, itemCount: 1 };
     }
@@ -184,7 +200,18 @@ export function missingTitleIndexes(draft: AiDraft): number[] {
   return draft.slides.flatMap((slide, index) => (slide.title.trim() ? [] : [index]));
 }
 
-export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title" | "table-too-large" | "table-ragged" | "templated-title" | "repeated-title-pattern" | "image-text-request" | "image-empty-prompt" | "image-on-structured-page" | "image-over-limit";
+export type ReviewIssueKind =
+  | "missing-title"
+  | "empty-content"
+  | "duplicate-title"
+  | "table-too-large"
+  | "table-ragged"
+  | "templated-title"
+  | "repeated-title-pattern"
+  | "image-text-request"
+  | "image-empty-prompt"
+  | "image-on-structured-page"
+  | "image-over-limit";
 export type ReviewIssue = {
   kind: ReviewIssueKind;
   /** Pages the issue applies to, in page order. The first one is the jump target. */
@@ -203,7 +230,12 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
   const issues: ReviewIssue[] = [];
   const missing = missingTitleIndexes(draft);
   if (missing.length > 0) {
-    issues.push({ kind: "missing-title", indexes: missing, message: `还有 ${missing.length} 页缺少标题`, blocking: true });
+    issues.push({
+      kind: "missing-title",
+      indexes: missing,
+      message: `还有 ${missing.length} 页缺少标题`,
+      blocking: true,
+    });
   }
   const empty = draft.slides.flatMap((slide, index) => (slideHasContent(slide) ? [] : [index]));
   if (empty.length > 0) {
@@ -220,7 +252,9 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
     // Every group of repeated titles is reported: a draft of twenty pages
     // rarely repeats only once, and naming one group left the writer guessing
     // about the others.
-    const groups = duplicates.map(([title, indexes]) => `${indexes.map((index) => `第 ${index + 1} 页`).join("、")}：${title}`);
+    const groups = duplicates.map(
+      ([title, indexes]) => `${indexes.map((index) => `第 ${index + 1} 页`).join("、")}：${title}`,
+    );
     const indexes = duplicates.flatMap(([, group]) => group);
     issues.push({
       kind: "duplicate-title",
@@ -231,7 +265,9 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
   }
   // A table wider or taller than the document model cannot become a project
   // file, and clamping it for the writer would silently drop reviewed cells.
-  const oversized = draft.slides.flatMap((slide, index) => (slide.blocks.some((block) => block.type === "table-data" && tableBlockOversized(block)) ? [index] : []));
+  const oversized = draft.slides.flatMap((slide, index) =>
+    slide.blocks.some((block) => block.type === "table-data" && tableBlockOversized(block)) ? [index] : [],
+  );
   if (oversized.length > 0) {
     issues.push({
       kind: "table-too-large",
@@ -243,9 +279,16 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
   // A row wider than the header keeps its extra cells in the draft but loses
   // them when the table is exported, so the writer has to fill the header or
   // delete the column instead of the cell silently disappearing later.
-  const ragged = draft.slides.flatMap((slide, index) => (slide.blocks.some((block) => block.type === "table-data" && tableBlockRagged(block)) ? [index] : []));
+  const ragged = draft.slides.flatMap((slide, index) =>
+    slide.blocks.some((block) => block.type === "table-data" && tableBlockRagged(block)) ? [index] : [],
+  );
   if (ragged.length > 0) {
-    issues.push({ kind: "table-ragged", indexes: ragged, message: `还有 ${ragged.length} 页表格行比表头宽，导出会丢失多出的列`, blocking: true });
+    issues.push({
+      kind: "table-ragged",
+      indexes: ragged,
+      message: `还有 ${ragged.length} 页表格行比表头宽，导出会丢失多出的列`,
+      blocking: true,
+    });
   }
   // 标题写成栏目名或空泛壳子时，文稿读起来像一份还没写完的大纲。
   // 这不是错误，内容照旧成立，但值得在确认之前提醒一次。
@@ -266,7 +309,10 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
   const repeated = findRepeatedTitlePatterns(draft.slides.map((slide) => slide.title));
   if (repeated.length > 0) {
     const detail = repeated
-      .map((group) => `第 ${group.indexes.map((index) => index + 1).join("、")} 页（${describeTitleSkeleton(group.skeleton)}）`)
+      .map(
+        (group) =>
+          `第 ${group.indexes.map((index) => index + 1).join("、")} 页（${describeTitleSkeleton(group.skeleton)}）`,
+      )
       .join("；");
     issues.push({
       kind: "repeated-title-pattern",
@@ -323,7 +369,12 @@ export type TableKeyAction = { type: "focus"; row: number } | { type: "append-ro
  * reach for the add button while typing a row of figures. The caller keeps the
  * cell's own column, since the helper only decides which row comes next.
  */
-export function tableCellKeyAction(key: string, row: number, rowCount: number, canAppendRow: boolean): TableKeyAction | undefined {
+export function tableCellKeyAction(
+  key: string,
+  row: number,
+  rowCount: number,
+  canAppendRow: boolean,
+): TableKeyAction | undefined {
   const lastRow = rowCount - 1;
   if (key === "ArrowDown") return { type: "focus", row: Math.min(lastRow, row + 1) };
   if (key === "ArrowUp") return { type: "focus", row: Math.max(0, row - 1) };
@@ -356,7 +407,13 @@ export function outlineNavTarget(key: string, index: number, total: number): num
  */
 export type ItemKeyAction = { type: "insert" } | { type: "remove"; focus: number };
 
-export function itemKeyAction(key: string, value: string, index: number, total: number, max: number): ItemKeyAction | undefined {
+export function itemKeyAction(
+  key: string,
+  value: string,
+  index: number,
+  total: number,
+  max: number,
+): ItemKeyAction | undefined {
   if (key === "Enter") return total < max ? { type: "insert" } : undefined;
   if (key === "Backspace" && total > 1 && value.trim() === "") return { type: "remove", focus: Math.max(0, index - 1) };
   return undefined;
@@ -367,7 +424,11 @@ export function itemKeyAction(key: string, value: string, index: number, total: 
  * than the first visible card, so a tall card does not steal the highlight from
  * the page the reader just scrolled to.
  */
-export function nearestSlideIndex(cards: readonly { index: number; top: number }[], listTop: number, anchorOffset = 8): number | undefined {
+export function nearestSlideIndex(
+  cards: readonly { index: number; top: number }[],
+  listTop: number,
+  anchorOffset = 8,
+): number | undefined {
   let nearest: number | undefined;
   let nearestDistance = Number.POSITIVE_INFINITY;
   for (const card of cards) {
@@ -387,7 +448,12 @@ export function nearestSlideIndex(cards: readonly { index: number; top: number }
  * scrolled page shifts the whole application window up: the header disappears
  * and an empty band shows under the status bar.
  */
-export function slideCardScrollTop(input: { listTop: number; cardTop: number; scrollTop: number; margin?: number }): number {
+export function slideCardScrollTop(input: {
+  listTop: number;
+  cardTop: number;
+  scrollTop: number;
+  margin?: number;
+}): number {
   const margin = input.margin ?? 0;
   return Math.max(0, input.scrollTop + input.cardTop - input.listTop - margin);
 }

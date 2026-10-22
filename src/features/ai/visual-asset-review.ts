@@ -22,10 +22,7 @@ const STRUCTURED_BLOCK_TYPES: readonly string[] = lexicon.imagePrompt.structured
 
 /** 配图意图的问题分类。 */
 export type VisualAssetIssueKind =
-  | "image-text-request"
-  | "image-empty-prompt"
-  | "image-on-structured-page"
-  | "image-over-limit";
+  "image-text-request" | "image-empty-prompt" | "image-on-structured-page" | "image-over-limit";
 
 /** 一条配图意图问题。 */
 export interface VisualAssetIssue {
@@ -61,14 +58,26 @@ export function visualAssetIssues(draft: AiDraft): VisualAssetIssue[] {
     enabledIndexes.push(index);
     const prompt = intent.prompt.trim();
     if (!prompt) {
-      issues.push({ slideIndex: index, kind: "image-empty-prompt", message: "这一页要配图，但没有画面描述，生成出来会很泛" });
+      issues.push({
+        slideIndex: index,
+        kind: "image-empty-prompt",
+        message: "这一页要配图，但没有画面描述，生成出来会很泛",
+      });
       return;
     }
     if (requestsTextInImage(prompt)) {
-      issues.push({ slideIndex: index, kind: "image-text-request", message: "画面描述里要求出现文字或字母，生成图的文字几乎总是错的" });
+      issues.push({
+        slideIndex: index,
+        kind: "image-text-request",
+        message: "画面描述里要求出现文字或字母，生成图的文字几乎总是错的",
+      });
     }
     if (hasStructuredBlock(slide)) {
-      issues.push({ slideIndex: index, kind: "image-on-structured-page", message: "这一页已有结构化内容块，再配图会一页讲两件事" });
+      issues.push({
+        slideIndex: index,
+        kind: "image-on-structured-page",
+        message: "这一页已有结构化内容块，再配图会一页讲两件事",
+      });
     }
   });
 
@@ -85,7 +94,9 @@ export function visualAssetIssues(draft: AiDraft): VisualAssetIssue[] {
 }
 
 /** 一页的配图意图在审核页上显示成什么。 */
-export function visualAssetSummary(slide: AiDraft["slides"][number]): { role: string; prompt: string; enabled: boolean } | undefined {
+export function visualAssetSummary(
+  slide: AiDraft["slides"][number],
+): { role: string; prompt: string; enabled: boolean } | undefined {
   const intent = slide.plan?.visualAsset;
   if (!intent) return undefined;
   const roleLabels: Record<string, string> = { hero: "主视觉", side: "侧栏图", band: "通栏图" };

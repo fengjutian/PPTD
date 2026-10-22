@@ -52,11 +52,24 @@ export interface CanvasGuideViewProps {
 }
 
 /** 参考线层，画在元素之上，方便看见被对象盖住的线。 */
-export const CanvasGuideView = memo(function CanvasGuideView({ guides, pageWidth, pageHeight, scale, activeSnapX, activeSnapY, onMove, onRemove }: CanvasGuideViewProps) {
+export const CanvasGuideView = memo(function CanvasGuideView({
+  guides,
+  pageWidth,
+  pageHeight,
+  scale,
+  activeSnapX,
+  activeSnapY,
+  onMove,
+  onRemove,
+}: CanvasGuideViewProps) {
   return (
     <div className="canvas-guide-layer">
-      {activeSnapX !== undefined && <div className="canvas-snap-line vertical" style={{ left: activeSnapX * scale }} aria-hidden="true" />}
-      {activeSnapY !== undefined && <div className="canvas-snap-line horizontal" style={{ top: activeSnapY * scale }} aria-hidden="true" />}
+      {activeSnapX !== undefined && (
+        <div className="canvas-snap-line vertical" style={{ left: activeSnapX * scale }} aria-hidden="true" />
+      )}
+      {activeSnapY !== undefined && (
+        <div className="canvas-snap-line horizontal" style={{ top: activeSnapY * scale }} aria-hidden="true" />
+      )}
       {guides.map((guide) => (
         <GuideLine
           key={guide.id}
@@ -94,7 +107,12 @@ export interface CanvasGuideLayerProps {
 }
 
 /** 连接 store 的参考线层。 */
-export const CanvasGuideLayer = memo(function CanvasGuideLayer({ slideId, pageWidth, pageHeight, scale }: CanvasGuideLayerProps) {
+export const CanvasGuideLayer = memo(function CanvasGuideLayer({
+  slideId,
+  pageWidth,
+  pageHeight,
+  scale,
+}: CanvasGuideLayerProps) {
   const guides = useCanvasGuidesStore((state) => state.guidesBySlide[slideId]);
   const activeSnapX = useCanvasGuidesStore((state) => state.activeSnapX);
   const activeSnapY = useCanvasGuidesStore((state) => state.activeSnapY);
@@ -153,7 +171,8 @@ const GuideLine = memo(function GuideLine({ axis, position, scale, extent, onMov
 
   const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
     drag.current = null;
   };
 
@@ -169,7 +188,10 @@ const GuideLine = memo(function GuideLine({ axis, position, scale, extent, onMov
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      onDoubleClick={(event) => { event.stopPropagation(); onRemove(); }}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        onRemove();
+      }}
     >
       <i />
     </div>

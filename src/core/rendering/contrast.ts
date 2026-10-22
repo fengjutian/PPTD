@@ -107,8 +107,19 @@ function hslToHex(hue: number, saturation: number, lightness: number): string {
   const secondary = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
   const match = lightness - chroma / 2;
   const sector = Math.floor(hue / 60) % 6;
-  const table = [[chroma, secondary, 0], [secondary, chroma, 0], [0, chroma, secondary], [0, secondary, chroma], [secondary, 0, chroma], [chroma, 0, secondary]];
-  const parts = table[sector]!.map((channel) => Math.round((channel + match) * 255).toString(16).padStart(2, "0"));
+  const table = [
+    [chroma, secondary, 0],
+    [secondary, chroma, 0],
+    [0, chroma, secondary],
+    [0, secondary, chroma],
+    [secondary, 0, chroma],
+    [chroma, 0, secondary],
+  ];
+  const parts = table[sector]!.map((channel) =>
+    Math.round((channel + match) * 255)
+      .toString(16)
+      .padStart(2, "0"),
+  );
   return `#${parts.join("")}`.toUpperCase();
 }
 
@@ -122,7 +133,7 @@ function adjustForContrast(value: string, backgroundLuminance: number, threshold
   if (!hsl || hsl.s < 0.15) return undefined;
   const direction = backgroundLuminance < 0.45 ? 1 : -1;
   for (let step = 1; step <= 20; step += 1) {
-    const lightness = Math.min(1, Math.max(0, hsl.l + (direction * step * 0.05)));
+    const lightness = Math.min(1, Math.max(0, hsl.l + direction * step * 0.05));
     const candidate = hslToHex(hsl.h, hsl.s, lightness);
     const ratio = contrastRatioAgainstLuminance(candidate, backgroundLuminance);
     if (ratio !== undefined && ratio >= threshold) return candidate;
@@ -136,13 +147,20 @@ function adjustForContrast(value: string, backgroundLuminance: number, threshold
  * their own hierarchy (a strong title ink and a softer body ink) so that fixing
  * contrast does not flatten the page into one flat colour.
  */
-export function readableTextColor(preferred: string, backgroundLuminance: number, large = false, fallback?: string): string {
+export function readableTextColor(
+  preferred: string,
+  backgroundLuminance: number,
+  large = false,
+  fallback?: string,
+): string {
   const threshold = large ? MINIMUM_LARGE_TEXT_CONTRAST : MINIMUM_CONTRAST;
   const ratio = contrastRatioAgainstLuminance(preferred, backgroundLuminance);
   if (ratio !== undefined && ratio >= threshold) return preferred;
   const adjusted = adjustForContrast(preferred, backgroundLuminance, threshold);
   if (adjusted) return adjusted;
-  const candidates = [fallback, backgroundLuminance < 0.45 ? "#FFFFFF" : "#1A1D23", "#FFFFFF", "#1A1D23"].filter((value): value is string => Boolean(value));
+  const candidates = [fallback, backgroundLuminance < 0.45 ? "#FFFFFF" : "#1A1D23", "#FFFFFF", "#1A1D23"].filter(
+    (value): value is string => Boolean(value),
+  );
   for (const candidate of candidates) {
     const candidateRatio = contrastRatioAgainstLuminance(candidate, backgroundLuminance);
     if (candidateRatio !== undefined && candidateRatio >= threshold) return candidate;
@@ -174,11 +192,18 @@ export function fillForInk(ink: string, fill: string, large = false): string {
  * carries it, and otherwise falls back to an ink that does. The hue of a
  * branded colour survives the correction.
  */
-export function readableTextColorOnRange(preferred: string, range: BackgroundRange, large = false, fallback?: string): string {
+export function readableTextColorOnRange(
+  preferred: string,
+  range: BackgroundRange,
+  large = false,
+  fallback?: string,
+): string {
   if (readableAcrossRange(preferred, range, large)) return preferred;
   const adjusted = adjustForContrastOnRange(preferred, range, large);
   if (adjusted) return adjusted;
-  const candidates = [fallback, range.darkest < 0.45 ? "#FFFFFF" : "#1A1D23", "#FFFFFF", "#1A1D23"].filter((value): value is string => Boolean(value));
+  const candidates = [fallback, range.darkest < 0.45 ? "#FFFFFF" : "#1A1D23", "#FFFFFF", "#1A1D23"].filter(
+    (value): value is string => Boolean(value),
+  );
   for (const candidate of candidates) {
     if (readableAcrossRange(candidate, range, large)) return candidate;
   }
@@ -196,7 +221,7 @@ function adjustForContrastOnRange(value: string, range: BackgroundRange, large: 
   if (!hsl || hsl.s < 0.15) return undefined;
   const direction = (colorLuminance(value) ?? 0) > 0.45 ? 1 : -1;
   for (let step = 1; step <= 20; step += 1) {
-    const lightness = Math.min(1, Math.max(0, hsl.l + (direction * step * 0.05)));
+    const lightness = Math.min(1, Math.max(0, hsl.l + direction * step * 0.05));
     const candidate = hslToHex(hsl.h, hsl.s, lightness);
     if (readableAcrossRange(candidate, range, large)) return candidate;
   }

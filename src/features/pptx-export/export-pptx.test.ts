@@ -12,7 +12,12 @@ import { validatePptxPackage } from "./pptx-package";
 function templateDocument(): PresentationDocument {
   const document = createDocument();
   const layoutId = crypto.randomUUID();
-  document.theme = { name: "昆佰泰", majorFont: "Source Han Sans", minorFont: "Source Han Serif", colors: [{ name: "accent1", value: "#C04A32" }] };
+  document.theme = {
+    name: "昆佰泰",
+    majorFont: "Source Han Sans",
+    minorFont: "Source Han Serif",
+    colors: [{ name: "accent1", value: "#C04A32" }],
+  };
   document.layouts = [{ id: layoutId, name: "内页（浅色）1", backgroundColor: "#ffffff" }];
   document.slides[0]!.layoutId = layoutId;
   document.slides[0]!.elements.unshift({
@@ -49,7 +54,13 @@ describe("PPTX export", () => {
 
   it("exports embedded images as native picture objects", async () => {
     const document = createDocument();
-    applyCommand(document, { type: "add-image", slideId: document.slides[0]!.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "sample" });
+    applyCommand(document, {
+      type: "add-image",
+      slideId: document.slides[0]!.id,
+      dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      mimeType: "image/png",
+      altText: "sample",
+    });
     const result = await buildPptx(document);
     expect(String.fromCharCode(...result.bytes.slice(0, 2))).toBe("PK");
     expect(result.report.nativeObjectCount).toBe(2);
@@ -59,9 +70,20 @@ describe("PPTX export", () => {
   it("writes the crop of a picture into the slide XML as a source rectangle", async () => {
     const document = createDocument();
     const slideId = document.slides[0]!.id;
-    applyCommand(document, { type: "add-image", slideId, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "sample" });
+    applyCommand(document, {
+      type: "add-image",
+      slideId,
+      dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      mimeType: "image/png",
+      altText: "sample",
+    });
     const image = document.slides[0]!.elements[1]!;
-    applyCommand(document, { type: "set-image-crop", slideId, elementId: image.id, crop: { top: 0.1, bottom: 0.2, left: 0.15, right: 0 } });
+    applyCommand(document, {
+      type: "set-image-crop",
+      slideId,
+      elementId: image.id,
+      crop: { top: 0.1, bottom: 0.2, left: 0.15, right: 0 },
+    });
     const result = await buildPptx(document);
     const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
     expect(slideXml).toContain('<a:srcRect l="15000" t="10000" r="0" b="20000"/>');
@@ -71,7 +93,13 @@ describe("PPTX export", () => {
 
   it("leaves a picture without a crop without a source rectangle", async () => {
     const document = createDocument();
-    applyCommand(document, { type: "add-image", slideId: document.slides[0]!.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "sample" });
+    applyCommand(document, {
+      type: "add-image",
+      slideId: document.slides[0]!.id,
+      dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      mimeType: "image/png",
+      altText: "sample",
+    });
     const result = await buildPptx(document);
     const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
     expect(slideXml).not.toContain("<a:srcRect");
@@ -83,7 +111,13 @@ describe("PPTX export", () => {
     const slideId = document.slides[0]!.id;
     applyCommand(document, { type: "add-shape", slideId, shape: "rectangle" });
     const shape = document.slides[0]!.elements[1]!;
-    applyCommand(document, { type: "move-element", slideId, elementId: shape.id, x: shape.frame.x, y: (0.1 * 914_400) as typeof shape.frame.y });
+    applyCommand(document, {
+      type: "move-element",
+      slideId,
+      elementId: shape.id,
+      x: shape.frame.x,
+      y: (0.1 * 914_400) as typeof shape.frame.y,
+    });
     const result = await buildPptx(document);
     const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
     const titleIndex = slideXml.indexOf("开始创造你的演示文稿");
@@ -152,7 +186,8 @@ describe("PPTX export", () => {
     expect(result.report.masters).toEqual([]);
   });
 
-  it("names the parts of the package so that PowerPoint can open them", async () => {    const result = await buildPptx(templateDocument());
+  it("names the parts of the package so that PowerPoint can open them", async () => {
+    const result = await buildPptx(templateDocument());
     const entries = unzipSync(result.bytes);
     const media = Object.keys(entries).filter((name) => name.startsWith("ppt/media/") && !name.endsWith("/"));
     expect(media.length).toBeGreaterThan(0);
@@ -166,7 +201,10 @@ describe("PPTX export", () => {
     const rels = strFromU8(entries[layoutRels!]!);
     expect(rels).not.toMatch(/Target="[^"]*[^\x00-\x7f]/);
     // The layout keeps the name of the template, it is only the part that is renamed.
-    const layoutXml = Object.keys(entries).filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name)).map((name) => strFromU8(entries[name]!)).join("");
+    const layoutXml = Object.keys(entries)
+      .filter((name) => /^ppt\/slideLayouts\/slideLayout\d+\.xml$/.test(name))
+      .map((name) => strFromU8(entries[name]!))
+      .join("");
     expect(layoutXml).toContain('name="内页（浅色）1"');
   });
 
@@ -184,7 +222,14 @@ describe("PPTX export", () => {
       frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(4) },
       rotationMilliDegree: 0,
       locked: false,
-      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, textColor: "#17181c", seriesColors: ["#3366CC"], showLegend: false, showValueLabels: true },
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        textColor: "#17181c",
+        seriesColors: ["#3366CC"],
+        showLegend: false,
+        showValueLabels: true,
+      },
     });
     const result = await buildPptx(document);
     const entries = unzipSync(result.bytes);
@@ -213,7 +258,14 @@ describe("PPTX export", () => {
       frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(4) },
       rotationMilliDegree: 0,
       locked: false,
-      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, textColor: "#FFFFFF", seriesColors: ["#3366CC"], showLegend: false, showValueLabels: true },
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        textColor: "#FFFFFF",
+        seriesColors: ["#3366CC"],
+        showLegend: false,
+        showValueLabels: true,
+      },
     });
     const result = await buildPptx(document);
     const entries = unzipSync(result.bytes);
@@ -234,7 +286,14 @@ describe("PPTX export", () => {
       frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(4) },
       rotationMilliDegree: 0,
       locked: false,
-      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, textColor: "#17181c", seriesColors: ["#3366CC"], showLegend: false, showValueLabels: true },
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        textColor: "#17181c",
+        seriesColors: ["#3366CC"],
+        showLegend: false,
+        showValueLabels: true,
+      },
     });
     await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
   });
@@ -242,7 +301,15 @@ describe("PPTX export", () => {
   it("writes a table as a native table object with the reviewed cells", async () => {
     const document = createDocument();
     document.slides[0]!.content.status = "approved";
-    const block = { id: crypto.randomUUID(), type: "table-data" as const, header: ["项目", "数量"], rows: [["样本量", "38万"], ["覆盖机构", "12万"]] };
+    const block = {
+      id: crypto.randomUUID(),
+      type: "table-data" as const,
+      header: ["项目", "数量"],
+      rows: [
+        ["样本量", "38万"],
+        ["覆盖机构", "12万"],
+      ],
+    };
     document.slides[0]!.content.blocks = [block];
     document.slides[0]!.elements.push({
       id: crypto.randomUUID() as never,
@@ -251,7 +318,15 @@ describe("PPTX export", () => {
       frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(3) },
       rotationMilliDegree: 0,
       locked: false,
-      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true },
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        headerFill: "#3366CC",
+        headerTextColor: "#FFFFFF",
+        bodyTextColor: "#17181c",
+        borderColor: "#E2E7EC",
+        firstColumnBold: true,
+      },
     });
     const result = await buildPptx(document);
     const entries = unzipSync(result.bytes);
@@ -282,7 +357,8 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
-  it("refuses to export a table whose cells are gone", async () => {    const document = createDocument();
+  it("refuses to export a table whose cells are gone", async () => {
+    const document = createDocument();
     document.slides[0]!.elements.push({
       id: crypto.randomUUID() as never,
       type: "table",
@@ -290,7 +366,15 @@ describe("PPTX export", () => {
       frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(3) },
       rotationMilliDegree: 0,
       locked: false,
-      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true },
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        headerFill: "#3366CC",
+        headerTextColor: "#FFFFFF",
+        bodyTextColor: "#17181c",
+        borderColor: "#E2E7EC",
+        firstColumnBold: true,
+      },
     });
     await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
   });

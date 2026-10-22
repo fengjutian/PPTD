@@ -14,7 +14,13 @@
 
 1. 片段用**偏移量**定位，不复制文字。新增的 `TextRun` 只带 `start`、`end` 和样式（`bold`、`color`、`underline`），指向 `element.text` 里的一个区间：
    ```ts
-   interface TextRun { start: number; end: number; bold?: boolean; color?: string; underline?: boolean }
+   interface TextRun {
+     start: number;
+     end: number;
+     bold?: boolean;
+     color?: string;
+     underline?: boolean;
+   }
    ```
    文字只有一份（在内容里），片段只是它上面的一层标注。因此片段不可能显示内容之外的字，改文字也不会让强调与正文脱节。
 2. 片段属于**设计态**。它挂在元素上，不进内容哈希，也不参与 `contentHash`。强调是"怎么呈现"，不是"说了什么"，与 `TextElementStyle` 同级。

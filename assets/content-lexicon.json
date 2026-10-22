@@ -42,25 +42,8 @@
       "未来",
       "趋势"
     ],
-    "columnSuffixes": [
-      "分析",
-      "概述",
-      "介绍",
-      "解读",
-      "探讨",
-      "综述",
-      "盘点",
-      "回顾",
-      "梳理"
-    ],
-    "bannedLeadPhrases": [
-      "如何",
-      "为什么",
-      "关于",
-      "什么是",
-      "怎样",
-      "怎么"
-    ],
+    "columnSuffixes": ["分析", "概述", "介绍", "解读", "探讨", "综述", "盘点", "回顾", "梳理"],
+    "bannedLeadPhrases": ["如何", "为什么", "关于", "什么是", "怎样", "怎么"],
     "emptyTailPhrases": [
       "的意义",
       "的价值",
@@ -73,19 +56,7 @@
       "的分享",
       "的解读"
     ],
-    "connectors": [
-      "以及",
-      "与",
-      "和",
-      "及",
-      "、",
-      "，",
-      ",",
-      "：",
-      ":",
-      "／",
-      "/"
-    ],
+    "connectors": ["以及", "与", "和", "及", "、", "，", ",", "：", ":", "／", "/"],
     "structuralTokens": [
       "以及",
       "通过",
@@ -161,12 +132,6 @@
       "水印"
     ],
     "maxImagesPerDeck": 4,
-    "structuredBlockTypes": [
-      "timeline",
-      "comparison",
-      "process",
-      "table-data",
-      "metric"
-    ]
+    "structuredBlockTypes": ["timeline", "comparison", "process", "table-data", "metric"]
   }
 }

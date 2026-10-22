@@ -21,6 +21,7 @@ jobs:
       - run: npm ci
       - run: npm run audit
       - run: npm run lint
+      - run: npm run format:check
       - run: npm run typecheck
       # The visual regression needs a real presentation application to render the
       # exported deck and to own the reference pictures, so it runs on a machine

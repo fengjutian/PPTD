@@ -81,7 +81,12 @@ export interface FlowLayout {
 }
 
 /** The height one item needs at a given font size, in points. */
-export function measureItemHeightPt(text: string, widthPt: number, fontSizePt: number, options: { lineHeightRatio?: number; fontFamily?: string } = {}): number {
+export function measureItemHeightPt(
+  text: string,
+  widthPt: number,
+  fontSizePt: number,
+  options: { lineHeightRatio?: number; fontFamily?: string } = {},
+): number {
   const ratio = options.lineHeightRatio ?? DEFAULT_LINE_HEIGHT_RATIO;
   const lines = estimateTextLines(text, widthPt, fontSizePt, options.fontFamily);
   return lines * fontSizePt * ratio;
@@ -99,7 +104,13 @@ export function layoutFlow(options: FlowOptions): FlowLayout {
   const minimumGapPt = options.minimumGapPt ?? 0;
   const maximumGapPt = options.maximumGapPt ?? Number.POSITIVE_INFINITY;
   const gapCount = Math.max(0, options.items.length - 1);
-  const heights = (fontSizePt: number) => options.items.map((text) => measureItemHeightPt(text, options.widthPt, fontSizePt, { lineHeightRatio: ratio, fontFamily: options.fontFamily }));
+  const heights = (fontSizePt: number) =>
+    options.items.map((text) =>
+      measureItemHeightPt(text, options.widthPt, fontSizePt, {
+        lineHeightRatio: ratio,
+        fontFamily: options.fontFamily,
+      }),
+    );
 
   // The largest font size whose items still fit the column.
   let fontSizePt = options.preferredFontSizePt;
@@ -119,7 +130,8 @@ export function layoutFlow(options: FlowOptions): FlowLayout {
 
   // A column that is shorter than the space it was given is centred, so the
   // white space does not all collect below the last item.
-  const leadingPt = options.verticalAlign === "center" ? Math.max(0, (options.availableHeightPt - totalHeightPt) / 2) : 0;
+  const leadingPt =
+    options.verticalAlign === "center" ? Math.max(0, (options.availableHeightPt - totalHeightPt) / 2) : 0;
 
   const rows: FlowRow[] = [];
   let topPt = leadingPt;

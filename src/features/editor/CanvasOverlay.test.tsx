@@ -43,7 +43,15 @@ describe("canvas overlay", () => {
 
   it("shows the line the object snapped to", () => {
     const markup = renderToStaticMarkup(
-      <CanvasGuideView guides={[]} pageWidth={inch(13.33)} pageHeight={inch(7.5)} scale={0.01} activeSnapX={inch(5)} onMove={() => undefined} onRemove={() => undefined} />,
+      <CanvasGuideView
+        guides={[]}
+        pageWidth={inch(13.33)}
+        pageHeight={inch(7.5)}
+        scale={0.01}
+        activeSnapX={inch(5)}
+        onMove={() => undefined}
+        onRemove={() => undefined}
+      />,
     );
     expect(markup).toContain("canvas-snap-line vertical");
   });

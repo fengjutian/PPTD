@@ -78,10 +78,13 @@ describe("保存时把图片一起带走", () => {
 
     expect(result?.report.missingAssets).toEqual([]);
     // 路径变了以后后端拿不到来源项目就会写出一份只有引用的文件，这里必须告诉它来源。
-    expect(invokeMock).toHaveBeenCalledWith("save_project", expect.objectContaining({
-      path: "C:/other.pptd",
-      sourcePath: "C:/source.pptd",
-    }));
+    expect(invokeMock).toHaveBeenCalledWith(
+      "save_project",
+      expect.objectContaining({
+        path: "C:/other.pptd",
+        sourcePath: "C:/source.pptd",
+      }),
+    );
   });
 
   it("存回同一个路径时来源就是它自己", async () => {
@@ -90,10 +93,13 @@ describe("保存时把图片一起带走", () => {
 
     await saveProject(document, "C:/other.pptd");
 
-    expect(invokeMock).toHaveBeenCalledWith("save_project", expect.objectContaining({
-      path: "C:/other.pptd",
-      sourcePath: "C:/other.pptd",
-    }));
+    expect(invokeMock).toHaveBeenCalledWith(
+      "save_project",
+      expect.objectContaining({
+        path: "C:/other.pptd",
+        sourcePath: "C:/other.pptd",
+      }),
+    );
   });
 
   it("另存项目后把后端报回来的缺图带给调用方", async () => {

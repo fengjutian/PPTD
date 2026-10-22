@@ -18,18 +18,43 @@ const goal = {
 } as unknown as PresentationVisualGoal;
 
 const review = {
-  overallScore: 70, hierarchyScore: 70, alignmentScore: 70, readabilityScore: 70, consistencyScore: 70,
+  overallScore: 70,
+  hierarchyScore: 70,
+  alignmentScore: 70,
+  readabilityScore: 70,
+  consistencyScore: 70,
   issues: [{ slideIndex: 0, severity: "warning", issue: "weak-hierarchy", elementIds: [], suggestion: "标题不够突出" }],
-  slideGuidance: [{ slideIndex: 0, safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 }, logoRegions: [], busyRegions: [], focalPoint: { x: 0.5, y: 0.5 }, recommendedLayout: "title-body" }],
+  slideGuidance: [
+    {
+      slideIndex: 0,
+      safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 },
+      logoRegions: [],
+      busyRegions: [],
+      focalPoint: { x: 0.5, y: 0.5 },
+      recommendedLayout: "title-body",
+    },
+  ],
 } as unknown as VisualReview;
 
 describe("vision review payload", () => {
   it("accepts bounded JPEG slide renders", () => {
-    expect(() => validateVisualRenderPayload({ slides: ["data:image/jpeg;base64,AA=="], contactSheet: "data:image/jpeg;base64,AA==" })).not.toThrow();
+    expect(() =>
+      validateVisualRenderPayload({
+        slides: ["data:image/jpeg;base64,AA=="],
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+    ).not.toThrow();
   });
   it("rejects unsupported image payloads and empty decks", () => {
-    expect(() => validateVisualRenderPayload({ slides: [], contactSheet: "data:image/jpeg;base64,AA==" })).toThrow("AI_VISION_SLIDE_COUNT_INVALID");
-    expect(() => validateVisualRenderPayload({ slides: ["data:image/png;base64,AA=="], contactSheet: "data:image/jpeg;base64,AA==" })).toThrow("AI_VISION_IMAGE_INVALID");
+    expect(() => validateVisualRenderPayload({ slides: [], contactSheet: "data:image/jpeg;base64,AA==" })).toThrow(
+      "AI_VISION_SLIDE_COUNT_INVALID",
+    );
+    expect(() =>
+      validateVisualRenderPayload({
+        slides: ["data:image/png;base64,AA=="],
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+    ).toThrow("AI_VISION_IMAGE_INVALID");
   });
 });
 
@@ -42,7 +67,15 @@ describe("视觉评审端口", () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "load_app_settings") return null;
       if (command === "review_presentation_visuals") {
-        return { overallScore: 90, hierarchyScore: 90, alignmentScore: 90, readabilityScore: 90, consistencyScore: 90, issues: [], slideGuidance: [] };
+        return {
+          overallScore: 90,
+          hierarchyScore: 90,
+          alignmentScore: 90,
+          readabilityScore: 90,
+          consistencyScore: 90,
+          issues: [],
+          slideGuidance: [],
+        };
       }
       throw new Error(`unexpected command: ${command}`);
     });
@@ -71,13 +104,29 @@ describe("视觉评审端口", () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "load_app_settings") return null;
       if (command === "plan_presentation_repairs") {
-        return { repairs: [{ slideIndex: 1, elementActions: [{ action: "align", target: "region", frame: { x: 0.3, y: 0.2, width: 0.5, height: 0.2 }, axis: "left" }], reason: "右栏没有和标题共用左轴" }] };
+        return {
+          repairs: [
+            {
+              slideIndex: 1,
+              elementActions: [
+                { action: "align", target: "region", frame: { x: 0.3, y: 0.2, width: 0.5, height: 0.2 }, axis: "left" },
+              ],
+              reason: "右栏没有和标题共用左轴",
+            },
+          ],
+        };
       }
       throw new Error(`unexpected command: ${command}`);
     });
 
     const port = new TauriVisionReviewPort();
-    const plan = await port.planRepairs(review, goal, { deck: [{ index: 0, title: "第一页", layout: "cards" }, { index: 1, title: "第二页", layout: "title-body" }], taskId: 9 });
+    const plan = await port.planRepairs(review, goal, {
+      deck: [
+        { index: 0, title: "第一页", layout: "cards" },
+        { index: 1, title: "第二页", layout: "title-body" },
+      ],
+      taskId: 9,
+    });
 
     expect(plan.repairs[0]!.elementActions[0]).toMatchObject({ action: "align", target: "region", axis: "left" });
     // 修复计划把任务号带给后端，取消时能真正打断。

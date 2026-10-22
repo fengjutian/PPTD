@@ -34,13 +34,18 @@ const LIBREOFFICE_PATHS = [
 
 function run(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { timeout: 180_000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`${command} failed: ${error.message}`));
-        return;
-      }
-      resolve({ stdout: String(stdout), stderr: String(stderr) });
-    });
+    execFile(
+      command,
+      args,
+      { timeout: 180_000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(`${command} failed: ${error.message}`));
+          return;
+        }
+        resolve({ stdout: String(stdout), stderr: String(stderr) });
+      },
+    );
   });
 }
 
@@ -107,7 +112,12 @@ export const libreOfficeRasterizer: PptxRasterizer = {
 export async function detectRasterizer(): Promise<PptxRasterizer | undefined> {
   if (process.platform === "win32" && existsSync(SCRIPT)) {
     try {
-      await run("powershell", ["-NoProfile", "-NonInteractive", "-Command", "$p = New-Object -ComObject PowerPoint.Application; $p.Quit()"]);
+      await run("powershell", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$p = New-Object -ComObject PowerPoint.Application; $p.Quit()",
+      ]);
       return powerPointRasterizer;
     } catch {
       // PowerPoint is not installed or cannot be automated; fall through.

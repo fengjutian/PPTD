@@ -29,6 +29,7 @@ export const useGroupDragStore = create<GroupDragState>((set) => ({
   groupDrag: null,
 
   beginGroupDrag: (ids, leaderId) => set({ groupDrag: { ids, leaderId, dx: 0 as Emu, dy: 0 as Emu } }),
-  updateGroupDrag: (dx, dy) => set((state) => (state.groupDrag ? { groupDrag: { ...state.groupDrag, dx, dy } } : state)),
+  updateGroupDrag: (dx, dy) =>
+    set((state) => (state.groupDrag ? { groupDrag: { ...state.groupDrag, dx, dy } } : state)),
   endGroupDrag: () => set({ groupDrag: null }),
 }));

@@ -12,7 +12,12 @@ import type { BackgroundRange } from "../rendering/contrast";
 import type { AiComposition, AiDensityTarget, AiEmphasis, AiPalette } from "./design-intent";
 import type { AiVisualAsset } from "./visual-asset";
 
-export interface AiNormalizedRect { x: number; y: number; width: number; height: number }
+export interface AiNormalizedRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
 /**
  * What a repair acts on.
@@ -25,24 +30,24 @@ export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" 
 export type AiElementRepairTarget = "title" | "body" | "region";
 export type AiElementRepair =
   | {
-    action: "move" | "resize";
-    target: AiElementRepairTarget;
-    /** For a region: the place the block is now. For a role: the new place. */
-    frame: AiNormalizedRect;
-    /**
-     * For a region: where the block should go. Without it a move has no
-     * destination, so the action is skipped rather than guessed.
-     */
-    to?: AiNormalizedRect;
-  }
+      action: "move" | "resize";
+      target: AiElementRepairTarget;
+      /** For a region: the place the block is now. For a role: the new place. */
+      frame: AiNormalizedRect;
+      /**
+       * For a region: where the block should go. Without it a move has no
+       * destination, so the action is skipped rather than guessed.
+       */
+      to?: AiNormalizedRect;
+    }
   | {
-    action: "restyle";
-    target: AiElementRepairTarget;
-    /** For a region: the rectangle whose text is restyled. */
-    frame?: AiNormalizedRect;
-    fontScale?: number;
-    color?: string;
-  }
+      action: "restyle";
+      target: AiElementRepairTarget;
+      /** For a region: the rectangle whose text is restyled. */
+      frame?: AiNormalizedRect;
+      fontScale?: number;
+      color?: string;
+    }
   /** Aligns the target to an edge of the given frame. */
   | { action: "align"; target: AiElementRepairTarget; frame: AiNormalizedRect; axis?: "left" | "top" }
   | { action: "changeLayout"; layout: AiLayoutKind };
@@ -101,7 +106,11 @@ export interface AiTemplateRegion {
   /** Font size in points the template designer assigned to this placeholder. */
   fontSizePt?: number;
 }
-export interface AiTemplateDecoration { shape: "rectangle" | "ellipse"; fill: string; frame: AiNormalizedRect }
+export interface AiTemplateDecoration {
+  shape: "rectangle" | "ellipse";
+  fill: string;
+  frame: AiNormalizedRect;
+}
 export interface AiTemplateLayout {
   index: number;
   name?: string;
@@ -158,7 +167,9 @@ export function bodyRegionsOf(regions: AiTemplateRegion[]): AiTemplateRegion[] {
  * region in document order is that subtitle, not the content box.
  */
 export function contentRegionOf(regions: AiTemplateRegion[]): AiTemplateRegion | undefined {
-  return [...bodyRegionsOf(regions)].sort((left, right) => right.frame.width * right.frame.height - left.frame.width * left.frame.height)[0];
+  return [...bodyRegionsOf(regions)].sort(
+    (left, right) => right.frame.width * right.frame.height - left.frame.width * left.frame.height,
+  )[0];
 }
 
 /** Two body regions that sit side by side and can carry a two-column page. */
@@ -170,7 +181,8 @@ export function columnRegionsOf(regions: AiTemplateRegion[]): [AiTemplateRegion,
       const second = bodies[rightIndex]!;
       const left = first.frame.x <= second.frame.x ? first : second;
       const right = left === first ? second : first;
-      if (left.frame.x + left.frame.width <= right.frame.x + 0.01 && Math.abs(left.frame.y - right.frame.y) < 0.18) return [left, right];
+      if (left.frame.x + left.frame.width <= right.frame.x + 0.01 && Math.abs(left.frame.y - right.frame.y) < 0.18)
+        return [left, right];
     }
   }
   return undefined;
@@ -193,7 +205,12 @@ export function templateColumnRegions(layout: AiTemplateLayout): [AiTemplateRegi
 }
 
 export function templateRectsOverlap(left: AiNormalizedRect, right: AiNormalizedRect): boolean {
-  return left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
+  return (
+    left.x < right.x + right.width &&
+    left.x + left.width > right.x &&
+    left.y < right.y + right.height &&
+    left.y + left.height > right.y
+  );
 }
 
 /**
@@ -228,7 +245,10 @@ function nameMatches(layout: AiTemplateLayout, intent: TemplateLayoutIntent): bo
  * Layouts that can physically carry the requested intent. Geometry is the hard
  * filter, the name only breaks ties between equally usable layouts.
  */
-export function templateLayoutCandidates(layouts: AiTemplateLayout[], intent: TemplateLayoutIntent): AiTemplateLayout[] {
+export function templateLayoutCandidates(
+  layouts: AiTemplateLayout[],
+  intent: TemplateLayoutIntent,
+): AiTemplateLayout[] {
   const titled = layouts.filter((layout) => templateTitleRegion(layout));
   // A layout whose own title collides with its body can never carry editable
   // text, so it is dropped instead of being used as a last resort.
@@ -256,13 +276,20 @@ export function templateLayoutScore(layout: AiTemplateLayout, intent: TemplateLa
   const keyword = nameMatches(layout, intent);
   const content = templateContentRegion(layout)?.frame;
   const title = templateTitleRegion(layout)?.frame;
-  const usableTitle = Boolean(title && title.width >= USABLE_TITLE_MIN_WIDTH && title.height >= USABLE_TITLE_MIN_HEIGHT);
+  const usableTitle = Boolean(
+    title && title.width >= USABLE_TITLE_MIN_WIDTH && title.height >= USABLE_TITLE_MIN_HEIGHT,
+  );
   switch (intent) {
-    case "cover": return (keyword ? 100 : 0) + (content && !isWideContent(content) ? 20 : 0);
-    case "section": return (keyword ? 100 : 0) + (content && !isWideContent(content) ? 15 : 0);
-    case "split": return (keyword ? 100 : 0) + (templateColumnRegions(layout) ? 40 : 0) + (isWideContent(content) ? 20 : 0);
-    case "quote": return (keyword ? 100 : 0) + (isWideContent(content) ? 20 : 0);
-    default: return (keyword ? 40 : 0) + (isWideContent(content) ? 40 : 0) + (usableTitle ? 20 : 0);
+    case "cover":
+      return (keyword ? 100 : 0) + (content && !isWideContent(content) ? 20 : 0);
+    case "section":
+      return (keyword ? 100 : 0) + (content && !isWideContent(content) ? 15 : 0);
+    case "split":
+      return (keyword ? 100 : 0) + (templateColumnRegions(layout) ? 40 : 0) + (isWideContent(content) ? 20 : 0);
+    case "quote":
+      return (keyword ? 100 : 0) + (isWideContent(content) ? 20 : 0);
+    default:
+      return (keyword ? 40 : 0) + (isWideContent(content) ? 40 : 0) + (usableTitle ? 20 : 0);
   }
 }
 
@@ -288,7 +315,10 @@ export function planTemplateLayouts(input: {
     if (candidates.length === 0) return undefined;
     const variantCount = Math.max(1, intent === "cover" ? rhythm.coverVariants : rhythm.contentVariants);
     const pool = [...candidates]
-      .sort((left, right) => templateLayoutScore(right, intent) - templateLayoutScore(left, intent) || left.index - right.index)
+      .sort(
+        (left, right) =>
+          templateLayoutScore(right, intent) - templateLayoutScore(left, intent) || left.index - right.index,
+      )
       .slice(0, variantCount);
     const eligible = pool.filter((layout) => !(layout.index === previousIndex && previousRun >= rhythm.repeatLimit));
     const usable = eligible.length > 0 ? eligible : pool;
@@ -303,7 +333,10 @@ export function planTemplateLayouts(input: {
     if (!chosen) return undefined;
     usage.set(chosen.index, (usage.get(chosen.index) ?? 0) + 1);
     if (chosen.index === previousIndex) previousRun += 1;
-    else { previousIndex = chosen.index; previousRun = 1; }
+    else {
+      previousIndex = chosen.index;
+      previousRun = 1;
+    }
     return chosen;
   });
 }

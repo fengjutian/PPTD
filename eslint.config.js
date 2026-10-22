@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "node_modules", "src-tauri/target", "src-tauri/gen"] },
+  { ignores: ["dist", "node_modules", "src-tauri/target", "src-tauri/gen", ".tmp*"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -51,6 +51,11 @@ export default tseslint.config(
     // ES module helper scripts are Node programs too.
     files: ["**/*.mjs"],
     languageOptions: { globals: globals.node, sourceType: "module" },
+  },
+  {
+    // Command-line helpers report their results on stdout; that is their API.
+    files: ["scripts/**/*.ts"],
+    rules: { "no-console": "off" },
   },
   {
     files: ["src-tauri/**"],

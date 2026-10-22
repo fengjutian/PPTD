@@ -15,7 +15,7 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
     <div
       style={{
         fontFamily: element.style.fontFamily,
-        fontSize: element.style.fontSizePt * scale * EMU_PER_INCH / 72,
+        fontSize: (element.style.fontSizePt * scale * EMU_PER_INCH) / 72,
         color: element.style.color,
         fontWeight: element.style.bold ? 700 : 400,
         textAlign: element.style.align,

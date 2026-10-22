@@ -1,0 +1,12 @@
+# Keep text files in LF so the Prettier gate behaves the same on every machine.
+* text=auto eol=lf
+
+# Binary assets must never be converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pptx binary
+*.xlsx binary

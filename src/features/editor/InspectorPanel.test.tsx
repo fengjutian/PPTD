@@ -75,7 +75,17 @@ describe("inspector panel", () => {
   it("labels the alignment buttons with their real meaning instead of a truncated first character", () => {
     const markup = renderView(textElement());
     // The align matrix names every place an object can take on the page.
-    for (const label of ["左上对齐", "顶端对齐", "右上对齐", "左对齐", "居中对齐", "右对齐", "左下对齐", "底端对齐", "右下对齐"]) {
+    for (const label of [
+      "左上对齐",
+      "顶端对齐",
+      "右上对齐",
+      "左对齐",
+      "居中对齐",
+      "右对齐",
+      "左下对齐",
+      "底端对齐",
+      "右下对齐",
+    ]) {
       expect(markup).toContain(`aria-label="${label}"`);
     }
     // The old panel truncated every label to its first character, which rendered

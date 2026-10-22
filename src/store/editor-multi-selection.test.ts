@@ -11,7 +11,13 @@ import { useEditorStore } from "./editor-store";
 describe("editor multi selection", () => {
   beforeEach(() => {
     const document = createDocument();
-    useEditorStore.setState({ document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] });
+    useEditorStore.setState({
+      document,
+      activeSlideId: document.slides[0]!.id,
+      selectedElementIds: [],
+      undoStack: [],
+      redoStack: [],
+    });
   });
 
   it("keeps a single selection as a one item array", () => {
@@ -72,7 +78,9 @@ describe("editor multi selection", () => {
     const before = slide.elements.map((element) => ({ ...element.frame }));
     const revisionsBefore = useEditorStore.getState().document.revisions;
     const undoBefore = useEditorStore.getState().undoStack.length;
-    useEditorStore.getState().execute({ type: "move-elements", slideId: slide.id, elementIds, dx: inches(1) as never, dy: 0 as never });
+    useEditorStore
+      .getState()
+      .execute({ type: "move-elements", slideId: slide.id, elementIds, dx: inches(1) as never, dy: 0 as never });
     const moved = useEditorStore.getState().document.slides[0]!.elements;
     expect(moved[0]!.frame.x).toBe(before[0]!.x + inches(1));
     expect(moved[1]!.frame.x).toBe(before[1]!.x + inches(1));
@@ -93,7 +101,9 @@ describe("editor multi selection", () => {
     const slide = useEditorStore.getState().document.slides[0]!;
     const elementIds = slide.elements.map((element) => element.id);
     const revisionsBefore = useEditorStore.getState().document.revisions;
-    useEditorStore.getState().execute({ type: "align-elements", slideId: slide.id, elementIds, align: { horizontal: "left" } });
+    useEditorStore
+      .getState()
+      .execute({ type: "align-elements", slideId: slide.id, elementIds, align: { horizontal: "left" } });
     const aligned = useEditorStore.getState().document.slides[0]!.elements;
     expect(aligned[0]!.frame.x).toBe(aligned[1]!.frame.x);
     const revisions = useEditorStore.getState().document.revisions;

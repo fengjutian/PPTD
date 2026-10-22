@@ -30,7 +30,10 @@ function blockLines(block: ContentBlock): string[] {
     case "table-data":
       // Cells may be blank while the writer is still filling the grid, so the
       // projection uses trimmed values instead of the storage placeholder.
-      return [block.header.map((cell) => cell.trim()).join(" | "), ...block.rows.map((row) => row.map((cell) => cell.trim()).join(" | "))];
+      return [
+        block.header.map((cell) => cell.trim()).join(" | "),
+        ...block.rows.map((row) => row.map((cell) => cell.trim()).join(" | ")),
+      ];
   }
 }
 

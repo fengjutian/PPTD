@@ -26,7 +26,12 @@ describe("AI 配图对话框", () => {
 
   it("生成失败时把原因说出来", () => {
     const markup = renderToStaticMarkup(
-      <AiImageDialogView busy={false} error="没有可用的图像服务凭据" onClose={() => undefined} onGenerate={() => undefined} />,
+      <AiImageDialogView
+        busy={false}
+        error="没有可用的图像服务凭据"
+        onClose={() => undefined}
+        onGenerate={() => undefined}
+      />,
     );
 
     expect(markup).toContain("没有可用的图像服务凭据");

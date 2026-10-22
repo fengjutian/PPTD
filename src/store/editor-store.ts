@@ -1,7 +1,13 @@
 import { applyPatches, enablePatches, produceWithPatches, type Patch } from "immer";
 import { create } from "zustand";
 import { applyCommand, commandDomain, type ChangeDomain, type DocumentCommand } from "../core/commands";
-import { createDocument, refreshContentHashes, type ElementId, type PresentationDocument, type SlideId } from "../core/document-model";
+import {
+  createDocument,
+  refreshContentHashes,
+  type ElementId,
+  type PresentationDocument,
+  type SlideId,
+} from "../core/document-model";
 
 enablePatches();
 
@@ -32,8 +38,10 @@ function estimatePatchBytes(patch: Patch): number {
 }
 
 function estimateEntryBytes(entry: HistoryEntry): number {
-  return entry.forward.reduce((sum, patch) => sum + estimatePatchBytes(patch), 0)
-    + entry.inverse.reduce((sum, patch) => sum + estimatePatchBytes(patch), 0);
+  return (
+    entry.forward.reduce((sum, patch) => sum + estimatePatchBytes(patch), 0) +
+    entry.inverse.reduce((sum, patch) => sum + estimatePatchBytes(patch), 0)
+  );
 }
 
 interface EditorState {
@@ -94,105 +102,149 @@ export const useEditorStore = create<EditorState>((set) => ({
   undoStack: [],
   redoStack: [],
 
-  execute: (command) => set((state) => {
-    const domain = commandDomain(command, state.document);
-    if (!domain) return state;
-    const [document, forward, inverse] = produceWithPatches(state.document, (draft) => {
-      applyCommand(draft, command);
-      draft.revisions.document += 1;
-      if (domain === "content" || domain === "both") draft.revisions.content += 1;
-      if (domain === "design" || domain === "both") draft.revisions.design += 1;
-      refreshContentHashes(draft);
-    });
-    let activeSlideId = state.activeSlideId;
-    if (command.type === "add-slide") activeSlideId = document.slides.at(-1)!.id;
-    if (command.type === "duplicate-slide") {
-      const sourceIndex = state.document.slides.findIndex((slide) => slide.id === command.slideId);
-      activeSlideId = document.slides[sourceIndex + 1]!.id;
-    }
-    if (!document.slides.some((slide) => slide.id === activeSlideId)) {
-      const previousIndex = state.document.slides.findIndex((slide) => slide.id === state.activeSlideId);
-      activeSlideId = document.slides[Math.min(previousIndex, document.slides.length - 1)]!.id;
-    }
-    // Design edits on the selected element must not drop the selection, otherwise
-    // handles disappear after a drag and repeated keyboard nudges stop working.
-    let selectedElementIds = state.selectedElementIds;
-    if (command.type === "add-text" || command.type === "add-shape" || command.type === "add-image") {
-      selectedElementIds = [document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id];
-    }
-    if (command.type === "duplicate-element") {
-      const slide = document.slides.find((item) => item.id === command.slideId)!;
-      const sourceIndex = state.document.slides.find((item) => item.id === command.slideId)!.elements.findIndex((item) => item.id === command.elementId);
-      selectedElementIds = [slide.elements[sourceIndex + 1]!.id];
-    }
-    if (command.type === "set-element-lock") selectedElementIds = [command.elementId];
-    if (command.type === "delete-element") selectedElementIds = selectedElementIds.filter((id) => id !== command.elementId);
-    if (command.type === "delete-elements") selectedElementIds = selectedElementIds.filter((id) => !command.elementIds.includes(id));
-    if (command.type === "add-slide" || command.type === "duplicate-slide" || command.type === "delete-slide" || command.type === "move-slide" || command.type === "apply-ai-draft" || command.type === "apply-ai-designed-draft") selectedElementIds = [];
-    selectedElementIds = pruneSelection(selectedElementIds, document);
-    return { ...state, document, activeSlideId, selectedElementIds, undoStack: pushHistory(state.undoStack, { forward, inverse }), redoStack: [] };
-  }),
-
-  replaceDocument: (document, change = "both") => set((state) => {
-    const [nextDocument, forward, inverse] = produceWithPatches(state.document, (draft) => {
-      draft.id = document.id;
-      draft.schemaVersion = document.schemaVersion;
-      draft.title = document.title;
-      draft.pageSize = { ...document.pageSize };
-      draft.slides = structuredClone(document.slides);
-      // The template binding belongs to the document, not to a single page. A
-      // page carries a reference to a layout, so dropping the layout registry
-      // here would leave every reference dangling: the saved file could no
-      // longer be read back and the exporter would lose the slide master.
-      if (document.theme) draft.theme = structuredClone(document.theme);
-      else delete draft.theme;
-      if (document.layouts) draft.layouts = structuredClone(document.layouts);
-      else delete draft.layouts;
-      refreshContentHashes(draft);
-      draft.revisions = {
-        document: draft.revisions.document + 1,
-        content: draft.revisions.content + (change === "content" || change === "both" ? 1 : 0),
-        design: draft.revisions.design + (change === "design" || change === "both" ? 1 : 0),
+  execute: (command) =>
+    set((state) => {
+      const domain = commandDomain(command, state.document);
+      if (!domain) return state;
+      const [document, forward, inverse] = produceWithPatches(state.document, (draft) => {
+        applyCommand(draft, command);
+        draft.revisions.document += 1;
+        if (domain === "content" || domain === "both") draft.revisions.content += 1;
+        if (domain === "design" || domain === "both") draft.revisions.design += 1;
+        refreshContentHashes(draft);
+      });
+      let activeSlideId = state.activeSlideId;
+      if (command.type === "add-slide") activeSlideId = document.slides.at(-1)!.id;
+      if (command.type === "duplicate-slide") {
+        const sourceIndex = state.document.slides.findIndex((slide) => slide.id === command.slideId);
+        activeSlideId = document.slides[sourceIndex + 1]!.id;
+      }
+      if (!document.slides.some((slide) => slide.id === activeSlideId)) {
+        const previousIndex = state.document.slides.findIndex((slide) => slide.id === state.activeSlideId);
+        activeSlideId = document.slides[Math.min(previousIndex, document.slides.length - 1)]!.id;
+      }
+      // Design edits on the selected element must not drop the selection, otherwise
+      // handles disappear after a drag and repeated keyboard nudges stop working.
+      let selectedElementIds = state.selectedElementIds;
+      if (command.type === "add-text" || command.type === "add-shape" || command.type === "add-image") {
+        selectedElementIds = [document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id];
+      }
+      if (command.type === "duplicate-element") {
+        const slide = document.slides.find((item) => item.id === command.slideId)!;
+        const sourceIndex = state.document.slides
+          .find((item) => item.id === command.slideId)!
+          .elements.findIndex((item) => item.id === command.elementId);
+        selectedElementIds = [slide.elements[sourceIndex + 1]!.id];
+      }
+      if (command.type === "set-element-lock") selectedElementIds = [command.elementId];
+      if (command.type === "delete-element")
+        selectedElementIds = selectedElementIds.filter((id) => id !== command.elementId);
+      if (command.type === "delete-elements")
+        selectedElementIds = selectedElementIds.filter((id) => !command.elementIds.includes(id));
+      if (
+        command.type === "add-slide" ||
+        command.type === "duplicate-slide" ||
+        command.type === "delete-slide" ||
+        command.type === "move-slide" ||
+        command.type === "apply-ai-draft" ||
+        command.type === "apply-ai-designed-draft"
+      )
+        selectedElementIds = [];
+      selectedElementIds = pruneSelection(selectedElementIds, document);
+      return {
+        ...state,
+        document,
+        activeSlideId,
+        selectedElementIds,
+        undoStack: pushHistory(state.undoStack, { forward, inverse }),
+        redoStack: [],
       };
-    });
-    return {
-      ...state,
-      document: nextDocument,
-      activeSlideId: nextDocument.slides[0]!.id,
-      selectedElementIds: [],
-      undoStack: pushHistory(state.undoStack, { forward, inverse }),
-      redoStack: [],
-    };
-  }),
+    }),
+
+  replaceDocument: (document, change = "both") =>
+    set((state) => {
+      const [nextDocument, forward, inverse] = produceWithPatches(state.document, (draft) => {
+        draft.id = document.id;
+        draft.schemaVersion = document.schemaVersion;
+        draft.title = document.title;
+        draft.pageSize = { ...document.pageSize };
+        draft.slides = structuredClone(document.slides);
+        // The template binding belongs to the document, not to a single page. A
+        // page carries a reference to a layout, so dropping the layout registry
+        // here would leave every reference dangling: the saved file could no
+        // longer be read back and the exporter would lose the slide master.
+        if (document.theme) draft.theme = structuredClone(document.theme);
+        else delete draft.theme;
+        if (document.layouts) draft.layouts = structuredClone(document.layouts);
+        else delete draft.layouts;
+        refreshContentHashes(draft);
+        draft.revisions = {
+          document: draft.revisions.document + 1,
+          content: draft.revisions.content + (change === "content" || change === "both" ? 1 : 0),
+          design: draft.revisions.design + (change === "design" || change === "both" ? 1 : 0),
+        };
+      });
+      return {
+        ...state,
+        document: nextDocument,
+        activeSlideId: nextDocument.slides[0]!.id,
+        selectedElementIds: [],
+        undoStack: pushHistory(state.undoStack, { forward, inverse }),
+        redoStack: [],
+      };
+    }),
 
   selectSlide: (activeSlideId) => set({ activeSlideId, selectedElementIds: [] }),
   selectElement: (elementId) => set({ selectedElementIds: elementId ? [elementId] : [] }),
-  toggleElement: (elementId) => set((state) => ({
-    selectedElementIds: state.selectedElementIds.includes(elementId)
-      ? state.selectedElementIds.filter((id) => id !== elementId)
-      : [...state.selectedElementIds, elementId],
-  })),
+  toggleElement: (elementId) =>
+    set((state) => ({
+      selectedElementIds: state.selectedElementIds.includes(elementId)
+        ? state.selectedElementIds.filter((id) => id !== elementId)
+        : [...state.selectedElementIds, elementId],
+    })),
   selectElements: (elementIds) => set({ selectedElementIds: [...new Set(elementIds)] }),
 
-  undo: () => set((state) => {
-    const entry = state.undoStack.at(-1);
-    if (!entry) return state;
-    const document = applyPatches(state.document, entry.inverse);
-    return { ...state, document, activeSlideId: document.slides.some((s) => s.id === state.activeSlideId) ? state.activeSlideId : document.slides[0]!.id, undoStack: state.undoStack.slice(0, -1), redoStack: [...state.redoStack, entry], selectedElementIds: [] };
-  }),
+  undo: () =>
+    set((state) => {
+      const entry = state.undoStack.at(-1);
+      if (!entry) return state;
+      const document = applyPatches(state.document, entry.inverse);
+      return {
+        ...state,
+        document,
+        activeSlideId: document.slides.some((s) => s.id === state.activeSlideId)
+          ? state.activeSlideId
+          : document.slides[0]!.id,
+        undoStack: state.undoStack.slice(0, -1),
+        redoStack: [...state.redoStack, entry],
+        selectedElementIds: [],
+      };
+    }),
 
-  redo: () => set((state) => {
-    const entry = state.redoStack.at(-1);
-    if (!entry) return state;
-    const document = applyPatches(state.document, entry.forward);
-    return { ...state, document, activeSlideId: document.slides.some((s) => s.id === state.activeSlideId) ? state.activeSlideId : document.slides[0]!.id, undoStack: pushHistory(state.undoStack, entry), redoStack: state.redoStack.slice(0, -1), selectedElementIds: [] };
-  }),
-  newDocument: () => set(() => {
-    const document = createDocument();
-    return { document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] };
-  }),
-  loadDocument: (document) => set(() => {
-    refreshContentHashes(document);
-    return { document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] };
-  }),
+  redo: () =>
+    set((state) => {
+      const entry = state.redoStack.at(-1);
+      if (!entry) return state;
+      const document = applyPatches(state.document, entry.forward);
+      return {
+        ...state,
+        document,
+        activeSlideId: document.slides.some((s) => s.id === state.activeSlideId)
+          ? state.activeSlideId
+          : document.slides[0]!.id,
+        undoStack: pushHistory(state.undoStack, entry),
+        redoStack: state.redoStack.slice(0, -1),
+        selectedElementIds: [],
+      };
+    }),
+  newDocument: () =>
+    set(() => {
+      const document = createDocument();
+      return { document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] };
+    }),
+  loadDocument: (document) =>
+    set(() => {
+      refreshContentHashes(document);
+      return { document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] };
+    }),
 }));

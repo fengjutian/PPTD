@@ -51,13 +51,17 @@ export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePr
             }}
           >
             <span aria-hidden style={{ display: "flex", gap: "4px", height: "18px" }}>
-              <span style={{ flex: 1, background: surface, border: "1px solid rgba(120,130,140,0.3)", borderRadius: "4px" }} />
+              <span
+                style={{ flex: 1, background: surface, border: "1px solid rgba(120,130,140,0.3)", borderRadius: "4px" }}
+              />
               <span style={{ width: "22px", background: accent, borderRadius: "4px" }} />
               <span style={{ width: "22px", background: primary, borderRadius: "4px" }} />
             </span>
             <strong style={{ fontSize: "13px" }}>{preset.name}</strong>
             <small style={{ fontSize: "11px", opacity: 0.72, lineHeight: 1.4 }}>{preset.description}</small>
-            <span style={{ fontSize: "10px", opacity: 0.55 }}>{preset.theme.majorFont} · {preset.theme.minorFont}</span>
+            <span style={{ fontSize: "10px", opacity: 0.55 }}>
+              {preset.theme.majorFont} · {preset.theme.minorFont}
+            </span>
           </button>
         );
       })}

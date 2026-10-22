@@ -17,12 +17,14 @@ describe("theme type scale", () => {
   });
 
   it("reads the levels the theme declares and derives the section title", () => {
-    const scale = resolveTypeScale(theme({
-      display: { fontSizePt: 48 },
-      title: { fontSizePt: 32 },
-      body: { fontSizePt: 16 },
-      caption: { fontSizePt: 10 },
-    }));
+    const scale = resolveTypeScale(
+      theme({
+        display: { fontSizePt: 48 },
+        title: { fontSizePt: 32 },
+        body: { fontSizePt: 16 },
+        caption: { fontSizePt: 10 },
+      }),
+    );
     expect(scale.display).toBe(48);
     expect(scale.title).toBe(32);
     expect(scale.body).toBe(16);

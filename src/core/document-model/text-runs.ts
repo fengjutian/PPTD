@@ -116,7 +116,10 @@ export function textFragments(text: string, runs: TextRun[] | undefined): TextFr
  * The style a fragment is drawn with: the run decides, the element is the
  * fallback for the properties the run does not mention.
  */
-export function resolveFragmentStyle(element: TextElementStyle, style: TextRunStyle): { bold: boolean; color: string; underline: boolean } {
+export function resolveFragmentStyle(
+  element: TextElementStyle,
+  style: TextRunStyle,
+): { bold: boolean; color: string; underline: boolean } {
   return {
     bold: style.bold ?? element.bold,
     color: style.color ?? element.color,

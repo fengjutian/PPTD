@@ -1,17 +1,72 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { parsePresentationDocument, repairDanglingLayoutReferences, type PresentationDocument } from "../core/document-model";
+import {
+  parsePresentationDocument,
+  repairDanglingLayoutReferences,
+  type PresentationDocument,
+} from "../core/document-model";
 import { resolveDocumentImages, getImageProjectPath } from "./image-url-service";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
 
 export const isDesktopRuntime = () => isTauri();
-export interface TemplateRecord { id: string; name: string; size: number; importedAt: number }
-export interface TemplateRegion { role: "title" | "body" | "image"; x: number; y: number; width: number; height: number; textColor: string | null; fontSizePt: number | null }
-export interface TemplateDecoration { shape: "rectangle" | "ellipse"; x: number; y: number; width: number; height: number; fill: string }
-export interface TemplateLayoutSummary { index: number; name: string; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }
-export interface TemplateAnalysis { slideCount: number; slideWidthEmu: number | null; slideHeightEmu: number | null; masterCount: number; layoutCount: number; themeCount: number; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; defaultDecorations: TemplateDecoration[]; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }>; layouts: TemplateLayoutSummary[]; warnings: string[] }
+export interface TemplateRecord {
+  id: string;
+  name: string;
+  size: number;
+  importedAt: number;
+}
+export interface TemplateRegion {
+  role: "title" | "body" | "image";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  textColor: string | null;
+  fontSizePt: number | null;
+}
+export interface TemplateDecoration {
+  shape: "rectangle" | "ellipse";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill: string;
+}
+export interface TemplateLayoutSummary {
+  index: number;
+  name: string;
+  backgroundColor: string | null;
+  decorations: TemplateDecoration[];
+  regions: TemplateRegion[];
+}
+export interface TemplateAnalysis {
+  slideCount: number;
+  slideWidthEmu: number | null;
+  slideHeightEmu: number | null;
+  masterCount: number;
+  layoutCount: number;
+  themeCount: number;
+  themeColors: Array<{ name: string; value: string }>;
+  majorFont: string | null;
+  minorFont: string | null;
+  defaultBackgroundColor: string | null;
+  defaultDecorations: TemplateDecoration[];
+  slides: Array<{
+    index: number;
+    title: string;
+    textCount: number;
+    imageCount: number;
+    shapeCount: number;
+    layout: string | null;
+    backgroundColor: string | null;
+    decorations: TemplateDecoration[];
+    regions: TemplateRegion[];
+  }>;
+  layouts: TemplateLayoutSummary[];
+  warnings: string[];
+}
 
 export interface StoredDocument {
   document: PresentationDocument;
@@ -40,13 +95,23 @@ export function readStoredDocument(raw: unknown): StoredDocument {
   }
 }
 
-export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument; modifiedAt: number; removedLayoutReferences: number } | null> {
+export async function chooseProjectToOpen(): Promise<{
+  path: string;
+  document: PresentationDocument;
+  modifiedAt: number;
+  removedLayoutReferences: number;
+} | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const path = await open({ multiple: false, directory: false, filters: projectFilter });
   if (!path) return null;
   const raw = await invoke<unknown>("open_project", { path });
   const stored = readStoredDocument(raw);
-  return { path, document: stored.document, modifiedAt: await projectModifiedAt(path), removedLayoutReferences: stored.removedLayoutReferences };
+  return {
+    path,
+    document: stored.document,
+    modifiedAt: await projectModifiedAt(path),
+    removedLayoutReferences: stored.removedLayoutReferences,
+  };
 }
 
 export async function choosePptxTemplate(): Promise<{ path: string; name: string } | null> {
@@ -56,11 +121,17 @@ export async function choosePptxTemplate(): Promise<{ path: string; name: string
   return { path, name: path.split(/[\\/]/).at(-1) || "template.pptx" };
 }
 
-export const importPptxTemplate = (sourcePath: string) => invoke<TemplateRecord>("import_pptx_template", { sourcePath });
+export const importPptxTemplate = (sourcePath: string) =>
+  invoke<TemplateRecord>("import_pptx_template", { sourcePath });
 export const listPptxTemplates = () => invoke<TemplateRecord[]>("list_pptx_templates");
-export const getPptxTemplatePreview = (templateId: string) => invoke<string | null>("get_pptx_template_preview", { templateId });
-export const renderPptxTemplateLayouts = (templateId: string) => invoke<Array<{ layoutIndex: number; layoutName: string; dataUrl: string }>>("render_pptx_template_layouts", { templateId });
-export const analyzePptxTemplate = (templateId: string) => invoke<TemplateAnalysis>("analyze_pptx_template", { templateId });
+export const getPptxTemplatePreview = (templateId: string) =>
+  invoke<string | null>("get_pptx_template_preview", { templateId });
+export const renderPptxTemplateLayouts = (templateId: string) =>
+  invoke<Array<{ layoutIndex: number; layoutName: string; dataUrl: string }>>("render_pptx_template_layouts", {
+    templateId,
+  });
+export const analyzePptxTemplate = (templateId: string) =>
+  invoke<TemplateAnalysis>("analyze_pptx_template", { templateId });
 
 export const projectModifiedAt = (path: string) => invoke<number>("project_modified_at", { path });
 
@@ -72,11 +143,17 @@ export const projectModifiedAt = (path: string) => invoke<number>("project_modif
  * project that keeps an `asset://` reference with no file behind it comes back
  * as a blank page, and nothing else in the app would say so.
  */
-export interface AssetReport { missingAssets: string[] }
+export interface AssetReport {
+  missingAssets: string[];
+}
 
-export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<{ path: string; modifiedAt: number | null; report: AssetReport } | null> {
+export async function saveProject(
+  document: PresentationDocument,
+  currentPath?: string,
+): Promise<{ path: string; modifiedAt: number | null; report: AssetReport } | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
-  const path = currentPath ?? await save({ filters: projectFilter, defaultPath: `${safeFileName(document.title)}.pptd` });
+  const path =
+    currentPath ?? (await save({ filters: projectFilter, defaultPath: `${safeFileName(document.title)}.pptd` }));
   if (!path) return null;
   // A document keeps its pictures as references into the asset directory of the
   // project they were saved to. Writing it to another path has to carry the
@@ -95,9 +172,12 @@ export async function saveProject(document: PresentationDocument, currentPath?: 
 
 let recoveryQueue: Promise<AssetReport | undefined> = Promise.resolve(undefined);
 
-const enqueueRecovery = <T,>(task: () => Promise<T>): Promise<T> => {
+const enqueueRecovery = <T>(task: () => Promise<T>): Promise<T> => {
   const result = recoveryQueue.catch(() => undefined).then(task);
-  recoveryQueue = result.then(() => undefined, () => undefined);
+  recoveryQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
   return result;
 };
 
@@ -122,7 +202,9 @@ export const recoveryProjectPath = () => invoke<string | null>("recovery_project
 
 export async function clearRecovery(): Promise<void> {
   if (!isTauri()) return;
-  await enqueueRecovery(async () => { await invoke("clear_recovery"); });
+  await enqueueRecovery(async () => {
+    await invoke("clear_recovery");
+  });
 }
 
 function safeFileName(value: string): string {
@@ -132,7 +214,10 @@ function safeFileName(value: string): string {
 
 export async function choosePptxPath(title: string): Promise<string | null> {
   if (!isTauri()) return null;
-  return save({ filters: [{ name: "PowerPoint 演示文稿", extensions: ["pptx"] }], defaultPath: `${safeFileName(title)}.pptx` });
+  return save({
+    filters: [{ name: "PowerPoint 演示文稿", extensions: ["pptx"] }],
+    defaultPath: `${safeFileName(title)}.pptx`,
+  });
 }
 
 export async function writePptx(path: string, bytes: Uint8Array): Promise<void> {

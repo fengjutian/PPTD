@@ -48,7 +48,11 @@ function channelDiffers(left: number, right: number, tolerance: number): boolean
  * not a rendering difference, and reporting it as "everything changed" would
  * hide the real cause.
  */
-export function comparePixels(expected: PixelImage, actual: PixelImage, options: PixelDiffOptions = {}): PixelDiffResult {
+export function comparePixels(
+  expected: PixelImage,
+  actual: PixelImage,
+  options: PixelDiffOptions = {},
+): PixelDiffResult {
   const tolerance = Math.max(0, Math.min(255, Math.round(options.channelTolerance ?? DEFAULT_TOLERANCE)));
 
   if (expected.width !== actual.width || expected.height !== actual.height) {
@@ -113,7 +117,9 @@ function buildDiffImage(expected: PixelImage, changedOffsets: number[]): PixelIm
   const data = new Uint8ClampedArray(width * height * 4);
   for (let offset = 0; offset < data.length; offset += 4) {
     const grey = Math.round(
-      (expected.data[offset]! * 0.299 + expected.data[offset + 1]! * 0.587 + expected.data[offset + 2]! * 0.114) * 0.25 + 191,
+      (expected.data[offset]! * 0.299 + expected.data[offset + 1]! * 0.587 + expected.data[offset + 2]! * 0.114) *
+        0.25 +
+        191,
     );
     data[offset] = grey;
     data[offset + 1] = grey;

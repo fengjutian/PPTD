@@ -1,6 +1,50 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, Grid2x2, Grid3x3, ImagePlus, Info, LayoutDashboard, Magnet, MoveHorizontal, MoveVertical, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  Circle,
+  CircleAlert,
+  CircleCheck,
+  Copy,
+  Download,
+  Eye,
+  FilePlus2,
+  FileUp,
+  Grid2x2,
+  Grid3x3,
+  ImagePlus,
+  Info,
+  LayoutDashboard,
+  Magnet,
+  MoveHorizontal,
+  MoveVertical,
+  MousePointer2,
+  Palette,
+  Plus,
+  Redo2,
+  RotateCcw,
+  Save,
+  Settings,
+  Sparkles,
+  Square,
+  Trash2,
+  Type,
+  Undo2,
+  Wand2,
+  X,
+} from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type Slide, type SlideElement, type SupportedImageMimeType } from "../core/document-model";
+import {
+  EMU_PER_INCH,
+  emu,
+  type ElementId,
+  type RectEmu,
+  type Slide,
+  type SlideElement,
+  type SupportedImageMimeType,
+} from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
@@ -18,16 +62,55 @@ import { useMarqueeSelection } from "../features/editor/use-marquee-selection";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
-import { countSlidePoints, draftMetrics, resolveActiveSlideIndex, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
+import {
+  countSlidePoints,
+  draftMetrics,
+  resolveActiveSlideIndex,
+  reviewIssues,
+  withSlideIds,
+  type AiDraftSaveState,
+} from "../features/ai/content-review";
 import { generateDeckVisualAssets, planVisualAssets, requestVisualAsset } from "../services/ai-visual-asset";
 import type { AiVisualAssetRole } from "../core/commands/visual-asset";
 import { AiImageDialog } from "../features/editor/AiImageDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, mergeStreamProgress, polishPresentationTopic, type AiDraft, type AiGenerationProgress, type AiVisualAssetIntent } from "../services/ai-service";
+import {
+  briefsFromDraft,
+  cancelAiGeneration,
+  describeAiError,
+  endAiGeneration,
+  generatePresentationDesign,
+  generatePresentationDraft,
+  listenAiGenerationProgress,
+  mergeStreamProgress,
+  polishPresentationTopic,
+  type AiDraft,
+  type AiGenerationProgress,
+  type AiVisualAssetIntent,
+} from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
-import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, recoveryProjectPath, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
+import {
+  analyzePptxTemplate,
+  choosePptxPath,
+  choosePptxTemplate,
+  chooseProjectToOpen,
+  clearRecovery,
+  getPptxTemplatePreview,
+  importPptxTemplate,
+  isDesktopRuntime,
+  listPptxTemplates,
+  loadRecovery,
+  projectModifiedAt,
+  recoveryProjectPath,
+  renderPptxTemplateLayouts,
+  saveProject,
+  saveRecovery,
+  writePptx,
+  type TemplateAnalysis,
+  type TemplateRecord,
+} from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS } from "../core/design/theme-presets";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
@@ -38,7 +121,13 @@ import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 import { renderRealPptxForReview } from "../features/pptx-export/render-real-pptx";
-import { resolveDocumentImages, setImageProjectPath, getImageProjectPath, failedImageReferences, subscribeImageFailures } from "../services/image-url-service";
+import {
+  resolveDocumentImages,
+  setImageProjectPath,
+  getImageProjectPath,
+  failedImageReferences,
+  subscribeImageFailures,
+} from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
 /** The narrowest and the widest the property panel may be dragged to. */
@@ -65,23 +154,49 @@ type PageMessage = { id: number; text: string; kind: "info" | "success" | "error
 type DesignProgress = { percent: number; label: string };
 type TemplateLayoutRender = { layoutIndex: number; layoutName: string; dataUrl: string };
 
-function matchTemplateLayoutRender(renders: TemplateLayoutRender[], layoutIndex: number, layoutName: string): TemplateLayoutRender | undefined {
+function matchTemplateLayoutRender(
+  renders: TemplateLayoutRender[],
+  layoutIndex: number,
+  layoutName: string,
+): TemplateLayoutRender | undefined {
   const normalizedName = layoutName.trim().toLocaleLowerCase();
   const nameMatches = renders.filter((render) => render.layoutName.trim().toLocaleLowerCase() === normalizedName);
-  if (nameMatches.length > 0) return nameMatches.sort((left, right) => Math.abs(left.layoutIndex - layoutIndex) - Math.abs(right.layoutIndex - layoutIndex))[0];
+  if (nameMatches.length > 0)
+    return nameMatches.sort(
+      (left, right) => Math.abs(left.layoutIndex - layoutIndex) - Math.abs(right.layoutIndex - layoutIndex),
+    )[0];
   return renders.find((render) => render.layoutIndex === layoutIndex);
 }
 
-function ToolButton({ label, onClick, disabled, children }: { label: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode }) {
-  return <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
+function ToolButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  );
 }
 
 type ResizeDirection = "n" | "s" | "e" | "w" | "nw" | "ne" | "sw" | "se";
 const MIN_ELEMENT_SIZE = emu(0.1 * EMU_PER_INCH);
 const RESIZE_HANDLES: ReadonlyArray<readonly [ResizeDirection, string]> = [
-  ["nw", "左上"], ["n", "上"], ["ne", "右上"],
-  ["w", "左"], ["e", "右"],
-  ["sw", "左下"], ["s", "下"], ["se", "右下"],
+  ["nw", "左上"],
+  ["n", "上"],
+  ["ne", "右上"],
+  ["w", "左"],
+  ["e", "右"],
+  ["sw", "左下"],
+  ["s", "下"],
+  ["se", "右下"],
 ];
 
 function resizeFrame(start: RectEmu, direction: ResizeDirection, dx: number, dy: number): RectEmu {
@@ -122,7 +237,19 @@ async function readImageSize(dataUrl: string): Promise<{ width: number; height: 
   }
 }
 
-const ElementView = memo(function ElementView({ element, slide, scale, selected, snap }: { element: SlideElement; slide: Slide; scale: number; selected: boolean; snap: SnapContext }) {
+const ElementView = memo(function ElementView({
+  element,
+  slide,
+  scale,
+  selected,
+  snap,
+}: {
+  element: SlideElement;
+  slide: Slide;
+  scale: number;
+  selected: boolean;
+  snap: SnapContext;
+}) {
   const execute = useEditorStore((s) => s.execute);
   const activeSlideId = useEditorStore((s) => s.activeSlideId);
   const selectElement = useEditorStore((s) => s.selectElement);
@@ -150,9 +277,10 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
   const [previewFrame, setPreviewFrame] = useState<RectEmu | null>(null);
   const [previewRotation, setPreviewRotation] = useState<number | null>(null);
   // 跟着整组一起动的对象，用整组的位移渲染；握鼠标的那个自己画预览。
-  const followerOffset = groupDrag && groupDrag.leaderId !== element.id && groupDrag.ids.includes(element.id)
-    ? { x: groupDrag.dx, y: groupDrag.dy }
-    : { x: 0, y: 0 };
+  const followerOffset =
+    groupDrag && groupDrag.leaderId !== element.id && groupDrag.ids.includes(element.id)
+      ? { x: groupDrag.dx, y: groupDrag.dy }
+      : { x: 0, y: 0 };
   const frame = previewFrame
     ? previewFrame
     : followerOffset.x || followerOffset.y
@@ -160,8 +288,10 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
       : element.frame;
   const rotation = previewRotation ?? element.rotationMilliDegree;
   const style: React.CSSProperties = {
-    left: frame.x * scale, top: frame.y * scale,
-    width: frame.width * scale, height: frame.height * scale,
+    left: frame.x * scale,
+    top: frame.y * scale,
+    width: frame.width * scale,
+    height: frame.height * scale,
     transform: `rotate(${rotation / 1000}deg)`,
     touchAction: "none",
   };
@@ -207,18 +337,20 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
       return;
     }
     // 拖动已经在选中的对象时，整组一起走；点未选中的对象则只选它一个。
-    const groupIds = kind === "move" && selectedElementIds.length > 1 && selectedElementIds.includes(element.id)
-      ? selectedElementIds.filter((id) => !slide.elements.find((item) => item.id === id)?.locked)
-      : undefined;
+    const groupIds =
+      kind === "move" && selectedElementIds.length > 1 && selectedElementIds.includes(element.id)
+        ? selectedElementIds.filter((id) => !slide.elements.find((item) => item.id === id)?.locked)
+        : undefined;
     if (!groupIds || groupIds.length < 2) selectElement(element.id);
     if (element.locked) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const rect = rootRef.current?.getBoundingClientRect();
     const centerX = rect ? rect.left + rect.width / 2 : event.clientX;
     const centerY = rect ? rect.top + rect.height / 2 : event.clientY;
-    const groupUnion = groupIds && groupIds.length > 1
-      ? unionFrame(slide.elements.filter((item) => groupIds.includes(item.id)).map((item) => item.frame))
-      : undefined;
+    const groupUnion =
+      groupIds && groupIds.length > 1
+        ? unionFrame(slide.elements.filter((item) => groupIds.includes(item.id)).map((item) => item.frame))
+        : undefined;
     if (groupUnion) beginGroupDrag(groupIds!, element.id);
     interaction.current = {
       kind,
@@ -258,6 +390,8 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
       const delta = dragDelta(current, event);
       if (current.groupIds && current.groupIds.length > 1) {
         updateGroupDrag(emu(delta.dx), emu(delta.dy));
+        // 握鼠标的那个对象也要跟着动：它是这一组的预览，其余成员用整组位移跟随。
+        setPreviewFrame({ ...current.frame, x: emu(current.frame.x + delta.dx), y: emu(current.frame.y + delta.dy) });
         return;
       }
       const candidate = { ...current.frame, x: emu(current.frame.x + delta.dx), y: emu(current.frame.y + delta.dy) };
@@ -274,7 +408,7 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
     const angle = Math.atan2(event.clientY - centerY, event.clientX - centerX);
-    setPreviewRotation(normalizeRotation(current.rotation + ((angle - current.startAngle!) * 180) / Math.PI * 1000));
+    setPreviewRotation(normalizeRotation(current.rotation + (((angle - current.startAngle!) * 180) / Math.PI) * 1000));
   };
 
   const finish = (event: React.PointerEvent, cancelled = false) => {
@@ -293,29 +427,66 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
       if (current.groupIds && current.groupIds.length > 1) {
         if (!delta.dx && !delta.dy) return;
         // 整组一起移动是一个意图，所以是一个命令、一个撤销项。
-        execute({ type: "move-elements", slideId: activeSlideId, elementIds: current.groupIds, dx: emu(delta.dx), dy: emu(delta.dy) });
+        execute({
+          type: "move-elements",
+          slideId: activeSlideId,
+          elementIds: current.groupIds,
+          dx: emu(delta.dx),
+          dy: emu(delta.dy),
+        });
         return;
       }
       if (!dx && !dy) return;
       const candidate = { ...current.frame, x: emu(current.frame.x + dx), y: emu(current.frame.y + dy) };
       const snapped = applyMoveSnap(candidate, false);
       if (snapped.frame.x === current.frame.x && snapped.frame.y === current.frame.y) return;
-      execute({ type: "move-element", slideId: activeSlideId, elementId: element.id, x: emu(snapped.frame.x), y: emu(snapped.frame.y) });
+      execute({
+        type: "move-element",
+        slideId: activeSlideId,
+        elementId: element.id,
+        x: emu(snapped.frame.x),
+        y: emu(snapped.frame.y),
+      });
       return;
     }
     if (current.kind === "resize") {
       const resized = resizeFrame(current.frame, current.direction!, dx, dy);
       const snapped = applyResizeSnap(resized, current.direction!, false);
-      if (snapped.frame.width === current.frame.width && snapped.frame.height === current.frame.height && snapped.frame.x === current.frame.x && snapped.frame.y === current.frame.y) return;
-      execute({ type: "transform-element", slideId: activeSlideId, elementId: element.id, frame: snapped.frame, rotationMilliDegree: current.rotation });
+      if (
+        snapped.frame.width === current.frame.width &&
+        snapped.frame.height === current.frame.height &&
+        snapped.frame.x === current.frame.x &&
+        snapped.frame.y === current.frame.y
+      )
+        return;
+      execute({
+        type: "transform-element",
+        slideId: activeSlideId,
+        elementId: element.id,
+        frame: snapped.frame,
+        rotationMilliDegree: current.rotation,
+      });
       return;
     }
     const rect = rootRef.current?.getBoundingClientRect();
     const nextRotation = rect
-      ? normalizeRotation(current.rotation + ((Math.atan2(event.clientY - (rect.top + rect.height / 2), event.clientX - (rect.left + rect.width / 2)) - current.startAngle!) * 180) / Math.PI * 1000)
+      ? normalizeRotation(
+          current.rotation +
+            (((Math.atan2(event.clientY - (rect.top + rect.height / 2), event.clientX - (rect.left + rect.width / 2)) -
+              current.startAngle!) *
+              180) /
+              Math.PI) *
+              1000,
+        )
       : current.rotation;
     if (nextRotation === current.rotation) return;
-    execute({ type: "transform-element", slideId: activeSlideId, elementId: element.id, frame: current.frame, rotationMilliDegree: nextRotation });
+    execute({
+      type: "transform-element",
+      slideId: activeSlideId,
+      elementId: element.id,
+      frame: current.frame,
+      rotationMilliDegree: nextRotation,
+    });
   };
 
   return (
@@ -331,34 +502,75 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
       onPointerCancel={(event) => finish(event, true)}
     >
       <SlideElementContent element={element} slide={slide} scale={scale} />
-      {selected && !element.locked && <>
-        {RESIZE_HANDLES.map(([direction, label]) => <button key={direction} type="button" aria-label={`从${label}缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
-        <button type="button" aria-label="旋转对象" className="element-rotate-handle" onPointerDown={(event) => begin("rotate", event)} />
-      </>}
+      {selected && !element.locked && (
+        <>
+          {RESIZE_HANDLES.map(([direction, label]) => (
+            <button
+              key={direction}
+              type="button"
+              aria-label={`从${label}缩放`}
+              className={`element-handle ${direction}`}
+              onPointerDown={(event) => begin("resize", event, direction)}
+            />
+          ))}
+          <button
+            type="button"
+            aria-label="旋转对象"
+            className="element-rotate-handle"
+            onPointerDown={(event) => begin("rotate", event)}
+          />
+        </>
+      )}
     </SlideElementFrame>
   );
 });
 
-const SlideThumbnail = memo(function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: Slide; pageWidth: number; pageHeight: number }) {
+const SlideThumbnail = memo(function SlideThumbnail({
+  slide,
+  pageWidth,
+  pageHeight,
+}: {
+  slide: Slide;
+  pageWidth: number;
+  pageHeight: number;
+}) {
   // The thumbnail is the canvas drawn smaller, so it needs the size of its own
   // box: the text of a page is only the same text when it is drawn with the
   // scale of the box it is drawn in.
   const { ref, width } = useMeasuredWidth<HTMLDivElement>();
   const scale = sceneScale(width, pageWidth);
-  return <div className="thumbnail" ref={ref} style={{ aspectRatio: `${pageWidth} / ${pageHeight}` }}>
-    <div className="thumbnail-scene" style={{ background: slide.background }}>
-      {slide.elements.map((element) => (
-        <SlideElementFrame key={element.id} element={element} scale={scale}>
-          <SlideElementContent element={element} slide={slide} scale={scale} imageAlt="" />
-        </SlideElementFrame>
-      ))}
-      {slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}
+  return (
+    <div className="thumbnail" ref={ref} style={{ aspectRatio: `${pageWidth} / ${pageHeight}` }}>
+      <div className="thumbnail-scene" style={{ background: slide.background }}>
+        {slide.elements.map((element) => (
+          <SlideElementFrame key={element.id} element={element} scale={scale}>
+            <SlideElementContent element={element} slide={slide} scale={scale} imageAlt="" />
+          </SlideElementFrame>
+        ))}
+        {slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}
+      </div>
     </div>
-  </div>;
+  );
 });
 
 export function App() {
-  const { document, activeSlideId, selectedElementIds, undoStack, redoStack, execute, replaceDocument, selectSlide, selectElement, selectElements, toggleElement, undo, redo, newDocument, loadDocument } = useEditorStore();
+  const {
+    document,
+    activeSlideId,
+    selectedElementIds,
+    undoStack,
+    redoStack,
+    execute,
+    replaceDocument,
+    selectSlide,
+    selectElement,
+    selectElements,
+    toggleElement,
+    undo,
+    redo,
+    newDocument,
+    loadDocument,
+  } = useEditorStore();
   const [projectPath, setProjectPath] = useState<string>();
   const [projectMtime, setProjectMtime] = useState<number>();
   const [saving, setSaving] = useState(false);
@@ -371,7 +583,20 @@ export function App() {
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
-  const setTaskStatus = (text?: string) => setMessage(text ? { id: Date.now(), text, kind: /失败|错误|无效|必须|不可用/.test(text) ? "error" : /完成|成功|已保存|已添加|已打开|已新建|已恢复|已确认/.test(text) ? "success" : "info" } : undefined);
+  const setTaskStatus = (text?: string) =>
+    setMessage(
+      text
+        ? {
+            id: Date.now(),
+            text,
+            kind: /失败|错误|无效|必须|不可用/.test(text)
+              ? "error"
+              : /完成|成功|已保存|已添加|已打开|已新建|已恢复|已确认/.test(text)
+                ? "success"
+                : "info",
+          }
+        : undefined,
+    );
   const [activeView, setActiveView] = useState<AppView>("editor");
   const [aiTopic, setAiTopic] = useState("");
   const [aiSlideCount, setAiSlideCount] = useState<number | "">(6);
@@ -396,6 +621,8 @@ export function App() {
   const activeHistoryIdRef = useRef<string | undefined>(undefined);
   const aiUnsavedRef = useRef(false);
   const [aiBusy, setAiBusy] = useState(false);
+  /** 整份草稿重新生成的状态。它和开始页的生成互斥，因为两者都要占用 AI 任务号。 */
+  const [aiRegenerating, setAiRegenerating] = useState(false);
   const [aiPolishing, setAiPolishing] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
   /** 流式汇报的实时进度：正文分批并行，这里是各批汇总后的结果。 */
@@ -418,7 +645,11 @@ export function App() {
   const designTaskId = useRef(0);
   const [designProgress, setDesignProgress] = useState<DesignProgress>({ percent: 0, label: "等待开始" });
   /** 质量门未过时保留报告，让用户决定进入编辑器调整还是稍后处理。 */
-  const [designQualityReport, setDesignQualityReport] = useState<{ templateName: string; issues: PresentationQualityIssue[]; notes: string[] }>();
+  const [designQualityReport, setDesignQualityReport] = useState<{
+    templateName: string;
+    issues: PresentationQualityIssue[];
+    notes: string[];
+  }>();
   const imageInputRef = useRef<HTMLInputElement>(null);
   /** AI 配图对话框是否打开。 */
   const [aiImageOpen, setAiImageOpen] = useState(false);
@@ -457,7 +688,10 @@ export function App() {
   const dirty = document.revisions.document !== savedRevision;
   useEffect(() => {
     void loadSettings()
-      .then((settings) => { applyTheme(settings.theme); applyUiFont(settings.uiFont); })
+      .then((settings) => {
+        applyTheme(settings.theme);
+        applyUiFont(settings.uiFont);
+      })
       .catch((error: unknown) => {
         const fallback = defaultSettings();
         applyTheme(fallback.theme);
@@ -468,12 +702,27 @@ export function App() {
   useEffect(() => {
     let active = true;
     void loadAiHistory()
-      .then((history) => { if (active) setAiHistory(history); })
-      .catch((error: unknown) => { if (active) setTaskStatus(`制作历史读取失败：${error instanceof Error ? error.message : String(error)}`); });
-    return () => { active = false; };
+      .then((history) => {
+        if (active) setAiHistory(history);
+      })
+      .catch((error: unknown) => {
+        if (active) setTaskStatus(`制作历史读取失败：${error instanceof Error ? error.message : String(error)}`);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
-  useEffect(() => { if (!message) return; const timer = window.setTimeout(() => setMessage(undefined), 4200); return () => window.clearTimeout(timer); }, [message]);
-  useEffect(() => { if (isDesktopRuntime()) void listPptxTemplates().then(setTemplateLibrary).catch(() => setTaskStatus("模板库读取失败")); }, []);
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(undefined), 4200);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+  useEffect(() => {
+    if (isDesktopRuntime())
+      void listPptxTemplates()
+        .then(setTemplateLibrary)
+        .catch(() => setTaskStatus("模板库读取失败"));
+  }, []);
   // The document core measures text with the real font once the application
   // tells it how wide a piece of text is. Without it the core falls back to a
   // rough estimate, which is why the measurer is registered here.
@@ -485,33 +734,41 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    void loadRecovery().then((recovery) => {
-      if (!active || !recovery) return;
-      if (!window.confirm("检测到未完成的恢复快照，是否恢复？")) {
-        void clearRecovery();
-        return;
-      }
-      // The pictures of a snapshot live next to the recovery file, so the
-      // document is read against that path until the user saves it as a
-      // project of its own.
-      void recoveryProjectPath().then((path) => {
-        if (!active) return;
-        setImageProjectPath(path ?? undefined);
+    void loadRecovery()
+      .then((recovery) => {
+        if (!active || !recovery) return;
+        if (!window.confirm("检测到未完成的恢复快照，是否恢复？")) {
+          void clearRecovery();
+          return;
+        }
+        // The pictures of a snapshot live next to the recovery file, so the
+        // document is read against that path until the user saves it as a
+        // project of its own.
+        void recoveryProjectPath().then((path) => {
+          if (!active) return;
+          setImageProjectPath(path ?? undefined);
+        });
+        loadDocument(recovery.document);
+        setProjectPath(undefined);
+        setSavedRevision(-1);
+        setTaskStatus(
+          recovery.removedLayoutReferences > 0
+            ? `已恢复自动保存快照，但 ${recovery.removedLayoutReferences} 个页面的模板引用缺失，请另存项目`
+            : "已恢复自动保存快照，请另存项目",
+        );
+      })
+      .catch((error: unknown) => {
+        // A snapshot that cannot be read is still the user's work. The file is
+        // kept and its path is reported, so nothing is lost silently.
+        void recoveryProjectPath().then((path) => {
+          setTaskStatus(
+            `恢复检查失败：${error instanceof Error ? error.message : String(error)}${path ? `。快照保留在 ${path}` : ""}`,
+          );
+        });
       });
-      loadDocument(recovery.document);
-      setProjectPath(undefined);
-      setSavedRevision(-1);
-      setTaskStatus(recovery.removedLayoutReferences > 0
-        ? `已恢复自动保存快照，但 ${recovery.removedLayoutReferences} 个页面的模板引用缺失，请另存项目`
-        : "已恢复自动保存快照，请另存项目");
-    }).catch((error: unknown) => {
-      // A snapshot that cannot be read is still the user's work. The file is
-      // kept and its path is reported, so nothing is lost silently.
-      void recoveryProjectPath().then((path) => {
-        setTaskStatus(`恢复检查失败：${error instanceof Error ? error.message : String(error)}${path ? `。快照保留在 ${path}` : ""}`);
-      });
-    });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [loadDocument]);
 
   // 读不到的图片要在状态栏里数出来。画布上的缺图块会随缩放、随滚动被忽略，
@@ -529,12 +786,15 @@ export function App() {
       // The snapshot keeps the pictures of the document. They live in the asset
       // directory of the project the document belongs to, so the backend needs
       // that path to carry them into the snapshot.
-      void saveRecovery(document, getImageProjectPath()).then((report) => {
-        // 自动保存失败要让用户看见，而不是继续显示"已保存"。
-        if (report && report.missingAssets.length > 0) {
-          setTaskStatus(`自动保存完成，但 ${report.missingAssets.length} 张图片资源缺失，请检查模板`);
-        }
-      }, (error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
+      void saveRecovery(document, getImageProjectPath()).then(
+        (report) => {
+          // 自动保存失败要让用户看见，而不是继续显示"已保存"。
+          if (report && report.missingAssets.length > 0) {
+            setTaskStatus(`自动保存完成，但 ${report.missingAssets.length} 张图片资源缺失，请检查模板`);
+          }
+        },
+        (error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`),
+      );
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [dirty, document]);
@@ -561,39 +821,65 @@ export function App() {
       setProjectPath(result.path);
       setProjectMtime(result.modifiedAt);
       setSavedRevision(result.document.revisions.document);
-      setTaskStatus(result.removedLayoutReferences > 0
-        ? `项目已打开，但 ${result.removedLayoutReferences} 个页面的模板引用缺失`
-        : "项目已打开");
-    } catch (error) { setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`); }
+      setTaskStatus(
+        result.removedLayoutReferences > 0
+          ? `项目已打开，但 ${result.removedLayoutReferences} 个页面的模板引用缺失`
+          : "项目已打开",
+      );
+    } catch (error) {
+      setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const handleSave = async () => {
     if (savingRef.current) return;
-    if (!isDesktopRuntime()) { setTaskStatus("浏览器预览模式不支持保存项目，请使用桌面端"); return; }
+    if (!isDesktopRuntime()) {
+      setTaskStatus("浏览器预览模式不支持保存项目，请使用桌面端");
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     setTaskStatus("正在保存…");
     try {
       if (projectPath && isDesktopRuntime() && projectMtime !== undefined) {
         let currentMtime: number | null = null;
-        try { currentMtime = await projectModifiedAt(projectPath); } catch { currentMtime = null; }
-        if (currentMtime !== null && currentMtime !== projectMtime && !window.confirm("项目文件已被其他程序修改。继续保存会覆盖外部修改，是否继续？")) {
+        try {
+          currentMtime = await projectModifiedAt(projectPath);
+        } catch {
+          currentMtime = null;
+        }
+        if (
+          currentMtime !== null &&
+          currentMtime !== projectMtime &&
+          !window.confirm("项目文件已被其他程序修改。继续保存会覆盖外部修改，是否继续？")
+        ) {
           setTaskStatus("保存已取消");
           return;
         }
       }
       const result = await saveProject(document, projectPath);
-      if (!result) { setTaskStatus(undefined); return; }
-      if (isDesktopRuntime()) { setProjectPath(result.path); setImageProjectPath(result.path); }
+      if (!result) {
+        setTaskStatus(undefined);
+        return;
+      }
+      if (isDesktopRuntime()) {
+        setProjectPath(result.path);
+        setImageProjectPath(result.path);
+      }
       setProjectMtime(result.modifiedAt ?? undefined);
       setSavedRevision(document.revisions.document);
       await clearRecovery();
       // 文稿存下来了，但有图片没存进去。悄悄说"已保存"等于把缺口藏起来。
-      setTaskStatus(result.report.missingAssets.length > 0
-        ? `项目已保存，但 ${result.report.missingAssets.length} 张图片资源缺失，请检查模板`
-        : isDesktopRuntime() ? "项目已保存" : "浏览器草稿已保存");
-    } catch (error) { setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
-    finally {
+      setTaskStatus(
+        result.report.missingAssets.length > 0
+          ? `项目已保存，但 ${result.report.missingAssets.length} 张图片资源缺失，请检查模板`
+          : isDesktopRuntime()
+            ? "项目已保存"
+            : "浏览器草稿已保存",
+      );
+    } catch (error) {
+      setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
       savingRef.current = false;
       setSaving(false);
     }
@@ -624,14 +910,24 @@ export function App() {
       const path = await choosePptxPath(document.title);
       if (path) await writePptx(path, bytes);
       else if (!isDesktopRuntime()) {
-        const blob = new Blob([bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+        const blob = new Blob([bytes as BlobPart], {
+          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        });
         const url = URL.createObjectURL(blob);
-        const anchor = Object.assign(globalThis.document.createElement("a"), { href: url, download: `${document.title}.pptx` });
+        const anchor = Object.assign(globalThis.document.createElement("a"), {
+          href: url,
+          download: `${document.title}.pptx`,
+        });
         anchor.click();
         URL.revokeObjectURL(url);
-      } else { setTaskStatus(undefined); return; }
+      } else {
+        setTaskStatus(undefined);
+        return;
+      }
       setExportReport(report);
-      setTaskStatus(`导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象${report.warnings.length ? `，${report.warnings.length} 条提示` : ""}`);
+      setTaskStatus(
+        `导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象${report.warnings.length ? `，${report.warnings.length} 条提示` : ""}`,
+      );
     } catch (error) {
       if (error instanceof Error && error.message === "EXPORT_CANCELLED") setTaskStatus("导出已取消");
       else setTaskStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`);
@@ -681,9 +977,10 @@ export function App() {
       setAiImageError(result.error);
       return;
     }
-    const mimeType: SupportedImageMimeType = result.asset.mimeType === "image/jpeg" || result.asset.mimeType === "image/webp"
-      ? result.asset.mimeType
-      : "image/png";
+    const mimeType: SupportedImageMimeType =
+      result.asset.mimeType === "image/jpeg" || result.asset.mimeType === "image/webp"
+        ? result.asset.mimeType
+        : "image/png";
     execute({
       type: "add-image",
       slideId: activeSlide.id,
@@ -717,7 +1014,8 @@ export function App() {
     aiRequestId.current = requestId;
     aiTaskId.current += 1;
     const taskId = aiTaskId.current;
-    setAiBusy(true); setAiDraft(undefined);
+    setAiBusy(true);
+    setAiDraft(undefined);
     aiContentUndo.current = [];
     aiContentRedo.current = [];
     aiContentCoalesce.current = undefined;
@@ -733,13 +1031,15 @@ export function App() {
         if (requestId !== aiRequestId.current || progress.taskId !== taskId) return;
         setAiStreamProgress(mergeStreamProgress(totals, progress));
       }).catch(() => undefined);
-      const draft = withSlideIds(await generatePresentationDraft(aiTopic, requestedSlideCount, {
-        onProgress: (progress) => {
-          if (requestId === aiRequestId.current) setAiProgress(progress);
-        },
-        isCancelled: () => requestId !== aiRequestId.current,
-        taskId,
-      }));
+      const draft = withSlideIds(
+        await generatePresentationDraft(aiTopic, requestedSlideCount, {
+          onProgress: (progress) => {
+            if (requestId === aiRequestId.current) setAiProgress(progress);
+          },
+          isCancelled: () => requestId !== aiRequestId.current,
+          taskId,
+        }),
+      );
       if (requestId !== aiRequestId.current) return;
       const id = crypto.randomUUID();
       aiOriginalDraft.current = structuredClone(draft);
@@ -747,25 +1047,116 @@ export function App() {
       aiContentRedo.current = [];
       aiContentCoalesce.current = undefined;
       setAiContentHistoryRevision((value) => value + 1);
-      setAiDraft(draft); setActiveHistoryId(id); selectAiDraftSlide(0); setAiSaveState("saved");
+      setAiDraft(draft);
+      setActiveHistoryId(id);
+      selectAiDraftSlide(0);
+      setAiSaveState("saved");
       try {
         setAiHistory(await saveAiHistory({ id, topic: aiTopic, slideCount: requestedSlideCount, draft }));
         setTaskStatus("AI 已完成 PPT 草稿生成");
       } catch (error) {
         setTaskStatus(`AI 草稿已生成，但历史保存失败：${error instanceof Error ? error.message : String(error)}`);
       }
-      if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
-    }
-    catch (error) {
+      if ("Notification" in window && Notification.permission === "granted")
+        new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
+    } catch (error) {
       if (requestId !== aiRequestId.current) return;
       const detail = describeAiError(error);
       setTaskStatus(`AI 内容生成失败：${detail}`);
-      if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成失败", { body: detail });
-    }
-    finally {
+      if ("Notification" in window && Notification.permission === "granted")
+        new Notification("PPTD · AI 生成失败", { body: detail });
+    } finally {
       unlisten?.();
       void endAiGeneration(taskId).catch(() => undefined);
-      if (requestId === aiRequestId.current) { setAiBusy(false); setAiProgress(undefined); setAiStreamProgress(undefined); }
+      if (requestId === aiRequestId.current) {
+        setAiBusy(false);
+        setAiProgress(undefined);
+        setAiStreamProgress(undefined);
+      }
+    }
+  };
+
+  /**
+   * 用同一个主题重新生成整份草稿。
+   *
+   * 审核页经常走到"这几页还行，但整册的写法不对"这一步：以前只能返回开始页
+   * 重新生成，等于把已经改好、审核过的页面全部丢掉。重新生成因此按"再要一版"
+   * 处理：生成期间旧草稿留在屏幕上，成功后整体替换，并把旧版本压进撤销栈，
+   * 一次撤销就能回到上一版。
+   */
+  const handleRegenerateDraft = async () => {
+    if (aiRegenerating) {
+      // 取消和开始页一致：推进请求号让在途回调失效，再真正中断后端。
+      aiRequestId.current += 1;
+      setAiRegenerating(false);
+      setAiProgress(undefined);
+      setAiStreamProgress(undefined);
+      void cancelAiGeneration(aiTaskId.current).catch(() => undefined);
+      setTaskStatus("已取消重新生成");
+      return;
+    }
+    const current = aiDraftRef.current;
+    if (!current) return;
+    // 主题就是这一册的生成依据；标题只在老数据没有主题时兜底。
+    const topic = aiTopic.trim() || current.title.trim();
+    if (!topic) {
+      setTaskStatus("缺少生成主题：请返回初始页面填写主题后再重新生成");
+      return;
+    }
+    // 页数以当前草稿为准：用户加过的页在重新生成时不应该被悄悄减回去。
+    const slideCount = current.slides.length;
+    const requestId = aiRequestId.current + 1;
+    aiRequestId.current = requestId;
+    aiTaskId.current += 1;
+    const taskId = aiTaskId.current;
+    setAiRegenerating(true);
+    setAiProgress({ stage: "outline", completed: 0, total: 1, label: "正在准备重新生成…" });
+    setAiStreamProgress(undefined);
+    setTaskStatus("AI 正在重新生成整份草稿");
+    let unlisten: (() => void) | undefined;
+    try {
+      const totals = new Map<string, { received: number; pages: number }>();
+      unlisten = await listenAiGenerationProgress((progress) => {
+        if (requestId !== aiRequestId.current || progress.taskId !== taskId) return;
+        setAiStreamProgress(mergeStreamProgress(totals, progress));
+      }).catch(() => undefined);
+      const regenerated = withSlideIds(
+        await generatePresentationDraft(topic, slideCount, {
+          onProgress: (progress) => {
+            if (requestId === aiRequestId.current) setAiProgress(progress);
+          },
+          isCancelled: () => requestId !== aiRequestId.current,
+          taskId,
+        }),
+      );
+      if (requestId !== aiRequestId.current) return;
+      const previous = aiDraftRef.current;
+      // 生成期间用户可能已经离开审核页；此时旧草稿仍在，但不再替换。
+      if (!previous) return;
+      aiContentUndo.current.push(snapshotAiContent(previous));
+      if (aiContentUndo.current.length > 100) aiContentUndo.current.shift();
+      aiContentRedo.current = [];
+      aiContentCoalesce.current = undefined;
+      // 新的生成结果成为这一版的 AI 原稿，单页"恢复 AI 原稿"也跟着更新。
+      aiOriginalDraft.current = structuredClone(regenerated);
+      aiRestoreBackups.current.clear();
+      setAiRestoreUndoSlideIds([]);
+      aiDraftRef.current = regenerated;
+      setAiDraft(regenerated);
+      selectAiDraftSlide(0);
+      setAiContentHistoryRevision((value) => value + 1);
+      setTaskStatus("已重新生成整份草稿，可用撤销回到上一版");
+    } catch (error) {
+      if (requestId !== aiRequestId.current) return;
+      setTaskStatus(`重新生成失败：${describeAiError(error)}`);
+    } finally {
+      unlisten?.();
+      void endAiGeneration(taskId).catch(() => undefined);
+      if (requestId === aiRequestId.current) {
+        setAiRegenerating(false);
+        setAiProgress(undefined);
+        setAiStreamProgress(undefined);
+      }
     }
   };
 
@@ -786,9 +1177,15 @@ export function App() {
 
   // Refs mirror the latest draft so the exit path can save without waiting for
   // another render, and so a close inside the debounce window is not lost.
-  useEffect(() => { aiDraftRef.current = aiDraft; }, [aiDraft]);
-  useEffect(() => { aiTopicRef.current = aiTopic; }, [aiTopic]);
-  useEffect(() => { activeHistoryIdRef.current = activeHistoryId; }, [activeHistoryId]);
+  useEffect(() => {
+    aiDraftRef.current = aiDraft;
+  }, [aiDraft]);
+  useEffect(() => {
+    aiTopicRef.current = aiTopic;
+  }, [aiTopic]);
+  useEffect(() => {
+    activeHistoryIdRef.current = activeHistoryId;
+  }, [activeHistoryId]);
 
   useEffect(() => {
     if (!aiDraft || !activeHistoryId) return;
@@ -796,7 +1193,11 @@ export function App() {
     aiUnsavedRef.current = true;
     const timer = window.setTimeout(() => {
       void saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft })
-        .then((history) => { setAiHistory(history); setAiSaveState("saved"); aiUnsavedRef.current = false; })
+        .then((history) => {
+          setAiHistory(history);
+          setAiSaveState("saved");
+          aiUnsavedRef.current = false;
+        })
         .catch((error: unknown) => {
           setAiSaveState("saved");
           setTaskStatus(`草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`);
@@ -811,8 +1212,13 @@ export function App() {
     const id = activeHistoryId;
     setAiSaveState("saved");
     void saveAiHistory({ id, topic: aiTopic, slideCount: draft.slides.length, draft })
-      .then((history) => { setAiHistory(history); aiUnsavedRef.current = false; })
-      .catch((error: unknown) => setTaskStatus(`草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`));
+      .then((history) => {
+        setAiHistory(history);
+        aiUnsavedRef.current = false;
+      })
+      .catch((error: unknown) =>
+        setTaskStatus(`草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`),
+      );
   };
 
   const changeActiveView = (view: AppView) => {
@@ -833,11 +1239,19 @@ export function App() {
         setAiSaveState("saved");
         aiUnsavedRef.current = false;
       } catch (error) {
-        setMessage({ id: Date.now(), text: `草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`, kind: "error" });
+        setMessage({
+          id: Date.now(),
+          text: `草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`,
+          kind: "error",
+        });
       }
     };
-    const onExit = () => { void flush(); };
-    const onVisibilityChange = () => { if (window.document.visibilityState === "hidden") onExit(); };
+    const onExit = () => {
+      void flush();
+    };
+    const onVisibilityChange = () => {
+      if (window.document.visibilityState === "hidden") onExit();
+    };
     window.addEventListener("pagehide", onExit);
     window.document.addEventListener("visibilitychange", onVisibilityChange);
     let unlisten: (() => void) | undefined;
@@ -874,7 +1288,12 @@ export function App() {
     aiContentRedo.current = [];
     aiContentCoalesce.current = undefined;
     setAiContentHistoryRevision((value) => value + 1);
-    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(draft); selectAiDraftSlide(0); setAiSaveState("saved");
+    setActiveHistoryId(entry.id);
+    setAiTopic(entry.topic);
+    setAiSlideCount(entry.slideCount);
+    setAiDraft(draft);
+    selectAiDraftSlide(0);
+    setAiSaveState("saved");
   };
 
   const selectAiDraftSlide = (index: number) => {
@@ -949,14 +1368,17 @@ export function App() {
 
   const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
     forgetRestoreBackup(index);
-    updateAiDraftWithHistory(`slide:${index}:${field}`, (draft) => ({ ...draft, slides: draft.slides.map((slide, slideIndex) => {
-      if (slideIndex !== index) return slide;
-      if (field !== "body") return { ...slide, [field]: value, reviewed: false };
-      // Body copy is only editable on legacy drafts that carry no structured
-      // blocks. Deriving blocks here used to swap the textarea for the block
-      // editor on the first keystroke, which dropped focus mid-sentence.
-      return { ...slide, body: value, reviewed: false };
-    }) }));
+    updateAiDraftWithHistory(`slide:${index}:${field}`, (draft) => ({
+      ...draft,
+      slides: draft.slides.map((slide, slideIndex) => {
+        if (slideIndex !== index) return slide;
+        if (field !== "body") return { ...slide, [field]: value, reviewed: false };
+        // Body copy is only editable on legacy drafts that carry no structured
+        // blocks. Deriving blocks here used to swap the textarea for the block
+        // editor on the first keystroke, which dropped focus mid-sentence.
+        return { ...slide, body: value, reviewed: false };
+      }),
+    }));
   };
 
   /**
@@ -969,35 +1391,53 @@ export function App() {
     forgetRestoreBackup(index);
     updateAiDraftWithHistory(`slide:${index}:visualAsset`, (draft) => ({
       ...draft,
-      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index
-        ? { ...slide, plan: { ...slide.plan, visualAsset: intent }, reviewed: false }
-        : slide)),
+      slides: draft.slides.map((slide, slideIndex) =>
+        slideIndex === index ? { ...slide, plan: { ...slide.plan, visualAsset: intent }, reviewed: false } : slide,
+      ),
     }));
   };
 
   const updateAiBlocks = (index: number, blocks: AiDraft["slides"][number]["blocks"], separateHistory = false) => {
     forgetRestoreBackup(index);
-    updateAiDraftWithHistory(`slide:${index}:blocks`, (draft) => ({
-      ...draft,
-      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...slide, blocks, body: bodyFromBlocks(blocks), reviewed: false } : slide)),
-    }), !separateHistory);
+    updateAiDraftWithHistory(
+      `slide:${index}:blocks`,
+      (draft) => ({
+        ...draft,
+        slides: draft.slides.map((slide, slideIndex) =>
+          slideIndex === index ? { ...slide, blocks, body: bodyFromBlocks(blocks), reviewed: false } : slide,
+        ),
+      }),
+      !separateHistory,
+    );
   };
 
   const updateAiSlideReviewed = (index: number, reviewed: boolean) => {
-    updateAiDraftWithHistory(`slide:${index}:reviewed`, (draft) => ({
-      ...draft,
-      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...slide, reviewed } : slide)),
-    }), false);
+    updateAiDraftWithHistory(
+      `slide:${index}:reviewed`,
+      (draft) => ({
+        ...draft,
+        slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...slide, reviewed } : slide)),
+      }),
+      false,
+    );
   };
 
   const reviewAllAiSlides = () => {
-    updateAiDraftWithHistory("slides:review-all", (draft) => ({
-      ...draft,
-      slides: draft.slides.map((slide) => ({ ...slide, reviewed: Boolean(slide.title.trim() && (slide.body.trim() || slide.blocks.length > 0)) })),
-    }), false);
+    updateAiDraftWithHistory(
+      "slides:review-all",
+      (draft) => ({
+        ...draft,
+        slides: draft.slides.map((slide) => ({
+          ...slide,
+          reviewed: Boolean(slide.title.trim() && (slide.body.trim() || slide.blocks.length > 0)),
+        })),
+      }),
+      false,
+    );
   };
 
-  const updateAiDraftTitle = (title: string) => updateAiDraftWithHistory("draft:title", (draft) => ({ ...draft, title }));
+  const updateAiDraftTitle = (title: string) =>
+    updateAiDraftWithHistory("draft:title", (draft) => ({ ...draft, title }));
 
   const addAiSlide = (afterIndex: number) => {
     const insertIndex = Math.min(afterIndex + 1, aiDraftRef.current?.slides.length ?? 0);
@@ -1007,13 +1447,22 @@ export function App() {
       body: "",
       speakerNotes: "",
       reviewed: false,
-      plan: { purpose: "补充演示内容", conclusion: "请填写本页核心结论", visualIntent: "structured-text", density: "medium" },
+      plan: {
+        purpose: "补充演示内容",
+        conclusion: "请填写本页核心结论",
+        visualIntent: "structured-text",
+        density: "medium",
+      },
       blocks: [],
     };
-    updateAiDraftWithHistory("slides:add", (draft) => ({
-      ...draft,
-      slides: [...draft.slides.slice(0, insertIndex), slide, ...draft.slides.slice(insertIndex)],
-    }), false);
+    updateAiDraftWithHistory(
+      "slides:add",
+      (draft) => ({
+        ...draft,
+        slides: [...draft.slides.slice(0, insertIndex), slide, ...draft.slides.slice(insertIndex)],
+      }),
+      false,
+    );
     selectAiDraftSlide(insertIndex);
     setTaskStatus(`已新增第 ${insertIndex + 1} 页`);
   };
@@ -1021,11 +1470,20 @@ export function App() {
   const duplicateAiSlide = (index: number) => {
     const source = aiDraftRef.current?.slides[index];
     if (!source) return;
-    const duplicate = { ...structuredClone(source), id: crypto.randomUUID(), title: `${source.title}（副本）`, reviewed: false };
-    updateAiDraftWithHistory("slides:duplicate", (draft) => ({
-      ...draft,
-      slides: [...draft.slides.slice(0, index + 1), duplicate, ...draft.slides.slice(index + 1)],
-    }), false);
+    const duplicate = {
+      ...structuredClone(source),
+      id: crypto.randomUUID(),
+      title: `${source.title}（副本）`,
+      reviewed: false,
+    };
+    updateAiDraftWithHistory(
+      "slides:duplicate",
+      (draft) => ({
+        ...draft,
+        slides: [...draft.slides.slice(0, index + 1), duplicate, ...draft.slides.slice(index + 1)],
+      }),
+      false,
+    );
     selectAiDraftSlide(index + 1);
     setTaskStatus(`已复制第 ${index + 1} 页`);
   };
@@ -1036,7 +1494,11 @@ export function App() {
     const slideId = current.slides[index]?.id;
     if (slideId) aiRestoreBackups.current.delete(slideId);
     setAiRestoreUndoSlideIds([...aiRestoreBackups.current.keys()]);
-    updateAiDraftWithHistory("slides:delete", (draft) => ({ ...draft, slides: draft.slides.filter((_, slideIndex) => slideIndex !== index) }), false);
+    updateAiDraftWithHistory(
+      "slides:delete",
+      (draft) => ({ ...draft, slides: draft.slides.filter((_, slideIndex) => slideIndex !== index) }),
+      false,
+    );
     selectAiDraftSlide(Math.min(index, current.slides.length - 2));
     setTaskStatus(`已删除第 ${index + 1} 页`);
   };
@@ -1044,13 +1506,17 @@ export function App() {
   const moveAiSlide = (index: number, destination: number) => {
     const current = aiDraftRef.current;
     if (!current || destination < 0 || destination >= current.slides.length || destination === index) return;
-    updateAiDraftWithHistory("slides:move", (draft) => {
-      const slides = [...draft.slides];
-      const [slide] = slides.splice(index, 1);
-      if (!slide) return draft;
-      slides.splice(destination, 0, slide);
-      return { ...draft, slides };
-    }, false);
+    updateAiDraftWithHistory(
+      "slides:move",
+      (draft) => {
+        const slides = [...draft.slides];
+        const [slide] = slides.splice(index, 1);
+        if (!slide) return draft;
+        slides.splice(destination, 0, slide);
+        return { ...draft, slides };
+      },
+      false,
+    );
     selectAiDraftSlide(destination);
     setTaskStatus(`已将页面移动到第 ${destination + 1} 页`);
   };
@@ -1062,10 +1528,14 @@ export function App() {
     if (!current || !slideId || !original) return;
     aiRestoreBackups.current.set(slideId, structuredClone(current));
     setAiRestoreUndoSlideIds([...aiRestoreBackups.current.keys()]);
-    updateAiDraftWithHistory(`slide:${index}:restore`, (draft) => ({
-      ...draft,
-      slides: draft.slides.map((slide) => (slide.id === slideId ? { ...original, id: slideId } : slide)),
-    }), false);
+    updateAiDraftWithHistory(
+      `slide:${index}:restore`,
+      (draft) => ({
+        ...draft,
+        slides: draft.slides.map((slide) => (slide.id === slideId ? { ...original, id: slideId } : slide)),
+      }),
+      false,
+    );
     setTaskStatus(`已恢复第 ${index + 1} 页的 AI 原始内容`);
   };
 
@@ -1075,15 +1545,27 @@ export function App() {
     if (!backup || !slideId) return;
     aiRestoreBackups.current.delete(slideId);
     setAiRestoreUndoSlideIds([...aiRestoreBackups.current.keys()]);
-    updateAiDraftWithHistory(`slide:${index}:undo-restore`, (draft) => ({
-      ...draft,
-      slides: draft.slides.map((slide) => (slide.id === slideId ? { ...backup, id: slideId } : slide)),
-    }), false);
+    updateAiDraftWithHistory(
+      `slide:${index}:undo-restore`,
+      (draft) => ({
+        ...draft,
+        slides: draft.slides.map((slide) => (slide.id === slideId ? { ...backup, id: slideId } : slide)),
+      }),
+      false,
+    );
     setTaskStatus(`已撤销第 ${index + 1} 页的恢复操作`);
   };
 
   const returnToAiStart = () => {
     persistAiDraft();
+    // 离开审核页就放弃在途的重新生成，否则回到开始页后旧请求仍会替换草稿。
+    if (aiRegenerating) {
+      aiRequestId.current += 1;
+      void cancelAiGeneration(aiTaskId.current).catch(() => undefined);
+      setAiRegenerating(false);
+      setAiProgress(undefined);
+      setAiStreamProgress(undefined);
+    }
     aiOriginalDraft.current = undefined;
     aiRestoreBackups.current.clear();
     setAiRestoreUndoSlideIds([]);
@@ -1107,26 +1589,30 @@ export function App() {
       ? "请先填写演示文稿标题"
       : aiDraftBlockingIssues.map((issue) => issue.message).join("；") || undefined;
   // The header keeps the hint to one line; the tooltip on the disabled button carries every reason.
-  const aiDraftBlockHint = aiDraftBlockingIssues.length === 0
-    ? undefined
-    : aiDraftBlockingIssues.length === 1
-      ? aiDraftBlockingIssues[0]!.message
-      : `${aiDraftBlockingIssues.length} 项待补全：${aiDraftBlockingIssues[0]!.message}`;
+  const aiDraftBlockHint =
+    aiDraftBlockingIssues.length === 0
+      ? undefined
+      : aiDraftBlockingIssues.length === 1
+        ? aiDraftBlockingIssues[0]!.message
+        : `${aiDraftBlockingIssues.length} 项待补全：${aiDraftBlockingIssues[0]!.message}`;
   const aiDraftMetrics = useMemo(() => (aiDraft ? draftMetrics(aiDraft) : { characters: 0, points: 0 }), [aiDraft]);
   // 大纲阶段占一小段，正文分批阶段按已完成批次推进；流式汇报的页数更细，取两者里更靠前的。
+  // 重新生成沿用当前草稿的页数，开始页仍按用户填写的页数换算。
+  const aiGenerationPageCount = aiRegenerating ? (aiDraft?.slides.length ?? aiSlideCount) : aiSlideCount;
   const aiGenerationPercent = aiProgress
     ? Math.max(
         aiProgress.stage === "outline"
           ? 12
           : 12 + Math.round((88 * aiProgress.completed) / Math.max(1, aiProgress.total)),
         aiStreamProgress
-          ? 12 + Math.round((88 * aiStreamProgress.pages) / Math.max(1, aiSlideCount || 1))
+          ? 12 + Math.round((88 * aiStreamProgress.pages) / Math.max(1, Number(aiGenerationPageCount) || 1))
           : 0,
       )
     : 0;
-  const aiGenerationLabel = aiStreamProgress && aiStreamProgress.pages > 0
-    ? `正在生成正文（已写 ${aiStreamProgress.pages} 页）`
-    : aiProgress?.label ?? "";
+  const aiGenerationLabel =
+    aiStreamProgress && aiStreamProgress.pages > 0
+      ? `正在生成正文（已写 ${aiStreamProgress.pages} 页）`
+      : (aiProgress?.label ?? "");
 
   const continueToTheme = () => {
     if (!aiDraft) return;
@@ -1159,13 +1645,24 @@ export function App() {
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
       const hasTemplateSize = templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu;
-      const templateColors = new Map(templateAnalysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]));
-      const resolveTemplateColor = (value: string | null) => value?.startsWith("#") ? value : value ? templateColors.get(value.toLowerCase()) : undefined;
+      const templateColors = new Map(
+        templateAnalysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]),
+      );
+      const resolveTemplateColor = (value: string | null) =>
+        value?.startsWith("#") ? value : value ? templateColors.get(value.toLowerCase()) : undefined;
       setDesignProgress({ percent: 94, label: "正在渲染可编辑页面" });
       const templateLayoutSources = hasTemplateSize
-        ? (templateAnalysis.layouts.length > 0 ? templateAnalysis.layouts : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title })))
+        ? templateAnalysis.layouts.length > 0
+          ? templateAnalysis.layouts
+          : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))
         : [];
-      const normalizeRegion = (region: { role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }) => ({
+      const normalizeRegion = (region: {
+        role: "title" | "body" | "image";
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }) => ({
         role: region.role,
         frame: {
           x: region.x / templateAnalysis.slideWidthEmu!,
@@ -1177,36 +1674,85 @@ export function App() {
       // Measure the rendered artwork under each placeholder so the command layer
       // can tell whether the template's own ink stays readable on it.
       const backgroundProbes = new Map<number, TemplateBackgroundProbe>();
-      await Promise.all(templateLayoutSources.map(async (layout) => {
-        const render = matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name);
-        if (!render) return;
-        try {
-          backgroundProbes.set(layout.index, await probeTemplateBackground(render.dataUrl, layout.regions.map(normalizeRegion)));
-        } catch {
-          // A layout without a probe falls back to the page color.
-        }
-      }));
+      await Promise.all(
+        templateLayoutSources.map(async (layout) => {
+          const render = matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name);
+          if (!render) return;
+          try {
+            backgroundProbes.set(
+              layout.index,
+              await probeTemplateBackground(render.dataUrl, layout.regions.map(normalizeRegion)),
+            );
+          } catch {
+            // A layout without a probe falls back to the page color.
+          }
+        }),
+      );
       // 配图：AI 说哪些页想配图，排版引擎说哪些页配得下。两边都同意的页才
       // 生成图片。图片生成失败只是少一张图，文稿照常成立。
       const assetPlan = planVisualAssets({
         designs: design.slides,
         itemCounts: aiDraft.slides.map((slide) => countSlidePoints(slide)),
-        deterministicBlocks: aiDraft.slides.map((slide) => (slide.blocks ?? []).some((block) => block.type !== "paragraph" && block.type !== "bullet-list" && block.type !== "quote")),
+        deterministicBlocks: aiDraft.slides.map((slide) =>
+          (slide.blocks ?? []).some(
+            (block) => block.type !== "paragraph" && block.type !== "bullet-list" && block.type !== "quote",
+          ),
+        ),
         topic: aiDraft.title,
         // 内容阶段产出的配图意图是用户审核过的，它优先于设计阶段的建议。
         intents: aiDraft.slides.map((slide) => slide.plan?.visualAsset),
       });
-      const visualAssets = await generateDeckVisualAssets({ decisions: assetPlan.decisions, prompts: assetPlan.prompts });
+      const visualAssets = await generateDeckVisualAssets({
+        decisions: assetPlan.decisions,
+        prompts: assetPlan.prompts,
+      });
       const generationCommand: DocumentCommand = {
         type: "apply-ai-designed-draft",
         title: aiDraft.title,
         slides: aiDraft.slides,
         designs: design.slides,
-        pageSize: hasTemplateSize ? { width: emu(templateAnalysis.slideWidthEmu!), height: emu(templateAnalysis.slideHeightEmu!) } : undefined,
+        pageSize: hasTemplateSize
+          ? { width: emu(templateAnalysis.slideWidthEmu!), height: emu(templateAnalysis.slideHeightEmu!) }
+          : undefined,
         fontFamily: templateAnalysis.majorFont || templateAnalysis.minorFont || undefined,
         bodyFontFamily: templateAnalysis.minorFont || templateAnalysis.majorFont || undefined,
-        templateDecorations: hasTemplateSize ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })) : undefined,
-        templateLayouts: hasTemplateSize ? templateLayoutSources.map((layout) => ({ index: layout.index, name: layout.name, backgroundColor: resolveTemplateColor(layout.backgroundColor), backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)?.dataUrl, backgroundLuminance: backgroundProbes.get(layout.index), decorations: (layout.decorations ?? []).map((item) => ({ shape: item.shape, fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent, frame: { x: item.x / templateAnalysis.slideWidthEmu!, y: item.y / templateAnalysis.slideHeightEmu!, width: item.width / templateAnalysis.slideWidthEmu!, height: item.height / templateAnalysis.slideHeightEmu! } })), regions: layout.regions.map((region) => ({ ...normalizeRegion(region), textColor: region.textColor ?? undefined, fontSizePt: region.fontSizePt ?? undefined })) })) : undefined,
+        templateDecorations: hasTemplateSize
+          ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({
+              shape: item.shape,
+              fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent,
+              frame: {
+                x: item.x / templateAnalysis.slideWidthEmu!,
+                y: item.y / templateAnalysis.slideHeightEmu!,
+                width: item.width / templateAnalysis.slideWidthEmu!,
+                height: item.height / templateAnalysis.slideHeightEmu!,
+              },
+            }))
+          : undefined,
+        templateLayouts: hasTemplateSize
+          ? templateLayoutSources.map((layout) => ({
+              index: layout.index,
+              name: layout.name,
+              backgroundColor: resolveTemplateColor(layout.backgroundColor),
+              backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)
+                ?.dataUrl,
+              backgroundLuminance: backgroundProbes.get(layout.index),
+              decorations: (layout.decorations ?? []).map((item) => ({
+                shape: item.shape,
+                fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent,
+                frame: {
+                  x: item.x / templateAnalysis.slideWidthEmu!,
+                  y: item.y / templateAnalysis.slideHeightEmu!,
+                  width: item.width / templateAnalysis.slideWidthEmu!,
+                  height: item.height / templateAnalysis.slideHeightEmu!,
+                },
+              })),
+              regions: layout.regions.map((region) => ({
+                ...normalizeRegion(region),
+                textColor: region.textColor ?? undefined,
+                fontSizePt: region.fontSizePt ?? undefined,
+              })),
+            }))
+          : undefined,
         // The theme of the template travels with the design, so the exported
         // deck keeps the typography and the palette of the template.
         themePresetId: themePresetId || undefined,
@@ -1220,7 +1766,12 @@ export function App() {
         visualAssets: visualAssets.map((asset) => ({
           slideIndex: asset.slideIndex,
           dataUrl: asset.dataUrl,
-          mimeType: asset.mimeType === "image/jpeg" ? "image/jpeg" : asset.mimeType === "image/webp" ? "image/webp" : "image/png",
+          mimeType:
+            asset.mimeType === "image/jpeg"
+              ? "image/jpeg"
+              : asset.mimeType === "image/webp"
+                ? "image/webp"
+                : "image/png",
           naturalWidth: asset.naturalWidth,
           naturalHeight: asset.naturalHeight,
           altText: asset.altText,
@@ -1237,7 +1788,15 @@ export function App() {
         initialDesigns: design.slides,
         buildDocument: buildFinalDocument,
         goal: defaultPresentationVisualGoal(),
-        contentFingerprint: () => JSON.stringify(aiDraft.slides.map((slide) => ({ title: slide.title, body: slide.body, speakerNotes: slide.speakerNotes, blocks: slide.blocks }))),
+        contentFingerprint: () =>
+          JSON.stringify(
+            aiDraft.slides.map((slide) => ({
+              title: slide.title,
+              body: slide.body,
+              speakerNotes: slide.speakerNotes,
+              blocks: slide.blocks,
+            })),
+          ),
         vision: new TauriVisionReviewPort(),
         taskId,
         isCancelled: () => designCancelRef.current,
@@ -1264,12 +1823,18 @@ export function App() {
         setDesignProgress({ percent: 100, label: "生成完成，存在待调整的排版问题" });
         setDesignQualityReport({
           templateName: selectedTemplate.name,
-          issues: [...new Map(stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue])).values()],
+          issues: [
+            ...new Map(
+              stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),
+            ).values(),
+          ],
           notes: stage.notes,
         });
-        setTaskStatus(stage.issues.length > 0
-          ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
-          : `PPT 已生成，但质检未完成：${stage.notes.join("；")}`);
+        setTaskStatus(
+          stage.issues.length > 0
+            ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
+            : `PPT 已生成，但质检未完成：${stage.notes.join("；")}`,
+        );
       }
     } catch (error) {
       window.clearInterval(progressTimer);
@@ -1290,7 +1855,10 @@ export function App() {
 
   const handleChooseTemplate = async () => {
     try {
-      if (!isDesktopRuntime()) { setTaskStatus("模板持久化仅在 PPTD 桌面端可用"); return; }
+      if (!isDesktopRuntime()) {
+        setTaskStatus("模板持久化仅在 PPTD 桌面端可用");
+        return;
+      }
       const template = await choosePptxTemplate();
       if (!template) return;
       const imported = await importPptxTemplate(template.path);
@@ -1312,7 +1880,16 @@ export function App() {
     if (!isDesktopRuntime()) return;
     setTemplatePreviewBusy(true);
     try {
-      const [preview, analysis, renders] = await Promise.all([getPptxTemplatePreview(template.id), analyzePptxTemplate(template.id), renderPptxTemplateLayouts(template.id).catch((error) => { setTaskStatus(`复杂模板视觉层渲染不可用，将使用基础样式：${error instanceof Error ? error.message : String(error)}`); return []; })]);
+      const [preview, analysis, renders] = await Promise.all([
+        getPptxTemplatePreview(template.id),
+        analyzePptxTemplate(template.id),
+        renderPptxTemplateLayouts(template.id).catch((error) => {
+          setTaskStatus(
+            `复杂模板视觉层渲染不可用，将使用基础样式：${error instanceof Error ? error.message : String(error)}`,
+          );
+          return [];
+        }),
+      ]);
       setTemplatePreview(preview);
       setTemplateAnalysis(analysis);
       setTemplateLayoutRenders(renders);
@@ -1371,7 +1948,12 @@ export function App() {
       }
       if (!selected || selected.locked) return;
       event.preventDefault();
-      if (shortcut === "nudge-left" || shortcut === "nudge-right" || shortcut === "nudge-up" || shortcut === "nudge-down") {
+      if (
+        shortcut === "nudge-left" ||
+        shortcut === "nudge-right" ||
+        shortcut === "nudge-up" ||
+        shortcut === "nudge-down"
+      ) {
         const step = emu((event.shiftKey ? 0.5 : 0.1) * EMU_PER_INCH);
         const dx = shortcut === "nudge-left" ? -step : shortcut === "nudge-right" ? step : 0;
         const dy = shortcut === "nudge-up" ? -step : shortcut === "nudge-down" ? step : 0;
@@ -1391,7 +1973,17 @@ export function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeSlide, document.pageSize.height, document.pageSize.width, execute, redo, redoStack.length, selected, undo, undoStack.length]);
+  }, [
+    activeSlide,
+    document.pageSize.height,
+    document.pageSize.width,
+    execute,
+    redo,
+    redoStack.length,
+    selected,
+    undo,
+    undoStack.length,
+  ]);
 
   /**
    * Dragging the border of the property panel changes its width. The width is
@@ -1402,7 +1994,10 @@ export function App() {
     const startX = event.clientX;
     const startWidth = inspectorWidth;
     const move = (moveEvent: PointerEvent) => {
-      const next = Math.min(INSPECTOR_MAX_WIDTH, Math.max(INSPECTOR_MIN_WIDTH, startWidth - (moveEvent.clientX - startX)));
+      const next = Math.min(
+        INSPECTOR_MAX_WIDTH,
+        Math.max(INSPECTOR_MIN_WIDTH, startWidth - (moveEvent.clientX - startX)),
+      );
       setInspectorWidth(next);
     };
     const stop = () => {
@@ -1419,164 +2014,1121 @@ export function App() {
   };
 
   return (
-    <div className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`} style={{ "--inspector-width": `${inspectorWidth}px` } as React.CSSProperties}>
-      {activeView === "editor" && <header className="topbar">
-        <div className="brand"><span className="brand-mark">P</span><div><strong>PPTD</strong><small>{document.title}</small></div></div>
-        <div className="toolbar-group">
-          <ToolButton label="新建项目" onClick={handleNew}><FilePlus2 /></ToolButton><ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}><FileUp /></ToolButton><ToolButton label={saving ? "正在保存" : "保存项目"} onClick={handleSave} disabled={saving}><Save /></ToolButton>
-          <span className="separator" />
-          <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}><Undo2 /></ToolButton><ToolButton label="重做" onClick={redo} disabled={!redoStack.length}><Redo2 /></ToolButton>
-        </div>
-        <div className="toolbar-group insert-tools">
-          <ToolButton label="选择"><MousePointer2 /></ToolButton><ToolButton label="文本" onClick={() => execute({ type: "add-text", slideId: activeSlide.id })}><Type /></ToolButton>
-          <ToolButton label="矩形" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}><Square /></ToolButton>
-          <ToolButton label="椭圆" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}><Circle /></ToolButton>
-          <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolButton>
-          <ToolButton label="AI 配图" onClick={() => { setAiImageError(undefined); setAiImageOpen(true); }} disabled={aiImageBusy}><Sparkles /></ToolButton>
-          <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { handleImageFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-          <ToolButton label="重排版式（保留手工对象）" onClick={() => { execute({ type: "relayout-slide", slideId: activeSlide.id }); setTaskStatus("已按当前内容重新应用版式，手工添加的图片、文本和锁定对象已保留"); }}><Wand2 /></ToolButton>
-        </div>
-        <div className="toolbar-group assist-tools">
-          <ToolButton label={gridEnabled ? "关闭网格" : "显示网格"} onClick={toggleGrid}><Grid3x3 /></ToolButton>
-          <ToolButton label={gridSnapEnabled ? "关闭网格吸附" : "吸附到网格"} onClick={toggleGridSnap}><Grid2x2 /></ToolButton>
-          <ToolButton label={snapEnabled ? "关闭吸附" : "开启吸附"} onClick={toggleSnap}><Magnet /></ToolButton>
-          <ToolButton label="添加垂直参考线" onClick={() => addGuide("x", document.pageSize.width / 2)}><MoveVertical /></ToolButton>
-          <ToolButton label="添加水平参考线" onClick={() => addGuide("y", document.pageSize.height / 2)}><MoveHorizontal /></ToolButton>
-          <ToolButton label="清除本页参考线" onClick={() => clearGuidesOnSlide(activeSlide.id)} disabled={!activeGuides.length}><Trash2 /></ToolButton>
-        </div>
-        <button className="export-button" onClick={handleExport}><Download size={17} /> {exportBusy ? "取消导出" : "导出 PPTX"}</button>
-      </header>}
-
-      <nav className="nav-rail" aria-label="主功能">
-        <button className={activeView === "editor" ? "active" : ""} aria-current={activeView === "editor" ? "page" : undefined} title="编辑器" onClick={() => changeActiveView("editor")}><LayoutDashboard /><span>编辑</span></button>
-        <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="AI 生成" onClick={() => changeActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
-        <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="PPT 模板" onClick={() => changeActiveView("theme")}><Palette /><span>模板</span></button>
-        <div className="nav-spacer" />
-        <button className={activeView === "settings" ? "active" : ""} aria-current={activeView === "settings" ? "page" : undefined} title="设置" onClick={() => changeActiveView("settings")}><Settings /><span>设置</span></button>
-      </nav>
-
-      {activeView === "editor" && <><aside className="left-panel">
-        <div className="panel-heading">
-          <div className="panel-tabs" role="tablist" aria-label="左侧面板">
-            <button type="button" role="tab" aria-selected={leftTab === "slides"} className={`panel-tab ${leftTab === "slides" ? "active" : ""}`} onClick={() => setLeftTab("slides")}>页面</button>
-            <button type="button" role="tab" aria-selected={leftTab === "layers"} className={`panel-tab ${leftTab === "layers" ? "active" : ""}`} onClick={() => setLeftTab("layers")}>图层</button>
+    <div
+      className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`}
+      style={{ "--inspector-width": `${inspectorWidth}px` } as React.CSSProperties}
+    >
+      {activeView === "editor" && (
+        <header className="topbar">
+          <div className="brand">
+            <span className="brand-mark">P</span>
+            <div>
+              <strong>PPTD</strong>
+              <small>{document.title}</small>
+            </div>
           </div>
-          {leftTab === "slides" && <button aria-label="新增页面" title="新增页面" onClick={() => execute({ type: "add-slide" })}><Plus size={16} /></button>}
-        </div>
-        {leftTab === "slides" ? <div className="slide-list">
-          {document.slides.map((slide, index) => <div key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`}>
-            <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><SlideThumbnail slide={slide} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} /></button>
-            {slide.id === activeSlide.id && <div className="thumbnail-actions">
-              <button aria-label="上移页面" title="上移页面" disabled={index === 0} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index - 1 })}><ArrowUp /></button>
-              <button aria-label="下移页面" title="下移页面" disabled={index === document.slides.length - 1} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index + 1 })}><ArrowDown /></button>
-              <button aria-label="复制页面" title="复制页面" onClick={() => execute({ type: "duplicate-slide", slideId: slide.id })}><Copy /></button>
-              <button aria-label="删除页面" title="删除页面" disabled={document.slides.length === 1} onClick={() => execute({ type: "delete-slide", slideId: slide.id })}><Trash2 /></button>
-            </div>}
-          </div>)}
-        </div> : <LayerList slide={activeSlide} selectedElementIds={selectedElementIds} onSelect={selectElement} onToggle={toggleElement} />}
-      </aside>
-
-      <main className="workspace">
-        <div className="canvas-ruler">13.33 × 7.5 in</div>
-        <div className="slide-canvas" style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }} onPointerDown={marquee.onPointerDown}>
-          <CanvasGridLayer scale={scale} />
-          {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={selectedElementIds.includes(element.id)} snap={snapContext} />)}
-          <CanvasGuideLayer slideId={activeSlide.id} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} scale={scale} />
-          {marquee.band && (
-            <div
-              className="canvas-marquee"
-              aria-hidden="true"
-              style={{
-                left: marquee.band.x * scale, top: marquee.band.y * scale,
-                width: marquee.band.width * scale, height: marquee.band.height * scale,
+          <div className="toolbar-group">
+            <ToolButton label="新建项目" onClick={handleNew}>
+              <FilePlus2 />
+            </ToolButton>
+            <ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}>
+              <FileUp />
+            </ToolButton>
+            <ToolButton label={saving ? "正在保存" : "保存项目"} onClick={handleSave} disabled={saving}>
+              <Save />
+            </ToolButton>
+            <span className="separator" />
+            <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}>
+              <Undo2 />
+            </ToolButton>
+            <ToolButton label="重做" onClick={redo} disabled={!redoStack.length}>
+              <Redo2 />
+            </ToolButton>
+          </div>
+          <div className="toolbar-group insert-tools">
+            <ToolButton label="选择">
+              <MousePointer2 />
+            </ToolButton>
+            <ToolButton label="文本" onClick={() => execute({ type: "add-text", slideId: activeSlide.id })}>
+              <Type />
+            </ToolButton>
+            <ToolButton
+              label="矩形"
+              onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}
+            >
+              <Square />
+            </ToolButton>
+            <ToolButton
+              label="椭圆"
+              onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}
+            >
+              <Circle />
+            </ToolButton>
+            <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}>
+              <ImagePlus />
+            </ToolButton>
+            <ToolButton
+              label="AI 配图"
+              onClick={() => {
+                setAiImageError(undefined);
+                setAiImageOpen(true);
+              }}
+              disabled={aiImageBusy}
+            >
+              <Sparkles />
+            </ToolButton>
+            <input
+              ref={imageInputRef}
+              className="visually-hidden"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => {
+                handleImageFile(event.target.files?.[0]);
+                event.currentTarget.value = "";
               }}
             />
+            <ToolButton
+              label="重排版式（保留手工对象）"
+              onClick={() => {
+                execute({ type: "relayout-slide", slideId: activeSlide.id });
+                setTaskStatus("已按当前内容重新应用版式，手工添加的图片、文本和锁定对象已保留");
+              }}
+            >
+              <Wand2 />
+            </ToolButton>
+          </div>
+          <div className="toolbar-group assist-tools">
+            <ToolButton label={gridEnabled ? "关闭网格" : "显示网格"} onClick={toggleGrid}>
+              <Grid3x3 />
+            </ToolButton>
+            <ToolButton label={gridSnapEnabled ? "关闭网格吸附" : "吸附到网格"} onClick={toggleGridSnap}>
+              <Grid2x2 />
+            </ToolButton>
+            <ToolButton label={snapEnabled ? "关闭吸附" : "开启吸附"} onClick={toggleSnap}>
+              <Magnet />
+            </ToolButton>
+            <ToolButton label="添加垂直参考线" onClick={() => addGuide("x", document.pageSize.width / 2)}>
+              <MoveVertical />
+            </ToolButton>
+            <ToolButton label="添加水平参考线" onClick={() => addGuide("y", document.pageSize.height / 2)}>
+              <MoveHorizontal />
+            </ToolButton>
+            <ToolButton
+              label="清除本页参考线"
+              onClick={() => clearGuidesOnSlide(activeSlide.id)}
+              disabled={!activeGuides.length}
+            >
+              <Trash2 />
+            </ToolButton>
+          </div>
+          <button className="export-button" onClick={handleExport}>
+            <Download size={17} /> {exportBusy ? "取消导出" : "导出 PPTX"}
+          </button>
+        </header>
+      )}
+
+      <nav className="nav-rail" aria-label="主功能">
+        <button
+          className={activeView === "editor" ? "active" : ""}
+          aria-current={activeView === "editor" ? "page" : undefined}
+          title="编辑器"
+          onClick={() => changeActiveView("editor")}
+        >
+          <LayoutDashboard />
+          <span>编辑</span>
+        </button>
+        <button
+          className={activeView === "ai" ? "active" : ""}
+          aria-current={activeView === "ai" ? "page" : undefined}
+          title="AI 生成"
+          onClick={() => changeActiveView("ai")}
+          disabled={!isDesktopRuntime()}
+        >
+          <Sparkles />
+          <span>AI</span>
+        </button>
+        <button
+          className={activeView === "theme" ? "active" : ""}
+          aria-current={activeView === "theme" ? "page" : undefined}
+          title="PPT 模板"
+          onClick={() => changeActiveView("theme")}
+        >
+          <Palette />
+          <span>模板</span>
+        </button>
+        <div className="nav-spacer" />
+        <button
+          className={activeView === "settings" ? "active" : ""}
+          aria-current={activeView === "settings" ? "page" : undefined}
+          title="设置"
+          onClick={() => changeActiveView("settings")}
+        >
+          <Settings />
+          <span>设置</span>
+        </button>
+      </nav>
+
+      {activeView === "editor" && (
+        <>
+          <aside className="left-panel">
+            <div className="panel-heading">
+              <div className="panel-tabs" role="tablist" aria-label="左侧面板">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={leftTab === "slides"}
+                  className={`panel-tab ${leftTab === "slides" ? "active" : ""}`}
+                  onClick={() => setLeftTab("slides")}
+                >
+                  页面
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={leftTab === "layers"}
+                  className={`panel-tab ${leftTab === "layers" ? "active" : ""}`}
+                  onClick={() => setLeftTab("layers")}
+                >
+                  图层
+                </button>
+              </div>
+              {leftTab === "slides" && (
+                <button aria-label="新增页面" title="新增页面" onClick={() => execute({ type: "add-slide" })}>
+                  <Plus size={16} />
+                </button>
+              )}
+            </div>
+            {leftTab === "slides" ? (
+              <div className="slide-list">
+                {document.slides.map((slide, index) => (
+                  <div key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`}>
+                    <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}>
+                      <span>{index + 1}</span>
+                      <SlideThumbnail
+                        slide={slide}
+                        pageWidth={document.pageSize.width}
+                        pageHeight={document.pageSize.height}
+                      />
+                    </button>
+                    {slide.id === activeSlide.id && (
+                      <div className="thumbnail-actions">
+                        <button
+                          aria-label="上移页面"
+                          title="上移页面"
+                          disabled={index === 0}
+                          onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index - 1 })}
+                        >
+                          <ArrowUp />
+                        </button>
+                        <button
+                          aria-label="下移页面"
+                          title="下移页面"
+                          disabled={index === document.slides.length - 1}
+                          onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index + 1 })}
+                        >
+                          <ArrowDown />
+                        </button>
+                        <button
+                          aria-label="复制页面"
+                          title="复制页面"
+                          onClick={() => execute({ type: "duplicate-slide", slideId: slide.id })}
+                        >
+                          <Copy />
+                        </button>
+                        <button
+                          aria-label="删除页面"
+                          title="删除页面"
+                          disabled={document.slides.length === 1}
+                          onClick={() => execute({ type: "delete-slide", slideId: slide.id })}
+                        >
+                          <Trash2 />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <LayerList
+                slide={activeSlide}
+                selectedElementIds={selectedElementIds}
+                onSelect={selectElement}
+                onToggle={toggleElement}
+              />
+            )}
+          </aside>
+
+          <main className="workspace">
+            <div className="canvas-ruler">13.33 × 7.5 in</div>
+            <div
+              className="slide-canvas"
+              style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }}
+              onPointerDown={marquee.onPointerDown}
+            >
+              <CanvasGridLayer scale={scale} />
+              {activeSlide.elements.map((element) => (
+                <ElementView
+                  key={element.id}
+                  element={element}
+                  slide={activeSlide}
+                  scale={scale}
+                  selected={selectedElementIds.includes(element.id)}
+                  snap={snapContext}
+                />
+              ))}
+              <CanvasGuideLayer
+                slideId={activeSlide.id}
+                pageWidth={document.pageSize.width}
+                pageHeight={document.pageSize.height}
+                scale={scale}
+              />
+              {marquee.band && (
+                <div
+                  className="canvas-marquee"
+                  aria-hidden="true"
+                  style={{
+                    left: marquee.band.x * scale,
+                    top: marquee.band.y * scale,
+                    width: marquee.band.width * scale,
+                    height: marquee.band.height * scale,
+                  }}
+                />
+              )}
+            </div>
+          </main>
+
+          <div
+            className="panel-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整属性面板宽度"
+            onPointerDown={startInspectorResize}
+          />
+
+          <InspectorPanel />
+        </>
+      )}
+
+      {activeView === "ai" && (
+        <main className="feature-workspace ai-workspace">
+          <header className="feature-header">
+            <div>
+              {aiDraft && (
+                <button
+                  type="button"
+                  className="header-back-button"
+                  aria-label="返回初始页面"
+                  title="返回初始页面"
+                  onClick={returnToAiStart}
+                >
+                  <ArrowLeft />
+                </button>
+              )}
+              <Sparkles />
+              <div>
+                <h1>AI 内容工作台</h1>
+                <p>生成并审核内容，确认后再套用 PPT 模板</p>
+              </div>
+            </div>
+            <div className="feature-header-actions">
+              <div className="workflow-steps" aria-label="制作流程">
+                <span className={!aiDraft ? "active" : "done"} aria-current={!aiDraft ? "step" : undefined}>
+                  {aiDraft ? <Check /> : "1"} 生成草稿
+                </span>
+                <i />
+                <span className={aiDraft ? "active" : ""} aria-current={aiDraft ? "step" : undefined}>
+                  2 编辑文字
+                </span>
+                <i />
+                <span>3 上传模板</span>
+              </div>
+              {aiDraft && (
+                <div className="draft-header-actions">
+                  {aiDraftBlockingIssues.length > 0 && (
+                    <span className="draft-blocked-hint">
+                      <CircleAlert />
+                      {aiDraftBlockHint}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="secondary-action draft-regenerate-action"
+                    title="用同一个主题重新生成整份草稿；生成期间当前内容不变，完成后可用撤销回到上一版"
+                    onClick={() => void handleRegenerateDraft()}
+                  >
+                    {aiRegenerating ? <X /> : <RotateCcw />}
+                    {aiRegenerating ? "取消重新生成" : "重新生成草稿"}
+                  </button>
+                  <button
+                    className="primary-action"
+                    title={aiDraftBlockReason}
+                    disabled={Boolean(aiDraftBlockReason)}
+                    onClick={continueToTheme}
+                  >
+                    确认内容，选择 PPT 模板
+                    <ArrowRight />
+                  </button>
+                </div>
+              )}
+            </div>
+          </header>
+          {!aiDraft ? (
+            <div className="ai-split">
+              <aside className="ai-history">
+                <div className="ai-history-heading">
+                  <strong>制作历史</strong>
+                  <span>{aiHistory.length} 个草稿</span>
+                </div>
+                {aiHistory.length === 0 ? (
+                  <p className="ai-history-empty">还没有草稿</p>
+                ) : (
+                  aiHistory.map((entry) => (
+                    <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}>
+                      <Sparkles />
+                      <div>
+                        <strong>{entry.draft.title}</strong>
+                        <span>
+                          {entry.draft.slides.length} 页 ·{" "}
+                          {new Date(entry.updatedAt).toLocaleString("zh-CN", {
+                            month: "numeric",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        <p>{entry.topic}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </aside>
+              <div className="feature-scroll ai-plan-pane">
+                <div className="ai-compose-card">
+                  <div className="section-kicker">AI 内容规划</div>
+                  <h2>你想制作什么演示文稿？</h2>
+                  <p>描述主题、受众、场景和重点，AI 将生成演示简报、逐页计划和可编辑的结构化内容。</p>
+                  <label>
+                    <span className="topic-field-heading">
+                      <span>主题与要求</span>
+                      <button
+                        type="button"
+                        className="link-action topic-polish-action"
+                        disabled={!aiTopic.trim() || aiPolishing || aiBusy}
+                        onClick={() => void handlePolishAiTopic()}
+                      >
+                        <Wand2 />
+                        {aiPolishing ? "润色中…" : "AI 润色"}
+                      </button>
+                    </span>
+                    <textarea
+                      value={aiTopic}
+                      onChange={(event) => setAiTopic(event.target.value)}
+                      placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动"
+                    />
+                  </label>
+                  <label className="slide-count-field">
+                    页数
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={aiSlideCount}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setAiSlideCount(value === "" ? "" : Math.max(1, Math.trunc(Number(value)) || 1));
+                      }}
+                      onBlur={() => {
+                        if (aiSlideCount === "") setAiSlideCount(1);
+                      }}
+                    />
+                  </label>
+                  <button
+                    className="primary-action"
+                    disabled={!aiTopic.trim() || aiPolishing || aiSlideCount === ""}
+                    onClick={handleAiGenerate}
+                  >
+                    {aiBusy ? "取消生成" : "生成 PPT 草稿"}
+                    <ArrowRight />
+                  </button>
+                  {aiBusy && aiProgress && (
+                    <div className="ai-generation-progress" role="status" aria-live="polite">
+                      <strong>{aiGenerationLabel}</strong>
+                      <div
+                        className="design-progress-track"
+                        aria-label="AI 生成进度"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={aiGenerationPercent}
+                        role="progressbar"
+                      >
+                        <i style={{ width: `${aiGenerationPercent}%` }} />
+                      </div>
+                      <span>生成中可随时点击“取消生成”停止本次任务</span>
+                    </div>
+                  )}
+                  <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="feature-scroll draft-mode">
+              <ContentReview
+                draft={aiDraft}
+                originalDraft={aiOriginalDraft.current}
+                activeIndex={activeDraftSlideIndex}
+                saveState={aiSaveState}
+                restoreUndoSlideIds={aiRestoreUndoSlideIds}
+                canUndo={aiContentUndo.current.length > 0}
+                canRedo={aiContentRedo.current.length > 0}
+                onActiveIndexChange={selectAiDraftSlide}
+                onDraftTitleChange={updateAiDraftTitle}
+                onSlideFieldChange={updateAiSlide}
+                onSlideVisualAssetChange={updateAiVisualAsset}
+                onSlideBlocksChange={updateAiBlocks}
+                onSlideReviewedChange={updateAiSlideReviewed}
+                onReviewAllSlides={reviewAllAiSlides}
+                onAddSlide={addAiSlide}
+                onDuplicateSlide={duplicateAiSlide}
+                onDeleteSlide={deleteAiSlide}
+                onMoveSlide={moveAiSlide}
+                onRestoreSlide={restoreAiSlide}
+                onUndoRestore={undoRestoreAiSlide}
+                onUndo={undoAiContent}
+                onRedo={redoAiContent}
+              />
+            </div>
           )}
+        </main>
+      )}
+
+      {activeView === "theme" && (
+        <main className="feature-workspace theme-workspace">
+          <header className="feature-header">
+            <div>
+              <Palette />
+              <div>
+                <h1>PPT 模板</h1>
+                <p>上传用户模板，在内容确认后提取主题、母版和页面版式</p>
+              </div>
+            </div>
+            <div className="feature-header-actions">
+              <div className="workflow-steps">
+                <span className="done">
+                  <Check /> 生成草稿
+                </span>
+                <i />
+                <span className="done">
+                  <Check /> 编辑文字
+                </span>
+                <i />
+                <span className="active">3 上传模板</span>
+              </div>
+              <button
+                type="button"
+                className="primary-action header-upload-button"
+                onClick={() => setTemplateUploadOpen(true)}
+              >
+                <FileUp />
+                上传 PPT 模板
+              </button>
+            </div>
+          </header>
+          <div className="feature-scroll">
+            <section className="template-content">
+              <div className="template-browser">
+                <div className="template-library">
+                  <div className="template-library-heading">
+                    <div>
+                      <strong>已保存模板</strong>
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+                        视觉主题
+                        <select
+                          aria-label="视觉主题"
+                          disabled={designBusy}
+                          value={themePresetId}
+                          onChange={(event) => setThemePresetId(event.currentTarget.value)}
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: "6px",
+                            border: "1px solid rgba(120,130,140,0.4)",
+                            background: "transparent",
+                            color: "inherit",
+                          }}
+                        >
+                          <option value="">跟随模板</option>
+                          {THEME_PRESETS.map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {themePresetId === "" &&
+                        (() => {
+                          const suggested = THEME_PRESETS.find((preset) => preset.id === inferThemePresetId(aiTopic));
+                          return suggested ? (
+                            <button
+                              type="button"
+                              className="secondary-action"
+                              disabled={designBusy}
+                              onClick={() => setThemePresetId(suggested.id)}
+                            >
+                              推荐：{suggested.name}
+                            </button>
+                          ) : null;
+                        })()}
+                      <span>{templateLibrary.length} 个</span>
+                    </div>
+                  </div>
+                  <div>
+                    {templateLibrary.map((template) => (
+                      <button
+                        type="button"
+                        className={selectedTemplate?.id === template.id ? "active" : ""}
+                        key={template.id}
+                        onClick={() => void handleSelectTemplate(template)}
+                      >
+                        <FileUp />
+                        <span>
+                          <strong>{template.name}</strong>
+                          <small>
+                            {(template.size / 1024 / 1024).toFixed(2)} MB ·{" "}
+                            {new Date(template.importedAt).toLocaleString("zh-CN")}
+                          </small>
+                        </span>
+                        {selectedTemplate?.id === template.id && <Check />}
+                      </button>
+                    ))}
+                  </div>
+                  {templateLibrary.length === 0 && <div className="template-empty">尚未上传模板</div>}
+                </div>
+                <div className="template-preview-panel">
+                  <div className="template-preview-heading">
+                    <strong>
+                      <Eye />
+                      模板预览
+                    </strong>
+                    {selectedTemplate && <span>{selectedTemplate.name}</span>}
+                  </div>
+                  <div className="template-preview-stage">
+                    {templatePreviewBusy ? (
+                      <span>正在解析模板…</span>
+                    ) : templatePreview ? (
+                      <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} />
+                    ) : selectedTemplate ? (
+                      <span>此 PPTX 没有内嵌封面预览</span>
+                    ) : (
+                      <span>选择左侧模板后查看预览</span>
+                    )}
+                  </div>
+                  {templateAnalysis && (
+                    <div className="template-analysis">
+                      <div className="template-analysis-grid">
+                        <span>
+                          <b>{templateAnalysis.slideCount}</b>页面
+                        </span>
+                        <span>
+                          <b>{templateAnalysis.masterCount}</b>母版
+                        </span>
+                        <span>
+                          <b>{templateAnalysis.layoutCount}</b>版式
+                        </span>
+                        <span>
+                          <b>{templateAnalysis.themeCount}</b>主题
+                        </span>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>页面尺寸</dt>
+                          <dd>
+                            {templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu
+                              ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in`
+                              : "未定义"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>标题字体</dt>
+                          <dd>{templateAnalysis.majorFont || "未定义"}</dd>
+                        </div>
+                        <div>
+                          <dt>正文字体</dt>
+                          <dd>{templateAnalysis.minorFont || "未定义"}</dd>
+                        </div>
+                      </dl>
+                      {templateAnalysis.themeColors.length > 0 && (
+                        <div className="template-color-row" aria-label="主题色">
+                          {templateAnalysis.themeColors.map((color) => (
+                            <span
+                              key={color.name}
+                              title={`${color.name} ${color.value}`}
+                              style={{ backgroundColor: color.value }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>
+                      {templateAnalysis.slides.length > 0 && (
+                        <div className="template-slide-summaries">
+                          <strong>页面结构</strong>
+                          <div>
+                            {templateAnalysis.slides.map((slide) => (
+                              <article key={slide.index}>
+                                <b>{String(slide.index).padStart(2, "0")}</b>
+                                <span>
+                                  <strong>{slide.title}</strong>
+                                  <small>
+                                    {slide.textCount} 文本 · {slide.imageCount} 图片 · {slide.shapeCount} 形状
+                                    {slide.layout ? ` · ${slide.layout}` : ""}
+                                  </small>
+                                </span>
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+      )}
+
+      {activeView === "settings" && (
+        <main className="feature-workspace settings-workspace">
+          <header className="feature-header">
+            <div>
+              <Settings />
+              <div>
+                <h1>设置</h1>
+                <p>管理模型连接、安全凭据和 PPTD 应用外观</p>
+              </div>
+            </div>
+          </header>
+          <div className="feature-scroll">
+            <SettingsWorkspace onMessage={setTaskStatus} />
+          </div>
+        </main>
+      )}
+
+      {aiImageOpen && (
+        <AiImageDialog
+          busy={aiImageBusy}
+          error={aiImageError}
+          onClose={() => setAiImageOpen(false)}
+          onGenerate={(prompt, role) => void handleAiImageGenerate(prompt, role)}
+        />
+      )}
+
+      {templateUploadOpen && (
+        <div
+          className="upload-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTemplateUploadOpen(false);
+          }}
+        >
+          <section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-template-title">
+            <div className="upload-dialog-heading">
+              <div>
+                <FileUp />
+                <div>
+                  <h2 id="upload-template-title">上传 PPT 模板</h2>
+                  <p>模板将保存到 PPTD 模板库。</p>
+                </div>
+              </div>
+              <button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}>
+                <X />
+              </button>
+            </div>
+            <button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}>
+              <FileUp />
+              <strong>选择 PPTX 模板</strong>
+              <span>从电脑中选择一个 PowerPoint 模板文件</span>
+              <small>支持 .pptx，最大 512 MB</small>
+            </button>
+            <div className="upload-dialog-actions">
+              <button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(false)}>
+                取消
+              </button>
+            </div>
+          </section>
         </div>
-      </main>
+      )}
 
-      <div
-        className="panel-resizer"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="调整属性面板宽度"
-        onPointerDown={startInspectorResize}
-      />
-
-      <InspectorPanel />
-    </>}
-
-      {activeView === "ai" && <main className="feature-workspace ai-workspace">
-        <header className="feature-header"><div>{aiDraft && <button type="button" className="header-back-button" aria-label="返回初始页面" title="返回初始页面" onClick={returnToAiStart}><ArrowLeft /></button>}<Sparkles /><div><h1>AI 内容工作台</h1><p>生成并审核内容，确认后再套用 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps" aria-label="制作流程"><span className={!aiDraft ? "active" : "done"} aria-current={!aiDraft ? "step" : undefined}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""} aria-current={aiDraft ? "step" : undefined}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions">{aiDraftBlockingIssues.length > 0 && <span className="draft-blocked-hint"><CircleAlert />{aiDraftBlockHint}</span>}<button className="primary-action" title={aiDraftBlockReason} disabled={Boolean(aiDraftBlockReason)} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
-        {!aiDraft ? <div className="ai-split">
-          <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.length === 0 ? <p className="ai-history-empty">还没有草稿</p> : aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>
-          <div className="feature-scroll ai-plan-pane">
-          <div className="ai-compose-card">
-          <div className="section-kicker">AI 内容规划</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成演示简报、逐页计划和可编辑的结构化内容。</p>
-          <label><span className="topic-field-heading"><span>主题与要求</span><button type="button" className="link-action topic-polish-action" disabled={!aiTopic.trim() || aiPolishing || aiBusy} onClick={() => void handlePolishAiTopic()}><Wand2 />{aiPolishing ? "润色中…" : "AI 润色"}</button></span><textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
-          <label className="slide-count-field">页数<input type="number" min="1" step="1" value={aiSlideCount} onChange={(event) => { const value = event.target.value; setAiSlideCount(value === "" ? "" : Math.max(1, Math.trunc(Number(value)) || 1)); }} onBlur={() => { if (aiSlideCount === "") setAiSlideCount(1); }} /></label>
-          <button className="primary-action" disabled={!aiTopic.trim() || aiPolishing || aiSlideCount === ""} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
-          {aiBusy && aiProgress && <div className="ai-generation-progress" role="status" aria-live="polite"><strong>{aiGenerationLabel}</strong><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={aiGenerationPercent} role="progressbar"><i style={{ width: `${aiGenerationPercent}%` }} /></div><span>生成中可随时点击“取消生成”停止本次任务</span></div>}
-          <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
-          </div>
-          </div>
-        </div> : <div className="feature-scroll draft-mode"><ContentReview
-          draft={aiDraft}
-          originalDraft={aiOriginalDraft.current}
-          activeIndex={activeDraftSlideIndex}
-          saveState={aiSaveState}
-          restoreUndoSlideIds={aiRestoreUndoSlideIds}
-          canUndo={aiContentUndo.current.length > 0}
-          canRedo={aiContentRedo.current.length > 0}
-          onActiveIndexChange={selectAiDraftSlide}
-          onDraftTitleChange={updateAiDraftTitle}
-          onSlideFieldChange={updateAiSlide}
-          onSlideVisualAssetChange={updateAiVisualAsset}
-          onSlideBlocksChange={updateAiBlocks}
-          onSlideReviewedChange={updateAiSlideReviewed}
-          onReviewAllSlides={reviewAllAiSlides}
-          onAddSlide={addAiSlide}
-          onDuplicateSlide={duplicateAiSlide}
-          onDeleteSlide={deleteAiSlide}
-          onMoveSlide={moveAiSlide}
-          onRestoreSlide={restoreAiSlide}
-          onUndoRestore={undoRestoreAiSlide}
-          onUndo={undoAiContent}
-          onRedo={redoAiContent}
-        /></div>}
-      </main>}
-
-      {activeView === "theme" && <main className="feature-workspace theme-workspace">
-        <header className="feature-header"><div><Palette /><div><h1>PPT 模板</h1><p>上传用户模板，在内容确认后提取主题、母版和页面版式</p></div></div><div className="feature-header-actions"><div className="workflow-steps"><span className="done"><Check /> 生成草稿</span><i /><span className="done"><Check /> 编辑文字</span><i /><span className="active">3 上传模板</span></div><button type="button" className="primary-action header-upload-button" onClick={() => setTemplateUploadOpen(true)}><FileUp />上传 PPT 模板</button></div></header>
-        <div className="feature-scroll">
-        <section className="template-content">
-          <div className="template-browser">
-            <div className="template-library"><div className="template-library-heading"><div><strong>已保存模板</strong><label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>视觉主题<select aria-label="视觉主题" disabled={designBusy} value={themePresetId} onChange={(event) => setThemePresetId(event.currentTarget.value)} style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(120,130,140,0.4)", background: "transparent", color: "inherit" }}><option value="">跟随模板</option>{THEME_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select></label>{themePresetId === "" && (() => { const suggested = THEME_PRESETS.find((preset) => preset.id === inferThemePresetId(aiTopic)); return suggested ? <button type="button" className="secondary-action" disabled={designBusy} onClick={() => setThemePresetId(suggested.id)}>推荐：{suggested.name}</button> : null; })()}<span>{templateLibrary.length} 个</span></div></div><div>{templateLibrary.map((template) => <button type="button" className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板</div>}</div>
-            <div className="template-preview-panel"><div className="template-preview-heading"><strong><Eye />模板预览</strong>{selectedTemplate && <span>{selectedTemplate.name}</span>}</div><div className="template-preview-stage">{templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-analysis"><div className="template-analysis-grid"><span><b>{templateAnalysis.slideCount}</b>页面</span><span><b>{templateAnalysis.masterCount}</b>母版</span><span><b>{templateAnalysis.layoutCount}</b>版式</span><span><b>{templateAnalysis.themeCount}</b>主题</span></div><dl><div><dt>页面尺寸</dt><dd>{templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in` : "未定义"}</dd></div><div><dt>标题字体</dt><dd>{templateAnalysis.majorFont || "未定义"}</dd></div><div><dt>正文字体</dt><dd>{templateAnalysis.minorFont || "未定义"}</dd></div></dl>{templateAnalysis.themeColors.length > 0 && <div className="template-color-row" aria-label="主题色">{templateAnalysis.themeColors.map((color) => <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />)}</div>}<div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>{templateAnalysis.slides.length > 0 && <div className="template-slide-summaries"><strong>页面结构</strong><div>{templateAnalysis.slides.map((slide) => <article key={slide.index}><b>{String(slide.index).padStart(2, "0")}</b><span><strong>{slide.title}</strong><small>{slide.textCount} 文本 · {slide.imageCount} 图片 · {slide.shapeCount} 形状{slide.layout ? ` · ${slide.layout}` : ""}</small></span></article>)}</div></div>}</div>}</div>
-          </div>
-        </section>
+      {templatePickerOpen && (
+        <div
+          className="upload-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (!designBusy && event.target === event.currentTarget) setTemplatePickerOpen(false);
+          }}
+        >
+          <section
+            className="upload-dialog template-picker-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-picker-title"
+            aria-busy={designBusy}
+          >
+            <div className="upload-dialog-heading">
+              <div>
+                <Palette />
+                <div>
+                  <h2 id="template-picker-title">选择 PPT 模板</h2>
+                  <p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="关闭模板选择窗口"
+                disabled={designBusy}
+                onClick={() => setTemplatePickerOpen(false)}
+              >
+                <X />
+              </button>
+            </div>
+            <div className="template-picker-toolbar">
+              <strong>已保存模板</strong>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
+                视觉主题
+                <select
+                  aria-label="视觉主题"
+                  disabled={designBusy}
+                  value={themePresetId}
+                  onChange={(event) => setThemePresetId(event.currentTarget.value)}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(120,130,140,0.4)",
+                    background: "transparent",
+                    color: "inherit",
+                  }}
+                >
+                  <option value="">跟随模板</option>
+                  {THEME_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {themePresetId === "" &&
+                (() => {
+                  const suggested = THEME_PRESETS.find((preset) => preset.id === inferThemePresetId(aiTopic));
+                  return suggested ? (
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      disabled={designBusy}
+                      onClick={() => setThemePresetId(suggested.id)}
+                    >
+                      推荐：{suggested.name}
+                    </button>
+                  ) : null;
+                })()}
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={designBusy}
+                onClick={() => setTemplateUploadOpen(true)}
+              >
+                <FileUp />
+                上传模板
+              </button>
+            </div>
+            <div className="template-picker-body">
+              <div className="template-library">
+                <div>
+                  {templateLibrary.map((template) => (
+                    <button
+                      type="button"
+                      disabled={designBusy}
+                      className={selectedTemplate?.id === template.id ? "active" : ""}
+                      key={template.id}
+                      onClick={() => void handleSelectTemplate(template)}
+                    >
+                      <FileUp />
+                      <span>
+                        <strong>{template.name}</strong>
+                        <small>
+                          {(template.size / 1024 / 1024).toFixed(2)} MB ·{" "}
+                          {new Date(template.importedAt).toLocaleString("zh-CN")}
+                        </small>
+                      </span>
+                      {selectedTemplate?.id === template.id && <Check />}
+                    </button>
+                  ))}
+                </div>
+                {templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}
+              </div>
+              <div className="template-preview-panel">
+                <div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>
+                  {designBusy ? (
+                    <div className="design-progress" role="status" aria-live="polite">
+                      <Sparkles />
+                      <strong>{designProgress.label}</strong>
+                      <span>{designProgress.percent}%</span>
+                      <div
+                        className="design-progress-track"
+                        aria-label="AI 生成进度"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={designProgress.percent}
+                        role="progressbar"
+                      >
+                        <i style={{ width: `${designProgress.percent}%` }} />
+                      </div>
+                      <small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small>
+                      <button
+                        type="button"
+                        className="secondary-action design-cancel-action"
+                        onClick={() => {
+                          designCancelRef.current = true;
+                          setDesignProgress({ percent: 0, label: "正在取消…" });
+                          void cancelAiGeneration(designTaskId.current).catch(() => undefined);
+                        }}
+                      >
+                        取消生成
+                      </button>
+                    </div>
+                  ) : templatePreviewBusy ? (
+                    <span>正在解析模板…</span>
+                  ) : templatePreview ? (
+                    <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} />
+                  ) : selectedTemplate ? (
+                    <span>此 PPTX 没有内嵌封面预览</span>
+                  ) : (
+                    <span>选择左侧模板后查看预览</span>
+                  )}
+                </div>
+                {templateAnalysis && (
+                  <div className="template-picker-summary">
+                    <span>{templateAnalysis.slideCount} 页面</span>
+                    <span>{templateAnalysis.layoutCount} 版式</span>
+                    <span>{templateAnalysis.themeCount} 主题</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="upload-dialog-actions">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={designBusy}
+                onClick={() => setTemplatePickerOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy}
+                onClick={() => void generateFromDraft()}
+              >
+                {designBusy ? `${designProgress.percent}%` : "生成 PPT"}
+                {!designBusy && <ArrowRight />}
+              </button>
+            </div>
+          </section>
         </div>
-      </main>}
+      )}
 
-      {activeView === "settings" && <main className="feature-workspace settings-workspace">
-        <header className="feature-header"><div><Settings /><div><h1>设置</h1><p>管理模型连接、安全凭据和 PPTD 应用外观</p></div></div></header>
-        <div className="feature-scroll"><SettingsWorkspace onMessage={setTaskStatus} /></div>
-      </main>}
+      {designQualityReport && (
+        <div
+          className="upload-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDesignQualityReport(undefined);
+          }}
+        >
+          <section
+            className="upload-dialog export-report-dialog design-quality-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="design-quality-title"
+          >
+            <div className="upload-dialog-heading">
+              <div>
+                <CircleAlert />
+                <div>
+                  <h2 id="design-quality-title">设计质检报告</h2>
+                  <p>{designQualityReport.templateName} · PPT 已生成并写入当前项目，以下问题不会阻止继续编辑或导出。</p>
+                </div>
+              </div>
+              <button type="button" aria-label="关闭设计质检报告" onClick={() => setDesignQualityReport(undefined)}>
+                <X />
+              </button>
+            </div>
+            {designQualityReport.issues.length === 0 ? (
+              <div className="template-empty">质量门没有给出具体问题，但检查未完成。</div>
+            ) : (
+              <ul className="export-report-list">
+                {designQualityReport.issues.map((issue, index) => (
+                  <li key={`${issue.issue}-${issue.slideIndex}-${index}`} className="error">
+                    <CircleAlert />
+                    <div>
+                      <strong>
+                        第 {issue.slideIndex + 1} 页 · {issue.message}
+                      </strong>
+                      {issue.elementIds.length > 0 && <p>{issue.elementIds.length} 个对象需要调整</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {designQualityReport.notes.length > 0 && (
+              <p className="design-quality-notes">{designQualityReport.notes.join("；")}</p>
+            )}
+            <div className="upload-dialog-actions">
+              <button type="button" className="secondary-action" onClick={() => setDesignQualityReport(undefined)}>
+                稍后处理
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => {
+                  setDesignQualityReport(undefined);
+                  setActiveView("editor");
+                }}
+              >
+                进入编辑器调整
+                <ArrowRight />
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
-      {aiImageOpen && <AiImageDialog busy={aiImageBusy} error={aiImageError} onClose={() => setAiImageOpen(false)} onGenerate={(prompt, role) => void handleAiImageGenerate(prompt, role)} />}
+      {exportReport && (
+        <div
+          className="upload-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setExportReport(undefined);
+          }}
+        >
+          <section
+            className="upload-dialog export-report-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-report-title"
+          >
+            <div className="upload-dialog-heading">
+              <div>
+                <CircleCheck />
+                <div>
+                  <h2 id="export-report-title">导出报告</h2>
+                  <p>
+                    {exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象
+                    {exportReport.nativeChartCount > 0 ? ` · ${exportReport.nativeChartCount} 个原生图表` : ""}
+                    {exportReport.nativeTableCount > 0 ? ` · ${exportReport.nativeTableCount} 个原生表格` : ""} · ZIP{" "}
+                    {exportReport.package.entryCount} 个条目
+                    {exportReport.masters.length > 0
+                      ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）`
+                      : ""}
+                    {exportReport.themeColors.length > 0 ? ` · 主题色 ${exportReport.themeColors.join("、")}` : ""}
+                  </p>
+                </div>
+              </div>
+              <button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}>
+                <X />
+              </button>
+            </div>
+            {exportReport.issues.length === 0 ? (
+              <div className="template-empty">未发现导出问题</div>
+            ) : (
+              <ul className="export-report-list">
+                {exportReport.issues.map((issue, index) => (
+                  <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}>
+                    <CircleAlert />
+                    <div>
+                      <strong>
+                        {issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页
+                      </strong>
+                      <p>{issue.message}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="upload-dialog-actions">
+              <button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>
+                关闭
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
-      {templateUploadOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTemplateUploadOpen(false); }}><section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-template-title"><div className="upload-dialog-heading"><div><FileUp /><div><h2 id="upload-template-title">上传 PPT 模板</h2><p>模板将保存到 PPTD 模板库。</p></div></div><button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}><X /></button></div><button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}><FileUp /><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx，最大 512 MB</small></button><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(false)}>取消</button></div></section></div>}
+      {message && (
+        <div className={`page-message ${message.kind}`} role="status" aria-live="polite">
+          {message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}
+          <span>{message.text}</span>
+          <button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}>
+            <X />
+          </button>
+        </div>
+      )}
 
-      {templatePickerOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!designBusy && event.target === event.currentTarget) setTemplatePickerOpen(false); }}><section className="upload-dialog template-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="template-picker-title" aria-busy={designBusy}><div className="upload-dialog-heading"><div><Palette /><div><h2 id="template-picker-title">选择 PPT 模板</h2><p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p></div></div><button type="button" aria-label="关闭模板选择窗口" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}><X /></button></div><div className="template-picker-toolbar"><strong>已保存模板</strong><label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>视觉主题<select aria-label="视觉主题" disabled={designBusy} value={themePresetId} onChange={(event) => setThemePresetId(event.currentTarget.value)} style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(120,130,140,0.4)", background: "transparent", color: "inherit" }}><option value="">跟随模板</option>{THEME_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}</select></label>{themePresetId === "" && (() => { const suggested = THEME_PRESETS.find((preset) => preset.id === inferThemePresetId(aiTopic)); return suggested ? <button type="button" className="secondary-action" disabled={designBusy} onClick={() => setThemePresetId(suggested.id)}>推荐：{suggested.name}</button> : null; })()}<button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplateUploadOpen(true)}><FileUp />上传模板</button></div><div className="template-picker-body"><div className="template-library"><div>{templateLibrary.map((template) => <button type="button" disabled={designBusy} className={selectedTemplate?.id === template.id ? "active" : ""} key={template.id} onClick={() => void handleSelectTemplate(template)}><FileUp /><span><strong>{template.name}</strong><small>{(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleString("zh-CN")}</small></span>{selectedTemplate?.id === template.id && <Check />}</button>)}</div>{templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}</div><div className="template-preview-panel"><div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>{designBusy ? <div className="design-progress" role="status" aria-live="polite"><Sparkles /><strong>{designProgress.label}</strong><span>{designProgress.percent}%</span><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={designProgress.percent} role="progressbar"><i style={{ width: `${designProgress.percent}%` }} /></div><small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small><button type="button" className="secondary-action design-cancel-action" onClick={() => { designCancelRef.current = true; setDesignProgress({ percent: 0, label: "正在取消…" }); void cancelAiGeneration(designTaskId.current).catch(() => undefined); }}>取消生成</button></div> : templatePreviewBusy ? <span>正在解析模板…</span> : templatePreview ? <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} /> : selectedTemplate ? <span>此 PPTX 没有内嵌封面预览</span> : <span>选择左侧模板后查看预览</span>}</div>{templateAnalysis && <div className="template-picker-summary"><span>{templateAnalysis.slideCount} 页面</span><span>{templateAnalysis.layoutCount} 版式</span><span>{templateAnalysis.themeCount} 主题</span></div>}</div></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" disabled={designBusy} onClick={() => setTemplatePickerOpen(false)}>取消</button><button type="button" className="primary-action" disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy} onClick={() => void generateFromDraft()}>{designBusy ? `${designProgress.percent}%` : "生成 PPT"}{!designBusy && <ArrowRight />}</button></div></section></div>}
-
-      {designQualityReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDesignQualityReport(undefined); }}><section className="upload-dialog export-report-dialog design-quality-dialog" role="dialog" aria-modal="true" aria-labelledby="design-quality-title"><div className="upload-dialog-heading"><div><CircleAlert /><div><h2 id="design-quality-title">设计质检报告</h2><p>{designQualityReport.templateName} · PPT 已生成并写入当前项目，以下问题不会阻止继续编辑或导出。</p></div></div><button type="button" aria-label="关闭设计质检报告" onClick={() => setDesignQualityReport(undefined)}><X /></button></div>{designQualityReport.issues.length === 0 ? <div className="template-empty">质量门没有给出具体问题，但检查未完成。</div> : <ul className="export-report-list">{designQualityReport.issues.map((issue, index) => <li key={`${issue.issue}-${issue.slideIndex}-${index}`} className="error"><CircleAlert /><div><strong>第 {issue.slideIndex + 1} 页 · {issue.message}</strong>{issue.elementIds.length > 0 && <p>{issue.elementIds.length} 个对象需要调整</p>}</div></li>)}</ul>}{designQualityReport.notes.length > 0 && <p className="design-quality-notes">{designQualityReport.notes.join("；")}</p>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setDesignQualityReport(undefined)}>稍后处理</button><button type="button" className="primary-action" onClick={() => { setDesignQualityReport(undefined); setActiveView("editor"); }}>进入编辑器调整<ArrowRight /></button></div></section></div>}
-
-      {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象{exportReport.nativeChartCount > 0 ? ` · ${exportReport.nativeChartCount} 个原生图表` : ""}{exportReport.nativeTableCount > 0 ? ` · ${exportReport.nativeTableCount} 个原生表格` : ""} · ZIP {exportReport.package.entryCount} 个条目{exportReport.masters.length > 0 ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）` : ""}{exportReport.themeColors.length > 0 ? ` · 主题色 ${exportReport.themeColors.join("、")}` : ""}</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
-
-
-      {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
-
-      <footer className="statusbar">{activeView === "ai" ? (aiDraft ? <><span>草稿第 {activeDraftSlideIndex + 1} / {aiDraft.slides.length} 页</span><span>{aiDraftMetrics.characters} 字</span><span>{aiDraftMetrics.points} 条要点</span><span className={`saved-dot ${aiSaveState === "saving" ? "dirty" : ""}`}>● {aiSaveState === "saving" ? "保存中…" : "已自动保存"}</span></> : <><span>AI 内容工作台</span><span>填写主题后生成结构化草稿</span><span className="saved-dot">● {aiHistory.length > 0 ? `${aiHistory.length} 个历史草稿` : "尚未生成草稿"}</span></>) : <><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{missingImageCount > 0 && <span className="missing-assets" title="这些图片读不出来，画布上以斜纹块占位">⚠ {missingImageCount} 张图片资源缺失</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom-controls"><button type="button" aria-label="缩小画布" onClick={() => setZoom((value) => Math.max(0.3, Math.round((value - 0.1) * 10) / 10))}>−</button><button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 10) / 10))}>＋</button></span></>}</footer>
+      <footer className="statusbar">
+        {activeView === "ai" ? (
+          aiDraft ? (
+            <>
+              <span>
+                草稿第 {activeDraftSlideIndex + 1} / {aiDraft.slides.length} 页
+              </span>
+              <span>{aiDraftMetrics.characters} 字</span>
+              <span>{aiDraftMetrics.points} 条要点</span>
+              <span className={`saved-dot ${aiSaveState === "saving" ? "dirty" : ""}`}>
+                ● {aiSaveState === "saving" ? "保存中…" : "已自动保存"}
+              </span>
+            </>
+          ) : (
+            <>
+              <span>AI 内容工作台</span>
+              <span>填写主题后生成结构化草稿</span>
+              <span className="saved-dot">
+                ● {aiHistory.length > 0 ? `${aiHistory.length} 个历史草稿` : "尚未生成草稿"}
+              </span>
+            </>
+          )
+        ) : (
+          <>
+            <span>
+              第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页
+            </span>
+            <span>{countLabel}</span>
+            <span>{revisionLabel}</span>
+            {missingImageCount > 0 && (
+              <span className="missing-assets" title="这些图片读不出来，画布上以斜纹块占位">
+                ⚠ {missingImageCount} 张图片资源缺失
+              </span>
+            )}
+            <span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span>
+            <span className="zoom-controls">
+              <button
+                type="button"
+                aria-label="缩小画布"
+                onClick={() => setZoom((value) => Math.max(0.3, Math.round((value - 0.1) * 10) / 10))}
+              >
+                −
+              </button>
+              <button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                aria-label="放大画布"
+                onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 10) / 10))}
+              >
+                ＋
+              </button>
+            </span>
+          </>
+        )}
+      </footer>
     </div>
   );
 }

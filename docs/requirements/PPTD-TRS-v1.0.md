@@ -1,4 +1,5 @@
 # PPTD — AI 驱动的 PPT 设计与编辑平台
+
 ## 详细技术需求文档（Technical Requirements Specification）
 
 **项目名称：** PPTD  
@@ -69,25 +70,25 @@ PPTD 必须区分以下能力：
 
 # 2. 技术栈与依赖选型
 
-| 模块 | 技术 | 职责 |
-|---|---|---|
-| 桌面应用 | Tauri 2 | 应用窗口、系统集成、文件访问 |
-| 原生服务 | Rust | 文件操作、项目管理、系统能力 |
-| 前端框架 | React + TypeScript | 编辑器界面及业务交互 |
-| 构建工具 | Vite | 前端开发及打包 |
-| UI 组件 | shadcn/ui | 开源界面组件 |
-| 图标 | Lucide | 开源图标系统 |
-| 样式系统 | Tailwind CSS | UI 样式管理 |
-| 状态管理 | Zustand + Immer | 文档状态、撤销重做及编辑事务 |
-| 2D 渲染 | React + SVG + HTML | 幻灯片编辑与实时预览 |
-| 3D 渲染 | Three.js | 三维场景、相机、材质及变换 |
-| 拖拽排序 | dnd-kit | 页面及图层排序 |
-| PPTX 生成 | PptxGenJS | 生成常规可编辑 PPTX |
-| ZIP 解析 | JSZip | 读取 PPTX 包内资源 |
-| PPTX 结构 | OOXML 解析层 | 主题、母版、布局及对象解析 |
-| 数据存储 | SQLite | 项目、配置、版本及索引元数据 |
-| AI 服务 | Provider Adapter | 对接不同的大模型服务 |
-| 导出验证 | LibreOffice | PPTX 转 PDF，辅助检查输出 |
+| 模块      | 技术               | 职责                         |
+| --------- | ------------------ | ---------------------------- |
+| 桌面应用  | Tauri 2            | 应用窗口、系统集成、文件访问 |
+| 原生服务  | Rust               | 文件操作、项目管理、系统能力 |
+| 前端框架  | React + TypeScript | 编辑器界面及业务交互         |
+| 构建工具  | Vite               | 前端开发及打包               |
+| UI 组件   | shadcn/ui          | 开源界面组件                 |
+| 图标      | Lucide             | 开源图标系统                 |
+| 样式系统  | Tailwind CSS       | UI 样式管理                  |
+| 状态管理  | Zustand + Immer    | 文档状态、撤销重做及编辑事务 |
+| 2D 渲染   | React + SVG + HTML | 幻灯片编辑与实时预览         |
+| 3D 渲染   | Three.js           | 三维场景、相机、材质及变换   |
+| 拖拽排序  | dnd-kit            | 页面及图层排序               |
+| PPTX 生成 | PptxGenJS          | 生成常规可编辑 PPTX          |
+| ZIP 解析  | JSZip              | 读取 PPTX 包内资源           |
+| PPTX 结构 | OOXML 解析层       | 主题、母版、布局及对象解析   |
+| 数据存储  | SQLite             | 项目、配置、版本及索引元数据 |
+| AI 服务   | Provider Adapter   | 对接不同的大模型服务         |
+| 导出验证  | LibreOffice        | PPTX 转 PDF，辅助检查输出    |
 
 依赖应在项目初始化时锁定版本，并通过许可证清单记录直接依赖及其传递依赖。
 
@@ -714,20 +715,11 @@ interface SlideContent {
   title: string;
   blocks: ContentBlock[];
   speakerNotes?: string;
-  status:
-    | "draft"
-    | "review"
-    | "approved"
-    | "changed"
-    | "needs_review";
+  status: "draft" | "review" | "approved" | "changed" | "needs_review";
   contentHash?: string;
 }
 
-type ContentBlock =
-  | TextBlock
-  | TableDataBlock
-  | ChartDataBlock
-  | ImageBriefBlock;
+type ContentBlock = TextBlock | TableDataBlock | ChartDataBlock | ImageBriefBlock;
 ```
 
 上述为逻辑接口示例。正式实现时应补充 ID、来源追踪、Schema 校验和版本迁移规则。
@@ -751,14 +743,7 @@ interface SlideModel {
 
 interface SlideElement {
   id: string;
-  type:
-    | "text"
-    | "shape"
-    | "image"
-    | "table"
-    | "chart"
-    | "group"
-    | "scene3d";
+  type: "text" | "shape" | "image" | "table" | "chart" | "group" | "scene3d";
 
   x: number;
   y: number;
@@ -817,14 +802,9 @@ interface SlideElement {
 
 ```ts
 interface AIProvider {
-  generateStructured<T>(
-    request: StructuredGenerationRequest
-  ): Promise<StructuredGenerationResult<T>>;
+  generateStructured<T>(request: StructuredGenerationRequest): Promise<StructuredGenerationResult<T>>;
 
-  streamText(
-    request: TextGenerationRequest,
-    onChunk: (chunk: string) => void
-  ): Promise<void>;
+  streamText(request: TextGenerationRequest, onChunk: (chunk: string) => void): Promise<void>;
 }
 ```
 

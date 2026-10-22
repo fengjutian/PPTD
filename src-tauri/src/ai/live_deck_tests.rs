@@ -39,7 +39,7 @@ fn strip_code_fence(content: &str) -> &str {
 
 /// 直接用模型的对话接口，绕开命令层。
 ///
-/// 这里刻意不复刻命令层的提示词：命令层已经各自有测试，这��要验证的是
+/// 这里刻意不复刻命令层的提示词：命令层已经各自有测试，这里要验证的是
 /// "真实模型在真实提示下会产出什么"，复刻一份提示词只会测到复刻的那份。
 async fn ask(api_key: &str, system: &str, user: &str, temperature: f32) -> serde_json::Value {
     let body = ChatRequest {

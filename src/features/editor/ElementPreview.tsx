@@ -17,7 +17,13 @@ export interface ElementPreviewProps {
  * It is drawn with the same code the canvas uses, scaled into the box of the
  * panel, so the user sees the object as it is instead of a name for it.
  */
-export const ElementPreview = memo(function ElementPreview({ element, slide, width = 56, height = 36, label }: ElementPreviewProps) {
+export const ElementPreview = memo(function ElementPreview({
+  element,
+  slide,
+  width = 56,
+  height = 36,
+  label,
+}: ElementPreviewProps) {
   // An element without size would divide by zero, so the scale stays at zero
   // and the box simply shows the background.
   const ratio =
@@ -31,7 +37,12 @@ export const ElementPreview = memo(function ElementPreview({ element, slide, wid
     <span className="element-preview" title={label} style={{ width, height, background: slide.background }}>
       <span
         className="element-preview-canvas"
-        style={{ width: drawnWidth, height: drawnHeight, left: (width - drawnWidth) / 2, top: (height - drawnHeight) / 2 }}
+        style={{
+          width: drawnWidth,
+          height: drawnHeight,
+          left: (width - drawnWidth) / 2,
+          top: (height - drawnHeight) / 2,
+        }}
       >
         <SlideElementFrame element={element} scale={scale} style={{ left: 0, top: 0 }}>
           <SlideElementContent element={element} slide={slide} scale={scale} imageAlt="" />

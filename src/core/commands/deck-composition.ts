@@ -1,4 +1,10 @@
-import { autoComposition, isCompositionLegal, type AiComposition, type CompositionFacts, type IntentConflict } from "./design-intent";
+import {
+  autoComposition,
+  isCompositionLegal,
+  type AiComposition,
+  type CompositionFacts,
+  type IntentConflict,
+} from "./design-intent";
 
 /**
  * The composition of a whole deck.
@@ -44,7 +50,10 @@ export const DEFAULT_MAX_CONSECUTIVE_COMPOSITIONS = 2;
 const COMPOSITION_PREFERENCE: readonly AiComposition[] = ["editorial", "columns", "grid", "stacked"];
 
 /** 与最近几页都不同的、且这一页装得下的构图。 */
-export function alternativeComposition(facts: CompositionFacts, avoid: readonly AiComposition[]): AiComposition | undefined {
+export function alternativeComposition(
+  facts: CompositionFacts,
+  avoid: readonly AiComposition[],
+): AiComposition | undefined {
   return COMPOSITION_PREFERENCE.find((candidate) => !avoid.includes(candidate) && isCompositionLegal(candidate, facts));
 }
 
@@ -56,7 +65,10 @@ export function alternativeComposition(facts: CompositionFacts, avoid: readonly 
  * choice would repeat the previous page for a third time, a different legal
  * composition is used instead.
  */
-export function planDeckCompositions(pages: DeckPageFacts[], options: { maxConsecutive?: number } = {}): DeckCompositionPlan {
+export function planDeckCompositions(
+  pages: DeckPageFacts[],
+  options: { maxConsecutive?: number } = {},
+): DeckCompositionPlan {
   const maxConsecutive = Math.max(1, options.maxConsecutive ?? DEFAULT_MAX_CONSECUTIVE_COMPOSITIONS);
   const compositions: AiComposition[] = [];
   const adjustments: DeckCompositionPlan["adjustments"] = [];
@@ -65,12 +77,15 @@ export function planDeckCompositions(pages: DeckPageFacts[], options: { maxConse
     const requested = page.requested;
     // The model asked for something the content cannot carry: the page keeps
     // the composition its own content implies, and the refusal is reported.
-    const legal = requested === undefined || requested === "auto"
-      ? true
-      : isCompositionLegal(requested, page.facts);
+    const legal = requested === undefined || requested === "auto" ? true : isCompositionLegal(requested, page.facts);
     let chosen = legal && requested !== undefined && requested !== "auto" ? requested : autoComposition(page.facts);
     const explicit = legal && requested !== undefined && requested !== "auto";
-    if (!explicit && recent.length > 0 && chosen === recent[0] && recent.filter((value) => value === chosen).length >= maxConsecutive) {
+    if (
+      !explicit &&
+      recent.length > 0 &&
+      chosen === recent[0] &&
+      recent.filter((value) => value === chosen).length >= maxConsecutive
+    ) {
       const alternative = alternativeComposition(page.facts, recent.slice(0, maxConsecutive));
       if (alternative) {
         adjustments.push({
@@ -96,7 +111,10 @@ export function deckIntentConflicts(pages: DeckPageFacts[]): IntentConflict[] {
     const requested = page.requested;
     if (!requested || requested === "auto") return;
     if (isCompositionLegal(requested, page.facts)) return;
-    conflicts.push({ intent: `slide ${index + 1}: composition=${requested}`, reason: "该页的内容装不下这个构图，已改用内容自己决定的那一种" });
+    conflicts.push({
+      intent: `slide ${index + 1}: composition=${requested}`,
+      reason: "该页的内容装不下这个构图，已改用内容自己决定的那一种",
+    });
   });
   return conflicts;
 }

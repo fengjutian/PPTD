@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { comparePixels } from "./pixel-diff";
 import type { PixelImage } from "./png";
 
-function picture(width: number, height: number, colour: [number, number, number, number] = [255, 255, 255, 255]): PixelImage {
+function picture(
+  width: number,
+  height: number,
+  colour: [number, number, number, number] = [255, 255, 255, 255],
+): PixelImage {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let offset = 0; offset < data.length; offset += 4) {
     data[offset] = colour[0];
@@ -64,8 +68,12 @@ describe("像素比较", () => {
     const result = comparePixels(picture(2, 2), actual, { includeDiffImage: true });
     expect(result.diff).toBeDefined();
     const offset = (1 * 2 + 1) * 4;
-    expect([result.diff!.data[offset], result.diff!.data[offset + 1], result.diff!.data[offset + 2]]).toEqual([220, 30, 40]);
+    expect([result.diff!.data[offset], result.diff!.data[offset + 1], result.diff!.data[offset + 2]]).toEqual([
+      220, 30, 40,
+    ]);
     const other = 0;
-    expect([result.diff!.data[other], result.diff!.data[other + 1], result.diff!.data[other + 2]]).not.toEqual([220, 30, 40]);
+    expect([result.diff!.data[other], result.diff!.data[other + 1], result.diff!.data[other + 2]]).not.toEqual([
+      220, 30, 40,
+    ]);
   });
 });

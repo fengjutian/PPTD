@@ -35,7 +35,10 @@ const SAMPLE_Y = [0.2, 0.5, 0.8];
  * actually carries the text, and the generator and the pixel gate then
  * disagree about the same page.
  */
-export async function probeTemplateBackground(dataUrl: string, regions: AiTemplateRegion[]): Promise<TemplateBackgroundProbe> {
+export async function probeTemplateBackground(
+  dataUrl: string,
+  regions: AiTemplateRegion[],
+): Promise<TemplateBackgroundProbe> {
   const image = await loadImage(dataUrl);
   const width = 240;
   const height = Math.max(1, Math.round((width * image.height) / image.width));

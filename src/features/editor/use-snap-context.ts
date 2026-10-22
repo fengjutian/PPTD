@@ -29,13 +29,17 @@ export function useSnapContext(slideId: SlideId, pageWidth: number, pageHeight: 
   const snapEnabled = useCanvasGuidesStore((state) => state.snapEnabled);
   const gridSize = useCanvasGuidesStore((state) => state.gridSize);
 
-  const targets = useMemo(() => buildSnapTargets({
-    gridSnapEnabled,
-    gridSize,
-    pageWidth,
-    pageHeight,
-    guides: guides ?? EMPTY_GUIDES,
-  }), [gridSnapEnabled, gridSize, pageWidth, pageHeight, guides]);
+  const targets = useMemo(
+    () =>
+      buildSnapTargets({
+        gridSnapEnabled,
+        gridSize,
+        pageWidth,
+        pageHeight,
+        guides: guides ?? EMPTY_GUIDES,
+      }),
+    [gridSnapEnabled, gridSize, pageWidth, pageHeight, guides],
+  );
 
   // 阈值是屏幕像素给出的，换算成页面坐标后缩放画布时手感不变。
   const threshold = scale > 0 ? SNAP_THRESHOLD_PX / scale : 0;

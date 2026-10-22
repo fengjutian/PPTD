@@ -82,7 +82,9 @@ export const AlignGrid = memo(function AlignGrid({ disabled, onAlign }: AlignGri
           type="button"
           key={`${cell.horizontal}-${cell.vertical}`}
           className="align-cell"
-          title={cell.single ? `${cell.label}（只改变${cell.horizontal === "center" ? "垂直" : "水平"}位置）` : cell.label}
+          title={
+            cell.single ? `${cell.label}（只改变${cell.horizontal === "center" ? "垂直" : "水平"}位置）` : cell.label
+          }
           aria-label={cell.label}
           disabled={disabled}
           onClick={() => onAlign(cell)}

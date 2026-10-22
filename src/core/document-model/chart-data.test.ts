@@ -12,7 +12,14 @@ function chartOf(blockIds: string[]): ChartElement {
     frame: { x: emu(0), y: emu(0), width: emu(100), height: emu(100) },
     rotationMilliDegree: 0,
     locked: false,
-    style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, textColor: "#17181c", seriesColors: ["#3366CC"], showLegend: false, showValueLabels: true },
+    style: {
+      fontFamily: "Microsoft YaHei",
+      fontSizePt: 14,
+      textColor: "#17181c",
+      seriesColors: ["#3366CC"],
+      showLegend: false,
+      showValueLabels: true,
+    },
   };
 }
 
@@ -39,7 +46,13 @@ describe("chart data", () => {
     const second = { id: crypto.randomUUID(), type: "metric" as const, label: "覆盖机构", value: "12万" };
     document.slides[0]!.content.blocks = [first, second];
     const resolved = resolveChartData(document.slides[0]!, chartOf([first.id, second.id]));
-    expect(resolved).toEqual({ data: [{ category: "年检测样本量", value: 38 }, { category: "覆盖机构", value: 12 }], unit: "万" });
+    expect(resolved).toEqual({
+      data: [
+        { category: "年检测样本量", value: 38 },
+        { category: "覆盖机构", value: 12 },
+      ],
+      unit: "万",
+    });
   });
 
   it("refuses metrics that do not share one unit", () => {

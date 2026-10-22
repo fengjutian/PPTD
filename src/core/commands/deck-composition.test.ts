@@ -27,7 +27,9 @@ describe("整册构图编排", () => {
     expect(plan.compositions[1]).toBe("grid");
     expect(plan.compositions[2]).not.toBe("grid");
     // 任何构图都不该连续出现三次。
-    const run = (index: number) => plan.compositions[index] === plan.compositions[index - 1] && plan.compositions[index] === plan.compositions[index - 2];
+    const run = (index: number) =>
+      plan.compositions[index] === plan.compositions[index - 1] &&
+      plan.compositions[index] === plan.compositions[index - 2];
     expect([0, 1, 2, 3].some(run)).toBe(false);
   });
 
@@ -54,7 +56,9 @@ describe("整册构图编排", () => {
     // 两条要点撑不起编辑式页面。
     expect(alternativeComposition(facts({ itemCount: 2 }), ["editorial", "columns", "grid"])).toBe("stacked");
     // 八条长要点排不成卡片网格，也放不进编辑式页面。
-    expect(alternativeComposition(facts({ itemCount: 8, shortItems: false, longestItemLength: 90 }), ["columns"])).toBe("stacked");
+    expect(alternativeComposition(facts({ itemCount: 8, shortItems: false, longestItemLength: 90 }), ["columns"])).toBe(
+      "stacked",
+    );
     // 备选不会选到刚刚用过的构图。
     expect(alternativeComposition(facts(), ["editorial"])).toBe("columns");
   });

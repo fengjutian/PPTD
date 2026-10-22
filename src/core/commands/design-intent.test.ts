@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, isCompositionLegal, resolvePageDesign, type CompositionFacts } from "./design-intent";
+import {
+  DENSITY_FACTORS,
+  EMPHASIS_FACTORS,
+  autoComposition,
+  detectPullQuote,
+  isCompositionLegal,
+  resolvePageDesign,
+  type CompositionFacts,
+} from "./design-intent";
 import { LAYOUT_CAPACITY } from "./layout-capacity";
 
 const facts = (overrides: Partial<CompositionFacts> = {}): CompositionFacts => ({

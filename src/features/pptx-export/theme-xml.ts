@@ -14,7 +14,20 @@ import { strFromU8, strToU8 } from "fflate";
 export const THEME_PART = "ppt/theme/theme1.xml";
 
 /** The color slots of the OOXML color scheme, in the order the scheme declares them. */
-const COLOR_SLOTS = ["dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"] as const;
+const COLOR_SLOTS = [
+  "dk1",
+  "lt1",
+  "dk2",
+  "lt2",
+  "accent1",
+  "accent2",
+  "accent3",
+  "accent4",
+  "accent5",
+  "accent6",
+  "hlink",
+  "folHlink",
+] as const;
 
 export interface ThemeColorSlot {
   name: string;

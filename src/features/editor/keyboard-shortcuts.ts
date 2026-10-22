@@ -1,4 +1,16 @@
-export type EditorShortcut = "undo" | "redo" | "duplicate-element" | "copy-element" | "paste-element" | "delete-element" | "nudge-left" | "nudge-right" | "nudge-up" | "nudge-down" | "layer-forward" | "layer-backward";
+export type EditorShortcut =
+  | "undo"
+  | "redo"
+  | "duplicate-element"
+  | "copy-element"
+  | "paste-element"
+  | "delete-element"
+  | "nudge-left"
+  | "nudge-right"
+  | "nudge-up"
+  | "nudge-down"
+  | "layer-forward"
+  | "layer-backward";
 
 export interface ShortcutInput {
   key: string;
@@ -11,7 +23,8 @@ export interface ShortcutInput {
 
 export function resolveEditorShortcut(input: ShortcutInput): EditorShortcut | null {
   const tagName = input.targetTagName?.toLowerCase();
-  if (tagName === "input" || tagName === "textarea" || tagName === "select" || input.targetIsContentEditable) return null;
+  if (tagName === "input" || tagName === "textarea" || tagName === "select" || input.targetIsContentEditable)
+    return null;
 
   const modifier = input.ctrlKey || input.metaKey;
   const key = input.key.toLowerCase();

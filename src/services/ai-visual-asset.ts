@@ -1,5 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { buildVisualAssetPrompt, resolveVisualAsset, VISUAL_ASSET_REQUEST_SIZE, type AiVisualAssetRole } from "../core/commands/visual-asset";
+import {
+  buildVisualAssetPrompt,
+  resolveVisualAsset,
+  VISUAL_ASSET_REQUEST_SIZE,
+  type AiVisualAssetRole,
+} from "../core/commands/visual-asset";
 import type { AiSlideDesign } from "../core/commands/template-layouts";
 
 /**
@@ -194,12 +199,14 @@ export async function generateDeckVisualAssets(input: {
   const concurrency = Math.max(1, input.concurrency ?? 2);
   for (let offset = 0; offset < targets.length; offset += concurrency) {
     const group = targets.slice(offset, offset + concurrency);
-    const results = await Promise.all(group.map(async (entry) => {
-      const prompt = input.prompts.get(entry.index);
-      if (!prompt) return undefined;
-      const asset = await generateVisualAsset({ prompt, role: entry.decision.role! });
-      return asset ? { ...asset, slideIndex: entry.index } : undefined;
-    }));
+    const results = await Promise.all(
+      group.map(async (entry) => {
+        const prompt = input.prompts.get(entry.index);
+        if (!prompt) return undefined;
+        const asset = await generateVisualAsset({ prompt, role: entry.decision.role! });
+        return asset ? { ...asset, slideIndex: entry.index } : undefined;
+      }),
+    );
     for (const asset of results) {
       if (asset) assets.push(asset);
     }

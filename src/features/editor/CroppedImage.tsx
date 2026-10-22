@@ -1,7 +1,14 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import type { ImageElement } from "../../core/document-model";
 import { cropGeometry } from "../../core/rendering/image-crop";
-import { isAssetReference, isFailedImageReference, peekImageUrl, resolveImageUrl, subscribeImageFailures, subscribeImageProjectPath } from "../../services/image-url-service";
+import {
+  isAssetReference,
+  isFailedImageReference,
+  peekImageUrl,
+  resolveImageUrl,
+  subscribeImageFailures,
+  subscribeImageProjectPath,
+} from "../../services/image-url-service";
 
 interface CroppedImageProps {
   element: ImageElement;
@@ -29,9 +36,7 @@ interface CroppedImageProps {
 export function CroppedImage({ element, className, alt }: CroppedImageProps) {
   const geometry = cropGeometry(element.crop);
   const source = element.source.dataUrl;
-  const [url, setUrl] = useState<string | undefined>(() =>
-    isAssetReference(source) ? peekImageUrl(source) : source,
-  );
+  const [url, setUrl] = useState<string | undefined>(() => (isAssetReference(source) ? peekImageUrl(source) : source));
   const [unreadable, setUnreadable] = useState(false);
 
   useEffect(() => {
@@ -86,7 +91,15 @@ export function CroppedImage({ element, className, alt }: CroppedImageProps) {
     // The picture is gone, but its description still belongs to the page.
     const description = alt === "" ? undefined : (alt ?? element.altText);
     const marker = [className, "image-missing"].filter(Boolean).join(" ");
-    return <div className={marker} style={style} role={description ? "img" : undefined} aria-label={description} title={description} />;
+    return (
+      <div
+        className={marker}
+        style={style}
+        role={description ? "img" : undefined}
+        aria-label={description}
+        title={description}
+      />
+    );
   }
 
   return (

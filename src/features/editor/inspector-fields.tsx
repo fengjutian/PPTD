@@ -28,7 +28,17 @@ interface NumberFieldProps {
  * the field until the pointer is released, so a long drag is one command and
  * one undo step instead of one per pixel.
  */
-export function NumberField({ label, value, unit, min, max, precision = 2, step, disabled, onCommit }: NumberFieldProps) {
+export function NumberField({
+  label,
+  value,
+  unit,
+  min,
+  max,
+  precision = 2,
+  step,
+  disabled,
+  onCommit,
+}: NumberFieldProps) {
   const [draft, setDraft] = useState(() => formatNumber(value, precision));
   const [error, setError] = useState<string>();
   const [dirty, setDirty] = useState(false);
@@ -99,7 +109,7 @@ export function NumberField({ label, value, unit, min, max, precision = 2, step,
     if (!start || step === undefined) return;
     // Four pixels of drag are one step; Shift multiplies the step, Alt divides it.
     const pixels = event.clientX - start.startX;
-    const steps = Math.round(pixels / 4) * (event.shiftKey ? 10 : 1) / (event.altKey ? 10 : 1);
+    const steps = (Math.round(pixels / 4) * (event.shiftKey ? 10 : 1)) / (event.altKey ? 10 : 1);
     let next = start.startValue + steps * step;
     if (min !== undefined) next = Math.max(min, next);
     if (max !== undefined) next = Math.min(max, next);
@@ -131,10 +141,17 @@ export function NumberField({ label, value, unit, min, max, precision = 2, step,
         {label}
       </span>
       <span className="field-control">
-        {step !== undefined && <button type="button" className="field-stepper" aria-label={`${label} 减少 ${step}`} disabled={disabled}
-          onClick={() => stepBy(-step)}>
-          <ChevronDown />
-        </button>}
+        {step !== undefined && (
+          <button
+            type="button"
+            className="field-stepper"
+            aria-label={`${label} 减少 ${step}`}
+            disabled={disabled}
+            onClick={() => stepBy(-step)}
+          >
+            <ChevronDown />
+          </button>
+        )}
         <span className={`field-input${unit ? " with-unit" : ""}`}>
           <input
             type="number"
@@ -144,7 +161,10 @@ export function NumberField({ label, value, unit, min, max, precision = 2, step,
             value={shown}
             disabled={disabled}
             aria-invalid={error ? true : undefined}
-            onChange={(event) => { update(event.target.value); setError(undefined); }}
+            onChange={(event) => {
+              update(event.target.value);
+              setError(undefined);
+            }}
             onBlur={commit}
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
@@ -160,10 +180,17 @@ export function NumberField({ label, value, unit, min, max, precision = 2, step,
           />
           {unit && <span className="field-unit">{unit}</span>}
         </span>
-        {step !== undefined && <button type="button" className="field-stepper" aria-label={`${label} 增加 ${step}`} disabled={disabled}
-          onClick={() => stepBy(step)}>
-          <ChevronUp />
-        </button>}
+        {step !== undefined && (
+          <button
+            type="button"
+            className="field-stepper"
+            aria-label={`${label} 增加 ${step}`}
+            disabled={disabled}
+            onClick={() => stepBy(step)}
+          >
+            <ChevronUp />
+          </button>
+        )}
       </span>
       {error && <small className="field-error">{error}</small>}
     </label>
@@ -234,7 +261,10 @@ export function ColorField({ label, value, wide, swatches, disabled, onCommit }:
             value={draft}
             disabled={disabled}
             aria-invalid={error ? true : undefined}
-            onChange={(event) => { update(event.target.value); setError(undefined); }}
+            onChange={(event) => {
+              update(event.target.value);
+              setError(undefined);
+            }}
             onBlur={commit}
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
@@ -249,21 +279,27 @@ export function ColorField({ label, value, wide, swatches, disabled, onCommit }:
           />
         </span>
       </span>
-      {swatches && swatches.length > 0 && <span className="color-swatches">
-        {swatches.map((color) => (
-          <button
-            type="button"
-            key={color}
-            className={`color-chip${color.toLowerCase() === current ? " active" : ""}`}
-            style={{ background: color }}
-            title={color}
-            aria-label={`使用颜色 ${color}`}
-            aria-pressed={color.toLowerCase() === current}
-            disabled={disabled}
-            onClick={() => { update(color); setError(undefined); onCommit(color); }}
-          />
-        ))}
-      </span>}
+      {swatches && swatches.length > 0 && (
+        <span className="color-swatches">
+          {swatches.map((color) => (
+            <button
+              type="button"
+              key={color}
+              className={`color-chip${color.toLowerCase() === current ? " active" : ""}`}
+              style={{ background: color }}
+              title={color}
+              aria-label={`使用颜色 ${color}`}
+              aria-pressed={color.toLowerCase() === current}
+              disabled={disabled}
+              onClick={() => {
+                update(color);
+                setError(undefined);
+                onCommit(color);
+              }}
+            />
+          ))}
+        </span>
+      )}
       {error && <small className="field-error">{error}</small>}
     </label>
   );
@@ -285,7 +321,11 @@ export function SelectField({ label, value, options, disabled, onCommit }: Selec
       <span className="field-control">
         <select value={value} disabled={disabled} onChange={(event) => onCommit(event.target.value)}>
           {!known && <option value={value}>{value}</option>}
-          {options.map((option) => <option key={option} value={option}>{option}</option>)}
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
         </select>
       </span>
     </label>
@@ -319,8 +359,15 @@ export function TextField({ label, value, maxLength, disabled, onCommit }: TextF
           value={draft}
           maxLength={maxLength}
           disabled={disabled}
-          onChange={(event) => { draftRef.current = event.target.value; setDraft(event.target.value); setDirty(true); }}
-          onBlur={() => { setDirty(false); onCommit(draftRef.current); }}
+          onChange={(event) => {
+            draftRef.current = event.target.value;
+            setDraft(event.target.value);
+            setDirty(true);
+          }}
+          onBlur={() => {
+            setDirty(false);
+            onCommit(draftRef.current);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") event.currentTarget.blur();
           }}

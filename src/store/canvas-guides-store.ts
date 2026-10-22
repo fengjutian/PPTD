@@ -63,32 +63,37 @@ export const useCanvasGuidesStore = create<CanvasGuidesState>((set) => ({
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
   setGridSize: (gridSize) => set({ gridSize }),
   // 拖拽时每移动一个像素都会调用一次，值没变就不必通知订阅者。
-  setActiveSnap: ({ x, y }) => set((state) => (
-    state.activeSnapX === x && state.activeSnapY === y ? state : { activeSnapX: x, activeSnapY: y }
-  )),
+  setActiveSnap: ({ x, y }) =>
+    set((state) => (state.activeSnapX === x && state.activeSnapY === y ? state : { activeSnapX: x, activeSnapY: y })),
 
-  addGuide: (slideId, axis, position) => set((state) => ({
-    guidesBySlide: {
-      ...state.guidesBySlide,
-      [slideId]: [...(state.guidesBySlide[slideId] ?? []), { id: nextGuideId(), axis, position }],
-    },
-  })),
+  addGuide: (slideId, axis, position) =>
+    set((state) => ({
+      guidesBySlide: {
+        ...state.guidesBySlide,
+        [slideId]: [...(state.guidesBySlide[slideId] ?? []), { id: nextGuideId(), axis, position }],
+      },
+    })),
 
-  moveGuide: (slideId, guideId, position) => set((state) => ({
-    guidesBySlide: {
-      ...state.guidesBySlide,
-      [slideId]: (state.guidesBySlide[slideId] ?? []).map((guide) => (guide.id === guideId ? { ...guide, position } : guide)),
-    },
-  })),
+  moveGuide: (slideId, guideId, position) =>
+    set((state) => ({
+      guidesBySlide: {
+        ...state.guidesBySlide,
+        [slideId]: (state.guidesBySlide[slideId] ?? []).map((guide) =>
+          guide.id === guideId ? { ...guide, position } : guide,
+        ),
+      },
+    })),
 
-  removeGuide: (slideId, guideId) => set((state) => ({
-    guidesBySlide: {
-      ...state.guidesBySlide,
-      [slideId]: (state.guidesBySlide[slideId] ?? []).filter((guide) => guide.id !== guideId),
-    },
-  })),
+  removeGuide: (slideId, guideId) =>
+    set((state) => ({
+      guidesBySlide: {
+        ...state.guidesBySlide,
+        [slideId]: (state.guidesBySlide[slideId] ?? []).filter((guide) => guide.id !== guideId),
+      },
+    })),
 
-  clearGuides: (slideId) => set((state) => ({
-    guidesBySlide: { ...state.guidesBySlide, [slideId]: [] },
-  })),
+  clearGuides: (slideId) =>
+    set((state) => ({
+      guidesBySlide: { ...state.guidesBySlide, [slideId]: [] },
+    })),
 }));

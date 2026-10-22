@@ -137,22 +137,25 @@ export async function resolveImageUrl(source: string): Promise<string | undefine
   const request = invoke<string>("read_image_asset", {
     projectPath: path,
     reference: source,
-  }).then((dataUrl) => {
-    // A read that started before the project changed belongs to the old
-    // project, so its bytes must not be kept for the new one.
-    if (path === currentProjectPath) cache.set(source, dataUrl);
-    inFlight.delete(source);
-    // 读回来一次就不再是缺失，之前记下的失败要让位给成功。
-    if (failures.delete(source)) notifyImageFailures();
-    return dataUrl;
-  }, (error: unknown) => {
-    inFlight.delete(source);
-    if (!failures.has(source)) {
-      failures.add(source);
-      notifyImageFailures();
-    }
-    throw error;
-  });
+  }).then(
+    (dataUrl) => {
+      // A read that started before the project changed belongs to the old
+      // project, so its bytes must not be kept for the new one.
+      if (path === currentProjectPath) cache.set(source, dataUrl);
+      inFlight.delete(source);
+      // 读回来一次就不再是缺失，之前记下的失败要让位给成功。
+      if (failures.delete(source)) notifyImageFailures();
+      return dataUrl;
+    },
+    (error: unknown) => {
+      inFlight.delete(source);
+      if (!failures.has(source)) {
+        failures.add(source);
+        notifyImageFailures();
+      }
+      throw error;
+    },
+  );
   inFlight.set(source, request);
   return request;
 }

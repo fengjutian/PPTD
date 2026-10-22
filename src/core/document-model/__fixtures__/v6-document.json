@@ -33,7 +33,13 @@
           "origin": "generated",
           "text": "Fixture",
           "contentRef": "title",
-          "style": { "fontFamily": "Microsoft YaHei", "fontSizePt": 28, "color": "#17181c", "bold": true, "align": "left" }
+          "style": {
+            "fontFamily": "Microsoft YaHei",
+            "fontSizePt": 28,
+            "color": "#17181c",
+            "bold": true,
+            "align": "left"
+          }
         }
       ]
     }

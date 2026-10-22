@@ -1,6 +1,40 @@
-import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTextStyles, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
-import { createDocument, createSlide, inches, parseMetricValue, applyTextRun, subtractTextRange, type TextRunStyle } from "../document-model";
-import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
+import type {
+  ChartElementStyle,
+  ChartKind,
+  ContentBlock,
+  DocumentTextStyles,
+  DocumentTheme,
+  ElementId,
+  Emu,
+  ImageCrop,
+  PresentationDocument,
+  RectEmu,
+  ShapeElementStyle,
+  Slide,
+  SlideElement,
+  SlideId,
+  SlideLayoutSpec,
+  SupportedImageMimeType,
+  TableElementStyle,
+  TextElementStyle,
+} from "../document-model";
+import {
+  createDocument,
+  createSlide,
+  inches,
+  parseMetricValue,
+  applyTextRun,
+  subtractTextRange,
+  type TextRunStyle,
+} from "../document-model";
+import {
+  colorLuminance,
+  fillForInk,
+  isLargeText,
+  readableTextColor,
+  readableTextColorOnRange,
+  type BackgroundRange,
+} from "../rendering/contrast";
 import { alignFrames, distributeFrames, unionFrame, type ArrangeHorizontal, type ArrangeVertical } from "./arrange";
 import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 import { layoutFlow } from "../rendering/flow";
@@ -19,13 +53,33 @@ import {
   type TemplateLayoutIntent,
 } from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
-import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, PANEL_TYPE_SCALE, stripListPrefix } from "./layout-capacity";
+import {
+  CONTENT_REGION,
+  DEFAULT_CONTENT_REGION,
+  LAYOUT_CAPACITY,
+  PANEL_TYPE_SCALE,
+  stripListPrefix,
+} from "./layout-capacity";
 import { resolveTypeScale } from "../design/type-scale";
 import { findThemePreset } from "../design/theme-presets";
 import { coverCrop } from "../rendering/image-fit";
-import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, resolvePageDesign, type CompositionFacts } from "./design-intent";
+import {
+  DENSITY_FACTORS,
+  EMPHASIS_FACTORS,
+  autoComposition,
+  detectPullQuote,
+  resolvePageDesign,
+  type CompositionFacts,
+} from "./design-intent";
 import { planDeckCompositions } from "./deck-composition";
-import { isVisualAssetRole, planManualVisualAssetLayout, planVisualAssetLayout, resolveVisualAsset, type AiVisualAssetRole, type NormalizedRect } from "./visual-asset";
+import {
+  isVisualAssetRole,
+  planManualVisualAssetLayout,
+  planVisualAssetLayout,
+  resolveVisualAsset,
+  type AiVisualAssetRole,
+  type NormalizedRect,
+} from "./visual-asset";
 
 export type {
   AiElementRepair,
@@ -49,7 +103,24 @@ export type AiContentBlock =
   | { type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
   | { type: "process"; items: Array<{ label: string; text: string }> }
   | { type: "table-data"; header: string[]; rows: string[][] };
-export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
+export interface AiSlideDraft {
+  title: string;
+  body: string;
+  speakerNotes: string;
+  blocks?: AiContentBlock[];
+  plan?: {
+    visualIntent:
+      | "hero"
+      | "quote"
+      | "timeline"
+      | "comparison"
+      | "process"
+      | "data-chart"
+      | "image-story"
+      | "summary"
+      | "structured-text";
+  };
+}
 
 /**
  * 一页已经生成好的配图。
@@ -107,8 +178,12 @@ function readTextStyles(input: AiTemplateTheme["textStyles"]): DocumentTheme["te
       fontSizePt,
       ...(typeof token.bold === "boolean" ? { bold: token.bold } : {}),
       ...(typeof token.color === "string" && HEX_COLOR_PATTERN.test(token.color) ? { color: token.color } : {}),
-      ...(typeof token.lineHeight === "number" && Number.isFinite(token.lineHeight) ? { lineHeight: token.lineHeight } : {}),
-      ...(typeof token.letterSpacingPt === "number" && Number.isFinite(token.letterSpacingPt) ? { letterSpacingPt: token.letterSpacingPt } : {}),
+      ...(typeof token.lineHeight === "number" && Number.isFinite(token.lineHeight)
+        ? { lineHeight: token.lineHeight }
+        : {}),
+      ...(typeof token.letterSpacingPt === "number" && Number.isFinite(token.letterSpacingPt)
+        ? { letterSpacingPt: token.letterSpacingPt }
+        : {}),
     };
   }
   return Object.keys(result).length > 0 ? result : undefined;
@@ -141,8 +216,17 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
     if (block.type === "quote") return { id, type: "quote", text: block.text, attribution: block.attribution };
     if (block.type === "metric") return { id, type: "metric", label: block.label, value: block.value };
     if (block.type === "timeline") return { id, type: "timeline", items: block.items.map((item) => ({ ...item })) };
-    if (block.type === "comparison") return { id, type: "comparison", leftLabel: block.leftLabel, rightLabel: block.rightLabel, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
-    if (block.type === "table-data") return { id, type: "table-data", header: [...block.header], rows: block.rows.map((row) => [...row]) };
+    if (block.type === "comparison")
+      return {
+        id,
+        type: "comparison",
+        leftLabel: block.leftLabel,
+        rightLabel: block.rightLabel,
+        leftItems: [...block.leftItems],
+        rightItems: [...block.rightItems],
+      };
+    if (block.type === "table-data")
+      return { id, type: "table-data", header: [...block.header], rows: block.rows.map((row) => [...row]) };
     return { id, type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
@@ -155,20 +239,40 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
 function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
   return blocks.map((block) => {
     if (block.type === "bullet-list") return { ...block, items: [...block.items] };
-    if (block.type === "timeline" || block.type === "process") return { ...block, items: block.items.map((item) => ({ ...item })) };
-    if (block.type === "comparison") return { ...block, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
-    if (block.type === "table-data") return { ...block, header: [...block.header], rows: block.rows.map((row) => [...row]) };
+    if (block.type === "timeline" || block.type === "process")
+      return { ...block, items: block.items.map((item) => ({ ...item })) };
+    if (block.type === "comparison")
+      return { ...block, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
+    if (block.type === "table-data")
+      return { ...block, header: [...block.header], rows: block.rows.map((row) => [...row]) };
     return { ...block };
   });
 }
 
 /** Plain deep copy of an element, safe to read from an Immer draft. */
 function cloneElement(element: SlideElement): SlideElement {
-  if (element.type === "text") return { ...element, frame: { ...element.frame }, style: { ...element.style }, ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}) };
+  if (element.type === "text")
+    return {
+      ...element,
+      frame: { ...element.frame },
+      style: { ...element.style },
+      ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
+    };
   if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
-  if (element.type === "chart") return { ...element, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] };
+  if (element.type === "chart")
+    return {
+      ...element,
+      frame: { ...element.frame },
+      style: { ...element.style, seriesColors: [...element.style.seriesColors] },
+      contentBlockIds: [...element.contentBlockIds],
+    };
   if (element.type === "table") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
-  return { ...element, frame: { ...element.frame }, source: { ...element.source }, ...(element.crop ? { crop: { ...element.crop } } : {}) };
+  return {
+    ...element,
+    frame: { ...element.frame },
+    source: { ...element.source },
+    ...(element.crop ? { crop: { ...element.crop } } : {}),
+  };
 }
 
 /** Strips document block IDs before handing reviewed content back to the renderer. */
@@ -180,8 +284,16 @@ function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | unde
     if (block.type === "quote") return { type: "quote", text: block.text, attribution: block.attribution };
     if (block.type === "metric") return { type: "metric", label: block.label, value: block.value };
     if (block.type === "timeline") return { type: "timeline", items: block.items.map((item) => ({ ...item })) };
-    if (block.type === "comparison") return { type: "comparison", leftLabel: block.leftLabel, rightLabel: block.rightLabel, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
-    if (block.type === "table-data") return { type: "table-data", header: [...block.header], rows: block.rows.map((row) => [...row]) };
+    if (block.type === "comparison")
+      return {
+        type: "comparison",
+        leftLabel: block.leftLabel,
+        rightLabel: block.rightLabel,
+        leftItems: [...block.leftItems],
+        rightItems: [...block.rightItems],
+      };
+    if (block.type === "table-data")
+      return { type: "table-data", header: [...block.header], rows: block.rows.map((row) => [...row]) };
     return { type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
@@ -196,13 +308,14 @@ export type VerticalAlign = "top" | "middle" | "bottom";
  * together place the object in a corner, in the middle or on an edge of the
  * page. Both are one intent, so both are one command and one undo step.
  */
-export type AlignTarget =
-  | HorizontalAlign
-  | VerticalAlign
-  | { horizontal?: HorizontalAlign; vertical?: VerticalAlign };
+export type AlignTarget = HorizontalAlign | VerticalAlign | { horizontal?: HorizontalAlign; vertical?: VerticalAlign };
 
 /** The axis each single direction belongs to. */
-const HORIZONTAL_ALIGN: Record<string, HorizontalAlign | undefined> = { left: "left", center: "center", right: "right" };
+const HORIZONTAL_ALIGN: Record<string, HorizontalAlign | undefined> = {
+  left: "left",
+  center: "center",
+  right: "right",
+};
 const VERTICAL_ALIGN: Record<string, VerticalAlign | undefined> = { top: "top", middle: "middle", bottom: "bottom" };
 
 export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
@@ -210,7 +323,21 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; templateTheme?: AiTemplateTheme; backgroundRhythm?: BackgroundRhythm; visualAssets?: AiVisualAssetData[]; themePresetId?: string }
+  | {
+      type: "apply-ai-designed-draft";
+      title: string;
+      slides: AiSlideDraft[];
+      designs: AiSlideDesign[];
+      pageSize?: { width: Emu; height: Emu };
+      fontFamily?: string;
+      bodyFontFamily?: string;
+      templateDecorations?: AiTemplateDecoration[];
+      templateLayouts?: AiTemplateLayout[];
+      templateTheme?: AiTemplateTheme;
+      backgroundRhythm?: BackgroundRhythm;
+      visualAssets?: AiVisualAssetData[];
+      themePresetId?: string;
+    }
   | { type: "relayout-slide"; slideId: SlideId }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
@@ -220,7 +347,16 @@ export type DocumentCommand =
   | { type: "set-slide-background-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType }
   | { type: "remove-slide-background-image"; slideId: SlideId }
   | { type: "add-text"; slideId: SlideId }
-  | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string; naturalWidth?: number; naturalHeight?: number; role?: AiVisualAssetRole }
+  | {
+      type: "add-image";
+      slideId: SlideId;
+      dataUrl: string;
+      mimeType: SupportedImageMimeType;
+      altText: string;
+      naturalWidth?: number;
+      naturalHeight?: number;
+      role?: AiVisualAssetRole;
+    }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
@@ -228,14 +364,26 @@ export type DocumentCommand =
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
   | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: AlignTarget }
-  | { type: "align-elements"; slideId: SlideId; elementIds: ElementId[]; align: { horizontal?: ArrangeHorizontal; vertical?: ArrangeVertical } }
+  | {
+      type: "align-elements";
+      slideId: SlideId;
+      elementIds: ElementId[];
+      align: { horizontal?: ArrangeHorizontal; vertical?: ArrangeVertical };
+    }
   | { type: "distribute-elements"; slideId: SlideId; elementIds: ElementId[]; axis: "horizontal" | "vertical" }
   | { type: "move-elements"; slideId: SlideId; elementIds: ElementId[]; dx: Emu; dy: Emu }
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
   | { type: "fit-text"; slideId: SlideId; elementId: ElementId }
-  | { type: "set-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number; style: TextRunStyle }
+  | {
+      type: "set-text-emphasis";
+      slideId: SlideId;
+      elementId: ElementId;
+      start: number;
+      end: number;
+      style: TextRunStyle;
+    }
   | { type: "clear-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number }
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
   | { type: "set-chart-style"; slideId: SlideId; elementId: ElementId; style: Partial<ChartElementStyle> }
@@ -245,13 +393,21 @@ export type DocumentCommand =
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
 
-/** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */function assertTextStyle(style: Partial<TextElementStyle>): void {
+/** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */ function assertTextStyle(
+  style: Partial<TextElementStyle>,
+): void {
   const fontFamily = style.fontFamily;
-  if (fontFamily !== undefined && (typeof fontFamily !== "string" || !fontFamily.trim() || fontFamily.length > 100)) throw new Error("INVALID_TEXT_STYLE");
-  if (style.fontSizePt !== undefined && (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)) throw new Error("INVALID_TEXT_STYLE");
+  if (fontFamily !== undefined && (typeof fontFamily !== "string" || !fontFamily.trim() || fontFamily.length > 100))
+    throw new Error("INVALID_TEXT_STYLE");
+  if (
+    style.fontSizePt !== undefined &&
+    (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)
+  )
+    throw new Error("INVALID_TEXT_STYLE");
   if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_TEXT_STYLE");
   if (style.bold !== undefined && typeof style.bold !== "boolean") throw new Error("INVALID_TEXT_STYLE");
-  if (style.align !== undefined && style.align !== "left" && style.align !== "center" && style.align !== "right") throw new Error("INVALID_TEXT_STYLE");
+  if (style.align !== undefined && style.align !== "left" && style.align !== "center" && style.align !== "right")
+    throw new Error("INVALID_TEXT_STYLE");
 }
 
 /**
@@ -289,42 +445,73 @@ function isLowSurrogate(code: number): boolean {
  * starts in the middle of a character would export as a broken glyph.
  */
 function assertTextRange(text: string, start: number, end: number): void {
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length) throw new Error("INVALID_TEXT_EMPHASIS");
-  if (start > 0 && isHighSurrogate(text.charCodeAt(start - 1)) && isLowSurrogate(text.charCodeAt(start))) throw new Error("INVALID_TEXT_EMPHASIS");
-  if (end < text.length && isHighSurrogate(text.charCodeAt(end - 1)) && isLowSurrogate(text.charCodeAt(end))) throw new Error("INVALID_TEXT_EMPHASIS");
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length)
+    throw new Error("INVALID_TEXT_EMPHASIS");
+  if (start > 0 && isHighSurrogate(text.charCodeAt(start - 1)) && isLowSurrogate(text.charCodeAt(start)))
+    throw new Error("INVALID_TEXT_EMPHASIS");
+  if (end < text.length && isHighSurrogate(text.charCodeAt(end - 1)) && isLowSurrogate(text.charCodeAt(end)))
+    throw new Error("INVALID_TEXT_EMPHASIS");
 }
 
 function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
   if (style.fill !== undefined && !HEX_COLOR_PATTERN.test(style.fill)) throw new Error("INVALID_SHAPE_STYLE");
   if (style.stroke !== undefined && !HEX_COLOR_PATTERN.test(style.stroke)) throw new Error("INVALID_SHAPE_STYLE");
-  if (style.strokeWidthPt !== undefined && (!Number.isFinite(style.strokeWidthPt) || style.strokeWidthPt < 0 || style.strokeWidthPt > 100)) throw new Error("INVALID_SHAPE_STYLE");
-  if (style.radiusPt !== undefined && (!Number.isFinite(style.radiusPt) || style.radiusPt < 0 || style.radiusPt > 1000)) throw new Error("INVALID_SHAPE_STYLE");
+  if (
+    style.strokeWidthPt !== undefined &&
+    (!Number.isFinite(style.strokeWidthPt) || style.strokeWidthPt < 0 || style.strokeWidthPt > 100)
+  )
+    throw new Error("INVALID_SHAPE_STYLE");
+  if (style.radiusPt !== undefined && (!Number.isFinite(style.radiusPt) || style.radiusPt < 0 || style.radiusPt > 1000))
+    throw new Error("INVALID_SHAPE_STYLE");
 }
 
 /** The style of a chart is presentation-only, so it is guarded like the others. */
 function assertChartStyle(style: Partial<ChartElementStyle>): void {
-  if (style.fontFamily !== undefined && (typeof style.fontFamily !== "string" || !style.fontFamily.trim() || style.fontFamily.length > 100)) throw new Error("INVALID_CHART_STYLE");
-  if (style.fontSizePt !== undefined && (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)) throw new Error("INVALID_CHART_STYLE");
+  if (
+    style.fontFamily !== undefined &&
+    (typeof style.fontFamily !== "string" || !style.fontFamily.trim() || style.fontFamily.length > 100)
+  )
+    throw new Error("INVALID_CHART_STYLE");
+  if (
+    style.fontSizePt !== undefined &&
+    (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)
+  )
+    throw new Error("INVALID_CHART_STYLE");
   if (style.textColor !== undefined && !HEX_COLOR_PATTERN.test(style.textColor)) throw new Error("INVALID_CHART_STYLE");
   if (style.seriesColors !== undefined) {
-    if (!Array.isArray(style.seriesColors) || style.seriesColors.length < 1 || style.seriesColors.length > 12) throw new Error("INVALID_CHART_STYLE");
+    if (!Array.isArray(style.seriesColors) || style.seriesColors.length < 1 || style.seriesColors.length > 12)
+      throw new Error("INVALID_CHART_STYLE");
     if (style.seriesColors.some((value) => !HEX_COLOR_PATTERN.test(value))) throw new Error("INVALID_CHART_STYLE");
   }
   if (style.showLegend !== undefined && typeof style.showLegend !== "boolean") throw new Error("INVALID_CHART_STYLE");
-  if (style.showValueLabels !== undefined && typeof style.showValueLabels !== "boolean") throw new Error("INVALID_CHART_STYLE");
+  if (style.showValueLabels !== undefined && typeof style.showValueLabels !== "boolean")
+    throw new Error("INVALID_CHART_STYLE");
 }
 
 /**
  * The style of a table is presentation-only, so it is guarded like the others.
  */
 function assertTableStyle(style: Partial<TableElementStyle>): void {
-  if (style.fontFamily !== undefined && (typeof style.fontFamily !== "string" || !style.fontFamily.trim() || style.fontFamily.length > 100)) throw new Error("INVALID_TABLE_STYLE");
-  if (style.fontSizePt !== undefined && (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)) throw new Error("INVALID_TABLE_STYLE");
-  if (style.headerFill !== undefined && !HEX_COLOR_PATTERN.test(style.headerFill)) throw new Error("INVALID_TABLE_STYLE");
-  if (style.headerTextColor !== undefined && !HEX_COLOR_PATTERN.test(style.headerTextColor)) throw new Error("INVALID_TABLE_STYLE");
-  if (style.bodyTextColor !== undefined && !HEX_COLOR_PATTERN.test(style.bodyTextColor)) throw new Error("INVALID_TABLE_STYLE");
-  if (style.borderColor !== undefined && !HEX_COLOR_PATTERN.test(style.borderColor)) throw new Error("INVALID_TABLE_STYLE");
-  if (style.firstColumnBold !== undefined && typeof style.firstColumnBold !== "boolean") throw new Error("INVALID_TABLE_STYLE");
+  if (
+    style.fontFamily !== undefined &&
+    (typeof style.fontFamily !== "string" || !style.fontFamily.trim() || style.fontFamily.length > 100)
+  )
+    throw new Error("INVALID_TABLE_STYLE");
+  if (
+    style.fontSizePt !== undefined &&
+    (!Number.isFinite(style.fontSizePt) || style.fontSizePt < 4 || style.fontSizePt > 400)
+  )
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.headerFill !== undefined && !HEX_COLOR_PATTERN.test(style.headerFill))
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.headerTextColor !== undefined && !HEX_COLOR_PATTERN.test(style.headerTextColor))
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.bodyTextColor !== undefined && !HEX_COLOR_PATTERN.test(style.bodyTextColor))
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.borderColor !== undefined && !HEX_COLOR_PATTERN.test(style.borderColor))
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.firstColumnBold !== undefined && typeof style.firstColumnBold !== "boolean")
+    throw new Error("INVALID_TABLE_STYLE");
 }
 
 /**
@@ -347,7 +534,14 @@ const IMAGE_BOX = { x: 2, y: 1.7, width: 4, height: 3 } as const;
  */
 function imageFrame(naturalWidth?: number, naturalHeight?: number): RectEmu {
   const box = IMAGE_BOX;
-  if (!naturalWidth || !naturalHeight || !Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) {
+  if (
+    !naturalWidth ||
+    !naturalHeight ||
+    !Number.isFinite(naturalWidth) ||
+    !Number.isFinite(naturalHeight) ||
+    naturalWidth <= 0 ||
+    naturalHeight <= 0
+  ) {
     return { x: inches(box.x), y: inches(box.y), width: inches(box.width), height: inches(box.height) };
   }
   const aspect = naturalWidth / naturalHeight;
@@ -393,7 +587,15 @@ function emuToNormalizedRect(frame: RectEmu, pageSize: { width: number; height: 
  * 宁可留白也不拉伸——拉伸过的图一眼就假。
  */
 function fitImageIntoBox(box: RectEmu, naturalWidth?: number, naturalHeight?: number): RectEmu {
-  if (!naturalWidth || !naturalHeight || !Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) return box;
+  if (
+    !naturalWidth ||
+    !naturalHeight ||
+    !Number.isFinite(naturalWidth) ||
+    !Number.isFinite(naturalHeight) ||
+    naturalWidth <= 0 ||
+    naturalHeight <= 0
+  )
+    return box;
   const aspect = naturalWidth / naturalHeight;
   const boxAspect = box.width / box.height;
   const width = aspect >= boxAspect ? box.width : Math.round(box.height * aspect);
@@ -413,7 +615,9 @@ function fitImageIntoBox(box: RectEmu, naturalWidth?: number, naturalHeight?: nu
  * 让位之后正文小到读不了，就宁可不动——让用户自己挪。
  */
 function makeRoomForAsset(slide: Slide, textArea: NormalizedRect, pageSize: { width: number; height: number }): void {
-  const body = slide.elements.find((element) => element.type === "text" && element.contentRef === "body" && !element.locked);
+  const body = slide.elements.find(
+    (element) => element.type === "text" && element.contentRef === "body" && !element.locked,
+  );
   if (!body) return;
   const current = emuToNormalizedRect(body.frame, pageSize);
   const left = Math.max(current.x, textArea.x);
@@ -430,10 +634,12 @@ function makeRoomForAsset(slide: Slide, textArea: NormalizedRect, pageSize: { wi
 
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
-    case "set-slide": return null;
+    case "set-slide":
+      return null;
     case "set-slide-background":
     case "set-slide-background-image":
-    case "remove-slide-background-image": return "design";
+    case "remove-slide-background-image":
+      return "design";
     case "set-text-style":
     case "fit-text":
     case "set-text-emphasis":
@@ -443,36 +649,56 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-chart-kind":
     case "set-table-style":
     case "set-image-alt-text":
-    case "set-image-crop": return "design";
+    case "set-image-crop":
+      return "design";
     case "delete-elements": {
       // 批量删除可能连带清空标题或正文——那属于内容变更，不能算作纯设计操作。
       if (!document) return "design";
       const slide = document.slides.find((item) => item.id === command.slideId);
-      const touchesContent = slide?.elements.some((item) => command.elementIds.includes(item.id) && item.type === "text" && (item.contentRef === "title" || item.contentRef === "body"))
-        ?? false;
+      const touchesContent =
+        slide?.elements.some(
+          (item) =>
+            command.elementIds.includes(item.id) &&
+            item.type === "text" &&
+            (item.contentRef === "title" || item.contentRef === "body"),
+        ) ?? false;
       return touchesContent ? "content" : "design";
     }
     case "align-elements":
     case "distribute-elements":
-    case "move-elements": return "design";
+    case "move-elements":
+      return "design";
     case "edit-text":
     case "delete-element": {
       if (!document) return command.type === "edit-text" ? "content" : "design";
       const slide = document.slides.find((item) => item.id === command.slideId);
       const element = slide?.elements.find((item) => item.id === command.elementId);
       const legacyTitle = element?.type === "text" && !element.contentRef && slide?.elements[0]?.id === element.id;
-      return element?.type === "text" && (element.contentRef === "title" || element.contentRef === "body" || legacyTitle) ? "content" : "design";
+      return element?.type === "text" &&
+        (element.contentRef === "title" || element.contentRef === "body" || legacyTitle)
+        ? "content"
+        : "design";
     }
-    case "add-text": return "design";
-    case "add-image": return "design";
-    case "relayout-slide": return "design";
-    case "add-slide": return "both";
-    case "apply-ai-draft": return "both";
-    case "apply-ai-designed-draft": return "both";
-    case "duplicate-slide": return "both";
-    case "delete-slide": return "both";
-    case "move-slide": return "both";
-    default: return "design";
+    case "add-text":
+      return "design";
+    case "add-image":
+      return "design";
+    case "relayout-slide":
+      return "design";
+    case "add-slide":
+      return "both";
+    case "apply-ai-draft":
+      return "both";
+    case "apply-ai-designed-draft":
+      return "both";
+    case "duplicate-slide":
+      return "both";
+    case "delete-slide":
+      return "both";
+    case "move-slide":
+      return "both";
+    default:
+      return "design";
   }
 }
 
@@ -485,8 +711,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
  */
 function relayoutSlide(document: PresentationDocument, slide: Slide): void {
   const context = inferRelayoutContext(slide, document);
-  const preserved = classifyRelayoutElements(slide).preserved
-    // A locked title/body placeholder is still the content binding. Keeping it
+  const preserved = classifyRelayoutElements(slide)
+    .preserved // A locked title/body placeholder is still the content binding. Keeping it
     // beside the newly rendered placeholder would duplicate the heading or the
     // body; the reviewed content itself is unchanged either way.
     .filter((element) => element.type !== "text" || (element.contentRef !== "title" && element.contentRef !== "body"))
@@ -555,8 +781,11 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
     delete slide.layoutId;
     return;
   }
-  const existingLayout = document.layouts?.find((layout) => layout.name === generatedLayout.name
-    && (layout.backgroundColor ?? "").toUpperCase() === (generatedLayout.backgroundColor ?? "").toUpperCase());
+  const existingLayout = document.layouts?.find(
+    (layout) =>
+      layout.name === generatedLayout.name &&
+      (layout.backgroundColor ?? "").toUpperCase() === (generatedLayout.backgroundColor ?? "").toUpperCase(),
+  );
   if (existingLayout) {
     slide.layoutId = existingLayout.id;
     return;
@@ -574,24 +803,48 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
   if (command.type === "apply-ai-draft") {
-    if (!command.title.trim() || command.slides.length < 1 || command.slides.length > 20) throw new Error("AI_DRAFT_INVALID");
+    if (!command.title.trim() || command.slides.length < 1 || command.slides.length > 20)
+      throw new Error("AI_DRAFT_INVALID");
     document.title = command.title.trim();
     document.slides = command.slides.map((draft, index) => {
       const slide = createSlide(index + 1);
       const blocks = toContentBlocks(draft.blocks);
-      slide.content = { title: draft.title, body: draft.body, ...(blocks ? { blocks } : {}), speakerNotes: draft.speakerNotes, status: "approved" };
+      slide.content = {
+        title: draft.title,
+        body: draft.body,
+        ...(blocks ? { blocks } : {}),
+        speakerNotes: draft.speakerNotes,
+        status: "approved",
+      };
       const title = slide.elements[0];
       if (title?.type === "text") {
         title.text = draft.title;
         title.origin = "generated";
       }
-      if (draft.body.trim()) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "text", contentRef: "body", frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) }, rotationMilliDegree: 0, locked: false, origin: "generated", text: draft.body, style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" } });
+      if (draft.body.trim())
+        slide.elements.push({
+          id: crypto.randomUUID() as ElementId,
+          type: "text",
+          contentRef: "body",
+          frame: { x: inches(0.9), y: inches(1.8), width: inches(10.8), height: inches(4.6) },
+          rotationMilliDegree: 0,
+          locked: false,
+          origin: "generated",
+          text: draft.body,
+          style: { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#262626", bold: false, align: "left" },
+        });
       return slide;
     });
     return;
   }
   if (command.type === "apply-ai-designed-draft") {
-    if (!command.title.trim() || command.slides.length < 1 || command.slides.length > 20 || command.designs.length !== command.slides.length) throw new Error("AI_DESIGN_INVALID");
+    if (
+      !command.title.trim() ||
+      command.slides.length < 1 ||
+      command.slides.length > 20 ||
+      command.designs.length !== command.slides.length
+    )
+      throw new Error("AI_DESIGN_INVALID");
     if (command.pageSize) document.pageSize = command.pageSize;
     const templateTheme = readTemplateTheme(command.templateTheme);
     // A preset is the fallback for a deck generated without a template: it owns
@@ -606,8 +859,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const typeScale = resolveTypeScale(document.theme);
     // Fonts follow the same precedence as the type scale: the template wins,
     // then the theme/preset, then the renderer default.
-    const majorFont = preset ? (document.theme?.majorFont ?? "Microsoft YaHei") : command.fontFamily || document.theme?.majorFont || "Microsoft YaHei";
-    const minorFont = preset ? (document.theme?.minorFont ?? document.theme?.majorFont ?? "Microsoft YaHei") : command.bodyFontFamily || command.fontFamily || document.theme?.minorFont || document.theme?.majorFont || "Microsoft YaHei";
+    const majorFont = preset
+      ? (document.theme?.majorFont ?? "Microsoft YaHei")
+      : command.fontFamily || document.theme?.majorFont || "Microsoft YaHei";
+    const minorFont = preset
+      ? (document.theme?.minorFont ?? document.theme?.majorFont ?? "Microsoft YaHei")
+      : command.bodyFontFamily ||
+        command.fontFamily ||
+        document.theme?.minorFont ||
+        document.theme?.majorFont ||
+        "Microsoft YaHei";
     // A chosen preset owns the type scale, so the placeholder sizes of the
     // template no longer override it. The structure of the template is kept.
     const effectiveLayouts = preset
@@ -625,11 +886,23 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const pageHeight = document.pageSize.height;
     const pageWidthIn = pageWidth / 914400;
     const pageHeightIn = pageHeight / 914400;
-    const frame = (x: number, y: number, width: number, height: number): RectEmu => ({ x: Math.round(x * pageWidth) as Emu, y: Math.round(y * pageHeight) as Emu, width: Math.round(width * pageWidth) as Emu, height: Math.round(height * pageHeight) as Emu });
+    const frame = (x: number, y: number, width: number, height: number): RectEmu => ({
+      x: Math.round(x * pageWidth) as Emu,
+      y: Math.round(y * pageHeight) as Emu,
+      width: Math.round(width * pageWidth) as Emu,
+      height: Math.round(height * pageHeight) as Emu,
+    });
     // A slide is wider than it is tall, so a circle has to be sized in inches on
     // both axes. A square in normalized coordinates is an ellipse on screen.
-    const circleFrame = (x: number, y: number, diameterInches: number): RectEmu => frame(x, y, diameterInches / pageWidthIn, diameterInches / pageHeightIn);
-    const fittedFontSize = (value: string, box: RectEmu, preferredPt: number, minimumPt = 12, lineHeightRatio = 1.2): number => {
+    const circleFrame = (x: number, y: number, diameterInches: number): RectEmu =>
+      frame(x, y, diameterInches / pageWidthIn, diameterInches / pageHeightIn);
+    const fittedFontSize = (
+      value: string,
+      box: RectEmu,
+      preferredPt: number,
+      minimumPt = 12,
+      lineHeightRatio = 1.2,
+    ): number => {
       const widthPt = box.width / 12_700;
       const heightPt = box.height / 12_700;
       // The same line estimator the quality gate uses decides whether a size
@@ -642,25 +915,67 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // Every text element is checked against the background it actually sits on.
     // A design that asks for dark text on dark artwork is corrected instead of
     // being rendered as invisible copy.
-    const ink = (luminance: number) => (luminance < 0.45 ? { strong: "#FFFFFF", soft: "#DCE3EA" } : { strong: "#171A1F", soft: "#3E4650" });
-    const text = (value: string, box: RectEmu, fontSizePt: number, color: string, bold: boolean, align: "left" | "center" | "right", contentRef?: "title" | "body" | "decorative", background?: BackgroundRange | number, minimumPt = 12) => {
+    const ink = (luminance: number) =>
+      luminance < 0.45 ? { strong: "#FFFFFF", soft: "#DCE3EA" } : { strong: "#171A1F", soft: "#3E4650" };
+    const text = (
+      value: string,
+      box: RectEmu,
+      fontSizePt: number,
+      color: string,
+      bold: boolean,
+      align: "left" | "center" | "right",
+      contentRef?: "title" | "body" | "decorative",
+      background?: BackgroundRange | number,
+      minimumPt = 12,
+    ) => {
       const fitted = fittedFontSize(value, box, fontSizePt, minimumPt);
       const range = typeof background === "number" ? { darkest: background, lightest: background } : background;
       const palette = ink(range ? range.darkest : 1);
       const large = isLargeText(fitted, bold);
       const fallback = bold ? palette.strong : palette.soft;
-      const resolved = range ? readableTextColorOnRange(color, range, large, fallback) : readableTextColor(color, 1, large, fallback);
-      return { id: crypto.randomUUID() as ElementId, type: "text" as const, contentRef, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: majorFont, fontSizePt: fitted, color: resolved, bold, align } };
+      const resolved = range
+        ? readableTextColorOnRange(color, range, large, fallback)
+        : readableTextColor(color, 1, large, fallback);
+      return {
+        id: crypto.randomUUID() as ElementId,
+        type: "text" as const,
+        contentRef,
+        frame: box,
+        rotationMilliDegree: 0,
+        locked: false,
+        text: value,
+        style: { fontFamily: majorFont, fontSizePt: fitted, color: resolved, bold, align },
+      };
     };
-    const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle", stroke = fill, strokeWidthPt = 0) => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke, strokeWidthPt, radiusPt: kind === "ellipse" ? 999 : 8 } });
-    const points = (body: string) => body.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((value) => value.trim()).filter(Boolean);
+    const shape = (
+      box: RectEmu,
+      fill: string,
+      kind: "rectangle" | "ellipse" = "rectangle",
+      stroke = fill,
+      strokeWidthPt = 0,
+    ) => ({
+      id: crypto.randomUUID() as ElementId,
+      type: "shape" as const,
+      frame: box,
+      rotationMilliDegree: 0,
+      locked: false,
+      shape: kind,
+      style: { fill, stroke, strokeWidthPt, radiusPt: kind === "ellipse" ? 999 : 8 },
+    });
+    const points = (body: string) =>
+      body
+        .split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/)
+        .map((value) => value.trim())
+        .filter(Boolean);
     const cleanPoint = stripListPrefix;
     // 整册的构图在画之前就要定下来：模板版式的选择依赖构图，而构图要看着
     // 整册的节奏来定。逐页独立决定构图会让相邻页长成一个样。
     const pageFacts = command.slides.map((content, index) => {
       const design = command.designs[index]!;
       const blocks = content.blocks ?? [];
-      const quoteBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote");
+      const quoteBlock = blocks.find(
+        (block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote",
+      );
       const blockItems = blocks
         .filter((block): block is Extract<AiContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
         .flatMap((block) => block.items);
@@ -673,7 +988,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         bodyLength: content.body.length,
         hasQuote: Boolean(detectPullQuote({ quoteText: quoteBlock?.text, items })),
         hasComparison: blocks.some((block) => block.type === "comparison"),
-        hasRowBlock: blocks.some((block) => block.type === "timeline" || block.type === "process" || block.type === "metric"),
+        hasRowBlock: blocks.some(
+          (block) => block.type === "timeline" || block.type === "process" || block.type === "metric",
+        ),
         layout: design.layout,
       };
       return { facts, requested: design.composition };
@@ -702,7 +1019,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       if (composition === "columns") return "split";
       return "body";
     });
-    const chosenLayouts = planTemplateLayouts({ layouts: effectiveLayouts ?? [], intents: layoutIntents, rhythm: command.backgroundRhythm });
+    const chosenLayouts = planTemplateLayouts({
+      layouts: effectiveLayouts ?? [],
+      intents: layoutIntents,
+      rhythm: command.backgroundRhythm,
+    });
     document.title = command.title.trim();
     document.slides = command.slides.map((content, index) => {
       const baseDesign = command.designs[index]!;
@@ -721,7 +1042,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const slide = createSlide(index + 1);
       slide.background = design.background;
       const contentBlocks = toContentBlocks(content.blocks);
-      slide.content = { title: content.title, body: content.body, ...(contentBlocks ? { blocks: contentBlocks } : {}), speakerNotes: content.speakerNotes, status: "approved" };
+      slide.content = {
+        title: content.title,
+        body: content.body,
+        ...(contentBlocks ? { blocks: contentBlocks } : {}),
+        speakerNotes: content.speakerNotes,
+        status: "approved",
+      };
       const blocks = content.blocks ?? [];
       const bulletItems = blocks
         .filter((block): block is Extract<AiContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
@@ -729,14 +1056,26 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // The structured block is the fact source. Body copy is only a fallback
       // for legacy or hand-authored drafts that do not carry blocks.
       const items = bulletItems.length > 0 ? bulletItems : points(content.body);
-      const timelineBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "timeline" }> => block.type === "timeline");
-      const comparisonBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "comparison" }> => block.type === "comparison");
-      const processBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process");
-      const quoteBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote");
-      const metricBlocks = blocks.filter((block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric");
+      const timelineBlock = blocks.find(
+        (block): block is Extract<AiContentBlock, { type: "timeline" }> => block.type === "timeline",
+      );
+      const comparisonBlock = blocks.find(
+        (block): block is Extract<AiContentBlock, { type: "comparison" }> => block.type === "comparison",
+      );
+      const processBlock = blocks.find(
+        (block): block is Extract<AiContentBlock, { type: "process" }> => block.type === "process",
+      );
+      const quoteBlock = blocks.find(
+        (block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote",
+      );
+      const metricBlocks = blocks.filter(
+        (block): block is Extract<AiContentBlock, { type: "metric" }> => block.type === "metric",
+      );
       // A table block is rendered as a native table: the exporter writes real
       // table cells, so the reviewer keeps an editable grid instead of a picture.
-      const tableBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "table-data" }> => block.type === "table-data");
+      const tableBlock = blocks.find(
+        (block): block is Extract<AiContentBlock, { type: "table-data" }> => block.type === "table-data",
+      );
       // A quoted line already present in the reviewed copy can carry the page
       // as a pull quote. It is a visual emphasis of existing content, never a
       // new claim, and gives dense list pages an editorial anchor.
@@ -746,7 +1085,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // right side without inventing a headline or duplicating a bullet.
       const shortItems = items.every((item) => cleanPoint(item).length <= LAYOUT_CAPACITY.shortItemLength);
       const longestItemLength = items.reduce((longest, item) => Math.max(longest, cleanPoint(item).length), 0);
-      const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock);
+      const hasDeterministicBlock = Boolean(
+        timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock,
+      );
       // A picture for this page. It is generated outside the document, so a page
       // without one simply has no picture: the deck still stands without it.
       const visualAsset = command.visualAssets?.find((asset) => asset.slideIndex === index);
@@ -763,8 +1104,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       if (recipe) {
         let spec = layoutSpecs.get(recipe.index);
         if (!spec) {
-          const backgroundColor = recipe.backgroundColor && HEX_COLOR_PATTERN.test(recipe.backgroundColor) ? recipe.backgroundColor.toUpperCase() : undefined;
-          spec = { id: crypto.randomUUID(), name: recipe.name?.trim() || `模板版式 ${recipe.index + 1}`, ...(backgroundColor ? { backgroundColor } : {}) };
+          const backgroundColor =
+            recipe.backgroundColor && HEX_COLOR_PATTERN.test(recipe.backgroundColor)
+              ? recipe.backgroundColor.toUpperCase()
+              : undefined;
+          spec = {
+            id: crypto.randomUUID(),
+            name: recipe.name?.trim() || `模板版式 ${recipe.index + 1}`,
+            ...(backgroundColor ? { backgroundColor } : {}),
+          };
           layoutSpecs.set(recipe.index, spec);
           layouts.push(spec);
         }
@@ -798,36 +1146,113 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const bodyBackground = keepsArtwork ? (recipe?.backgroundLuminance?.body ?? titleBackground) : undefined;
       const titleLuminance = titleBackground ?? pageLuminance;
       const bodyLuminance = bodyBackground ?? pageLuminance;
-      const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);
-      const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
+      const isSafeRegion = (
+        candidate: { x: number; y: number; width: number; height: number } | undefined,
+        minimumWidth: number,
+        minimumHeight: number,
+      ) =>
+        Boolean(
+          candidate &&
+          candidate.x >= 0 &&
+          candidate.y >= 0 &&
+          candidate.width >= minimumWidth &&
+          candidate.height >= minimumHeight &&
+          candidate.x + candidate.width <= 1 &&
+          candidate.y + candidate.height <= 1,
+        );
+      const safeFrame = (
+        candidate: { x: number; y: number; width: number; height: number } | undefined,
+        fallback: [number, number, number, number],
+        minimumWidth = 0.25,
+        minimumHeight = 0.08,
+      ) =>
+        isSafeRegion(candidate, minimumWidth, minimumHeight)
+          ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height)
+          : frame(...fallback);
       const [leftRecipe, rightRecipe] = recipeColumnRegions?.map((region) => region.frame) ?? [];
-      const hasSafeColumns = isSafeRegion(leftRecipe, 0.25, 0.25) && isSafeRegion(rightRecipe, 0.25, 0.25) && leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x && Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
-      const intersects = (left: AiNormalizedRect, right: AiNormalizedRect) => left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
-      const insetObstacle = (region: AiNormalizedRect): AiNormalizedRect => ({ x: Math.max(0, region.x - 0.015), y: Math.max(0, region.y - 0.015), width: Math.min(1, region.width + 0.03), height: Math.min(1, region.height + 0.03) });
-      const obstacles = (design.obstacleRegions ?? []).filter((region) => isSafeRegion(region, 0.001, 0.001)).map(insetObstacle);
+      const hasSafeColumns =
+        isSafeRegion(leftRecipe, 0.25, 0.25) &&
+        isSafeRegion(rightRecipe, 0.25, 0.25) &&
+        leftRecipe!.x + leftRecipe!.width <= rightRecipe!.x &&
+        Math.abs(leftRecipe!.y - rightRecipe!.y) < 0.18;
+      const intersects = (left: AiNormalizedRect, right: AiNormalizedRect) =>
+        left.x < right.x + right.width &&
+        left.x + left.width > right.x &&
+        left.y < right.y + right.height &&
+        left.y + left.height > right.y;
+      const insetObstacle = (region: AiNormalizedRect): AiNormalizedRect => ({
+        x: Math.max(0, region.x - 0.015),
+        y: Math.max(0, region.y - 0.015),
+        width: Math.min(1, region.width + 0.03),
+        height: Math.min(1, region.height + 0.03),
+      });
+      const obstacles = (design.obstacleRegions ?? [])
+        .filter((region) => isSafeRegion(region, 0.001, 0.001))
+        .map(insetObstacle);
       const largestFreeRegion = (source: AiNormalizedRect): AiNormalizedRect => {
         let candidates = [source];
         for (const obstacle of obstacles) {
           candidates = candidates.flatMap((candidate) => {
             if (!intersects(candidate, obstacle)) return [candidate];
-            const right = candidate.x + candidate.width; const bottom = candidate.y + candidate.height;
-            const obstacleRight = obstacle.x + obstacle.width; const obstacleBottom = obstacle.y + obstacle.height;
+            const right = candidate.x + candidate.width;
+            const bottom = candidate.y + candidate.height;
+            const obstacleRight = obstacle.x + obstacle.width;
+            const obstacleBottom = obstacle.y + obstacle.height;
             return [
-              { x: candidate.x, y: candidate.y, width: Math.max(0, obstacle.x - candidate.x), height: candidate.height },
-              { x: Math.min(right, obstacleRight), y: candidate.y, width: Math.max(0, right - Math.max(candidate.x, obstacleRight)), height: candidate.height },
+              {
+                x: candidate.x,
+                y: candidate.y,
+                width: Math.max(0, obstacle.x - candidate.x),
+                height: candidate.height,
+              },
+              {
+                x: Math.min(right, obstacleRight),
+                y: candidate.y,
+                width: Math.max(0, right - Math.max(candidate.x, obstacleRight)),
+                height: candidate.height,
+              },
               { x: candidate.x, y: candidate.y, width: candidate.width, height: Math.max(0, obstacle.y - candidate.y) },
-              { x: candidate.x, y: Math.min(bottom, obstacleBottom), width: candidate.width, height: Math.max(0, bottom - Math.max(candidate.y, obstacleBottom)) },
-            ].filter((region) => region.width >= 0.28 && region.height >= 0.20);
+              {
+                x: candidate.x,
+                y: Math.min(bottom, obstacleBottom),
+                width: candidate.width,
+                height: Math.max(0, bottom - Math.max(candidate.y, obstacleBottom)),
+              },
+            ].filter((region) => region.width >= 0.28 && region.height >= 0.2);
           });
         }
         return candidates.sort((left, right) => right.width * right.height - left.width * left.height)[0] ?? source;
       };
-      const requestedSafe = design.safeRegion && isSafeRegion(design.safeRegion, 0.30, 0.25) ? design.safeRegion : { x: 0.07, y: 0.12, width: 0.86, height: 0.75 };
+      const requestedSafe =
+        design.safeRegion && isSafeRegion(design.safeRegion, 0.3, 0.25)
+          ? design.safeRegion
+          : { x: 0.07, y: 0.12, width: 0.86, height: 0.75 };
       const visualSafe = largestFreeRegion(requestedSafe);
-      const safeLeft = visualSafe?.x ?? DEFAULT_CONTENT_REGION.left; const safeRight = visualSafe ? visualSafe.x + visualSafe.width : DEFAULT_CONTENT_REGION.right; const safeTop = visualSafe?.y ?? DEFAULT_CONTENT_REGION.top; const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : DEFAULT_CONTENT_REGION.bottom;
-      const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(CONTENT_REGION.contentTopOffset, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
+      const safeLeft = visualSafe?.x ?? DEFAULT_CONTENT_REGION.left;
+      const safeRight = visualSafe ? visualSafe.x + visualSafe.width : DEFAULT_CONTENT_REGION.right;
+      const safeTop = visualSafe?.y ?? DEFAULT_CONTENT_REGION.top;
+      const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : DEFAULT_CONTENT_REGION.bottom;
+      const alignmentGrid = {
+        left: safeLeft,
+        right: safeRight,
+        titleY: safeTop,
+        titleHeight: Math.min(0.1, (safeBottom - safeTop) * 0.18),
+        ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22),
+        contentY: safeTop + Math.min(CONTENT_REGION.contentTopOffset, (safeBottom - safeTop) * 0.3),
+        contentBottom: safeBottom,
+      } as const;
       slide.elements = [];
-      if (keepsArtwork) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", placement: "layout-background", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe!.backgroundImageDataUrl!, mimeType: "image/png" }, altText: `模板版式背景：${recipe!.name ?? recipe!.index}` });
+      if (keepsArtwork)
+        slide.elements.push({
+          id: crypto.randomUUID() as ElementId,
+          type: "image",
+          placement: "layout-background",
+          frame: frame(0, 0, 1, 1),
+          rotationMilliDegree: 0,
+          locked: true,
+          source: { kind: "embedded", dataUrl: recipe!.backgroundImageDataUrl!, mimeType: "image/png" },
+          altText: `模板版式背景：${recipe!.name ?? recipe!.index}`,
+        });
       // A scrim belongs to the text block only. Painting the whole page erased the
       // template artwork and was the single biggest reason a generated deck looked
       // like a blank sheet with a coloured border.
@@ -836,16 +1261,35 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // background is not the page's background.
       const scrimFill = slide.background;
       const scrimLuminance = colorLuminance(scrimFill) ?? 1;
-      const contentRegion = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
-      const titleBox = recipeTitle ?? { x: alignmentGrid.left, y: alignmentGrid.titleY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.titleHeight };
+      const contentRegion = recipeContent ?? {
+        x: alignmentGrid.left,
+        y: alignmentGrid.contentY,
+        width: alignmentGrid.right - alignmentGrid.left,
+        height: alignmentGrid.contentBottom - alignmentGrid.contentY,
+      };
+      const titleBox = recipeTitle ?? {
+        x: alignmentGrid.left,
+        y: alignmentGrid.titleY,
+        width: alignmentGrid.right - alignmentGrid.left,
+        height: alignmentGrid.titleHeight,
+      };
       // Template ornaments are painted before the copy, so an ornament that runs
       // across the title sits under the glyphs and reads as a printing accident.
       // A small shape that overlaps the title box is dropped; a large panel
       // behind the title is a background and is kept.
-      const titleGuard = { x: titleBox.x - 0.004, y: titleBox.y - 0.004, width: titleBox.width + 0.008, height: titleBox.height + 0.008 };
+      const titleGuard = {
+        x: titleBox.x - 0.004,
+        y: titleBox.y - 0.004,
+        width: titleBox.width + 0.008,
+        height: titleBox.height + 0.008,
+      };
       const decorationCovers = (decoration: AiTemplateDecoration): number => {
-        const width = Math.min(decoration.frame.x + decoration.frame.width, titleGuard.x + titleGuard.width) - Math.max(decoration.frame.x, titleGuard.x);
-        const height = Math.min(decoration.frame.y + decoration.frame.height, titleGuard.y + titleGuard.height) - Math.max(decoration.frame.y, titleGuard.y);
+        const width =
+          Math.min(decoration.frame.x + decoration.frame.width, titleGuard.x + titleGuard.width) -
+          Math.max(decoration.frame.x, titleGuard.x);
+        const height =
+          Math.min(decoration.frame.y + decoration.frame.height, titleGuard.y + titleGuard.height) -
+          Math.max(decoration.frame.y, titleGuard.y);
         if (width <= 0 || height <= 0) return 0;
         return (width * height) / Math.max(1e-6, decoration.frame.width * decoration.frame.height);
       };
@@ -854,7 +1298,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!isSafeRegion(decoration.frame, 0.001, 0.001)) return;
         const area = decoration.frame.width * decoration.frame.height;
         if (area < 0.06 && decorationCovers(decoration) > 0.2) return;
-        slide.elements.push(shape(frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height), decoration.fill, decoration.shape));
+        slide.elements.push(
+          shape(
+            frame(decoration.frame.x, decoration.frame.y, decoration.frame.width, decoration.frame.height),
+            decoration.fill,
+            decoration.shape,
+          ),
+        );
       });
       // A picture takes its own place on the page and the text moves out of its
       // way. The image is never laid over the copy: a page where the text is
@@ -866,9 +1316,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         requested: Boolean(visualAsset && design.visualAsset?.enabled),
         requestedRole: design.visualAsset?.role,
       });
-      const assetLayout = visualAsset && assetPlan.enabled && assetPlan.role
-        ? planVisualAssetLayout(assetPlan.role, contentRegion, pageWidth, pageHeight)
-        : undefined;
+      const assetLayout =
+        visualAsset && assetPlan.enabled && assetPlan.role
+          ? planVisualAssetLayout(assetPlan.role, contentRegion, pageWidth, pageHeight)
+          : undefined;
       // The text area shrinks to whatever the picture left behind.
       const contentBox = assetLayout ? assetLayout.text : contentRegion;
       // The same text area in the units the element frames use.
@@ -899,25 +1350,42 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // An editorial page needs room for a numbered column and an anchor panel
       // beside it. A page that does not have that room falls back to the
       // composition its own layout would have produced.
-      const composition = intent.composition === "editorial" && (contentBox.width < 0.55 || contentBox.height < 0.35)
-        ? autoComposition(compositionFacts, { allowEditorial: false })
-        : intent.composition;
+      const composition =
+        intent.composition === "editorial" && (contentBox.width < 0.55 || contentBox.height < 0.35)
+          ? autoComposition(compositionFacts, { allowEditorial: false })
+          : intent.composition;
       // A short summary or split page without a quotation still needs a visual
       // anchor. A count panel uses the real number of points, so it fills the
       // right side without inventing a headline or duplicating a bullet.
-      const countPanel = !pullQuote
-        && (design.layout === "summary" || design.layout === "split" || composition === "editorial")
-        && items.length >= LAYOUT_CAPACITY.panelMinItems
-        && items.length <= LAYOUT_CAPACITY.panelMaxItems
-        && shortItems;
+      const countPanel =
+        !pullQuote &&
+        (design.layout === "summary" || design.layout === "split" || composition === "editorial") &&
+        items.length >= LAYOUT_CAPACITY.panelMinItems &&
+        items.length <= LAYOUT_CAPACITY.panelMaxItems &&
+        shortItems;
       if (artworkTreatment === "local-scrim") {
-        slide.elements.push(shape(frame(Math.max(0, contentBox.x - 0.02), Math.max(0, contentBox.y - 0.02), Math.min(1 - Math.max(0, contentBox.x - 0.02), contentBox.width + 0.04), Math.min(1 - Math.max(0, contentBox.y - 0.02), contentBox.height + 0.04)), scrimFill));
+        slide.elements.push(
+          shape(
+            frame(
+              Math.max(0, contentBox.x - 0.02),
+              Math.max(0, contentBox.y - 0.02),
+              Math.min(1 - Math.max(0, contentBox.x - 0.02), contentBox.width + 0.04),
+              Math.min(1 - Math.max(0, contentBox.y - 0.02), contentBox.height + 0.04),
+            ),
+            scrimFill,
+          ),
+        );
       }
       // The picture goes on the page before the text, so the text stays on top of
       // it wherever the two touch. The picture is cropped to fill its box: a
       // stretched picture is the fastest way to make a generated deck look fake.
       if (visualAsset && assetLayout) {
-        const imageFrame = frame(assetLayout.image.x, assetLayout.image.y, assetLayout.image.width, assetLayout.image.height);
+        const imageFrame = frame(
+          assetLayout.image.x,
+          assetLayout.image.y,
+          assetLayout.image.width,
+          assetLayout.image.height,
+        );
         const crop = coverCrop(
           { width: visualAsset.naturalWidth, height: visualAsset.naturalHeight },
           { width: assetLayout.image.width * pageWidth, height: assetLayout.image.height * pageHeight },
@@ -955,7 +1423,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const widthPt = widthFraction * (pageWidth / 914400) * 72;
         return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt, majorFont) * fontSizePt * 1.25);
       };
-      const centeredBlock = (value: string, slot: { x: number; y: number; width: number; height: number }, fontSizePt: number) => {
+      const centeredBlock = (
+        value: string,
+        slot: { x: number; y: number; width: number; height: number },
+        fontSizePt: number,
+      ) => {
         const height = blockHeight(value, slot.width, fontSizePt) * 1.04;
         return frame(slot.x, slot.y + slot.height / 2 - height / 2, slot.width, height);
       };
@@ -976,32 +1448,113 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         return { x: left as Emu, y: top as Emu, width: (right - left) as Emu, height: (bottom - top) as Emu };
       };
       if (design.layout === "cover" && !hasDeterministicBlock) {
-        const coverTitle = safeFrame(recipeTitle, [0.10, 0.24, 0.78, 0.28], 0.25, 0.04);
-        const coverBody = safeFrame(recipeContent, [0.10, 0.56, 0.72, 0.16], 0.25, 0.08);
+        const coverTitle = safeFrame(recipeTitle, [0.1, 0.24, 0.78, 0.28], 0.25, 0.04);
+        const coverBody = safeFrame(recipeContent, [0.1, 0.56, 0.72, 0.16], 0.25, 0.08);
         // A picture on the cover takes the right side of the page, so the
         // headline and the subtitle have to stop where the picture starts.
         // Otherwise the title runs underneath the picture.
         const clippedTitle = clipToTextArea(coverTitle, contentAreaEmu);
         const clippedBody = clipToTextArea(coverBody, contentAreaEmu);
-        if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
-        slide.elements.push(text(content.title, clippedTitle, templateTitleSize ?? typeScale.display, titleInk, true, "left", undefined, titleLuminance));
-        if (content.body.trim()) slide.elements.push(text(content.body, clippedBody, templateBodySize ?? typeScale.subtitle, bodyInk, false, "left", undefined, contentTextLuminance));
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(frame(0, 0, 0.035, 1), design.accent),
+            shape(frame(0.08, 0.7, 0.18, 0.018), design.accent),
+          );
+        slide.elements.push(
+          text(
+            content.title,
+            clippedTitle,
+            templateTitleSize ?? typeScale.display,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (content.body.trim())
+          slide.elements.push(
+            text(
+              content.body,
+              clippedBody,
+              templateBodySize ?? typeScale.subtitle,
+              bodyInk,
+              false,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
       } else if (design.layout === "section" && !hasDeterministicBlock) {
-        const sectionTitle = safeFrame(recipeTitle, [0.39, 0.30, 0.50, 0.22], 0.25, 0.04);
-        const sectionBody = safeFrame(recipeContent, [0.39, 0.56, 0.47, 0.20], 0.25, 0.08);
+        const sectionTitle = safeFrame(recipeTitle, [0.39, 0.3, 0.5, 0.22], 0.25, 0.04);
+        const sectionBody = safeFrame(recipeContent, [0.39, 0.56, 0.47, 0.2], 0.25, 0.08);
         // The template draws its own section number into the artwork, so PPTD must
         // not add a second one on top of it.
-        if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.32, 1), design.accent), text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left", undefined, accentLuminance));
-        slide.elements.push(text(content.title, clipToTextArea(sectionTitle, contentAreaEmu), templateTitleSize ?? typeScale.section, titleInk, true, "left", undefined, titleLuminance));
-        if (content.body.trim()) slide.elements.push(text(content.body, clipToTextArea(sectionBody, contentAreaEmu), templateBodySize ?? typeScale.body, bodyInk, false, "left", undefined, contentTextLuminance));
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(frame(0, 0, 0.32, 1), design.accent),
+            text(
+              String(index + 1).padStart(2, "0"),
+              frame(0.07, 0.17, 0.16, 0.18),
+              52,
+              "#FFFFFF",
+              true,
+              "left",
+              undefined,
+              accentLuminance,
+            ),
+          );
+        slide.elements.push(
+          text(
+            content.title,
+            clipToTextArea(sectionTitle, contentAreaEmu),
+            templateTitleSize ?? typeScale.section,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (content.body.trim())
+          slide.elements.push(
+            text(
+              content.body,
+              clipToTextArea(sectionBody, contentAreaEmu),
+              templateBodySize ?? typeScale.body,
+              bodyInk,
+              false,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
       } else if (timelineBlock) {
         // Every reviewed step is drawn. A timeline that cut its last steps
         // would drop reviewed copy from the exported file, so the row narrows
         // and the type shrinks instead.
         const timelineItems = timelineBlock.items;
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
-        const startX = contentBox.x + contentBox.width * 0.05; const endX = contentBox.x + contentBox.width * 0.95;
+        slide.elements.push(
+          text(
+            content.title,
+            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.2), 0.012),
+              design.accent,
+            ),
+          );
+        const startX = contentBox.x + contentBox.width * 0.05;
+        const endX = contentBox.x + contentBox.width * 0.95;
         const lineY = contentBox.y + contentBox.height * 0.45;
         const stepGap = timelineItems.length > 1 ? (endX - startX) / (timelineItems.length - 1) : endX - startX;
         const itemWidth = Math.min(0.22, contentBox.width * 0.18, stepGap * 0.92);
@@ -1017,23 +1570,45 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // frames were anchored to the line by a fraction of the content area
           // and were taller than the space they were given, so the sentence of
           // an above item was drawn across the line and its dots.
-          const itemLeft = Math.max(contentBox.x, Math.min(x - itemWidth / 2, contentBox.x + contentBox.width - itemWidth));
+          const itemLeft = Math.max(
+            contentBox.x,
+            Math.min(x - itemWidth / 2, contentBox.x + contentBox.width - itemWidth),
+          );
           const labelY = above ? lineY - lineGap - textFraction - 0.005 - labelFraction : lineY + lineGap;
           const textY = above ? lineY - lineGap - textFraction : labelY + labelFraction + 0.005;
           const labelFrame = frame(itemLeft, Math.max(contentBox.y, labelY), itemWidth, labelFraction);
           const stepTextFrame = frame(itemLeft, textY, itemWidth, textFraction);
           const labelSize = fittedFontSize(item.label, labelFrame, 15, 10);
-          slide.elements.push(text(item.label, labelFrame, labelSize, design.accent, true, "center", undefined, contentTextLuminance));
+          slide.elements.push(
+            text(item.label, labelFrame, labelSize, design.accent, true, "center", undefined, contentTextLuminance),
+          );
           const stepTextSize = fittedFontSize(item.text, stepTextFrame, 13, 9);
-          slide.elements.push(text(item.text, stepTextFrame, stepTextSize, bodyInk, false, "center", undefined, contentTextLuminance));
+          slide.elements.push(
+            text(item.text, stepTextFrame, stepTextSize, bodyInk, false, "center", undefined, contentTextLuminance),
+          );
         });
       } else if (comparisonBlock) {
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(
+          text(
+            content.title,
+            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
         const columnWidth = contentBox.width * CONTENT_REGION.comparisonColumnWidth;
         const columnGap = contentBox.width * CONTENT_REGION.comparisonColumnGap;
         const columns = [
           { x: contentBox.x, label: comparisonBlock.leftLabel, items: comparisonBlock.leftItems },
-          { x: contentBox.x + columnWidth + columnGap, label: comparisonBlock.rightLabel, items: comparisonBlock.rightItems },
+          {
+            x: contentBox.x + columnWidth + columnGap,
+            label: comparisonBlock.rightLabel,
+            items: comparisonBlock.rightItems,
+          },
         ];
         // The panel is never shorter than its share of the content area. Sized to
         // its copy alone, a two-point comparison became a 1.7in card floating in
@@ -1045,13 +1620,27 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // that cut its last point would drop reviewed copy from the exported
         // file, so the copy shrinks to fit instead of losing a point.
         const itemText = (items: string[]) => items.map((item) => `• ${cleanPoint(item)}`).join("\n\n");
-        const minimumPanelHeight = Math.min(contentBox.height, contentBox.height * CONTENT_REGION.comparisonMinPanelHeightRatio);
+        const minimumPanelHeight = Math.min(
+          contentBox.height,
+          contentBox.height * CONTENT_REGION.comparisonMinPanelHeightRatio,
+        );
         // The panel grows with its copy up to the content area, so the copy is
         // fitted against the whole area; the floor only applies to short copy.
         const availableHeight = Math.max(0.05, contentBox.height - headerHeight - 0.06);
-        const longestColumn = columns.reduce((longest, column) => (itemText(column.items).length > itemText(longest.items).length ? column : longest), columns[0]!);
-        const itemSize = fittedFontSize(itemText(longestColumn.items), frame(contentBox.x, contentBox.y, columnWidth - 0.07, availableHeight), CONTENT_REGION.comparisonItemFontSizePt, CONTENT_REGION.comparisonMinimumItemFontSizePt, 1.25);
-        const copyHeight = Math.max(...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize)));
+        const longestColumn = columns.reduce(
+          (longest, column) => (itemText(column.items).length > itemText(longest.items).length ? column : longest),
+          columns[0]!,
+        );
+        const itemSize = fittedFontSize(
+          itemText(longestColumn.items),
+          frame(contentBox.x, contentBox.y, columnWidth - 0.07, availableHeight),
+          CONTENT_REGION.comparisonItemFontSizePt,
+          CONTENT_REGION.comparisonMinimumItemFontSizePt,
+          1.25,
+        );
+        const copyHeight = Math.max(
+          ...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize)),
+        );
         const panelHeight = Math.min(contentBox.height, Math.max(minimumPanelHeight, headerHeight + 0.06 + copyHeight));
         const panelTop = contentBox.y + (contentBox.height - panelHeight) * CONTENT_REGION.blockVerticalAnchor;
         columns.forEach((column) => {
@@ -1064,15 +1653,61 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const bodyBottom = panelTop + panelHeight - 0.03;
           const textTop = bodyTop + Math.max(0.015, (bodyBottom - bodyTop - columnHeight) / 2);
           const textHeight = Math.min(columnHeight * 1.04 + 0.002, Math.max(0.02, bodyBottom - textTop));
-          slide.elements.push(shape(frame(column.x, panelTop, columnWidth, panelHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(column.x, panelTop, columnWidth, headerHeight), accentFill));
-          slide.elements.push(text(column.label, centeredBlock(column.label, { x: column.x + 0.025, y: panelTop, width: columnWidth - 0.05, height: headerHeight }, labelSize), labelSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          slide.elements.push(text(copy, frame(column.x + 0.035, textTop, columnWidth - 0.07, textHeight), itemSize, bodyInk, false, "left", undefined, cardLuminance));
+          slide.elements.push(
+            shape(frame(column.x, panelTop, columnWidth, panelHeight), cardFill, "rectangle", cardStroke, 0.75),
+            shape(frame(column.x, panelTop, columnWidth, headerHeight), accentFill),
+          );
+          slide.elements.push(
+            text(
+              column.label,
+              centeredBlock(
+                column.label,
+                { x: column.x + 0.025, y: panelTop, width: columnWidth - 0.05, height: headerHeight },
+                labelSize,
+              ),
+              labelSize,
+              "#FFFFFF",
+              true,
+              "center",
+              undefined,
+              accentFillLuminance,
+            ),
+          );
+          slide.elements.push(
+            text(
+              copy,
+              frame(column.x + 0.035, textTop, columnWidth - 0.07, textHeight),
+              itemSize,
+              bodyInk,
+              false,
+              "left",
+              undefined,
+              cardLuminance,
+            ),
+          );
         });
       } else if (tableBlock) {
         const tableIndex = blocks.indexOf(tableBlock);
         const tableContent = contentBlocks?.[tableIndex];
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        slide.elements.push(
+          text(
+            content.title,
+            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.2), 0.012),
+              design.accent,
+            ),
+          );
         // The table element holds no cells of its own: it points at the reviewed
         // table block, so editing the numbers keeps the grid in sync.
         if (tableContent?.type === "table-data" && tableContent.header.length > 0 && tableContent.rows.length > 0) {
@@ -1080,7 +1715,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             id: crypto.randomUUID() as ElementId,
             type: "table",
             contentBlockId: tableContent.id,
-            frame: frame(contentBox.x, contentBox.y + contentBox.height * 0.06, contentBox.width, Math.min(contentBox.height * 0.80, 0.52)),
+            frame: frame(
+              contentBox.x,
+              contentBox.y + contentBox.height * 0.06,
+              contentBox.width,
+              Math.min(contentBox.height * 0.8, 0.52),
+            ),
             rotationMilliDegree: 0,
             locked: false,
             style: {
@@ -1099,8 +1739,25 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // would drop reviewed numbers from the exported file, so the grid
         // grows a row and the type shrinks instead.
         const metrics = metricBlocks;
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        slide.elements.push(
+          text(
+            content.title,
+            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.2), 0.012),
+              design.accent,
+            ),
+          );
         // The metrics of a page are the reviewed numbers of the page. When they
         // are numbers of the same unit, they are drawn as a native chart: the
         // exported file keeps an editable chart instead of a picture of bars.
@@ -1108,14 +1765,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           .map((metric, metricIndex) => {
             const parsed = parseMetricValue(metric.value);
             const block = contentBlocks?.filter((candidate) => candidate.type === "metric")[metricIndex];
-            return parsed && block?.type === "metric" ? { blockId: block.id, label: metric.label, value: parsed.value, unit: parsed.unit } : undefined;
+            return parsed && block?.type === "metric"
+              ? { blockId: block.id, label: metric.label, value: parsed.value, unit: parsed.unit }
+              : undefined;
           })
-          .filter((metric): metric is { blockId: string; label: string; value: number; unit: string } => Boolean(metric));
-        const sameUnit = chartMetrics.length > 0 && chartMetrics.every((metric) => metric.unit === chartMetrics[0]!.unit);
+          .filter((metric): metric is { blockId: string; label: string; value: number; unit: string } =>
+            Boolean(metric),
+          );
+        const sameUnit =
+          chartMetrics.length > 0 && chartMetrics.every((metric) => metric.unit === chartMetrics[0]!.unit);
         if (chartMetrics.length >= 2 && sameUnit) {
           // A page with many categories reads better with horizontal bars.
           const kind = chartMetrics.length > 4 ? "bar" : "column";
-          const chartFrame = frame(contentBox.x, contentBox.y + contentBox.height * 0.06, contentBox.width, Math.min(contentBox.height * 0.80, 0.46));
+          const chartFrame = frame(
+            contentBox.x,
+            contentBox.y + contentBox.height * 0.06,
+            contentBox.width,
+            Math.min(contentBox.height * 0.8, 0.46),
+          );
           slide.elements.push({
             id: crypto.randomUUID() as ElementId,
             type: "chart",
@@ -1134,7 +1801,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             },
           });
         } else {
-          const columns = metrics.length > 3 ? 3 : metrics.length; const rows = Math.ceil(metrics.length / columns);
+          const columns = metrics.length > 3 ? 3 : metrics.length;
+          const rows = Math.ceil(metrics.length / columns);
           const cellWidth = contentBox.width / columns;
           const cardGap = 0.03;
           const valueSize = 30;
@@ -1146,18 +1814,42 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const gridHeight = rows * cardHeight + (rows - 1) * cardGap;
           const gridTop = contentBox.y + (contentBox.height - gridHeight) * CONTENT_REGION.blockVerticalAnchor;
           metrics.forEach((metric, metricIndex) => {
-            const column = metricIndex % columns; const row = Math.floor(metricIndex / columns);
+            const column = metricIndex % columns;
+            const row = Math.floor(metricIndex / columns);
             const width = cellWidth - 0.025;
-            const x = contentBox.x + column * cellWidth; const y = gridTop + row * (cardHeight + cardGap);
+            const x = contentBox.x + column * cellWidth;
+            const y = gridTop + row * (cardHeight + cardGap);
             slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
             // The number and its label share a card that grows shorter with
             // every extra row, so both are fitted to the card they sit in.
-            const valueFrame = centeredBlock(metric.value, { x: x + 0.02, y: y + cardHeight * 0.10, width: width - 0.04, height: cardHeight * 0.46 }, valueSize);
-            const fittedValueSize = fittedFontSize(metric.value, frame(valueFrame.x, valueFrame.y, valueFrame.width, valueFrame.height), valueSize, 12);
-            slide.elements.push(text(metric.value, valueFrame, fittedValueSize, design.accent, true, "center", undefined, cardLuminance));
-            const labelFrame = centeredBlock(metric.label, { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 }, labelSize);
-            const fittedLabelSize = fittedFontSize(metric.label, frame(labelFrame.x, labelFrame.y, labelFrame.width, labelFrame.height), labelSize, 9);
-            slide.elements.push(text(metric.label, labelFrame, fittedLabelSize, bodyInk, false, "center", undefined, cardLuminance));
+            const valueFrame = centeredBlock(
+              metric.value,
+              { x: x + 0.02, y: y + cardHeight * 0.1, width: width - 0.04, height: cardHeight * 0.46 },
+              valueSize,
+            );
+            const fittedValueSize = fittedFontSize(
+              metric.value,
+              frame(valueFrame.x, valueFrame.y, valueFrame.width, valueFrame.height),
+              valueSize,
+              12,
+            );
+            slide.elements.push(
+              text(metric.value, valueFrame, fittedValueSize, design.accent, true, "center", undefined, cardLuminance),
+            );
+            const labelFrame = centeredBlock(
+              metric.label,
+              { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 },
+              labelSize,
+            );
+            const fittedLabelSize = fittedFontSize(
+              metric.label,
+              frame(labelFrame.x, labelFrame.y, labelFrame.width, labelFrame.height),
+              labelSize,
+              9,
+            );
+            slide.elements.push(
+              text(metric.label, labelFrame, fittedLabelSize, bodyInk, false, "center", undefined, cardLuminance),
+            );
           });
         }
       } else if (processBlock) {
@@ -1165,11 +1857,31 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // would drop reviewed copy from the exported file, so the row narrows
         // and the type shrinks instead.
         const processItems = processBlock.items;
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        slide.elements.push(
+          text(
+            content.title,
+            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.2), 0.012),
+              design.accent,
+            ),
+          );
         const stepGap = 0.03 * density.gap;
-        const stepWidth = (contentBox.width - stepGap * Math.max(processItems.length - 1, 0)) / Math.max(processItems.length, 1);
-        const labelSize = 18; const textSize = 14; const badgeSize = 14;
+        const stepWidth =
+          (contentBox.width - stepGap * Math.max(processItems.length - 1, 0)) / Math.max(processItems.length, 1);
+        const labelSize = 18;
+        const textSize = 14;
+        const badgeSize = 14;
         const badgeDiameter = 0.42;
         const badgeHeight = badgeDiameter / pageHeightIn;
         const padding = 0.045;
@@ -1177,65 +1889,156 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // lines of copy. Centring the copy in a fixed 1.95in panel left a hole
         // under every label and pushed the whole row into the upper third.
         const labelHeight = pointsToFraction(labelSize * 1.3);
-        const bodyHeight = Math.max(...processItems.map((item) => blockHeight(item.text, stepWidth - padding * 2, textSize)));
-        const stepHeight = Math.min(0.28, Math.max(0.16, padding * 2 + badgeHeight + 0.02 + labelHeight + 0.01 + bodyHeight));
+        const bodyHeight = Math.max(
+          ...processItems.map((item) => blockHeight(item.text, stepWidth - padding * 2, textSize)),
+        );
+        const stepHeight = Math.min(
+          0.28,
+          Math.max(0.16, padding * 2 + badgeHeight + 0.02 + labelHeight + 0.01 + bodyHeight),
+        );
         const stepTop = contentBox.y + (contentBox.height - stepHeight) * 0.5;
         processItems.forEach((item, itemIndex) => {
           const x = contentBox.x + itemIndex * (stepWidth + stepGap);
           const badgeX = x + padding;
           const badgeY = stepTop + padding;
-          slide.elements.push(shape(frame(x, stepTop, stepWidth, stepHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, stepTop, stepWidth, 0.008), design.accent));
+          slide.elements.push(
+            shape(frame(x, stepTop, stepWidth, stepHeight), cardFill, "rectangle", cardStroke, 0.75),
+            shape(frame(x, stepTop, stepWidth, 0.008), design.accent),
+          );
           slide.elements.push(shape(circleFrame(badgeX, badgeY, badgeDiameter), accentFill, "ellipse"));
-          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: badgeX, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, badgeSize), badgeSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
+          slide.elements.push(
+            text(
+              String(itemIndex + 1),
+              centeredBlock(
+                String(itemIndex + 1),
+                { x: badgeX, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight },
+                badgeSize,
+              ),
+              badgeSize,
+              "#FFFFFF",
+              true,
+              "center",
+              undefined,
+              accentFillLuminance,
+            ),
+          );
           // Left aligned type reads as an editorial column; centring every line
           // in four identical boxes is what made the page look like a template.
           const labelY = badgeY + badgeHeight + 0.02;
           const labelFrame = frame(x + padding, labelY, stepWidth - padding * 2, labelHeight);
           const fittedLabelSize = fittedFontSize(item.label, labelFrame, labelSize, 9);
-          slide.elements.push(text(item.label, labelFrame, fittedLabelSize, titleInk, true, "left", undefined, cardLuminance));
-          const copyFrame = frame(x + padding, labelY + labelHeight + 0.01, stepWidth - padding * 2, Math.max(0.04, bodyHeight));
+          slide.elements.push(
+            text(item.label, labelFrame, fittedLabelSize, titleInk, true, "left", undefined, cardLuminance),
+          );
+          const copyFrame = frame(
+            x + padding,
+            labelY + labelHeight + 0.01,
+            stepWidth - padding * 2,
+            Math.max(0.04, bodyHeight),
+          );
           const fittedTextSize = fittedFontSize(item.text, copyFrame, textSize, 9);
-          slide.elements.push(text(item.text, copyFrame, fittedTextSize, bodyInk, false, "left", undefined, cardLuminance));
+          slide.elements.push(
+            text(item.text, copyFrame, fittedTextSize, bodyInk, false, "left", undefined, cardLuminance),
+          );
         });
       } else if ((design.layout === "quote" || quoteBlock) && items.length < 3) {
         const quoteText = quoteBlock?.text ?? content.body;
         const attribution = quoteBlock?.attribution?.trim();
         if (!keepsArtwork) slide.elements.push(shape(frame(0.08, 0.16, 0.025, 0.68), design.accent));
-        const quoteTitle = text(content.title, safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.25, 0.04), templateTitleSize ?? 28, titleInk, true, "left", undefined, titleLuminance);
+        const quoteTitle = text(
+          content.title,
+          safeFrame(recipeTitle, [0.15, 0.12, 0.72, 0.13], 0.25, 0.04),
+          templateTitleSize ?? 28,
+          titleInk,
+          true,
+          "left",
+          undefined,
+          titleLuminance,
+        );
         slide.elements.push(quoteTitle);
         if (quoteText.trim()) {
-          const quoteBox = safeFrame(recipeContent, [0.16, 0.30, 0.66, 0.38], 0.25, 0.12);
-          const quoteFrame = { x: quoteBox.x + Math.round(pageWidth * 0.035), y: quoteBox.y, width: Math.max(Math.round(pageWidth * 0.25), quoteBox.width - Math.round(pageWidth * 0.035)), height: quoteBox.height };
+          const quoteBox = safeFrame(recipeContent, [0.16, 0.3, 0.66, 0.38], 0.25, 0.12);
+          const quoteFrame = {
+            x: quoteBox.x + Math.round(pageWidth * 0.035),
+            y: quoteBox.y,
+            width: Math.max(Math.round(pageWidth * 0.25), quoteBox.width - Math.round(pageWidth * 0.035)),
+            height: quoteBox.height,
+          };
           const quoteSize = Math.max(26, templateBodySize ?? 26);
-          const quoteElement = text(quoteText, centeredBlock(quoteText, { x: quoteFrame.x / pageWidth, y: quoteFrame.y / pageHeight, width: quoteFrame.width / pageWidth, height: quoteFrame.height / pageHeight }, quoteSize), quoteSize, bodyInk, false, "left", undefined, contentTextLuminance);
+          const quoteElement = text(
+            quoteText,
+            centeredBlock(
+              quoteText,
+              {
+                x: quoteFrame.x / pageWidth,
+                y: quoteFrame.y / pageHeight,
+                width: quoteFrame.width / pageWidth,
+                height: quoteFrame.height / pageHeight,
+              },
+              quoteSize,
+            ),
+            quoteSize,
+            bodyInk,
+            false,
+            "left",
+            undefined,
+            contentTextLuminance,
+          );
           slide.elements.push(quoteElement);
           const markY = quoteElement.frame.y / pageHeight - 0.065;
           const titleBottom = quoteTitle.frame.y / pageHeight + quoteTitle.frame.height / pageHeight;
           if (!keepsArtwork && markY > titleBottom + 0.01) {
             const markX = Math.max(0.02, quoteFrame.x / pageWidth - 0.08);
-            slide.elements.push(text("“", frame(markX, markY, 0.07, 0.12), 60, design.accent, true, "left", undefined, contentTextLuminance));
+            slide.elements.push(
+              text(
+                "“",
+                frame(markX, markY, 0.07, 0.12),
+                60,
+                design.accent,
+                true,
+                "left",
+                undefined,
+                contentTextLuminance,
+              ),
+            );
           }
           if (attribution) {
             const attributionY = quoteElement.frame.y / pageHeight + quoteElement.frame.height / pageHeight + 0.025;
-            if (attributionY < 0.90) {
-              slide.elements.push(text(`— ${attribution}`, frame(quoteFrame.x / pageWidth, attributionY, quoteFrame.width / pageWidth, Math.min(0.06, 0.96 - attributionY)), 14, bodyInk, false, "left", undefined, contentTextLuminance));
+            if (attributionY < 0.9) {
+              slide.elements.push(
+                text(
+                  `— ${attribution}`,
+                  frame(
+                    quoteFrame.x / pageWidth,
+                    attributionY,
+                    quoteFrame.width / pageWidth,
+                    Math.min(0.06, 0.96 - attributionY),
+                  ),
+                  14,
+                  bodyInk,
+                  false,
+                  "left",
+                  undefined,
+                  contentTextLuminance,
+                ),
+              );
             }
           }
         }
       } else if (
-        composition === "editorial"
-        && (pullQuote || countPanel)
-        && items.length >= LAYOUT_CAPACITY.panelMinItems
-        && items.length <= LAYOUT_CAPACITY.panelMaxItems
-        && contentBox.width >= 0.55
-        && contentBox.height >= 0.35
+        composition === "editorial" &&
+        (pullQuote || countPanel) &&
+        items.length >= LAYOUT_CAPACITY.panelMinItems &&
+        items.length <= LAYOUT_CAPACITY.panelMaxItems &&
+        contentBox.width >= 0.55 &&
+        contentBox.height >= 0.35
       ) {
         // A narrow numbered column plus one visual anchor: an oversized pull
         // quote copied from the reviewed body, or the real count of summary
         // points when there is no quote. Neither invents content.
         const listItems = items.slice(0, 5);
         const listWidth = contentBox.width * 0.56;
-        const panelX = contentBox.x + contentBox.width * 0.60;
+        const panelX = contentBox.x + contentBox.width * 0.6;
         const panelWidth = contentBox.width * 0.37;
         const numberWidth = Math.min(0.07, listWidth * 0.16);
         const itemSize = Math.max(17, Math.min(20, templateBodySize ?? typeScale.body));
@@ -1260,9 +2063,29 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const flowFontPt = listFlow.fontSizePt;
         const rowGapPt = listFlow.gapPt;
         const flowHeightFraction = (points: number) => points / (pageHeightIn * 72);
-        const numberSize = Math.max(PANEL_TYPE_SCALE.railNumberMinPt, Math.min(PANEL_TYPE_SCALE.railNumberMaxPt, flowFontPt * PANEL_TYPE_SCALE.railNumberRatio));
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
+        const numberSize = Math.max(
+          PANEL_TYPE_SCALE.railNumberMinPt,
+          Math.min(PANEL_TYPE_SCALE.railNumberMaxPt, flowFontPt * PANEL_TYPE_SCALE.railNumberRatio),
+        );
+        slide.elements.push(
+          text(
+            content.title,
+            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.2), 0.012),
+              design.accent,
+            ),
+          );
         listFlow.rows.forEach((row, itemIndex) => {
           const rowY = contentBox.y + flowHeightFraction(row.topPt);
           const rowHeight = flowHeightFraction(row.heightPt);
@@ -1274,16 +2097,49 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // into the row's line box was what shrank it back to body size.
           const numberLineHeight = flowHeightFraction(numberSize * 1.25);
           const numberBox = { x: contentBox.x + 0.015, y: rowY, width: numberWidth, height: numberLineHeight };
-          slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), frame(numberBox.x, numberBox.y, numberBox.width, numberBox.height), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
-          const itemBox = { x: contentBox.x + numberWidth + 0.03, y: rowY, width: listWidth - numberWidth - 0.03, height: rowHeight };
-          slide.elements.push(text(row.text, frame(itemBox.x, itemBox.y, itemBox.width, itemBox.height), row.fontSizePt, bodyInk, false, "left", undefined, contentTextLuminance));
-          if (itemIndex < listFlow.rows.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + flowHeightFraction(rowGapPt) / 2 - 0.002, listWidth, 0.004), cardStroke));
+          slide.elements.push(
+            text(
+              String(itemIndex + 1).padStart(2, "0"),
+              frame(numberBox.x, numberBox.y, numberBox.width, numberBox.height),
+              numberSize,
+              design.accent,
+              true,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
+          const itemBox = {
+            x: contentBox.x + numberWidth + 0.03,
+            y: rowY,
+            width: listWidth - numberWidth - 0.03,
+            height: rowHeight,
+          };
+          slide.elements.push(
+            text(
+              row.text,
+              frame(itemBox.x, itemBox.y, itemBox.width, itemBox.height),
+              row.fontSizePt,
+              bodyInk,
+              false,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
+          if (itemIndex < listFlow.rows.length - 1)
+            slide.elements.push(
+              shape(
+                frame(contentBox.x, rowY + rowHeight + flowHeightFraction(rowGapPt) / 2 - 0.002, listWidth, 0.004),
+                cardStroke,
+              ),
+            );
         });
         slide.elements.push(shape(frame(panelX, contentBox.y, panelWidth, contentBox.height), accentFill, "rectangle"));
         if (pullQuote) {
           const quoteAttribution = quoteBlock?.attribution?.trim();
           const panelQuote = quoteAttribution ? `${pullQuote}\n— ${quoteAttribution}` : pullQuote;
-          const quoteWidthPt = (panelWidth - 0.10) * pageWidthIn * 72;
+          const quoteWidthPt = (panelWidth - 0.1) * pageWidthIn * 72;
           const panelHeightPt = contentBox.height * pageHeightIn * 72;
           const pageHeightPt = pageHeightIn * 72;
           // The panel is measured instead of split into fixed fractions. The
@@ -1310,7 +2166,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // the panel and produced quotes of three different sizes. The size
           // is also capped: a pull quote is a display object, but a quote that
           // is set larger than the title of the page takes over the page.
-          const quoteSizes = [30, 28, 26, 24, 22, 20, 18].filter((size) => size >= PANEL_TYPE_SCALE.quoteMinPt && size <= PANEL_TYPE_SCALE.quoteMaxPt);
+          const quoteSizes = [30, 28, 26, 24, 22, 20, 18].filter(
+            (size) => size >= PANEL_TYPE_SCALE.quoteMinPt && size <= PANEL_TYPE_SCALE.quoteMaxPt,
+          );
           let quoteSize = quoteSizes[quoteSizes.length - 1]!;
           let quoteHeightPt = 0;
           for (const size of quoteSizes) {
@@ -1321,48 +2179,146 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             if (height <= quoteAreaPt) break;
           }
           const quoteTopPt = quoteAreaTopPt + Math.max(0, (quoteAreaPt - quoteHeightPt) / 2);
-          const quoteFrame = frame(panelX + 0.05, contentBox.y + quoteTopPt / pageHeightPt, panelWidth - 0.10, quoteHeightPt / pageHeightPt);
-          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.20, markHeightPt / pageHeightPt), markSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-          slide.elements.push(text(panelQuote, quoteFrame, quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+          const quoteFrame = frame(
+            panelX + 0.05,
+            contentBox.y + quoteTopPt / pageHeightPt,
+            panelWidth - 0.1,
+            quoteHeightPt / pageHeightPt,
+          );
+          slide.elements.push(
+            text(
+              "“",
+              frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.2, markHeightPt / pageHeightPt),
+              markSize,
+              "#FFFFFF",
+              true,
+              "left",
+              undefined,
+              accentFillLuminance,
+            ),
+          );
+          slide.elements.push(
+            text(panelQuote, quoteFrame, quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance),
+          );
           // The rule and the label keep their place under the quote, so the
           // panel always ends the same way. The rule keeps a clear distance
           // above the label: too close and the line cuts through the text.
           const rulePt = labelTopPt - 12;
           const ruleY = contentBox.y + rulePt / pageHeightPt;
-          slide.elements.push(shape(frame(panelX + 0.05, ruleY, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + labelTopPt / pageHeightPt, panelWidth - 0.10, labelHeightPt / pageHeightPt), PANEL_TYPE_SCALE.labelPt, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(shape(frame(panelX + 0.05, ruleY, panelWidth - 0.1, 0.004), "#FFFFFF"));
+          slide.elements.push(
+            text(
+              "关键摘录",
+              frame(
+                panelX + 0.05,
+                contentBox.y + labelTopPt / pageHeightPt,
+                panelWidth - 0.1,
+                labelHeightPt / pageHeightPt,
+              ),
+              PANEL_TYPE_SCALE.labelPt,
+              "#FFFFFF",
+              true,
+              "left",
+              undefined,
+              accentFillLuminance,
+            ),
+          );
         } else {
           const countText = String(items.length).padStart(2, "0");
           // The numeral is the anchor, so measure its own block and place the
           // rule and label below it instead of guessing a fixed fraction. Short
           // panels step the numeral down so the label and footer still fit.
-          const compact = contentBox.height < 0.40;
+          const compact = contentBox.height < 0.4;
           const countSize = compact ? 64 : 86;
           const labelSize = compact ? 14 : 18;
           const labelHeight = compact ? 0.05 : 0.07;
           const footerY = contentBox.y + contentBox.height - (compact ? 0.04 : 0.055);
-          const countFrame = frame(panelX + 0.05, contentBox.y + contentBox.height * 0.10, panelWidth - 0.10, blockHeight(countText, panelWidth - 0.10, countSize) * 1.04);
+          const countFrame = frame(
+            panelX + 0.05,
+            contentBox.y + contentBox.height * 0.1,
+            panelWidth - 0.1,
+            blockHeight(countText, panelWidth - 0.1, countSize) * 1.04,
+          );
           const countBottom = countFrame.y / pageHeight + countFrame.height / pageHeight;
           const labelY = Math.min(countBottom + 0.04, footerY - labelHeight - 0.01);
-          slide.elements.push(text(countText, countFrame, countSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-          slide.elements.push(shape(frame(panelX + 0.05, countBottom + 0.02, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("项要点", frame(panelX + 0.05, labelY, panelWidth - 0.10, labelHeight), labelSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-          slide.elements.push(text("本页要点", frame(panelX + 0.05, footerY, panelWidth - 0.10, 0.06), PANEL_TYPE_SCALE.labelPt, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+          slide.elements.push(
+            text(countText, countFrame, countSize, "#FFFFFF", true, "left", undefined, accentFillLuminance),
+          );
+          slide.elements.push(shape(frame(panelX + 0.05, countBottom + 0.02, panelWidth - 0.1, 0.004), "#FFFFFF"));
+          slide.elements.push(
+            text(
+              "项要点",
+              frame(panelX + 0.05, labelY, panelWidth - 0.1, labelHeight),
+              labelSize,
+              "#FFFFFF",
+              true,
+              "left",
+              undefined,
+              accentFillLuminance,
+            ),
+          );
+          slide.elements.push(
+            text(
+              "本页要点",
+              frame(panelX + 0.05, footerY, panelWidth - 0.1, 0.06),
+              PANEL_TYPE_SCALE.labelPt,
+              "#FFFFFF",
+              false,
+              "left",
+              undefined,
+              accentFillLuminance,
+            ),
+          );
         }
       } else if (composition === "grid" && items.length > 1 && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(
+          text(
+            content.title,
+            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
         if (!keepsArtwork) {
           // A single-page deck has no footer, so the page index is its own mark.
           // A longer deck prints the number in the footer; repeating it at the
           // top right made the page look like it had two page numbers.
-          if (command.slides.length === 1) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance));
-          slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
+          if (command.slides.length === 1)
+            slide.elements.push(
+              text(
+                String(index + 1).padStart(2, "0"),
+                frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight),
+                14,
+                titleInk,
+                true,
+                "right",
+                undefined,
+                titleLuminance,
+              ),
+            );
+          slide.elements.push(
+            shape(
+              frame(
+                alignmentGrid.left,
+                alignmentGrid.ruleY,
+                Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.2),
+                0.009,
+              ),
+              design.accent,
+            ),
+          );
         }
         const visible = items.slice(0, 6);
         const columns = visible.length === 3 || visible.length >= 5 ? 3 : 2;
         const rows = Math.ceil(visible.length / columns);
-        const contentWidth = contentBox.width; const contentHeight = contentBox.height;
-        const columnGap = 0.022 * density.gap; const rowGap = 0.040 * density.gap;
+        const contentWidth = contentBox.width;
+        const contentHeight = contentBox.height;
+        const columnGap = 0.022 * density.gap;
+        const rowGap = 0.04 * density.gap;
         const cardWidth = (contentWidth - columnGap * (columns - 1)) / columns;
         // A top-left badge frees the whole card width for copy. Placing the
         // badge in a left gutter made the text column narrow and the card
@@ -1374,36 +2330,91 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // A card is as tall as the badge and the copy it carries. Stretching a
         // one-line card to the row's full height left the copy stranded in the
         // middle of an empty box.
-        const cardHeight = Math.min(rows === 1 ? 0.30 : 0.24, Math.max(0.16, cardTextTop + cardTextHeight + 0.03), contentHeight / rows - 0.04);
+        const cardHeight = Math.min(
+          rows === 1 ? 0.3 : 0.24,
+          Math.max(0.16, cardTextTop + cardTextHeight + 0.03),
+          contentHeight / rows - 0.04,
+        );
         const gridHeight = rows * cardHeight + (rows - 1) * rowGap;
         const gridTop = contentBox.y + (contentHeight - gridHeight) * CONTENT_REGION.blockVerticalAnchor;
         visible.forEach((item, itemIndex) => {
-          const row = Math.floor(itemIndex / columns); const column = itemIndex % columns;
+          const row = Math.floor(itemIndex / columns);
+          const column = itemIndex % columns;
           const rowItemCount = Math.min(columns, visible.length - row * columns);
           const rowWidth = rowItemCount * cardWidth + (rowItemCount - 1) * columnGap;
           const rowStart = contentBox.x + (contentWidth - rowWidth) / 2;
-          const x = rowStart + column * (cardWidth + columnGap); const y = gridTop + row * (cardHeight + rowGap);
+          const x = rowStart + column * (cardWidth + columnGap);
+          const y = gridTop + row * (cardHeight + rowGap);
           const cleanItem = cleanPoint(item);
           const badgeWidth = badgeDiameter / pageWidthIn;
           const badgeX = x + 0.03;
           const badgeY = y + 0.035;
           const textTop = y + cardTextTop;
-          slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, y, cardWidth, 0.008), design.accent));
+          slide.elements.push(
+            shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75),
+            shape(frame(x, y, cardWidth, 0.008), design.accent),
+          );
           slide.elements.push(shape(circleFrame(badgeX, badgeY, badgeDiameter), accentFill, "ellipse"));
           const badgeText = String(itemIndex + 1).padStart(2, "0");
-          slide.elements.push(text(badgeText, centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          const cardTextBox = { x: x + 0.03, y: textTop, width: cardWidth - 0.06, height: Math.max(0.05, cardHeight - cardTextTop - 0.03) };
-          const fittedCardSize = fittedFontSize(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height), 16, 12);
+          slide.elements.push(
+            text(
+              badgeText,
+              centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 12),
+              12,
+              "#FFFFFF",
+              true,
+              "center",
+              undefined,
+              accentFillLuminance,
+            ),
+          );
+          const cardTextBox = {
+            x: x + 0.03,
+            y: textTop,
+            width: cardWidth - 0.06,
+            height: Math.max(0.05, cardHeight - cardTextTop - 0.03),
+          };
+          const fittedCardSize = fittedFontSize(
+            cleanItem,
+            frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height),
+            16,
+            12,
+          );
           const fittedHeight = blockHeight(cleanItem, cardWidth - 0.06, fittedCardSize);
-          slide.elements.push(text(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, Math.max(0.04, Math.min(cardTextBox.height, fittedHeight))), fittedCardSize, "#293241", false, "left", undefined, cardLuminance));
+          slide.elements.push(
+            text(
+              cleanItem,
+              frame(
+                cardTextBox.x,
+                cardTextBox.y,
+                cardTextBox.width,
+                Math.max(0.04, Math.min(cardTextBox.height, fittedHeight)),
+              ),
+              fittedCardSize,
+              "#293241",
+              false,
+              "left",
+              undefined,
+              cardLuminance,
+            ),
+          );
         });
       } else if (composition === "columns" && items.length > 1) {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
+        slide.elements.push(
+          text(
+            content.title,
+            safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork) slide.elements.push(shape(frame(0.5, 0.25, 0.012, 0.6), design.accent));
         const middle = Math.ceil(items.length / 2);
-        const columnCopy = (columnItems: string[]) => columnItems
-          .map((item) => `• ${cleanPoint(item)}`)
-          .join("\n\n");
+        const columnCopy = (columnItems: string[]) => columnItems.map((item) => `• ${cleanPoint(item)}`).join("\n\n");
         const columnFont = templateColumnSize ?? 18;
         const leftSlot = hasSafeColumns
           ? { x: leftRecipe!.x, y: leftRecipe!.y, width: leftRecipe!.width, height: leftRecipe!.height }
@@ -1424,40 +2435,185 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const rightHeight = blockHeight(rightCopy, rightTextWidth, columnFont);
         // Both cards share one height: two panels of different heights read as
         // two unrelated blocks instead of one comparison.
-        const panelHeight = Math.min(Math.min(leftSlot.height, rightSlot.height), Math.max(contentBox.height * 0.5, Math.max(leftHeight, rightHeight) + padding * 2));
-        const drawColumn = (copy: string, textWidth: number, usedHeight: number, slot: { x: number; y: number; width: number; height: number }) => {
+        const panelHeight = Math.min(
+          Math.min(leftSlot.height, rightSlot.height),
+          Math.max(contentBox.height * 0.5, Math.max(leftHeight, rightHeight) + padding * 2),
+        );
+        const drawColumn = (
+          copy: string,
+          textWidth: number,
+          usedHeight: number,
+          slot: { x: number; y: number; width: number; height: number },
+        ) => {
           const panelTop = slot.y + (slot.height - panelHeight) / 2;
           const textTop = panelTop + (panelHeight - usedHeight) / 2;
-          slide.elements.push(shape(frame(slot.x, panelTop, slot.width, panelHeight), cardFill, "rectangle", cardStroke, 0.75));
+          slide.elements.push(
+            shape(frame(slot.x, panelTop, slot.width, panelHeight), cardFill, "rectangle", cardStroke, 0.75),
+          );
           slide.elements.push(shape(frame(slot.x, panelTop, slot.width, 0.008), design.accent));
-          slide.elements.push(text(copy, frame(slot.x + padding, textTop, textWidth, Math.max(0.04, usedHeight * 1.04 + 0.002)), columnFont, bodyInk, false, "left", undefined, contentTextLuminance));
+          slide.elements.push(
+            text(
+              copy,
+              frame(slot.x + padding, textTop, textWidth, Math.max(0.04, usedHeight * 1.04 + 0.002)),
+              columnFont,
+              bodyInk,
+              false,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
         };
         drawColumn(leftCopy, leftTextWidth, leftHeight, leftSlot);
         drawColumn(rightCopy, rightTextWidth, rightHeight, rightSlot);
-      } else if (composition === "stacked" && (design.layout === "title-body" || design.layout === "summary") && items.length >= LAYOUT_CAPACITY.cardsGridMinItems && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
+      } else if (
+        composition === "stacked" &&
+        (design.layout === "title-body" || design.layout === "summary") &&
+        items.length >= LAYOUT_CAPACITY.cardsGridMinItems &&
+        items.length <= LAYOUT_CAPACITY.cardsMaxItems
+      ) {
         // A short list is a sequence of visual units, not one paragraph. Keeping
         // it as a single text box was the reason a five-point page looked like a
         // small block stranded in a large empty canvas.
         const listItems = items.slice(0, 6);
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
+        slide.elements.push(
+          text(
+            content.title,
+            safeFrame(
+              recipeTitle,
+              [
+                alignmentGrid.left,
+                alignmentGrid.titleY,
+                alignmentGrid.right - alignmentGrid.left,
+                alignmentGrid.titleHeight,
+              ],
+              0.25,
+              0.04,
+            ),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(
+                alignmentGrid.left,
+                alignmentGrid.ruleY,
+                Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.2),
+                0.012,
+              ),
+              design.accent,
+            ),
+          );
         const rowGap = Math.min(0.012 * density.gap, contentBox.height * 0.02);
         const rowHeight = (contentBox.height - rowGap * (listItems.length - 1)) / listItems.length;
         const numberWidth = Math.min(0.085, contentBox.width * 0.12);
         const itemWidth = contentBox.width - numberWidth - 0.02;
-        const numberSize = Math.max(12, Math.min(22, (rowHeight * pageHeightIn * 72) * 0.52));
+        const numberSize = Math.max(12, Math.min(22, rowHeight * pageHeightIn * 72 * 0.52));
         listItems.forEach((item, itemIndex) => {
           const rowY = contentBox.y + itemIndex * (rowHeight + rowGap);
           const cleanItem = cleanPoint(item);
           slide.elements.push(shape(frame(contentBox.x, rowY, 0.008, rowHeight), design.accent));
-          slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), centeredBlock(String(itemIndex + 1).padStart(2, "0"), { x: contentBox.x + 0.022, y: rowY, width: numberWidth, height: rowHeight }, numberSize), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
-          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: contentBox.x + numberWidth + 0.025, y: rowY, width: itemWidth, height: rowHeight }, templateBodySize ?? typeScale.body), templateBodySize ?? typeScale.body, bodyInk, false, "left", undefined, contentTextLuminance));
-          if (itemIndex < listItems.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + rowGap / 2 - 0.003, contentBox.width, 0.006), cardStroke));
+          slide.elements.push(
+            text(
+              String(itemIndex + 1).padStart(2, "0"),
+              centeredBlock(
+                String(itemIndex + 1).padStart(2, "0"),
+                { x: contentBox.x + 0.022, y: rowY, width: numberWidth, height: rowHeight },
+                numberSize,
+              ),
+              numberSize,
+              design.accent,
+              true,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
+          slide.elements.push(
+            text(
+              cleanItem,
+              centeredBlock(
+                cleanItem,
+                { x: contentBox.x + numberWidth + 0.025, y: rowY, width: itemWidth, height: rowHeight },
+                templateBodySize ?? typeScale.body,
+              ),
+              templateBodySize ?? typeScale.body,
+              bodyInk,
+              false,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
+          if (itemIndex < listItems.length - 1)
+            slide.elements.push(
+              shape(frame(contentBox.x, rowY + rowHeight + rowGap / 2 - 0.003, contentBox.width, 0.006), cardStroke),
+            );
         });
       } else {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
-        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeContent, [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.25, 0.12), templateBodySize ?? typeScale.body, bodyInk, false, "left", undefined, contentTextLuminance));
+        slide.elements.push(
+          text(
+            content.title,
+            safeFrame(
+              recipeTitle,
+              [
+                alignmentGrid.left,
+                alignmentGrid.titleY,
+                alignmentGrid.right - alignmentGrid.left,
+                alignmentGrid.titleHeight,
+              ],
+              0.25,
+              0.04,
+            ),
+            templateTitleSize ?? typeScale.title,
+            titleInk,
+            true,
+            "left",
+            undefined,
+            titleLuminance,
+          ),
+        );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(
+                alignmentGrid.left,
+                alignmentGrid.ruleY,
+                Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.2),
+                0.012,
+              ),
+              design.accent,
+            ),
+          );
+        if (content.body.trim())
+          slide.elements.push(
+            text(
+              content.body,
+              safeFrame(
+                recipeContent,
+                [
+                  alignmentGrid.left + 0.01,
+                  alignmentGrid.contentY,
+                  alignmentGrid.right - alignmentGrid.left - 0.02,
+                  alignmentGrid.contentBottom - alignmentGrid.contentY,
+                ],
+                0.25,
+                0.12,
+              ),
+              templateBodySize ?? typeScale.body,
+              bodyInk,
+              false,
+              "left",
+              undefined,
+              contentTextLuminance,
+            ),
+          );
       }
       // Link rendered title/body text back to semantic content. Structured
       // layouts (cards, timeline items, metrics) stay decorative because one
@@ -1477,8 +2633,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // a pair of slashes.
       const quoteMark = slide.elements.find((element) => element.type === "text" && element.text === "“");
       if (quoteMark?.type === "text") quoteMark.style.fontFamily = "Georgia";
-      const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
-      const bodyRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "body");
+      const titleRepair = design.elementRepairs?.find(
+        (repair) => repair.action !== "changeLayout" && repair.target === "title",
+      );
+      const bodyRepair = design.elementRepairs?.find(
+        (repair) => repair.action !== "changeLayout" && repair.target === "body",
+      );
       // A region repair points at a place on the page instead of at a role.
       // The review model looked at a picture, so a rectangle is the only thing
       // it can honestly name.
@@ -1523,22 +2683,47 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // The text frame is allowed to stand a little outside its container (a
         // centred label can be a few points taller than the bar that carries
         // it), so "belongs to" is measured by overlap, not full containment.
-        const container = elementArea > 0
-          ? slide.elements.find((candidate) => candidate.type === "shape"
-            && candidate.frame.width * candidate.frame.height < pageArea * 0.4
-            && overlapArea(candidate.frame, element.frame) / elementArea >= 0.8)
-          : undefined;
-        const repair = element.text === content.title ? titleRepair : element.text === content.body ? bodyRepair : undefined;
+        const container =
+          elementArea > 0
+            ? slide.elements.find(
+                (candidate) =>
+                  candidate.type === "shape" &&
+                  candidate.frame.width * candidate.frame.height < pageArea * 0.4 &&
+                  overlapArea(candidate.frame, element.frame) / elementArea >= 0.8,
+              )
+            : undefined;
+        const repair =
+          element.text === content.title ? titleRepair : element.text === content.body ? bodyRepair : undefined;
         if (repair) {
           if ((repair.action === "move" || repair.action === "resize") && !container) {
             const collisionFreeFrame = obstacles.some((obstacle) => intersects(repair.frame, obstacle))
               ? repair.target === "title"
-                ? { x: visualSafe.x, y: visualSafe.y, width: visualSafe.width, height: Math.min(0.14, visualSafe.height * 0.22) }
-                : { x: visualSafe.x, y: visualSafe.y + Math.min(0.18, visualSafe.height * 0.28), width: visualSafe.width, height: Math.max(0.08, visualSafe.height - Math.min(0.18, visualSafe.height * 0.28)) }
+                ? {
+                    x: visualSafe.x,
+                    y: visualSafe.y,
+                    width: visualSafe.width,
+                    height: Math.min(0.14, visualSafe.height * 0.22),
+                  }
+                : {
+                    x: visualSafe.x,
+                    y: visualSafe.y + Math.min(0.18, visualSafe.height * 0.28),
+                    width: visualSafe.width,
+                    height: Math.max(0.08, visualSafe.height - Math.min(0.18, visualSafe.height * 0.28)),
+                  }
               : repair.frame;
-            element.frame = frame(collisionFreeFrame.x, collisionFreeFrame.y, collisionFreeFrame.width, collisionFreeFrame.height);
+            element.frame = frame(
+              collisionFreeFrame.x,
+              collisionFreeFrame.y,
+              collisionFreeFrame.width,
+              collisionFreeFrame.height,
+            );
           }
-          if (repair.action === "restyle") element.style = { ...element.style, fontSizePt: Math.max(12, element.style.fontSizePt * (repair.fontScale ?? 1)), color: repair.color ?? element.style.color };
+          if (repair.action === "restyle")
+            element.style = {
+              ...element.style,
+              fontSizePt: Math.max(12, element.style.fontSizePt * (repair.fontScale ?? 1)),
+              color: repair.color ?? element.style.color,
+            };
         }
         // A region repair applies to everything that lies inside the region.
         for (const regionRepair of regionRepairs) {
@@ -1569,27 +2754,40 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             if (obstacles.some((obstacle) => intersects(moved, obstacle))) continue;
             element.frame = frame(moved.x, moved.y, moved.width, moved.height);
           }
-          if (regionRepair.action === "restyle") element.style = { ...element.style, fontSizePt: Math.max(12, element.style.fontSizePt * (regionRepair.fontScale ?? 1)), color: regionRepair.color ?? element.style.color };
+          if (regionRepair.action === "restyle")
+            element.style = {
+              ...element.style,
+              fontSizePt: Math.max(12, element.style.fontSizePt * (regionRepair.fontScale ?? 1)),
+              color: regionRepair.color ?? element.style.color,
+            };
           if (regionRepair.action === "align") {
             const box = elementBox(element);
-            const aligned = regionRepair.axis === "top"
-              ? { x: box.x, y: regionFrame.y, width: box.width, height: box.height }
-              : { x: regionFrame.x, y: box.y, width: box.width, height: box.height };
+            const aligned =
+              regionRepair.axis === "top"
+                ? { x: box.x, y: regionFrame.y, width: box.width, height: box.height }
+                : { x: regionFrame.x, y: box.y, width: box.width, height: box.height };
             element.frame = frame(aligned.x, aligned.y, aligned.width, aligned.height);
           }
         }
       }
       if (design.hierarchyAction === "strengthen-title") {
         const title = slide.elements.find((element) => element.type === "text" && element.text === content.title);
-        if (title?.type === "text") title.style = { ...title.style, fontSizePt: Math.min(44, title.style.fontSizePt * 1.15), bold: true };
+        if (title?.type === "text")
+          title.style = { ...title.style, fontSizePt: Math.min(44, title.style.fontSizePt * 1.15), bold: true };
       }
       if (design.hierarchyAction === "reduce-density") {
         const body = slide.elements.find((element) => element.type === "text" && element.text === content.body);
-        if (body?.type === "text") body.frame = { ...body.frame, height: Math.max(body.frame.height, Math.round(pageHeight * 0.42)) as Emu };
+        if (body?.type === "text")
+          body.frame = { ...body.frame, height: Math.max(body.frame.height, Math.round(pageHeight * 0.42)) as Emu };
       }
       if (design.hierarchyAction === "increase-whitespace") {
         const body = slide.elements.find((element) => element.type === "text" && element.text === content.body);
-        if (body?.type === "text") body.frame = { ...body.frame, x: (body.frame.x + Math.round(pageWidth * 0.025)) as Emu, width: Math.max(Math.round(pageWidth * 0.30), body.frame.width - Math.round(pageWidth * 0.05)) as Emu };
+        if (body?.type === "text")
+          body.frame = {
+            ...body.frame,
+            x: (body.frame.x + Math.round(pageWidth * 0.025)) as Emu,
+            width: Math.max(Math.round(pageWidth * 0.3), body.frame.width - Math.round(pageWidth * 0.05)) as Emu,
+          };
       }
       // The emphasis of the page decides which level of the hierarchy carries
       // the weight. A title that is pushed up has to stay inside its own frame,
@@ -1599,8 +2797,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const emphasisTarget = (element: SlideElement, factor: number) => {
           if (element.type !== "text") return;
           const scaled = element.style.fontSizePt * factor;
-          const readableInBox = Math.floor((element.frame.height / 12_700) / 1.25);
-          element.style = { ...element.style, fontSizePt: Math.max(12, Math.min(Math.round(scaled), readableInBox, 44)) };
+          const readableInBox = Math.floor(element.frame.height / 12_700 / 1.25);
+          element.style = {
+            ...element.style,
+            fontSizePt: Math.max(12, Math.min(Math.round(scaled), readableInBox, 44)),
+          };
         };
         const title = slide.elements.find((element) => element.type === "text" && element.text === content.title);
         if (title) emphasisTarget(title, emphasis.title);
@@ -1630,7 +2831,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const carrierArea = element.frame.width * element.frame.height;
         for (let candidateIndex = 0; candidateIndex < elementIndex; candidateIndex += 1) {
           const candidate = slide.elements[candidateIndex]!;
-          if (candidate.type === "shape" && carrierArea > 0 && overlapArea(candidate.frame, element.frame) / carrierArea >= 0.8) carrying = candidate.style.fill;
+          if (
+            candidate.type === "shape" &&
+            carrierArea > 0 &&
+            overlapArea(candidate.frame, element.frame) / carrierArea >= 0.8
+          )
+            carrying = candidate.style.fill;
         }
         const large = isLargeText(element.style.fontSizePt, element.style.bold);
         // The footer sits outside the artwork placeholders, so the artwork
@@ -1642,11 +2848,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // against the same range the page was built with.
           const range = element.contentRef === "title" ? titleBackground : bodyBackground;
           if (range) {
-            element.style = { ...element.style, color: readableTextColorOnRange(element.style.color, range, large, bodyInk) };
+            element.style = {
+              ...element.style,
+              color: readableTextColorOnRange(element.style.color, range, large, bodyInk),
+            };
             return;
           }
         }
-        const background = carrying ?? ((keepsArtwork && !inFooter) ? undefined : slide.background);
+        const background = carrying ?? (keepsArtwork && !inFooter ? undefined : slide.background);
         const luminance = background ? colorLuminance(background) : undefined;
         if (luminance === undefined) return;
         element.style = { ...element.style, color: readableTextColor(element.style.color, luminance, large, bodyInk) };
@@ -1660,7 +2869,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const footerBand = { x: 0, y: 0.94, width: 1, height: 0.06 };
       const footerClaimed = obstacles.some((obstacle) => intersects(footerBand, obstacle));
       const templateFooter = recipe ? templateLayoutHasFooterMarker(recipe) : false;
-      if (command.slides.length > 1 && design.layout !== "cover" && design.layout !== "section" && !footerClaimed && !templateFooter) {
+      if (
+        command.slides.length > 1 &&
+        design.layout !== "cover" &&
+        design.layout !== "section" &&
+        !footerClaimed &&
+        !templateFooter
+      ) {
         const pageLabel = `${String(index + 1).padStart(2, "0")} / ${String(command.slides.length).padStart(2, "0")}`;
         // The left side names the section the page belongs to, not the deck:
         // a 20-page deck whose footer repeats the deck title on every page says
@@ -1678,8 +2893,34 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const titleChars = [...(sectionLabel ?? command.title.trim())];
         const footerLabel = titleChars.length > 30 ? `${titleChars.slice(0, 29).join("")}…` : titleChars.join("");
         const footerInk = readableTextColor("#5F6B76", pageLuminance, false, bodyInk);
-        slide.elements.push({ ...text(footerLabel, frame(alignmentGrid.left, 0.947, 0.55, 0.03), 10, footerInk, false, "left", "decorative", pageLuminance, 8), origin: "generated" });
-        slide.elements.push({ ...text(pageLabel, frame(alignmentGrid.right - 0.16, 0.947, 0.16, 0.03), 10, footerInk, false, "right", "decorative", pageLuminance, 8), origin: "generated" });
+        slide.elements.push({
+          ...text(
+            footerLabel,
+            frame(alignmentGrid.left, 0.947, 0.55, 0.03),
+            10,
+            footerInk,
+            false,
+            "left",
+            "decorative",
+            pageLuminance,
+            8,
+          ),
+          origin: "generated",
+        });
+        slide.elements.push({
+          ...text(
+            pageLabel,
+            frame(alignmentGrid.right - 0.16, 0.947, 0.16, 0.03),
+            10,
+            footerInk,
+            false,
+            "right",
+            "decorative",
+            pageLuminance,
+            8,
+          ),
+          origin: "generated",
+        });
       }
       // Provenance is what lets a later design-only relayout replace the
       // generated composition without deleting anything the user added.
@@ -1695,16 +2936,48 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const duplicate = {
       ...source,
       id: crypto.randomUUID() as SlideId,
-      content: { ...source.content, ...(source.content.blocks ? { blocks: cloneContentBlocks(source.content.blocks) } : {}) },
-      elements: source.elements.map((element) => element.type === "text"
-        ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style }, ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}) }
-        : element.type === "shape"
-          ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
-          : element.type === "chart"
-            ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] }
-            : element.type === "table"
-              ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, style: { ...element.style } }
-              : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame }, source: { ...element.source } }),
+      content: {
+        ...source.content,
+        ...(source.content.blocks ? { blocks: cloneContentBlocks(source.content.blocks) } : {}),
+      },
+      elements: source.elements.map((element) =>
+        element.type === "text"
+          ? {
+              ...element,
+              id: crypto.randomUUID() as ElementId,
+              frame: { ...element.frame },
+              style: { ...element.style },
+              ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
+            }
+          : element.type === "shape"
+            ? {
+                ...element,
+                id: crypto.randomUUID() as ElementId,
+                frame: { ...element.frame },
+                style: { ...element.style },
+              }
+            : element.type === "chart"
+              ? {
+                  ...element,
+                  id: crypto.randomUUID() as ElementId,
+                  frame: { ...element.frame },
+                  style: { ...element.style, seriesColors: [...element.style.seriesColors] },
+                  contentBlockIds: [...element.contentBlockIds],
+                }
+              : element.type === "table"
+                ? {
+                    ...element,
+                    id: crypto.randomUUID() as ElementId,
+                    frame: { ...element.frame },
+                    style: { ...element.style },
+                  }
+                : {
+                    ...element,
+                    id: crypto.randomUUID() as ElementId,
+                    frame: { ...element.frame },
+                    source: { ...element.source },
+                  },
+      ),
     };
     document.slides.splice(sourceIndex + 1, 0, duplicate);
     return;
@@ -1740,16 +3013,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
   if (command.type === "remove-slide-background-image") {
-    slide.elements = slide.elements.filter((element) => element.type !== "image" || element.placement !== "slide-background");
+    slide.elements = slide.elements.filter(
+      (element) => element.type !== "image" || element.placement !== "slide-background",
+    );
     return;
   }
   if (command.type === "set-slide-background-image") {
     const expectedPrefix = `data:${command.mimeType};base64,`;
     const payload = command.dataUrl.slice(expectedPrefix.length);
-    if (!command.dataUrl.startsWith(expectedPrefix) || command.dataUrl.length > 360_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) {
+    if (
+      !command.dataUrl.startsWith(expectedPrefix) ||
+      command.dataUrl.length > 360_000_000 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(payload)
+    ) {
       throw new Error("INVALID_IMAGE_SOURCE");
     }
-    slide.elements = slide.elements.filter((element) => element.type !== "image" || element.placement !== "slide-background");
+    slide.elements = slide.elements.filter(
+      (element) => element.type !== "image" || element.placement !== "slide-background",
+    );
     let afterLayoutArtwork = 0;
     while (afterLayoutArtwork < slide.elements.length) {
       const element = slide.elements[afterLayoutArtwork]!;
@@ -1786,7 +3067,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "add-image") {
     const expectedPrefix = `data:${command.mimeType};base64,`;
     const payload = command.dataUrl.slice(expectedPrefix.length);
-    if (!command.dataUrl.startsWith(expectedPrefix) || command.dataUrl.length > 360_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload) || command.altText.length > 500) {
+    if (
+      !command.dataUrl.startsWith(expectedPrefix) ||
+      command.dataUrl.length > 360_000_000 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(payload) ||
+      command.altText.length > 500
+    ) {
       throw new Error("INVALID_IMAGE_SOURCE");
     }
     if (command.role !== undefined && !isVisualAssetRole(command.role)) {
@@ -1845,15 +3131,26 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (targets.length === 0) return;
     const reference = unionFrame(targets.map((item) => item.frame));
     if (!reference) return;
-    const aligned = alignFrames(targets.map((item) => item.frame), reference, command.align);
-    targets.forEach((item, index) => { item.frame = aligned[index]!; });
+    const aligned = alignFrames(
+      targets.map((item) => item.frame),
+      reference,
+      command.align,
+    );
+    targets.forEach((item, index) => {
+      item.frame = aligned[index]!;
+    });
     return;
   }
   if (command.type === "distribute-elements") {
     const targets = slide.elements.filter((item) => command.elementIds.includes(item.id) && !item.locked);
     if (targets.length < 3) return;
-    const distributed = distributeFrames(targets.map((item) => item.frame), command.axis);
-    targets.forEach((item, index) => { item.frame = distributed[index]!; });
+    const distributed = distributeFrames(
+      targets.map((item) => item.frame),
+      command.axis,
+    );
+    targets.forEach((item, index) => {
+      item.frame = distributed[index]!;
+    });
     return;
   }
   if (command.type === "delete-elements") {
@@ -1869,13 +3166,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.content.blocks = [];
         }
       }
-      slide.elements.splice(slide.elements.findIndex((item) => item.id === elementId), 1);
+      slide.elements.splice(
+        slide.elements.findIndex((item) => item.id === elementId),
+        1,
+      );
     }
     return;
   }
   if (command.type === "move-elements") {
     // 整组一起移动是一个意图，所以是一个命令、一个撤销项。
-    if (!Number.isSafeInteger(command.dx) || !Number.isSafeInteger(command.dy)) throw new Error("INVALID_ELEMENT_TRANSFORM");
+    if (!Number.isSafeInteger(command.dx) || !Number.isSafeInteger(command.dy))
+      throw new Error("INVALID_ELEMENT_TRANSFORM");
     for (const item of slide.elements) {
       if (!command.elementIds.includes(item.id) || item.locked) continue;
       item.frame = { ...item.frame, x: (item.frame.x + command.dx) as Emu, y: (item.frame.y + command.dy) as Emu };
@@ -1893,15 +3194,52 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "duplicate-element") {
     const sourceIndex = slide.elements.findIndex((item) => item.id === command.elementId);
     const offset = inches(0.2);
-    const duplicate = element.type === "text"
-      ? { ...element, id: crypto.randomUUID() as ElementId, contentRef: "decorative" as const, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style }, ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}) }
-      : element.type === "shape"
-        ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
-        : element.type === "chart"
-          ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] }
-          : element.type === "table"
-            ? { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, style: { ...element.style } }
-            : { ...element, id: crypto.randomUUID() as ElementId, frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu }, source: { ...element.source } };
+    const duplicate =
+      element.type === "text"
+        ? {
+            ...element,
+            id: crypto.randomUUID() as ElementId,
+            contentRef: "decorative" as const,
+            frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu },
+            style: { ...element.style },
+            ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
+          }
+        : element.type === "shape"
+          ? {
+              ...element,
+              id: crypto.randomUUID() as ElementId,
+              frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu },
+              style: { ...element.style },
+            }
+          : element.type === "chart"
+            ? {
+                ...element,
+                id: crypto.randomUUID() as ElementId,
+                frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu },
+                style: { ...element.style, seriesColors: [...element.style.seriesColors] },
+                contentBlockIds: [...element.contentBlockIds],
+              }
+            : element.type === "table"
+              ? {
+                  ...element,
+                  id: crypto.randomUUID() as ElementId,
+                  frame: {
+                    ...element.frame,
+                    x: (element.frame.x + offset) as Emu,
+                    y: (element.frame.y + offset) as Emu,
+                  },
+                  style: { ...element.style },
+                }
+              : {
+                  ...element,
+                  id: crypto.randomUUID() as ElementId,
+                  frame: {
+                    ...element.frame,
+                    x: (element.frame.x + offset) as Emu,
+                    y: (element.frame.y + offset) as Emu,
+                  },
+                  source: { ...element.source },
+                };
     // A copy is user-owned even when its source was generated.
     duplicate.origin = "user";
     slide.elements.splice(sourceIndex + 1, 0, duplicate);
@@ -1975,7 +3313,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   }
   if (command.type === "set-chart-kind") {
     if (element.type !== "chart") throw new Error("ELEMENT_NOT_CHART");
-    if (command.kind !== "column" && command.kind !== "bar" && command.kind !== "line" && command.kind !== "pie") throw new Error("INVALID_CHART_KIND");
+    if (command.kind !== "column" && command.kind !== "bar" && command.kind !== "line" && command.kind !== "pie")
+      throw new Error("INVALID_CHART_KIND");
     element.kind = command.kind;
     return;
   }
@@ -2009,15 +3348,25 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.content.blocks = [];
       }
     }
-    slide.elements.splice(slide.elements.findIndex((item) => item.id === command.elementId), 1);
+    slide.elements.splice(
+      slide.elements.findIndex((item) => item.id === command.elementId),
+      1,
+    );
     return;
   }
   if (command.type === "move-element") {
-    if (!Number.isSafeInteger(command.x) || !Number.isSafeInteger(command.y)) throw new Error("INVALID_ELEMENT_TRANSFORM");
+    if (!Number.isSafeInteger(command.x) || !Number.isSafeInteger(command.y))
+      throw new Error("INVALID_ELEMENT_TRANSFORM");
     element.frame = { ...element.frame, x: command.x, y: command.y };
   }
   if (command.type === "transform-element") {
-    const values = [command.frame.x, command.frame.y, command.frame.width, command.frame.height, command.rotationMilliDegree];
+    const values = [
+      command.frame.x,
+      command.frame.y,
+      command.frame.width,
+      command.frame.height,
+      command.rotationMilliDegree,
+    ];
     if (!values.every(Number.isSafeInteger) || command.frame.width <= 0 || command.frame.height <= 0) {
       throw new Error("INVALID_ELEMENT_TRANSFORM");
     }
@@ -2031,8 +3380,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // wrong words once the copy changed. Dropping them keeps the emphasis
     // honest instead of highlighting something the reviewer did not select.
     element.runs = undefined;
-    const contentBound = element.contentRef === "title" || element.contentRef === "body" || (!element.contentRef && slide.elements[0]?.id === element.id);
-    if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id)) slide.content.title = command.text;
+    const contentBound =
+      element.contentRef === "title" ||
+      element.contentRef === "body" ||
+      (!element.contentRef && slide.elements[0]?.id === element.id);
+    if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id))
+      slide.content.title = command.text;
     if (element.contentRef === "body") {
       slide.content.body = command.text;
       slide.content.blocks = command.text.trim()

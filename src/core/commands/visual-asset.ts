@@ -215,8 +215,18 @@ export function planManualVisualAssetLayout(
       const x = pageWidthPx - widthPx - pageWidthPx * 0.05;
       const y = pageHeightPx * 0.17;
       return {
-        image: { x: x / pageWidthPx, y: y / pageHeightPx, width: widthPx / pageWidthPx, height: heightPx / pageHeightPx },
-        text: { x: 0.06, y: 0.17, width: (x - pageWidthPx * 0.05 - pageWidthPx * 0.06) / pageWidthPx, height: maxHeightPx / pageHeightPx },
+        image: {
+          x: x / pageWidthPx,
+          y: y / pageHeightPx,
+          width: widthPx / pageWidthPx,
+          height: heightPx / pageHeightPx,
+        },
+        text: {
+          x: 0.06,
+          y: 0.17,
+          width: (x - pageWidthPx * 0.05 - pageWidthPx * 0.06) / pageWidthPx,
+          height: maxHeightPx / pageHeightPx,
+        },
       };
     }
     case "side": {
@@ -226,7 +236,12 @@ export function planManualVisualAssetLayout(
       const x = pageWidthPx - widthPx - pageWidthPx * 0.05;
       const y = pageHeightPx * 0.78 - heightPx;
       return {
-        image: { x: x / pageWidthPx, y: y / pageHeightPx, width: widthPx / pageWidthPx, height: heightPx / pageHeightPx },
+        image: {
+          x: x / pageWidthPx,
+          y: y / pageHeightPx,
+          width: widthPx / pageWidthPx,
+          height: heightPx / pageHeightPx,
+        },
         text: { x: 0.06, y: 0.17, width: (x - pageWidthPx * 0.05 - pageWidthPx * 0.06) / pageWidthPx, height: 0.6 },
       };
     }
@@ -237,8 +252,18 @@ export function planManualVisualAssetLayout(
       const x = pageWidthPx * 0.06;
       const y = pageHeightPx * 0.15;
       return {
-        image: { x: x / pageWidthPx, y: y / pageHeightPx, width: widthPx / pageWidthPx, height: heightPx / pageHeightPx },
-        text: { x: 0.06, y: (y + heightPx + pageHeightPx * 0.03) / pageHeightPx, width: 0.88, height: (pageHeightPx * 0.85 - y - heightPx) / pageHeightPx },
+        image: {
+          x: x / pageWidthPx,
+          y: y / pageHeightPx,
+          width: widthPx / pageWidthPx,
+          height: heightPx / pageHeightPx,
+        },
+        text: {
+          x: 0.06,
+          y: (y + heightPx + pageHeightPx * 0.03) / pageHeightPx,
+          width: 0.88,
+          height: (pageHeightPx * 0.85 - y - heightPx) / pageHeightPx,
+        },
       };
     }
   }

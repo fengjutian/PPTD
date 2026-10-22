@@ -32,61 +32,80 @@ const CLICK_THRESHOLD_PX = 3;
  */
 export function useMarqueeSelection({ scale, elements, onSelect, onClear }: MarqueeOptions) {
   const [band, setBand] = useState<MarqueeBand | null>(null);
-  const drag = useRef<{ startClientX: number; startClientY: number; originX: number; originY: number; lastX: number; lastY: number; moved: boolean } | null>(null);
+  const drag = useRef<{
+    startClientX: number;
+    startClientY: number;
+    originX: number;
+    originY: number;
+    lastX: number;
+    lastY: number;
+    moved: boolean;
+  } | null>(null);
 
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    // 只有主键才框选；右键和中键留给别的用途。
-    if (event.button !== 0) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const originX = (event.clientX - rect.left) / scale;
-    const originY = (event.clientY - rect.top) / scale;
-    drag.current = { startClientX: event.clientX, startClientY: event.clientY, originX, originY, lastX: originX, lastY: originY, moved: false };
-
-    const move = (moveEvent: PointerEvent) => {
-      const current = drag.current;
-      if (!current) return;
-      const dx = moveEvent.clientX - current.startClientX;
-      const dy = moveEvent.clientY - current.startClientY;
-      if (!current.moved && Math.hypot(dx, dy) < CLICK_THRESHOLD_PX) return;
-      current.moved = true;
-      const x = (moveEvent.clientX - rect.left) / scale;
-      const y = (moveEvent.clientY - rect.top) / scale;
-      current.lastX = x;
-      current.lastY = y;
-      setBand({
-        x: Math.min(current.originX, x),
-        y: Math.min(current.originY, y),
-        width: Math.abs(x - current.originX),
-        height: Math.abs(y - current.originY),
-      });
-    };
-
-    const finish = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-      const current = drag.current;
-      drag.current = null;
-      setBand(null);
-      if (!current) return;
-      if (!current.moved) {
-        onClear();
-        return;
-      }
-      // 选框以按下点为起点、以松开点为终点，两点构成矩形。
-      const selection: RectEmu = {
-        x: Math.min(current.originX, current.lastX) as RectEmu["x"],
-        y: Math.min(current.originY, current.lastY) as RectEmu["y"],
-        width: Math.abs(current.lastX - current.originX) as RectEmu["width"],
-        height: Math.abs(current.lastY - current.originY) as RectEmu["height"],
+  const onPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      // 只有主键才框选；右键和中键留给别的用途。
+      if (event.button !== 0) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const originX = (event.clientX - rect.left) / scale;
+      const originY = (event.clientY - rect.top) / scale;
+      drag.current = {
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+        originX,
+        originY,
+        lastX: originX,
+        lastY: originY,
+        moved: false,
       };
-      onSelect(framesInSelection(elements, selection));
-    };
 
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
-  }, [scale, elements, onSelect, onClear]);
+      const move = (moveEvent: PointerEvent) => {
+        const current = drag.current;
+        if (!current) return;
+        const dx = moveEvent.clientX - current.startClientX;
+        const dy = moveEvent.clientY - current.startClientY;
+        if (!current.moved && Math.hypot(dx, dy) < CLICK_THRESHOLD_PX) return;
+        current.moved = true;
+        const x = (moveEvent.clientX - rect.left) / scale;
+        const y = (moveEvent.clientY - rect.top) / scale;
+        current.lastX = x;
+        current.lastY = y;
+        setBand({
+          x: Math.min(current.originX, x),
+          y: Math.min(current.originY, y),
+          width: Math.abs(x - current.originX),
+          height: Math.abs(y - current.originY),
+        });
+      };
+
+      const finish = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
+        const current = drag.current;
+        drag.current = null;
+        setBand(null);
+        if (!current) return;
+        if (!current.moved) {
+          onClear();
+          return;
+        }
+        // 选框以按下点为起点、以松开点为终点，两点构成矩形。
+        const selection: RectEmu = {
+          x: Math.min(current.originX, current.lastX) as RectEmu["x"],
+          y: Math.min(current.originY, current.lastY) as RectEmu["y"],
+          width: Math.abs(current.lastX - current.originX) as RectEmu["width"],
+          height: Math.abs(current.lastY - current.originY) as RectEmu["height"],
+        };
+        onSelect(framesInSelection(elements, selection));
+      };
+
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+    },
+    [scale, elements, onSelect, onClear],
+  );
 
   return { band, onPointerDown };
 }

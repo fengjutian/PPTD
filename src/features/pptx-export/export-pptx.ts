@@ -1,7 +1,23 @@
 import PptxGenJS from "pptxgenjs";
 import { unzipSync, zipSync } from "fflate";
-import { EMU_PER_INCH, resolveChartData, resolveFragmentStyle, resolveTableData, textFragments, type ChartElement, type ImageCrop, type ImageElement, type PresentationDocument, type ShapeElement, type SlideLayoutSpec } from "../../core/document-model";
-import { isFontAvailable, validatePresentationForExport, type ExportIssue } from "../../core/validation/export-validation";
+import {
+  EMU_PER_INCH,
+  resolveChartData,
+  resolveFragmentStyle,
+  resolveTableData,
+  textFragments,
+  type ChartElement,
+  type ImageCrop,
+  type ImageElement,
+  type PresentationDocument,
+  type ShapeElement,
+  type SlideLayoutSpec,
+} from "../../core/document-model";
+import {
+  isFontAvailable,
+  validatePresentationForExport,
+  type ExportIssue,
+} from "../../core/validation/export-validation";
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
 import { patchThemeColors } from "./theme-xml";
 import { normalizePackagePartNames } from "./package-parts";
@@ -67,7 +83,10 @@ function imageExtension(dataUrl: string): string {
  * illegal in XML or in a package path are replaced before they are used.
  */
 function safeMasterTitle(name: string, fallback: string): string {
-  const cleaned = name.replace(/[\u0000-\u001f<>:"|?*\\/]/g, "-").replace(/\s+/g, " ").trim();
+  const cleaned = name
+    .replace(/[\u0000-\u001f<>:"|?*\\/]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
   return cleaned || fallback;
 }
 
@@ -82,7 +101,9 @@ function planMasters(document: PresentationDocument): Map<string, MasterPlan> {
     if (!slide.layoutId) continue;
     const spec: SlideLayoutSpec | undefined = document.layouts?.find((layout) => layout.id === slide.layoutId);
     if (!spec || plans.has(spec.id)) continue;
-    const artwork = slide.elements.find((element): element is ImageElement => element.type === "image" && element.placement === "layout-background");
+    const artwork = slide.elements.find(
+      (element): element is ImageElement => element.type === "image" && element.placement === "layout-background",
+    );
     const base = safeMasterTitle(spec.name, "PPTD 版式");
     let title = base;
     let counter = 2;
@@ -95,7 +116,9 @@ function planMasters(document: PresentationDocument): Map<string, MasterPlan> {
       title,
       layoutId: spec.id,
       backgroundColor: spec.backgroundColor ?? slide.background,
-      ...(artwork ? { artwork: { dataUrl: artwork.source.dataUrl, extension: imageExtension(artwork.source.dataUrl) } } : {}),
+      ...(artwork
+        ? { artwork: { dataUrl: artwork.source.dataUrl, extension: imageExtension(artwork.source.dataUrl) } }
+        : {}),
     });
   }
   return plans;
@@ -126,10 +149,11 @@ export async function buildPptx(
   document: PresentationDocument,
   options: ExportOptions = {},
 ): Promise<{ bytes: Uint8Array; report: ExportReport }> {
-  const issues = options.prevalidatedIssues
-    ?? await validatePresentationForExport(document, {
+  const issues =
+    options.prevalidatedIssues ??
+    (await validatePresentationForExport(document, {
       fontAvailable: options.fontAvailable ?? isFontAvailable,
-    });
+    }));
   const blocking = issues.filter((issue) => issue.severity === "error");
   if (blocking.length > 0) {
     throw new Error(`EXPORT_VALIDATION_FAILED: ${blocking.map((issue) => issue.message).join("；")}`);
@@ -218,17 +242,20 @@ export async function buildPptx(
         // stays editable in PowerPoint instead of being flattened into the
         // style of the whole box.
         if (element.runs && element.runs.length > 0) {
-          slide.addText(textFragments(element.text, element.runs).map((fragment) => {
-            const style = resolveFragmentStyle(element.style, fragment.style);
-            return {
-              text: fragment.text,
-              options: {
-                bold: style.bold,
-                color: color(style.color),
-                ...(style.underline ? { underline: { style: "sng" as const } } : {}),
-              },
-            };
-          }), textOptions);
+          slide.addText(
+            textFragments(element.text, element.runs).map((fragment) => {
+              const style = resolveFragmentStyle(element.style, fragment.style);
+              return {
+                text: fragment.text,
+                options: {
+                  bold: style.bold,
+                  color: color(style.color),
+                  ...(style.underline ? { underline: { style: "sng" as const } } : {}),
+                },
+              };
+            }),
+            textOptions,
+          );
         } else {
           slide.addText(element.text, textOptions);
         }
@@ -249,15 +276,20 @@ export async function buildPptx(
         if (!resolved) throw new Error("EXPORT_CHART_DATA_INVALID");
         const values = resolved.data.map((datum) => datum.value);
         const labels = resolved.data.map((datum) => datum.category);
-        const colors = element.kind === "pie"
-          ? resolved.data.map((_, index) => color(element.style.seriesColors[index % element.style.seriesColors.length]!))
-          : [color(element.style.seriesColors[0]!)];
+        const colors =
+          element.kind === "pie"
+            ? resolved.data.map((_, index) =>
+                color(element.style.seriesColors[index % element.style.seriesColors.length]!),
+              )
+            : [color(element.style.seriesColors[0]!)];
         // The unit of the reviewed numbers belongs to the labels, so a value
         // reads "38万" in the deck and not "380000".
         const valueFormat = resolved.unit ? `#,##0.##"${resolved.unit}"` : "#,##0.##";
         slide.addChart(chartType(pptx, element.kind), [{ name: resolved.unit || "数值", labels, values }], {
           ...position,
-          ...(element.kind === "column" || element.kind === "bar" ? { barDir: element.kind === "bar" ? "bar" : "col" } : {}),
+          ...(element.kind === "column" || element.kind === "bar"
+            ? { barDir: element.kind === "bar" ? "bar" : "col" }
+            : {}),
           chartColors: colors,
           showLegend: element.style.showLegend,
           showTitle: false,

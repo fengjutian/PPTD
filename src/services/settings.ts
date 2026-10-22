@@ -5,7 +5,12 @@ import { isFontInstalled } from "./font-availability";
 export type AppTheme = "dark" | "light" | "system" | "amber" | "green" | "blue";
 /** PPTD 界面字体，只影响界面排版，不改变 PPT 模板与导出文稿的字体。 */
 export type AppUiFont = "sans" | "song" | "hei" | "mono";
-export interface AppSettings { theme: AppTheme; uiFont: AppUiFont; aiProviderId: string; aiModel: string }
+export interface AppSettings {
+  theme: AppTheme;
+  uiFont: AppUiFont;
+  aiProviderId: string;
+  aiModel: string;
+}
 let systemThemeQuery: MediaQueryList | undefined;
 let systemThemeListener: (() => void) | undefined;
 
@@ -23,10 +28,34 @@ export interface UiFontOption {
 }
 
 export const UI_FONT_OPTIONS: readonly UiFontOption[] = [
-  { id: "sans", label: "默认无衬线", stack: 'Inter, "Segoe UI", "Microsoft YaHei", sans-serif', probes: ["Microsoft YaHei", "Segoe UI"], note: "与当前界面一致，跨平台回退最稳。" },
-  { id: "song", label: "思源宋体", stack: '"Source Han Serif SC", "Noto Serif SC", "思源宋体", "Songti SC", SimSun, serif', probes: ["Source Han Serif SC", "Noto Serif SC", "思源宋体"], note: "思源宋体（Source Han Serif）适合正文与引文，需本机已安装；PPTD 不内置字体文件。" },
-  { id: "hei", label: "思源黑体", stack: '"Source Han Sans SC", "Noto Sans SC", "思源黑体", "Microsoft YaHei", sans-serif', probes: ["Source Han Sans SC", "Noto Sans SC", "思源黑体"], note: "思源黑体（Source Han Sans）适合标题与界面，需本机已安装。" },
-  { id: "mono", label: "等宽", stack: '"Cascadia Mono", "JetBrains Mono", Consolas, "Microsoft YaHei", monospace', probes: ["Cascadia Mono", "JetBrains Mono", "Consolas"], note: "等宽字体适合数值与代码片段。" },
+  {
+    id: "sans",
+    label: "默认无衬线",
+    stack: 'Inter, "Segoe UI", "Microsoft YaHei", sans-serif',
+    probes: ["Microsoft YaHei", "Segoe UI"],
+    note: "与当前界面一致，跨平台回退最稳。",
+  },
+  {
+    id: "song",
+    label: "思源宋体",
+    stack: '"Source Han Serif SC", "Noto Serif SC", "思源宋体", "Songti SC", SimSun, serif',
+    probes: ["Source Han Serif SC", "Noto Serif SC", "思源宋体"],
+    note: "思源宋体（Source Han Serif）适合正文与引文，需本机已安装；PPTD 不内置字体文件。",
+  },
+  {
+    id: "hei",
+    label: "思源黑体",
+    stack: '"Source Han Sans SC", "Noto Sans SC", "思源黑体", "Microsoft YaHei", sans-serif',
+    probes: ["Source Han Sans SC", "Noto Sans SC", "思源黑体"],
+    note: "思源黑体（Source Han Sans）适合标题与界面，需本机已安装。",
+  },
+  {
+    id: "mono",
+    label: "等宽",
+    stack: '"Cascadia Mono", "JetBrains Mono", Consolas, "Microsoft YaHei", monospace',
+    probes: ["Cascadia Mono", "JetBrains Mono", "Consolas"],
+    note: "等宽字体适合数值与代码片段。",
+  },
 ];
 
 export function defaultSettings(): AppSettings {
@@ -58,9 +87,16 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 
 export function applyTheme(theme: AppTheme): void {
   if (systemThemeQuery && systemThemeListener) systemThemeQuery.removeEventListener("change", systemThemeListener);
-  const update = () => { document.documentElement.dataset.theme = theme === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : theme; };
+  const update = () => {
+    document.documentElement.dataset.theme =
+      theme === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : theme;
+  };
   update();
-  if (theme === "system") { systemThemeQuery = matchMedia("(prefers-color-scheme: light)"); systemThemeListener = update; systemThemeQuery.addEventListener("change", update); }
+  if (theme === "system") {
+    systemThemeQuery = matchMedia("(prefers-color-scheme: light)");
+    systemThemeListener = update;
+    systemThemeQuery.addEventListener("change", update);
+  }
 }
 
 /** 把界面字体写入 CSS 变量，styles.css 的 :root 只读这一个变量。 */

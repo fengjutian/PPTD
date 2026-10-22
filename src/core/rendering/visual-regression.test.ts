@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { evaluateVisualRegression, type VisualRegressionPolicy } from "./visual-regression";
 import type { PixelImage } from "./png";
 
-function picture(width: number, height: number, colour: [number, number, number, number] = [255, 255, 255, 255]): PixelImage {
+function picture(
+  width: number,
+  height: number,
+  colour: [number, number, number, number] = [255, 255, 255, 255],
+): PixelImage {
   const data = new Uint8ClampedArray(width * height * 4);
   for (let offset = 0; offset < data.length; offset += 4) {
     data[offset] = colour[0];

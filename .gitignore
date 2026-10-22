@@ -3,6 +3,9 @@ dist/
 target/
 src-tauri/target/
 *.log
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
 .octop/
+# Local debugging output (decks, rendered pages, scratch scripts).
+.tmp*

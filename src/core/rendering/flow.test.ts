@@ -18,7 +18,9 @@ describe("measured flow layout", () => {
 
   it("gives every item the same gap", () => {
     const flow = layoutFlow(options({ items: ["一", "二", "三", "四"], availableHeightPt: 400 }));
-    const gaps = flow.rows.slice(1).map((row, index) => row.topPt - (flow.rows[index]!.topPt + flow.rows[index]!.heightPt));
+    const gaps = flow.rows
+      .slice(1)
+      .map((row, index) => row.topPt - (flow.rows[index]!.topPt + flow.rows[index]!.heightPt));
     expect(new Set(gaps.map((gap) => gap.toFixed(3))).size).toBe(1);
   });
 
@@ -34,7 +36,9 @@ describe("measured flow layout", () => {
   });
 
   it("centres a column that is shorter than the space it was given", () => {
-    const flow = layoutFlow(options({ items: ["一", "二"], availableHeightPt: 400, maximumGapPt: 10, verticalAlign: "center" }));
+    const flow = layoutFlow(
+      options({ items: ["一", "二"], availableHeightPt: 400, maximumGapPt: 10, verticalAlign: "center" }),
+    );
     expect(flow.rows[0]!.topPt).toBeGreaterThan(0);
   });
 
@@ -44,7 +48,9 @@ describe("measured flow layout", () => {
   });
 
   it("shrinks the font size when the column does not fit", () => {
-    const flow = layoutFlow(options({ items: ["一二三四五六七八九十".repeat(3), "一二三四五六七八九十".repeat(3)], availableHeightPt: 120 }));
+    const flow = layoutFlow(
+      options({ items: ["一二三四五六七八九十".repeat(3), "一二三四五六七八九十".repeat(3)], availableHeightPt: 120 }),
+    );
     expect(flow.fontSizePt).toBeLessThan(20);
     expect(flow.overflow).toBe(false);
   });

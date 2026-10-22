@@ -89,7 +89,12 @@ describe("presentation document schema", () => {
 
   it("accepts a native table that points at a reviewed table block", () => {
     const document = createDocument();
-    const block = { id: crypto.randomUUID(), type: "table-data" as const, header: ["项目", "数值"], rows: [["样本量", "38万"]] };
+    const block = {
+      id: crypto.randomUUID(),
+      type: "table-data" as const,
+      header: ["项目", "数值"],
+      rows: [["样本量", "38万"]],
+    };
     document.slides[0]!.content.blocks = [block];
     document.slides[0]!.elements.push({
       id: crypto.randomUUID() as never,
@@ -98,7 +103,15 @@ describe("presentation document schema", () => {
       frame: document.slides[0]!.elements[0]!.frame,
       rotationMilliDegree: 0,
       locked: false,
-      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true },
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        headerFill: "#3366CC",
+        headerTextColor: "#FFFFFF",
+        bodyTextColor: "#17181c",
+        borderColor: "#E2E7EC",
+        firstColumnBold: true,
+      },
     });
     expect(presentationDocumentSchema.parse(document).slides[0]!.elements[1]!.type).toBe("table");
   });
@@ -119,7 +132,8 @@ describe("presentation document schema", () => {
     expect(() => presentationDocumentSchema.parse(invalid)).toThrow();
   });
 
-  it("accepts explicit element provenance and rejects an unknown origin", () => {    const document = createDocument();
+  it("accepts explicit element provenance and rejects an unknown origin", () => {
+    const document = createDocument();
     document.slides[0]!.elements[0]!.origin = "user";
     const parsed = presentationDocumentSchema.parse(document);
     expect(parsed.slides[0]!.elements[0]!.origin).toBe("user");
@@ -131,7 +145,12 @@ describe("presentation document schema", () => {
 
   it("keeps the template theme and layout binding of a version 3 document", () => {
     const document = createDocument();
-    document.theme = { name: "昆佰泰", majorFont: "思源黑体", minorFont: "思源黑体", colors: [{ name: "accent1", value: "#c0504d" }] };
+    document.theme = {
+      name: "昆佰泰",
+      majorFont: "思源黑体",
+      minorFont: "思源黑体",
+      colors: [{ name: "accent1", value: "#c0504d" }],
+    };
     document.layouts = [{ id: crypto.randomUUID(), name: "内页（浅色）1", backgroundColor: "#ffffff" }];
     document.slides[0]!.layoutId = document.layouts[0]!.id;
     const parsed = presentationDocumentSchema.parse(document);
@@ -146,7 +165,9 @@ describe("presentation document schema", () => {
   });
 
   it("rejects unknown future schema versions with a stable error", () => {
-    expect(() => parsePresentationDocument({ ...versionOneFixture, schemaVersion: 99 })).toThrow("UNSUPPORTED_SCHEMA_VERSION: 99");
+    expect(() => parsePresentationDocument({ ...versionOneFixture, schemaVersion: 99 })).toThrow(
+      "UNSUPPORTED_SCHEMA_VERSION: 99",
+    );
   });
 
   it("rejects duplicate slide and element IDs", () => {
@@ -189,7 +210,9 @@ describe("presentation document schema", () => {
       source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" },
       altText: "页面背景图",
     });
-    expect(presentationDocumentSchema.parse(document).slides[0]!.elements.at(-1)).toMatchObject({ placement: "slide-background" });
+    expect(presentationDocumentSchema.parse(document).slides[0]!.elements.at(-1)).toMatchObject({
+      placement: "slide-background",
+    });
   });
 
   it("accepts a cropped picture and refuses a crop that hides the whole image", () => {
@@ -205,8 +228,12 @@ describe("presentation document schema", () => {
       crop: { top: 0.1, bottom: 0.2, left: 0, right: 0.3 },
     });
     const parsed = presentationDocumentSchema.parse(document);
-    expect(parsed.slides[0]!.elements[1]!.type === "image" ? parsed.slides[0]!.elements[1]!.crop : undefined)
-      .toEqual({ top: 0.1, bottom: 0.2, left: 0, right: 0.3 });
+    expect(parsed.slides[0]!.elements[1]!.type === "image" ? parsed.slides[0]!.elements[1]!.crop : undefined).toEqual({
+      top: 0.1,
+      bottom: 0.2,
+      left: 0,
+      right: 0.3,
+    });
 
     const empty = createDocument();
     empty.slides[0]!.elements.push({

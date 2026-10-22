@@ -211,7 +211,8 @@ export function decodePng(bytes: Uint8Array): PixelImage {
         continue;
       }
       if (colorType === 0 || colorType === 4) {
-        const gray = bitDepth < 8 ? Math.round((sampleValue(row, x, bitDepth) * 255) / maxSample) : sampleValue(row, x, bitDepth);
+        const gray =
+          bitDepth < 8 ? Math.round((sampleValue(row, x, bitDepth) * 255) / maxSample) : sampleValue(row, x, bitDepth);
         data[target] = gray;
         data[target + 1] = gray;
         data[target + 2] = gray;
@@ -259,7 +260,7 @@ function filterRow(type: number, row: Bytes, previous: Bytes, bytesPerRow: numbe
     const value = row[x]!;
     const left = x >= bytesPerPixel ? row[x - bytesPerPixel]! : 0;
     const up = previous[x] ?? 0;
-    const upLeft = x >= bytesPerPixel ? previous[x - bytesPerPixel] ?? 0 : 0;
+    const upLeft = x >= bytesPerPixel ? (previous[x - bytesPerPixel] ?? 0) : 0;
     switch (type) {
       case 1:
         out[x] = (value - left) & 0xff;

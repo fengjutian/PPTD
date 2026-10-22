@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { breakAtoms, breakIntoLines, type MeasurableAtom } from "./cjk-linebreak";
 
-const cjk = (text: string, width = 1): MeasurableAtom[] => [...text].map((character) => ({ value: character, text: character, width }));
+const cjk = (text: string, width = 1): MeasurableAtom[] =>
+  [...text].map((character) => ({ value: character, text: character, width }));
 
 describe("Chinese line breaking", () => {
   it("breaks a paragraph when the line is full", () => {

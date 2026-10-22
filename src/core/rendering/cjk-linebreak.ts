@@ -108,10 +108,17 @@ export function breakAtoms<T>(atoms: readonly MeasurableAtom<T>[], limit: number
 }
 
 /** The lines a text breaks into, with the width of a single character given. */
-export function breakIntoLines(text: string, options: { widthEm: number; widthOf: (character: string) => number }): string[] {
+export function breakIntoLines(
+  text: string,
+  options: { widthEm: number; widthOf: (character: string) => number },
+): string[] {
   const lines: string[] = [];
   for (const paragraph of text.split("\n")) {
-    const atoms = [...paragraph].map((character) => ({ value: character, text: character, width: options.widthOf(character) }));
+    const atoms = [...paragraph].map((character) => ({
+      value: character,
+      text: character,
+      width: options.widthOf(character),
+    }));
     if (atoms.length === 0) {
       lines.push("");
       continue;

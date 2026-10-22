@@ -4,8 +4,9 @@ import { findHalfWidthPunctuation, normalizeChinesePunctuation } from "./punctua
 describe("中文标点规范化", () => {
   it("把中文语境里的半角标点转成全角", () => {
     // 实测真实产出：模型把中文标题里的逗号写成了半角。
-    expect(normalizeChinesePunctuation("Q2 营收达成预算目标,盈利能力出现结构性压力"))
-      .toBe("Q2 营收达成预算目标，盈利能力出现结构性压力");
+    expect(normalizeChinesePunctuation("Q2 营收达成预算目标,盈利能力出现结构性压力")).toBe(
+      "Q2 营收达成预算目标，盈利能力出现结构性压力",
+    );
     expect(normalizeChinesePunctuation("增长放缓;毛利率承压")).toBe("增长放缓；毛利率承压");
     expect(normalizeChinesePunctuation("结论:三点")).toBe("结论：三点");
   });

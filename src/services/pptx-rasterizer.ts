@@ -14,9 +14,7 @@ export interface RasterizedDeck {
 }
 
 /** 真实渲染走不通时的结果。 */
-export type RasterizeOutcome =
-  | { status: "ok"; deck: RasterizedDeck }
-  | { status: "unavailable"; reason: string };
+export type RasterizeOutcome = { status: "ok"; deck: RasterizedDeck } | { status: "unavailable"; reason: string };
 
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -60,7 +58,8 @@ export async function rasterizePptxForReview(bytes: Uint8Array): Promise<Rasteri
     for (const source of images.slice(0, MAX_REVIEW_SLIDES)) {
       const image = await loadImage(source);
       const jpeg = await toJpeg(image, 0.85);
-      if (jpeg.length > MAX_REVIEW_IMAGE_BYTES * 1.4) return { status: "unavailable", reason: "REVIEW_RASTER_IMAGE_TOO_LARGE" };
+      if (jpeg.length > MAX_REVIEW_IMAGE_BYTES * 1.4)
+        return { status: "unavailable", reason: "REVIEW_RASTER_IMAGE_TOO_LARGE" };
       slides.push(jpeg);
       decoded.push(image);
     }

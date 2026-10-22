@@ -40,12 +40,12 @@
 
 新增 `src/features/ai/visual-asset-review.ts`，四类确定性检查：
 
-| 问题 | 判据 |
-| --- | --- |
-| `image-text-request` | 画面描述里出现"文字/标题/写着…"等词 |
-| `image-empty-prompt` | 配了图但没有画面描述 |
+| 问题                       | 判据                                 |
+| -------------------------- | ------------------------------------ |
+| `image-text-request`       | 画面描述里出现"文字/标题/写着…"等词  |
+| `image-empty-prompt`       | 配了图但没有画面描述                 |
 | `image-on-structured-page` | 页面已有时间线/对比/流程/表格/指标块 |
-| `image-over-limit` | 整册配图超过上限 |
+| `image-over-limit`         | 整册配图超过上限                     |
 
 规则表在共享词表里，前端据此检测，后端据此写提示，两边不会各说各话。
 

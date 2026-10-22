@@ -1,7 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocument, emu, type ImageElement } from "../core/document-model";
-import { resolveDocumentImages, resolveImageUrl, setImageProjectPath, subscribeImageProjectPath, failedImageReferences, isFailedImageReference, subscribeImageFailures } from "./image-url-service";
+import {
+  resolveDocumentImages,
+  resolveImageUrl,
+  setImageProjectPath,
+  subscribeImageProjectPath,
+  failedImageReferences,
+  isFailedImageReference,
+  subscribeImageFailures,
+} from "./image-url-service";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => true }));
 
@@ -57,10 +65,7 @@ describe("图片资源的解析", () => {
     invokeMock.mockResolvedValue("data:image/png;base64,AA==");
     setImageProjectPath("C:/p.pptd");
 
-    const [first, second] = await Promise.all([
-      resolveImageUrl("asset://c.png"),
-      resolveImageUrl("asset://c.png"),
-    ]);
+    const [first, second] = await Promise.all([resolveImageUrl("asset://c.png"), resolveImageUrl("asset://c.png")]);
 
     expect(first).toBe("data:image/png;base64,AA==");
     expect(second).toBe("data:image/png;base64,AA==");

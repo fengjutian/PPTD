@@ -5,7 +5,13 @@ import { useEditorStore } from "./editor-store";
 describe("editor history", () => {
   beforeEach(() => {
     const document = createDocument();
-    useEditorStore.setState({ document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] });
+    useEditorStore.setState({
+      document,
+      activeSlideId: document.slides[0]!.id,
+      selectedElementIds: [],
+      undoStack: [],
+      redoStack: [],
+    });
   });
 
   it("undoes and redoes one user command with its revisions", () => {
@@ -63,8 +69,17 @@ describe("editor history", () => {
     const state = useEditorStore.getState();
     const element = state.document.slides[0]!.elements[0]!;
     const frame = { x: inches(2), y: inches(2), width: inches(6), height: inches(1) };
-    state.execute({ type: "transform-element", slideId: state.activeSlideId, elementId: element.id, frame, rotationMilliDegree: 30_000 });
-    expect(useEditorStore.getState().document.slides[0]!.elements[0]).toMatchObject({ frame, rotationMilliDegree: 30_000 });
+    state.execute({
+      type: "transform-element",
+      slideId: state.activeSlideId,
+      elementId: element.id,
+      frame,
+      rotationMilliDegree: 30_000,
+    });
+    expect(useEditorStore.getState().document.slides[0]!.elements[0]).toMatchObject({
+      frame,
+      rotationMilliDegree: 30_000,
+    });
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
     expect(useEditorStore.getState().undoStack).toHaveLength(1);
     useEditorStore.getState().undo();
@@ -77,9 +92,17 @@ describe("editor history", () => {
     const title = slide.elements[0]!;
     const originalHash = slide.content.contentHash;
     expect(originalHash).toMatch(/^[0-9a-f]{16}$/);
-    state.execute({ type: "transform-element", slideId: slide.id, elementId: title.id, frame: { ...title.frame, x: inches(1) }, rotationMilliDegree: 0 });
+    state.execute({
+      type: "transform-element",
+      slideId: slide.id,
+      elementId: title.id,
+      frame: { ...title.frame, x: inches(1) },
+      rotationMilliDegree: 0,
+    });
     expect(useEditorStore.getState().document.slides[0]!.content.contentHash).toBe(originalHash);
-    useEditorStore.getState().execute({ type: "edit-text", slideId: slide.id, elementId: title.id, text: "新的已审核标题" });
+    useEditorStore
+      .getState()
+      .execute({ type: "edit-text", slideId: slide.id, elementId: title.id, text: "新的已审核标题" });
     const edited = useEditorStore.getState().document.slides[0]!;
     expect(edited.content.title).toBe("新的已审核标题");
     expect(edited.content.contentHash).not.toBe(originalHash);
@@ -90,7 +113,13 @@ describe("editor history", () => {
     const state = useEditorStore.getState();
     const element = state.document.slides[0]!.elements[0]!;
     state.selectElement(element.id);
-    state.execute({ type: "move-element", slideId: state.activeSlideId, elementId: element.id, x: inches(2), y: inches(2) });
+    state.execute({
+      type: "move-element",
+      slideId: state.activeSlideId,
+      elementId: element.id,
+      x: inches(2),
+      y: inches(2),
+    });
     expect(useEditorStore.getState().selectedElementIds).toEqual([element.id]);
     state.execute({ type: "delete-element", slideId: state.activeSlideId, elementId: element.id });
     expect(useEditorStore.getState().selectedElementIds).toEqual([]);
@@ -102,7 +131,12 @@ describe("editor history", () => {
     const title = slide.elements[0]!;
     const originalHash = slide.content.contentHash;
     const originalSize = title.type === "text" ? title.style.fontSizePt : 0;
-    state.execute({ type: "set-text-style", slideId: slide.id, elementId: title.id, style: { fontSizePt: 44, bold: true } });
+    state.execute({
+      type: "set-text-style",
+      slideId: slide.id,
+      elementId: title.id,
+      style: { fontSizePt: 44, bold: true },
+    });
     const restyled = useEditorStore.getState().document.slides[0]!.elements[0]!;
     expect(restyled.type === "text" && restyled.style.fontSizePt).toBe(44);
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
@@ -120,7 +154,14 @@ describe("editor history", () => {
     const slide = state.document.slides[0]!;
     const title = slide.elements[0]!;
     const originalHash = slide.content.contentHash;
-    state.execute({ type: "set-text-emphasis", slideId: slide.id, elementId: title.id, start: 0, end: 2, style: { bold: true } });
+    state.execute({
+      type: "set-text-emphasis",
+      slideId: slide.id,
+      elementId: title.id,
+      start: 0,
+      end: 2,
+      style: { bold: true },
+    });
     const emphasised = useEditorStore.getState().document.slides[0]!.elements[0]!;
     expect(emphasised.type === "text" ? emphasised.runs : undefined).toEqual([{ start: 0, end: 2, bold: true }]);
     // The emphasis is design: the approved copy stays frozen.
@@ -136,11 +177,22 @@ describe("editor history", () => {
     const state = useEditorStore.getState();
     const slide = state.document.slides[0]!;
     const originalHash = slide.content.contentHash;
-    state.execute({ type: "add-image", slideId: slide.id, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png", altText: "样例" });
+    state.execute({
+      type: "add-image",
+      slideId: slide.id,
+      dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      mimeType: "image/png",
+      altText: "样例",
+    });
     const image = useEditorStore.getState().document.slides[0]!.elements[1]!;
     if (image.type !== "image") throw new Error("expected an image");
 
-    state.execute({ type: "set-image-crop", slideId: slide.id, elementId: image.id, crop: { top: 0.25, bottom: 0, left: 0, right: 0 } });
+    state.execute({
+      type: "set-image-crop",
+      slideId: slide.id,
+      elementId: image.id,
+      crop: { top: 0.25, bottom: 0, left: 0, right: 0 },
+    });
     const cropped = useEditorStore.getState().document.slides[0]!.elements[1]!;
     expect(cropped.type === "image" ? cropped.crop : undefined).toEqual({ top: 0.25, bottom: 0, left: 0, right: 0 });
     // A crop only changes the design. The reviewed content stays frozen.
@@ -182,7 +234,12 @@ describe("editor history", () => {
     const generated = createDocument();
     const layoutId = crypto.randomUUID();
     generated.title = "带模板的文稿";
-    generated.theme = { name: "昆佰泰", majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] };
+    generated.theme = {
+      name: "昆佰泰",
+      majorFont: "思源黑体",
+      minorFont: "思源宋体",
+      colors: [{ name: "accent1", value: "#C04A32" }],
+    };
     generated.layouts = [{ id: layoutId, name: "内页（浅色）1", backgroundColor: "#FFFFFF" }];
     generated.slides[0]!.layoutId = layoutId;
 

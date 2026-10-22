@@ -1,46 +1,89 @@
 import { describe, expect, it } from "vitest";
-import { buildVisualAssetPrompt, planManualVisualAssetLayout, planVisualAssetLayout, resolveVisualAsset, VISUAL_ASSET_ASPECT, VISUAL_ASSET_REQUEST_SIZE, VISUAL_ASSET_STYLE_HINT } from "./visual-asset";
+import {
+  buildVisualAssetPrompt,
+  planManualVisualAssetLayout,
+  planVisualAssetLayout,
+  resolveVisualAsset,
+  VISUAL_ASSET_ASPECT,
+  VISUAL_ASSET_REQUEST_SIZE,
+  VISUAL_ASSET_STYLE_HINT,
+} from "./visual-asset";
 import { coverCrop } from "../rendering/image-fit";
 
 describe("视觉素材意图", () => {
   it("不给没有要求配图的页面配图", () => {
-    const decision = resolveVisualAsset({ layout: "title-body", itemCount: 3, hasDeterministicBlock: false, requested: false });
+    const decision = resolveVisualAsset({
+      layout: "title-body",
+      itemCount: 3,
+      hasDeterministicBlock: false,
+      requested: false,
+    });
     expect(decision.enabled).toBe(false);
     expect(decision.reason).toBeTruthy();
   });
 
   it("不给有结构化内容块的页面配图", () => {
     // 内容块自己就是版面：时间线、对比、流程各有一套图形。
-    const decision = resolveVisualAsset({ layout: "title-body", itemCount: 3, hasDeterministicBlock: true, requested: true });
+    const decision = resolveVisualAsset({
+      layout: "title-body",
+      itemCount: 3,
+      hasDeterministicBlock: true,
+      requested: true,
+    });
     expect(decision.enabled).toBe(false);
     expect(decision.reason).toContain("内容块");
   });
 
   it("不给要点过多的页面配图", () => {
-    const decision = resolveVisualAsset({ layout: "title-body", itemCount: 6, hasDeterministicBlock: false, requested: true });
+    const decision = resolveVisualAsset({
+      layout: "title-body",
+      itemCount: 6,
+      hasDeterministicBlock: false,
+      requested: true,
+    });
     expect(decision.enabled).toBe(false);
     expect(decision.reason).toContain("6");
   });
 
   it("给封面页配主视觉", () => {
-    expect(resolveVisualAsset({ layout: "cover", itemCount: 0, hasDeterministicBlock: false, requested: true })).toMatchObject({ enabled: true, role: "hero" });
-    expect(resolveVisualAsset({ layout: "section", itemCount: 0, hasDeterministicBlock: false, requested: true })).toMatchObject({ enabled: true, role: "hero" });
+    expect(
+      resolveVisualAsset({ layout: "cover", itemCount: 0, hasDeterministicBlock: false, requested: true }),
+    ).toMatchObject({ enabled: true, role: "hero" });
+    expect(
+      resolveVisualAsset({ layout: "section", itemCount: 0, hasDeterministicBlock: false, requested: true }),
+    ).toMatchObject({ enabled: true, role: "hero" });
   });
 
   it("拒绝把主视觉放在内容页上", () => {
-    const decision = resolveVisualAsset({ layout: "title-body", itemCount: 2, hasDeterministicBlock: false, requested: true, requestedRole: "hero" });
+    const decision = resolveVisualAsset({
+      layout: "title-body",
+      itemCount: 2,
+      hasDeterministicBlock: false,
+      requested: true,
+      requestedRole: "hero",
+    });
     expect(decision.enabled).toBe(false);
     expect(decision.reason).toContain("封面");
   });
 
   it("采纳 AI 指定的内容页配图角色", () => {
-    expect(resolveVisualAsset({ layout: "title-body", itemCount: 2, hasDeterministicBlock: false, requested: true, requestedRole: "band" })).toMatchObject({ enabled: true, role: "band" });
-    expect(resolveVisualAsset({ layout: "title-body", itemCount: 2, hasDeterministicBlock: false, requested: true })).toMatchObject({ enabled: true, role: "side" });
+    expect(
+      resolveVisualAsset({
+        layout: "title-body",
+        itemCount: 2,
+        hasDeterministicBlock: false,
+        requested: true,
+        requestedRole: "band",
+      }),
+    ).toMatchObject({ enabled: true, role: "band" });
+    expect(
+      resolveVisualAsset({ layout: "title-body", itemCount: 2, hasDeterministicBlock: false, requested: true }),
+    ).toMatchObject({ enabled: true, role: "side" });
   });
 });
 
 describe("配图与文字的几何", () => {
-  const region = { x: 0.08, y: 0.30, width: 0.84, height: 0.55 };
+  const region = { x: 0.08, y: 0.3, width: 0.84, height: 0.55 };
   const pageWidth = 12_191_695;
   const pageHeight = 6_858_000;
 

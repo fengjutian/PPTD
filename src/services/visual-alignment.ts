@@ -5,30 +5,102 @@ export const presentationVisualGoalSchema = z.object({
   mood: z.enum(["restrained", "modern", "energetic", "formal"]),
   density: z.enum(["low", "medium", "high"]),
   alignment: z.enum(["left-grid", "centered-grid"]),
-  backgroundRhythm: z.object({ coverVariants: z.number().int().min(1).max(2), contentVariants: z.number().int().min(1).max(3), repeatLimit: z.number().int().min(1).max(4) }),
-  minimumScores: z.object({ overall: z.number().min(0).max(100), hierarchy: z.number().min(0).max(100), alignment: z.number().min(0).max(100), readability: z.number().min(0).max(100), consistency: z.number().min(0).max(100) }),
+  backgroundRhythm: z.object({
+    coverVariants: z.number().int().min(1).max(2),
+    contentVariants: z.number().int().min(1).max(3),
+    repeatLimit: z.number().int().min(1).max(4),
+  }),
+  minimumScores: z.object({
+    overall: z.number().min(0).max(100),
+    hierarchy: z.number().min(0).max(100),
+    alignment: z.number().min(0).max(100),
+    readability: z.number().min(0).max(100),
+    consistency: z.number().min(0).max(100),
+  }),
 });
 export type PresentationVisualGoal = z.infer<typeof presentationVisualGoalSchema>;
 
 export const visualReviewSchema = z.object({
-  overallScore: z.number().min(0).max(100), hierarchyScore: z.number().min(0).max(100), alignmentScore: z.number().min(0).max(100), readabilityScore: z.number().min(0).max(100), consistencyScore: z.number().min(0).max(100),
-  issues: z.array(z.object({ slideIndex: z.number().int().nonnegative(), severity: z.enum(["error", "warning"]), issue: z.enum(["weak-hierarchy", "poor-contrast", "visual-imbalance", "background-conflict", "misalignment", "excessive-empty-space", "repetitive-layout"]), elementIds: z.array(z.string()).default([]), suggestion: z.string().min(1).max(500) })).max(100),
-  slideGuidance: z.array(z.object({
-    slideIndex: z.number().int().nonnegative(),
-    safeRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).refine((region) => region.x + region.width <= 1 && region.y + region.height <= 1),
-    logoRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(8).default([]),
-    busyRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(8).default([]),
-    focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
-    recommendedLayout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
-  })).default([]),
+  overallScore: z.number().min(0).max(100),
+  hierarchyScore: z.number().min(0).max(100),
+  alignmentScore: z.number().min(0).max(100),
+  readabilityScore: z.number().min(0).max(100),
+  consistencyScore: z.number().min(0).max(100),
+  issues: z
+    .array(
+      z.object({
+        slideIndex: z.number().int().nonnegative(),
+        severity: z.enum(["error", "warning"]),
+        issue: z.enum([
+          "weak-hierarchy",
+          "poor-contrast",
+          "visual-imbalance",
+          "background-conflict",
+          "misalignment",
+          "excessive-empty-space",
+          "repetitive-layout",
+        ]),
+        elementIds: z.array(z.string()).default([]),
+        suggestion: z.string().min(1).max(500),
+      }),
+    )
+    .max(100),
+  slideGuidance: z
+    .array(
+      z.object({
+        slideIndex: z.number().int().nonnegative(),
+        safeRegion: z
+          .object({
+            x: z.number().min(0).max(1),
+            y: z.number().min(0).max(1),
+            width: z.number().positive().max(1),
+            height: z.number().positive().max(1),
+          })
+          .refine((region) => region.x + region.width <= 1 && region.y + region.height <= 1),
+        logoRegions: z
+          .array(
+            z.object({
+              x: z.number().min(0).max(1),
+              y: z.number().min(0).max(1),
+              width: z.number().positive().max(1),
+              height: z.number().positive().max(1),
+            }),
+          )
+          .max(8)
+          .default([]),
+        busyRegions: z
+          .array(
+            z.object({
+              x: z.number().min(0).max(1),
+              y: z.number().min(0).max(1),
+              width: z.number().positive().max(1),
+              height: z.number().positive().max(1),
+            }),
+          )
+          .max(8)
+          .default([]),
+        focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
+        recommendedLayout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
+      }),
+    )
+    .default([]),
 });
 export type VisualReview = z.infer<typeof visualReviewSchema>;
 
-const visualIssueKinds = ["weak-hierarchy", "poor-contrast", "visual-imbalance", "background-conflict", "misalignment", "excessive-empty-space", "repetitive-layout"] as const;
+const visualIssueKinds = [
+  "weak-hierarchy",
+  "poor-contrast",
+  "visual-imbalance",
+  "background-conflict",
+  "misalignment",
+  "excessive-empty-space",
+  "repetitive-layout",
+] as const;
 const visualLayouts = ["cover", "title-body", "split", "cards", "quote", "section", "summary"] as const;
 type NormalizedRegion = VisualReview["slideGuidance"][number]["safeRegion"];
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 const clamp = (value: number, minimum: number, maximum: number): number => Math.min(maximum, Math.max(minimum, value));
 
 function normalizeScore(value: unknown): number | undefined {
@@ -53,52 +125,195 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
   const expected = [...new Set(expectedSlideIndexes)].filter((index) => Number.isInteger(index) && index >= 0);
   if (expected.length === 0) throw new Error("AI_VISION_SLIDE_INDEX_INVALID");
   const expectedSet = new Set(expected);
-  const scoreKeys = ["overallScore", "hierarchyScore", "alignmentScore", "readabilityScore", "consistencyScore"] as const;
-  const scores = Object.fromEntries(scoreKeys.map((key) => [key, normalizeScore(input[key])])) as Record<(typeof scoreKeys)[number], number | undefined>;
+  const scoreKeys = [
+    "overallScore",
+    "hierarchyScore",
+    "alignmentScore",
+    "readabilityScore",
+    "consistencyScore",
+  ] as const;
+  const scores = Object.fromEntries(scoreKeys.map((key) => [key, normalizeScore(input[key])])) as Record<
+    (typeof scoreKeys)[number],
+    number | undefined
+  >;
   if (scoreKeys.some((key) => scores[key] === undefined)) throw new Error("AI_VISION_RESPONSE_UNREPAIRABLE");
 
-  const issues = (Array.isArray(input.issues) ? input.issues : []).flatMap((candidate) => {
-    if (!isRecord(candidate) || typeof candidate.slideIndex !== "number" || !expectedSet.has(candidate.slideIndex)) return [];
-    if (candidate.severity !== "error" && candidate.severity !== "warning") return [];
-    if (typeof candidate.issue !== "string" || !visualIssueKinds.includes(candidate.issue as (typeof visualIssueKinds)[number])) return [];
-    if (typeof candidate.suggestion !== "string" || candidate.suggestion.trim().length === 0) return [];
-    return [{ slideIndex: candidate.slideIndex, severity: candidate.severity, issue: candidate.issue, elementIds: Array.isArray(candidate.elementIds) ? candidate.elementIds.filter((id): id is string => typeof id === "string").slice(0, 100) : [], suggestion: candidate.suggestion.trim().slice(0, 500) }];
-  }).slice(0, 100);
+  const issues = (Array.isArray(input.issues) ? input.issues : [])
+    .flatMap((candidate) => {
+      if (!isRecord(candidate) || typeof candidate.slideIndex !== "number" || !expectedSet.has(candidate.slideIndex))
+        return [];
+      if (candidate.severity !== "error" && candidate.severity !== "warning") return [];
+      if (
+        typeof candidate.issue !== "string" ||
+        !visualIssueKinds.includes(candidate.issue as (typeof visualIssueKinds)[number])
+      )
+        return [];
+      if (typeof candidate.suggestion !== "string" || candidate.suggestion.trim().length === 0) return [];
+      return [
+        {
+          slideIndex: candidate.slideIndex,
+          severity: candidate.severity,
+          issue: candidate.issue,
+          elementIds: Array.isArray(candidate.elementIds)
+            ? candidate.elementIds.filter((id): id is string => typeof id === "string").slice(0, 100)
+            : [],
+          suggestion: candidate.suggestion.trim().slice(0, 500),
+        },
+      ];
+    })
+    .slice(0, 100);
 
   const guidanceBySlide = new Map<number, VisualReview["slideGuidance"][number]>();
   for (const candidate of Array.isArray(input.slideGuidance) ? input.slideGuidance : []) {
-    if (!isRecord(candidate) || typeof candidate.slideIndex !== "number" || !expectedSet.has(candidate.slideIndex) || guidanceBySlide.has(candidate.slideIndex)) continue;
+    if (
+      !isRecord(candidate) ||
+      typeof candidate.slideIndex !== "number" ||
+      !expectedSet.has(candidate.slideIndex) ||
+      guidanceBySlide.has(candidate.slideIndex)
+    )
+      continue;
     const safeRegion = normalizeRegion(candidate.safeRegion) ?? { x: 0.08, y: 0.18, width: 0.84, height: 0.7 };
-    const normalizeRegions = (value: unknown): NormalizedRegion[] => (Array.isArray(value) ? value.map(normalizeRegion).filter((region): region is NormalizedRegion => region !== undefined).slice(0, 8) : []);
-    const focal = isRecord(candidate.focalPoint) && typeof candidate.focalPoint.x === "number" && Number.isFinite(candidate.focalPoint.x) && typeof candidate.focalPoint.y === "number" && Number.isFinite(candidate.focalPoint.y)
-      ? { x: clamp(candidate.focalPoint.x, 0, 1), y: clamp(candidate.focalPoint.y, 0, 1) }
-      : { x: 0.5, y: 0.5 };
-    const recommendedLayout = typeof candidate.recommendedLayout === "string" && visualLayouts.includes(candidate.recommendedLayout as (typeof visualLayouts)[number])
-      ? candidate.recommendedLayout as (typeof visualLayouts)[number]
-      : candidate.slideIndex === 0 ? "cover" : "title-body";
-    guidanceBySlide.set(candidate.slideIndex, { slideIndex: candidate.slideIndex, safeRegion, logoRegions: normalizeRegions(candidate.logoRegions), busyRegions: normalizeRegions(candidate.busyRegions), focalPoint: focal, recommendedLayout });
+    const normalizeRegions = (value: unknown): NormalizedRegion[] =>
+      Array.isArray(value)
+        ? value
+            .map(normalizeRegion)
+            .filter((region): region is NormalizedRegion => region !== undefined)
+            .slice(0, 8)
+        : [];
+    const focal =
+      isRecord(candidate.focalPoint) &&
+      typeof candidate.focalPoint.x === "number" &&
+      Number.isFinite(candidate.focalPoint.x) &&
+      typeof candidate.focalPoint.y === "number" &&
+      Number.isFinite(candidate.focalPoint.y)
+        ? { x: clamp(candidate.focalPoint.x, 0, 1), y: clamp(candidate.focalPoint.y, 0, 1) }
+        : { x: 0.5, y: 0.5 };
+    const recommendedLayout =
+      typeof candidate.recommendedLayout === "string" &&
+      visualLayouts.includes(candidate.recommendedLayout as (typeof visualLayouts)[number])
+        ? (candidate.recommendedLayout as (typeof visualLayouts)[number])
+        : candidate.slideIndex === 0
+          ? "cover"
+          : "title-body";
+    guidanceBySlide.set(candidate.slideIndex, {
+      slideIndex: candidate.slideIndex,
+      safeRegion,
+      logoRegions: normalizeRegions(candidate.logoRegions),
+      busyRegions: normalizeRegions(candidate.busyRegions),
+      focalPoint: focal,
+      recommendedLayout,
+    });
   }
 
-  const slideGuidance = expected.map((slideIndex) => guidanceBySlide.get(slideIndex) ?? ({ slideIndex, safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 }, logoRegions: [], busyRegions: [], focalPoint: { x: 0.5, y: 0.5 }, recommendedLayout: slideIndex === 0 ? "cover" as const : "title-body" as const }));
+  const slideGuidance = expected.map(
+    (slideIndex) =>
+      guidanceBySlide.get(slideIndex) ?? {
+        slideIndex,
+        safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 },
+        logoRegions: [],
+        busyRegions: [],
+        focalPoint: { x: 0.5, y: 0.5 },
+        recommendedLayout: slideIndex === 0 ? ("cover" as const) : ("title-body" as const),
+      },
+  );
   return visualReviewSchema.parse({ ...scores, issues, slideGuidance });
 }
 export const visualRepairPlanSchema = z.object({
-  repairs: z.array(z.object({
-    slideIndex: z.number().int().nonnegative(),
-    layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]).optional(),
-    backgroundAction: z.enum(["keep", "replace-compatible", "simplify"]).default("keep"),
-    hierarchyAction: z.enum(["keep", "strengthen-title", "reduce-density", "increase-whitespace"]).default("keep"),
-    safeRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional(),
-    obstacleRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(16).default([]),
-    elementActions: z.array(z.discriminatedUnion("action", [
-      z.object({ action: z.literal("move"), target: z.enum(["title", "body", "region"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }), to: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional() }),
-      z.object({ action: z.literal("resize"), target: z.enum(["title", "body", "region"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }), to: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional() }),
-      z.object({ action: z.literal("restyle"), target: z.enum(["title", "body", "region"]), fontScale: z.number().min(0.75).max(1.5).optional(), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional() }),
-      z.object({ action: z.literal("align"), target: z.enum(["title", "body", "region"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }), axis: z.enum(["left", "top"]).optional() }),
-      z.object({ action: z.literal("changeLayout"), layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]) }),
-    ])).max(12).default([]),
-    reason: z.string().min(1).max(500),
-  })),
+  repairs: z.array(
+    z.object({
+      slideIndex: z.number().int().nonnegative(),
+      layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]).optional(),
+      backgroundAction: z.enum(["keep", "replace-compatible", "simplify"]).default("keep"),
+      hierarchyAction: z.enum(["keep", "strengthen-title", "reduce-density", "increase-whitespace"]).default("keep"),
+      safeRegion: z
+        .object({
+          x: z.number().min(0).max(1),
+          y: z.number().min(0).max(1),
+          width: z.number().positive().max(1),
+          height: z.number().positive().max(1),
+        })
+        .optional(),
+      obstacleRegions: z
+        .array(
+          z.object({
+            x: z.number().min(0).max(1),
+            y: z.number().min(0).max(1),
+            width: z.number().positive().max(1),
+            height: z.number().positive().max(1),
+          }),
+        )
+        .max(16)
+        .default([]),
+      elementActions: z
+        .array(
+          z.discriminatedUnion("action", [
+            z.object({
+              action: z.literal("move"),
+              target: z.enum(["title", "body", "region"]),
+              frame: z.object({
+                x: z.number().min(0).max(1),
+                y: z.number().min(0).max(1),
+                width: z.number().positive().max(1),
+                height: z.number().positive().max(1),
+              }),
+              to: z
+                .object({
+                  x: z.number().min(0).max(1),
+                  y: z.number().min(0).max(1),
+                  width: z.number().positive().max(1),
+                  height: z.number().positive().max(1),
+                })
+                .optional(),
+            }),
+            z.object({
+              action: z.literal("resize"),
+              target: z.enum(["title", "body", "region"]),
+              frame: z.object({
+                x: z.number().min(0).max(1),
+                y: z.number().min(0).max(1),
+                width: z.number().positive().max(1),
+                height: z.number().positive().max(1),
+              }),
+              to: z
+                .object({
+                  x: z.number().min(0).max(1),
+                  y: z.number().min(0).max(1),
+                  width: z.number().positive().max(1),
+                  height: z.number().positive().max(1),
+                })
+                .optional(),
+            }),
+            z.object({
+              action: z.literal("restyle"),
+              target: z.enum(["title", "body", "region"]),
+              fontScale: z.number().min(0.75).max(1.5).optional(),
+              color: z
+                .string()
+                .regex(/^#[0-9A-Fa-f]{6}$/)
+                .optional(),
+            }),
+            z.object({
+              action: z.literal("align"),
+              target: z.enum(["title", "body", "region"]),
+              frame: z.object({
+                x: z.number().min(0).max(1),
+                y: z.number().min(0).max(1),
+                width: z.number().positive().max(1),
+                height: z.number().positive().max(1),
+              }),
+              axis: z.enum(["left", "top"]).optional(),
+            }),
+            z.object({
+              action: z.literal("changeLayout"),
+              layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
+            }),
+          ]),
+        )
+        .max(12)
+        .default([]),
+      reason: z.string().min(1).max(500),
+    }),
+  ),
 });
 export type VisualRepairPlan = z.infer<typeof visualRepairPlanSchema>;
 type RepairAction = VisualRepairPlan["repairs"][number]["elementActions"][number];
@@ -140,83 +355,138 @@ function repairRegion(value: unknown): NormalizedRegion | undefined {
 export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: number[]): VisualRepairPlan {
   if (!isRecord(input) || !Array.isArray(input.repairs)) throw new Error("AI_REPAIR_RESPONSE_UNREPAIRABLE");
   const expected = new Set(expectedSlideIndexes.filter((index) => Number.isInteger(index) && index >= 0));
-  const repairs = input.repairs.flatMap((candidate): VisualRepairPlan["repairs"] => {
-    if (!isRecord(candidate) || typeof candidate.slideIndex !== "number" || !expected.has(candidate.slideIndex)) return [];
-    const layout = typeof candidate.layout === "string" && repairLayouts.includes(candidate.layout as (typeof repairLayouts)[number])
-      ? candidate.layout as (typeof repairLayouts)[number]
-      : undefined;
-    const backgroundAction = typeof candidate.backgroundAction === "string" && repairBackgroundActions.includes(candidate.backgroundAction as (typeof repairBackgroundActions)[number])
-      ? candidate.backgroundAction as (typeof repairBackgroundActions)[number]
-      : "keep";
-    const hierarchyAction = typeof candidate.hierarchyAction === "string" && repairHierarchyActions.includes(candidate.hierarchyAction as (typeof repairHierarchyActions)[number])
-      ? candidate.hierarchyAction as (typeof repairHierarchyActions)[number]
-      : "keep";
-    const safeRegion = candidate.safeRegion === undefined ? undefined : normalizeRegion(candidate.safeRegion);
-    const obstacleRegions = (Array.isArray(candidate.obstacleRegions) ? candidate.obstacleRegions : [])
-      .map(normalizeRegion)
-      .filter((region): region is NormalizedRegion => region !== undefined)
-      .slice(0, 16);
-    const elementActions = (Array.isArray(candidate.elementActions) ? candidate.elementActions : []).flatMap((action): RepairAction[] => {
-      if (!isRecord(action) || typeof action.action !== "string" || typeof action.target !== "string") return [];
-      if (!repairTargets.includes(action.target as (typeof repairTargets)[number])) return [];
-      const target = action.target as (typeof repairTargets)[number];
-      if (action.action === "changeLayout") {
-        if (typeof action.layout !== "string" || !repairLayouts.includes(action.layout as (typeof repairLayouts)[number])) return [];
-        return [{ action: "changeLayout", layout: action.layout as (typeof repairLayouts)[number] }];
-      }
-      if (action.action === "restyle") {
-        const fontScale = typeof action.fontScale === "number" && Number.isFinite(action.fontScale) ? clamp(action.fontScale, 0.75, 1.5) : undefined;
-        const color = typeof action.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(action.color) ? action.color : undefined;
-        if (fontScale === undefined && color === undefined) return [];
-        return [{ action: "restyle", target, ...(fontScale === undefined ? {} : { fontScale }), ...(color === undefined ? {} : { color }) }];
-      }
-      if (action.action !== "move" && action.action !== "resize" && action.action !== "align") return [];
-      const region = repairRegion(action.frame);
-      // A region repair without a usable rectangle has no meaning: the model
-      // wanted to point at a place and did not say where.
-      if (!region) return [];
-      if (action.action === "align") {
-        const axis = action.axis === "top" ? "top" : "left";
-        return [{ action: "align", target, frame: region, axis }];
-      }
-      // A move of a region needs a destination. Without one the action is
-      // dropped instead of being applied to a guessed place.
-      const to = action.to === undefined ? undefined : repairRegion(action.to);
-      if (target === "region" && !to) return [];
-      return [{ action: action.action, target, frame: region, ...(to === undefined ? {} : { to }) }];
-    }).slice(0, 12);
-    const reason = typeof candidate.reason === "string" ? candidate.reason.trim().slice(0, 500) : "";
-    if (!reason) return [];
-    // A repair that ends up doing nothing is not a repair. Keeping it would
-    // make the plan look busier than it is and hide the fact that the model
-    // did not actually say what to change.
-    if (elementActions.length === 0 && layout === undefined && backgroundAction === "keep" && hierarchyAction === "keep") return [];
-    return [{
-      slideIndex: candidate.slideIndex,
-      ...(layout === undefined ? {} : { layout }),
-      backgroundAction,
-      hierarchyAction,
-      ...(safeRegion === undefined ? {} : { safeRegion }),
-      obstacleRegions,
-      elementActions,
-      reason,
-    }];
-  }).slice(0, 20);
+  const repairs = input.repairs
+    .flatMap((candidate): VisualRepairPlan["repairs"] => {
+      if (!isRecord(candidate) || typeof candidate.slideIndex !== "number" || !expected.has(candidate.slideIndex))
+        return [];
+      const layout =
+        typeof candidate.layout === "string" &&
+        repairLayouts.includes(candidate.layout as (typeof repairLayouts)[number])
+          ? (candidate.layout as (typeof repairLayouts)[number])
+          : undefined;
+      const backgroundAction =
+        typeof candidate.backgroundAction === "string" &&
+        repairBackgroundActions.includes(candidate.backgroundAction as (typeof repairBackgroundActions)[number])
+          ? (candidate.backgroundAction as (typeof repairBackgroundActions)[number])
+          : "keep";
+      const hierarchyAction =
+        typeof candidate.hierarchyAction === "string" &&
+        repairHierarchyActions.includes(candidate.hierarchyAction as (typeof repairHierarchyActions)[number])
+          ? (candidate.hierarchyAction as (typeof repairHierarchyActions)[number])
+          : "keep";
+      const safeRegion = candidate.safeRegion === undefined ? undefined : normalizeRegion(candidate.safeRegion);
+      const obstacleRegions = (Array.isArray(candidate.obstacleRegions) ? candidate.obstacleRegions : [])
+        .map(normalizeRegion)
+        .filter((region): region is NormalizedRegion => region !== undefined)
+        .slice(0, 16);
+      const elementActions = (Array.isArray(candidate.elementActions) ? candidate.elementActions : [])
+        .flatMap((action): RepairAction[] => {
+          if (!isRecord(action) || typeof action.action !== "string" || typeof action.target !== "string") return [];
+          if (!repairTargets.includes(action.target as (typeof repairTargets)[number])) return [];
+          const target = action.target as (typeof repairTargets)[number];
+          if (action.action === "changeLayout") {
+            if (
+              typeof action.layout !== "string" ||
+              !repairLayouts.includes(action.layout as (typeof repairLayouts)[number])
+            )
+              return [];
+            return [{ action: "changeLayout", layout: action.layout as (typeof repairLayouts)[number] }];
+          }
+          if (action.action === "restyle") {
+            const fontScale =
+              typeof action.fontScale === "number" && Number.isFinite(action.fontScale)
+                ? clamp(action.fontScale, 0.75, 1.5)
+                : undefined;
+            const color =
+              typeof action.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(action.color) ? action.color : undefined;
+            if (fontScale === undefined && color === undefined) return [];
+            return [
+              {
+                action: "restyle",
+                target,
+                ...(fontScale === undefined ? {} : { fontScale }),
+                ...(color === undefined ? {} : { color }),
+              },
+            ];
+          }
+          if (action.action !== "move" && action.action !== "resize" && action.action !== "align") return [];
+          const region = repairRegion(action.frame);
+          // A region repair without a usable rectangle has no meaning: the model
+          // wanted to point at a place and did not say where.
+          if (!region) return [];
+          if (action.action === "align") {
+            const axis = action.axis === "top" ? "top" : "left";
+            return [{ action: "align", target, frame: region, axis }];
+          }
+          // A move of a region needs a destination. Without one the action is
+          // dropped instead of being applied to a guessed place.
+          const to = action.to === undefined ? undefined : repairRegion(action.to);
+          if (target === "region" && !to) return [];
+          return [{ action: action.action, target, frame: region, ...(to === undefined ? {} : { to }) }];
+        })
+        .slice(0, 12);
+      const reason = typeof candidate.reason === "string" ? candidate.reason.trim().slice(0, 500) : "";
+      if (!reason) return [];
+      // A repair that ends up doing nothing is not a repair. Keeping it would
+      // make the plan look busier than it is and hide the fact that the model
+      // did not actually say what to change.
+      if (
+        elementActions.length === 0 &&
+        layout === undefined &&
+        backgroundAction === "keep" &&
+        hierarchyAction === "keep"
+      )
+        return [];
+      return [
+        {
+          slideIndex: candidate.slideIndex,
+          ...(layout === undefined ? {} : { layout }),
+          backgroundAction,
+          hierarchyAction,
+          ...(safeRegion === undefined ? {} : { safeRegion }),
+          obstacleRegions,
+          elementActions,
+          reason,
+        },
+      ];
+    })
+    .slice(0, 20);
   if (repairs.length === 0) throw new Error("AI_REPAIR_RESPONSE_UNREPAIRABLE");
   return visualRepairPlanSchema.parse({ repairs });
 }
-export interface VisualAlignmentResult<T> { value: T; review: VisualReview; iterations: number; stopReason: "target-reached" | "stagnated" | "iteration-limit" }
+export interface VisualAlignmentResult<T> {
+  value: T;
+  review: VisualReview;
+  iterations: number;
+  stopReason: "target-reached" | "stagnated" | "iteration-limit";
+}
 
-
-export async function runVisualAlignmentLoop<T>(options: { initial: T; goal: PresentationVisualGoal; contentFingerprint: (value: T) => string; review: (value: T, goal: PresentationVisualGoal, iteration: number) => Promise<VisualReview>; repair: (value: T, review: VisualReview, goal: PresentationVisualGoal) => Promise<T>; maxIterations?: number }): Promise<VisualAlignmentResult<T>> {
+export async function runVisualAlignmentLoop<T>(options: {
+  initial: T;
+  goal: PresentationVisualGoal;
+  contentFingerprint: (value: T) => string;
+  review: (value: T, goal: PresentationVisualGoal, iteration: number) => Promise<VisualReview>;
+  repair: (value: T, review: VisualReview, goal: PresentationVisualGoal) => Promise<T>;
+  maxIterations?: number;
+}): Promise<VisualAlignmentResult<T>> {
   const maxIterations = Math.min(3, Math.max(1, options.maxIterations ?? 3));
   const approvedContent = options.contentFingerprint(options.initial);
-  let value = options.initial; let previousScore = -1; let lastReview: VisualReview | undefined;
+  let value = options.initial;
+  let previousScore = -1;
+  let lastReview: VisualReview | undefined;
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const review = visualReviewSchema.parse(await options.review(value, options.goal, iteration)); lastReview = review;
-    const reached = review.overallScore >= options.goal.minimumScores.overall && review.hierarchyScore >= options.goal.minimumScores.hierarchy && review.alignmentScore >= options.goal.minimumScores.alignment && review.readabilityScore >= options.goal.minimumScores.readability && review.consistencyScore >= options.goal.minimumScores.consistency && !review.issues.some((issue) => issue.severity === "error");
+    const review = visualReviewSchema.parse(await options.review(value, options.goal, iteration));
+    lastReview = review;
+    const reached =
+      review.overallScore >= options.goal.minimumScores.overall &&
+      review.hierarchyScore >= options.goal.minimumScores.hierarchy &&
+      review.alignmentScore >= options.goal.minimumScores.alignment &&
+      review.readabilityScore >= options.goal.minimumScores.readability &&
+      review.consistencyScore >= options.goal.minimumScores.consistency &&
+      !review.issues.some((issue) => issue.severity === "error");
     if (reached) return { value, review, iterations: iteration, stopReason: "target-reached" };
-    if (previousScore >= 0 && review.overallScore - previousScore < 3) return { value, review, iterations: iteration, stopReason: "stagnated" };
+    if (previousScore >= 0 && review.overallScore - previousScore < 3)
+      return { value, review, iterations: iteration, stopReason: "stagnated" };
     if (iteration === maxIterations) return { value, review, iterations: iteration, stopReason: "iteration-limit" };
     previousScore = review.overallScore;
     const repaired = await options.repair(value, review, options.goal);
@@ -226,8 +496,21 @@ export async function runVisualAlignmentLoop<T>(options: { initial: T; goal: Pre
   throw new Error(lastReview ? "VISUAL_ALIGNMENT_ITERATION_INVALID" : "VISUAL_ALIGNMENT_REVIEW_MISSING");
 }
 
-export const defaultPresentationVisualGoal = (): PresentationVisualGoal => ({ style: "editorial", mood: "modern", density: "medium", alignment: "left-grid", backgroundRhythm: { coverVariants: 1, contentVariants: 3, repeatLimit: 2 }, minimumScores: { overall: 85, hierarchy: 82, alignment: 90, readability: 88, consistency: 85 } });
+export const defaultPresentationVisualGoal = (): PresentationVisualGoal => ({
+  style: "editorial",
+  mood: "modern",
+  density: "medium",
+  alignment: "left-grid",
+  backgroundRhythm: { coverVariants: 1, contentVariants: 3, repeatLimit: 2 },
+  minimumScores: { overall: 85, hierarchy: 82, alignment: 90, readability: 88, consistency: 85 },
+});
 
 export function affectedSlideIndexes(review: VisualReview): number[] {
-  return [...new Set(review.issues.filter((issue) => issue.severity === "error" || review.overallScore < 85).map((issue) => issue.slideIndex))].sort((left, right) => left - right);
+  return [
+    ...new Set(
+      review.issues
+        .filter((issue) => issue.severity === "error" || review.overallScore < 85)
+        .map((issue) => issue.slideIndex),
+    ),
+  ].sort((left, right) => left - right);
 }

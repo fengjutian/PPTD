@@ -38,7 +38,11 @@ function normalizeBlock(block: ContentBlock): ContentBlock {
     case "process":
       return {
         ...block,
-        items: block.items.map((item) => ({ ...item, label: normalizeChinesePunctuation(item.label), text: normalizeChinesePunctuation(item.text) })),
+        items: block.items.map((item) => ({
+          ...item,
+          label: normalizeChinesePunctuation(item.label),
+          text: normalizeChinesePunctuation(item.text),
+        })),
       };
     case "comparison":
       return {
@@ -73,15 +77,20 @@ export function normalizeDraftPunctuation(draft: AiDraft): AiDraft {
       speakerNotes: normalizeChinesePunctuation(slide.speakerNotes),
       ...(slide.plan
         ? {
-          plan: {
-            ...slide.plan,
-            purpose: normalizeChinesePunctuation(slide.plan.purpose),
-            conclusion: normalizeChinesePunctuation(slide.plan.conclusion),
-            ...(slide.plan.visualAsset
-              ? { visualAsset: { ...slide.plan.visualAsset, prompt: normalizeChinesePunctuation(slide.plan.visualAsset.prompt) } }
-              : {}),
-          },
-        }
+            plan: {
+              ...slide.plan,
+              purpose: normalizeChinesePunctuation(slide.plan.purpose),
+              conclusion: normalizeChinesePunctuation(slide.plan.conclusion),
+              ...(slide.plan.visualAsset
+                ? {
+                    visualAsset: {
+                      ...slide.plan.visualAsset,
+                      prompt: normalizeChinesePunctuation(slide.plan.visualAsset.prompt),
+                    },
+                  }
+                : {}),
+            },
+          }
         : {}),
       ...(slide.blocks ? { blocks: slide.blocks.map(normalizeBlock) } : {}),
     })),

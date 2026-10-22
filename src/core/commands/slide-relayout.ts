@@ -17,8 +17,19 @@ export interface RelayoutElements {
 const DEFAULT_TITLE = { x: 0.08, y: 0.08, width: 0.84, height: 0.12 };
 const DEFAULT_BODY = { x: 0.08, y: 0.26, width: 0.84, height: 0.58 };
 const NEUTRAL_COLORS = new Set([
-  "#FFFFFF", "#F3F5F7", "#E2E7EC", "#000000", "#111111", "#171A1F",
-  "#17181C", "#262626", "#293241", "#30343A", "#333333", "#3E4650", "#DCE3EA",
+  "#FFFFFF",
+  "#F3F5F7",
+  "#E2E7EC",
+  "#000000",
+  "#111111",
+  "#171A1F",
+  "#17181C",
+  "#262626",
+  "#293241",
+  "#30343A",
+  "#333333",
+  "#3E4650",
+  "#DCE3EA",
 ]);
 
 function normalizedFrame(frame: RectEmu, pageSize: PresentationDocument["pageSize"]): AiTemplateRegion["frame"] {
@@ -48,15 +59,21 @@ function unionFrames(frames: AiTemplateRegion["frame"][]): AiTemplateRegion["fra
 
 function contains(outer: RectEmu, inner: RectEmu): boolean {
   const tolerance = 9144; // 0.01 inch
-  return inner.x >= outer.x - tolerance
-    && inner.y >= outer.y - tolerance
-    && inner.x + inner.width <= outer.x + outer.width + tolerance
-    && inner.y + inner.height <= outer.y + outer.height + tolerance;
+  return (
+    inner.x >= outer.x - tolerance &&
+    inner.y >= outer.y - tolerance &&
+    inner.x + inner.width <= outer.x + outer.width + tolerance &&
+    inner.y + inner.height <= outer.y + outer.height + tolerance
+  );
 }
 
 function intersects(left: RectEmu, right: RectEmu): boolean {
-  return left.x < right.x + right.width && left.x + left.width > right.x
-    && left.y < right.y + right.height && left.y + left.height > right.y;
+  return (
+    left.x < right.x + right.width &&
+    left.x + left.width > right.x &&
+    left.y < right.y + right.height &&
+    left.y + left.height > right.y
+  );
 }
 
 function isLayoutBackground(element: SlideElement): boolean {
@@ -75,8 +92,10 @@ function reviewedText(slide: Slide): string {
     else if (block.type === "bullet-list") values.push(...block.items);
     else if (block.type === "quote") values.push(block.text, block.attribution ?? "");
     else if (block.type === "metric") values.push(block.label, block.value);
-    else if (block.type === "timeline" || block.type === "process") values.push(...block.items.flatMap((item) => [item.label, item.text]));
-    else if (block.type === "comparison") values.push(block.leftLabel, block.rightLabel, ...block.leftItems, ...block.rightItems);
+    else if (block.type === "timeline" || block.type === "process")
+      values.push(...block.items.flatMap((item) => [item.label, item.text]));
+    else if (block.type === "comparison")
+      values.push(block.leftLabel, block.rightLabel, ...block.leftItems, ...block.rightItems);
     else if (block.type === "table-data") values.push(...block.header, ...block.rows.flat());
   }
   return values.join("\n");
@@ -142,7 +161,11 @@ export function classifyRelayoutElements(slide: Slide): RelayoutElements {
     // Legacy editorial pages keep their list copy in decorative text boxes.
     // When the string is verbatim reviewed copy, it belongs to the generated
     // composition, not to a hand-written note.
-    if (element.type === "text" && element.contentRef === "decorative" && textFromReviewedCopy(element.text, reviewed)) {
+    if (
+      element.type === "text" &&
+      element.contentRef === "decorative" &&
+      textFromReviewedCopy(element.text, reviewed)
+    ) {
       decide(element, "generated");
     }
   }
@@ -156,7 +179,9 @@ export function classifyRelayoutElements(slide: Slide): RelayoutElements {
     for (const element of slide.elements) {
       if (generated.has(element.id) || preserved.has(element.id)) continue;
       if (element.type === "text" && element.contentRef === "decorative") {
-        const insideShape = slide.elements.some((candidate) => candidate.type === "shape" && contains(candidate.frame, element.frame));
+        const insideShape = slide.elements.some(
+          (candidate) => candidate.type === "shape" && contains(candidate.frame, element.frame),
+        );
         if (insideShape) {
           generated.add(element.id);
           changed = true;
@@ -166,8 +191,13 @@ export function classifyRelayoutElements(slide: Slide): RelayoutElements {
     for (const element of slide.elements) {
       if (generated.has(element.id) || preserved.has(element.id)) continue;
       if (element.type !== "shape") continue;
-      const containsGenerated = slide.elements.some((candidate) => generated.has(candidate.id) && contains(element.frame, candidate.frame));
-      const overlapsGenerated = slide.elements.some((candidate) => generated.has(candidate.id) && candidate.type === "shape" && intersects(element.frame, candidate.frame));
+      const containsGenerated = slide.elements.some(
+        (candidate) => generated.has(candidate.id) && contains(element.frame, candidate.frame),
+      );
+      const overlapsGenerated = slide.elements.some(
+        (candidate) =>
+          generated.has(candidate.id) && candidate.type === "shape" && intersects(element.frame, candidate.frame),
+      );
       if (containsGenerated || overlapsGenerated) {
         generated.add(element.id);
         changed = true;
@@ -198,7 +228,9 @@ function inferLayout(slide: Slide, document: PresentationDocument, generated: Sl
   if (/(引用|引言|金句|quote)/u.test(name)) return "quote";
   if (/(总结|summary)/u.test(name)) return "summary";
 
-  const texts = generated.filter((element): element is TextElement => element.type === "text" && element.contentRef !== "title");
+  const texts = generated.filter(
+    (element): element is TextElement => element.type === "text" && element.contentRef !== "title",
+  );
   const bodyFrames = texts.map((element) => element.frame);
   if (bodyFrames.length >= 2) {
     const left = bodyFrames.filter((frame) => frame.x < document.pageSize.width * 0.5);
@@ -235,9 +267,7 @@ function backgroundRangeFor(textColor: string): BackgroundRange {
   // A dark title needs a light background range to stay dark. The previous
   // polarity forced every dark title onto a dark range, so the contrast repair
   // turned it white on a white page.
-  return luminance < 0.45
-    ? { darkest: 0.68, lightest: 0.98 }
-    : { darkest: 0.02, lightest: 0.32 };
+  return luminance < 0.45 ? { darkest: 0.68, lightest: 0.98 } : { darkest: 0.02, lightest: 0.32 };
 }
 
 /**
@@ -249,19 +279,20 @@ export function inferRelayoutContext(slide: Slide, document: PresentationDocumen
   const classified = classifyRelayoutElements(slide);
   const allText = slide.elements.filter((element): element is TextElement => element.type === "text");
   const generatedText = classified.generated.filter((element): element is TextElement => element.type === "text");
-  const title = generatedText.find((element) => element.contentRef === "title")
-    ?? generatedText.find((element) => element.text.trim() === slide.content.title.trim())
-    ?? generatedText[0]
-    ?? allText.find((element) => element.contentRef === "title")
-    ?? allText[0];
-  const bodyTexts = (generatedText.length > 0 ? generatedText : allText)
-    .filter((element) => element !== title && element.contentRef !== "title");
+  const title =
+    generatedText.find((element) => element.contentRef === "title") ??
+    generatedText.find((element) => element.text.trim() === slide.content.title.trim()) ??
+    generatedText[0] ??
+    allText.find((element) => element.contentRef === "title") ??
+    allText[0];
+  const bodyTexts = (generatedText.length > 0 ? generatedText : allText).filter(
+    (element) => element !== title && element.contentRef !== "title",
+  );
 
-  const titleFrame = title
-    ? normalizedFrame(title.frame, document.pageSize)
-    : { ...DEFAULT_TITLE };
-  const bodyFrame = unionFrames(bodyTexts.map((element) => normalizedFrame(element.frame, document.pageSize)))
-    ?? { ...DEFAULT_BODY };
+  const titleFrame = title ? normalizedFrame(title.frame, document.pageSize) : { ...DEFAULT_TITLE };
+  const bodyFrame = unionFrames(bodyTexts.map((element) => normalizedFrame(element.frame, document.pageSize))) ?? {
+    ...DEFAULT_BODY,
+  };
   const safe = unionFrames([titleFrame, bodyFrame]) ?? { ...DEFAULT_BODY };
   const safeRegion = {
     x: Math.max(0, safe.x - 0.02),

@@ -27,24 +27,18 @@ interface PresentationDocument {
 
 内容块是语义事实，页面元素是呈现形式。`SlideElement.sourceContentId` 将一个呈现元素关联到内容块。允许一个内容块映射为多个视觉元素；删除最后一个映射时只删除呈现，除非用户明确发出内容删除命令。
 
-| 内容字段 | 设计字段 |
-|---|---|
-| 标题、正文、数值、表格数据 | 坐标、尺寸、旋转、层级 |
-| 图表语义数据 | 图表类型、配色、标签样式 |
-| 引用、来源、备注 | 字体、颜色、间距、背景 |
-| 页面语义顺序 | 版式、图片裁剪、阴影、3D 引用 |
+| 内容字段                   | 设计字段                      |
+| -------------------------- | ----------------------------- |
+| 标题、正文、数值、表格数据 | 坐标、尺寸、旋转、层级        |
+| 图表语义数据               | 图表类型、配色、标签样式      |
+| 引用、来源、备注           | 字体、颜色、间距、背景        |
+| 页面语义顺序               | 版式、图片裁剪、阴影、3D 引用 |
 
 ## 3. 强类型元素
 
 ```ts
 type SlideElement =
-  | TextElement
-  | ShapeElement
-  | ImageElement
-  | TableElement
-  | ChartElement
-  | GroupElement
-  | Scene3DElement;
+  TextElement | ShapeElement | ImageElement | TableElement | ChartElement | GroupElement | Scene3DElement;
 
 interface ElementBase {
   id: ElementId;
@@ -85,13 +79,13 @@ interface ElementBase {
 
 ## 5. Revision 规则
 
-| 变更 | document | content | design |
-|---|---:|---:|---:|
-| 修改正文或业务数据 | +1 | +1 | 0 |
-| 新增/删除/调整语义页面 | +1 | +1 | 0 |
-| 移动、缩放、换色、换版式 | +1 | 0 | +1 |
-| 同时拆页并重新排版 | +1 | +1 | +1 |
-| 选择、缩放视口等瞬时 UI 状态 | 0 | 0 | 0 |
+| 变更                         | document | content | design |
+| ---------------------------- | -------: | ------: | -----: |
+| 修改正文或业务数据           |       +1 |      +1 |      0 |
+| 新增/删除/调整语义页面       |       +1 |      +1 |      0 |
+| 移动、缩放、换色、换版式     |       +1 |       0 |     +1 |
+| 同时拆页并重新排版           |       +1 |      +1 |     +1 |
+| 选择、缩放视口等瞬时 UI 状态 |        0 |       0 |      0 |
 
 AI 设计任务记录开始时的三个 revision。应用结果前必须比较 `content` revision；不一致时转为冲突结果并重新评估受影响页面，禁止覆盖新内容。
 

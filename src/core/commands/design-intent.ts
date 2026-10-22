@@ -149,13 +149,17 @@ export function isCompositionLegal(composition: AiComposition, facts: Compositio
     case "columns":
       return facts.itemCount >= LAYOUT_CAPACITY.splitMinItems;
     case "grid":
-      return facts.itemCount >= LAYOUT_CAPACITY.cardsMinItems
-        && facts.itemCount <= LAYOUT_CAPACITY.cardsMaxItems
-        && facts.longestItemLength <= LAYOUT_CAPACITY.cardItemLengthLimit;
+      return (
+        facts.itemCount >= LAYOUT_CAPACITY.cardsMinItems &&
+        facts.itemCount <= LAYOUT_CAPACITY.cardsMaxItems &&
+        facts.longestItemLength <= LAYOUT_CAPACITY.cardItemLengthLimit
+      );
     case "editorial":
-      return facts.itemCount >= LAYOUT_CAPACITY.panelMinItems
-        && facts.itemCount <= LAYOUT_CAPACITY.panelMaxItems
-        && facts.shortItems;
+      return (
+        facts.itemCount >= LAYOUT_CAPACITY.panelMinItems &&
+        facts.itemCount <= LAYOUT_CAPACITY.panelMaxItems &&
+        facts.shortItems
+      );
     default:
       return false;
   }
@@ -172,12 +176,17 @@ export function isCompositionLegal(composition: AiComposition, facts: Compositio
 export function autoComposition(facts: CompositionFacts, options: { allowEditorial?: boolean } = {}): AiComposition {
   if (facts.hasRowBlock || facts.hasComparison) return "auto";
   const count = facts.itemCount;
-  const editorialRange = count >= LAYOUT_CAPACITY.panelMinItems && count <= LAYOUT_CAPACITY.panelMaxItems && facts.shortItems;
+  const editorialRange =
+    count >= LAYOUT_CAPACITY.panelMinItems && count <= LAYOUT_CAPACITY.panelMaxItems && facts.shortItems;
   // A page with a quote beside its points is an editorial page: the quote is
   // the anchor of the column. A split page and a summary page are editorial
   // pages as well, because they are the pages that carry an anchor instead of
   // a second column of copy.
-  if (options.allowEditorial !== false && editorialRange && (facts.hasQuote || facts.layout === "split" || facts.layout === "summary")) {
+  if (
+    options.allowEditorial !== false &&
+    editorialRange &&
+    (facts.hasQuote || facts.layout === "split" || facts.layout === "summary")
+  ) {
     return "editorial";
   }
   // A card page always becomes a grid. A title page becomes one only when its
@@ -185,12 +194,18 @@ export function autoComposition(facts: CompositionFacts, options: { allowEditori
   // the full six points of a grid.
   if (count >= LAYOUT_CAPACITY.cardsMinItems && count <= LAYOUT_CAPACITY.cardsMaxItems) {
     if (facts.layout === "cards") return "grid";
-    if (facts.shortItems && (facts.layout === "title-body" || facts.layout === "summary") && count >= LAYOUT_CAPACITY.cardsGridMinItems) return "grid";
+    if (
+      facts.shortItems &&
+      (facts.layout === "title-body" || facts.layout === "summary") &&
+      count >= LAYOUT_CAPACITY.cardsGridMinItems
+    )
+      return "grid";
     if (facts.shortItems && facts.layout === "split" && count === LAYOUT_CAPACITY.cardsMaxItems) return "grid";
   }
   // A split page, and a card page that holds more points than a grid can
   // carry, are drawn as two columns.
-  if (count > 1 && (facts.layout === "split" || (facts.layout === "cards" && count > LAYOUT_CAPACITY.cardsMaxItems))) return "columns";
+  if (count > 1 && (facts.layout === "split" || (facts.layout === "cards" && count > LAYOUT_CAPACITY.cardsMaxItems)))
+    return "columns";
   return "stacked";
 }
 

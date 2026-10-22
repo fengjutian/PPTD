@@ -88,10 +88,14 @@ describe("snap position", () => {
   });
 
   it("picks the closest of several lines of the same tier", () => {
-    const hit = snapPosition(inch(1.06), [
-      { position: inch(1), tier: TARGET_TIER.grid },
-      { position: inch(1.08), tier: TARGET_TIER.grid },
-    ], inch(0.2));
+    const hit = snapPosition(
+      inch(1.06),
+      [
+        { position: inch(1), tier: TARGET_TIER.grid },
+        { position: inch(1.08), tier: TARGET_TIER.grid },
+      ],
+      inch(0.2),
+    );
     expect(hit?.position).toBe(inch(1.08));
   });
 });

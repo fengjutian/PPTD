@@ -27,7 +27,10 @@ export function patchPictureCrops(xml: string, crops: readonly (ImageCrop | unde
  * Writes the crops of every slide into the package. A slide without a crop is
  * left untouched, so a failure here can never cost a deck its pictures.
  */
-export function patchImageCrops(entries: Record<string, Uint8Array>, cropsBySlide: readonly (readonly (ImageCrop | undefined)[])[]): number {
+export function patchImageCrops(
+  entries: Record<string, Uint8Array>,
+  cropsBySlide: readonly (readonly (ImageCrop | undefined)[])[],
+): number {
   let patched = 0;
   cropsBySlide.forEach((crops, slideIndex) => {
     if (crops.length === 0) return;

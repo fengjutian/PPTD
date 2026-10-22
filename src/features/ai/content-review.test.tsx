@@ -27,7 +27,12 @@ import {
   withSlideIds,
 } from "./content-review";
 
-const plan = { purpose: "介绍作者经历", conclusion: "经历塑造了作品气质", visualIntent: "structured-text" as const, density: "medium" as const };
+const plan = {
+  purpose: "介绍作者经历",
+  conclusion: "经历塑造了作品气质",
+  visualIntent: "structured-text" as const,
+  density: "medium" as const,
+};
 
 function createDraft(): AiDraft {
   return aiDraftSchema.parse({
@@ -96,13 +101,19 @@ describe("content review metrics", () => {
 
   it("reports blocking issues with the page each one should jump to", () => {
     const draft = createDraft();
-    expect(reviewIssues(draft)).toEqual([{ kind: "missing-title", indexes: [1], message: "还有 1 页缺少标题", blocking: true }]);
+    expect(reviewIssues(draft)).toEqual([
+      { kind: "missing-title", indexes: [1], message: "还有 1 页缺少标题", blocking: true },
+    ]);
 
     const empty: AiDraft = {
       ...draft,
-      slides: draft.slides.map((slide, index) => (index === 1 ? { ...slide, title: "空白页", body: "", blocks: [] } : slide)),
+      slides: draft.slides.map((slide, index) =>
+        index === 1 ? { ...slide, title: "空白页", body: "", blocks: [] } : slide,
+      ),
     };
-    expect(reviewIssues(empty)).toEqual([{ kind: "empty-content", indexes: [1], message: "还有 1 页没有内容", blocking: true }]);
+    expect(reviewIssues(empty)).toEqual([
+      { kind: "empty-content", indexes: [1], message: "还有 1 页没有内容", blocking: true },
+    ]);
   });
 
   it("warns about duplicate titles without blocking confirmation", () => {
@@ -182,7 +193,9 @@ describe("content review metrics", () => {
     expect(isSlideEdited({ ...draft.slides[0]!, body: "改过的正文" }, draft.slides[0])).toBe(true);
     // A block-only edit (for example a corrected metric value) must still count,
     // because the block is what the deck renders.
-    expect(isSlideEdited({ ...draft.slides[0]!, blocks: [{ type: "bullet-list", items: ["字希文"] }] }, draft.slides[0])).toBe(true);
+    expect(
+      isSlideEdited({ ...draft.slides[0]!, blocks: [{ type: "bullet-list", items: ["字希文"] }] }, draft.slides[0]),
+    ).toBe(true);
     expect(isSlideEdited(draft.slides[0]!, undefined)).toBe(false);
   });
 
@@ -246,12 +259,21 @@ describe("structured content editing", () => {
   });
 
   it("trims blank table cells out of the plain-text projection", () => {
-    expect(bodyFromBlocks([{ type: "table-data", header: ["项目", " "], rows: [["营收", ""]] }])).toBe("项目 | \n营收 | ");
+    expect(bodyFromBlocks([{ type: "table-data", header: ["项目", " "], rows: [["营收", ""]] }])).toBe(
+      "项目 | \n营收 | ",
+    );
   });
 });
 
 describe("table grid editing", () => {
-  const table = { type: "table-data" as const, header: ["项目", "数值"], rows: [["营收", "38万"], ["成本", "12万"]] };
+  const table = {
+    type: "table-data" as const,
+    header: ["项目", "数值"],
+    rows: [
+      ["营收", "38万"],
+      ["成本", "12万"],
+    ],
+  };
 
   it("moves between cells like a grid and appends a row from the last one", () => {
     expect(tableCellKeyAction("ArrowDown", 0, 2, true)).toEqual({ type: "focus", row: 1 });
@@ -265,8 +287,15 @@ describe("table grid editing", () => {
 
   it("flags a table the document model cannot store", () => {
     expect(tableBlockOversized(table)).toBe(false);
-    expect(tableBlockOversized({ ...table, header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`) })).toBe(true);
-    expect(tableBlockOversized({ ...table, rows: Array.from({ length: TABLE_REVIEW_MAX_ROWS + 1 }, () => ["a", "b"]) })).toBe(true);
+    expect(
+      tableBlockOversized({
+        ...table,
+        header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`),
+      }),
+    ).toBe(true);
+    expect(
+      tableBlockOversized({ ...table, rows: Array.from({ length: TABLE_REVIEW_MAX_ROWS + 1 }, () => ["a", "b"]) }),
+    ).toBe(true);
     // A wider row is storable but is called out separately: the export would
     // drop the cells the header has no column for.
     expect(tableBlockOversized({ ...table, rows: [["a", "b", "c"]] })).toBe(false);
@@ -276,13 +305,26 @@ describe("table grid editing", () => {
     const draft = createDraft();
     const wide: AiDraft = {
       ...draft,
-      slides: [{ ...draft.slides[0]!, blocks: [{ ...table, header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`) }] }],
+      slides: [
+        {
+          ...draft.slides[0]!,
+          blocks: [{ ...table, header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`) }],
+        },
+      ],
     };
     expect(reviewIssues(wide)).toEqual([
-      { kind: "table-too-large", indexes: [0], message: `还有 1 页表格超过上限（最多 ${TABLE_REVIEW_MAX_COLUMNS} 列、${TABLE_REVIEW_MAX_ROWS} 行）`, blocking: true },
+      {
+        kind: "table-too-large",
+        indexes: [0],
+        message: `还有 1 页表格超过上限（最多 ${TABLE_REVIEW_MAX_COLUMNS} 列、${TABLE_REVIEW_MAX_ROWS} 行）`,
+        blocking: true,
+      },
     ]);
 
-    const ragged: AiDraft = { ...draft, slides: [{ ...draft.slides[0]!, blocks: [{ ...table, rows: [["营收", "38万", "备注"]] }] }] };
+    const ragged: AiDraft = {
+      ...draft,
+      slides: [{ ...draft.slides[0]!, blocks: [{ ...table, rows: [["营收", "38万", "备注"]] }] }],
+    };
     expect(reviewIssues(ragged)).toEqual([
       { kind: "table-ragged", indexes: [0], message: "还有 1 页表格行比表头宽，导出会丢失多出的列", blocking: true },
     ]);
@@ -292,10 +334,15 @@ describe("table grid editing", () => {
     const draft = createDraft();
     const withImage: AiDraft = {
       ...draft,
-      slides: [{
-        ...draft.slides[0]!,
-        plan: { ...draft.slides[0]!.plan, visualAsset: { enabled: true, prompt: "一间明亮的现代化数据中心", role: "side" } },
-      }],
+      slides: [
+        {
+          ...draft.slides[0]!,
+          plan: {
+            ...draft.slides[0]!.plan,
+            visualAsset: { enabled: true, prompt: "一间明亮的现代化数据中心", role: "side" },
+          },
+        },
+      ],
     };
     const markup = renderReview(withImage);
     // 审核阶段是唯一还没花钱生成图片的时机：这一页要配什么图必须看得见。
@@ -308,20 +355,39 @@ describe("table grid editing", () => {
     const draft = createDraft();
     const withImage: AiDraft = {
       ...draft,
-      slides: [{
-        ...draft.slides[0]!,
-        plan: { ...draft.slides[0]!.plan, visualAsset: { enabled: true, prompt: "一块写着「季度增长」的指示牌", role: "side" } },
-      }],
+      slides: [
+        {
+          ...draft.slides[0]!,
+          plan: {
+            ...draft.slides[0]!.plan,
+            visualAsset: { enabled: true, prompt: "一块写着「季度增长」的指示牌", role: "side" },
+          },
+        },
+      ],
     };
     const issues = reviewIssues(withImage);
     // 配图的问题不阻塞审核：内容本身没问题，图的事可以之后再定。
-    expect(issues).toContainEqual({ kind: "image-text-request", indexes: [0], message: "画面描述里要求出现文字或字母，生成图的文字几乎总是错的", blocking: false });
+    expect(issues).toContainEqual({
+      kind: "image-text-request",
+      indexes: [0],
+      message: "画面描述里要求出现文字或字母，生成图的文字几乎总是错的",
+      blocking: false,
+    });
   });
 
-  it("treats a table whose cells are all blank as a page without content", () => {    const draft = createDraft();
-    const blank: AiDraft = { ...draft, slides: [{ ...draft.slides[0]!, body: "", blocks: [{ type: "table-data", header: ["", ""], rows: [["", ""]] }] }] };
+  it("treats a table whose cells are all blank as a page without content", () => {
+    const draft = createDraft();
+    const blank: AiDraft = {
+      ...draft,
+      slides: [{ ...draft.slides[0]!, body: "", blocks: [{ type: "table-data", header: ["", ""], rows: [["", ""]] }] }],
+    };
     expect(slideHasContent(blank.slides[0]!)).toBe(false);
-    expect(slideHasContent({ ...blank.slides[0]!, blocks: [{ type: "table-data", header: ["项目", ""], rows: [["", ""]] }] })).toBe(true);
+    expect(
+      slideHasContent({
+        ...blank.slides[0]!,
+        blocks: [{ type: "table-data", header: ["项目", ""], rows: [["", ""]] }],
+      }),
+    ).toBe(true);
     // Pages without blocks still fall back to their body copy.
     expect(slideHasContent({ ...draft.slides[0]!, blocks: [], body: "纯文本正文" })).toBe(true);
   });
@@ -393,7 +459,10 @@ describe("content review layout", () => {
 
   it("marks changed pages and names the destructive reset explicitly", () => {
     const original = withSlideIds(createDraft());
-    const edited = { ...original, slides: original.slides.map((slide, index) => index === 0 ? { ...slide, body: "修改后的正文" } : slide) };
+    const edited = {
+      ...original,
+      slides: original.slides.map((slide, index) => (index === 0 ? { ...slide, body: "修改后的正文" } : slide)),
+    };
     const markup = renderReview(edited, 0, original);
     expect(markup).toContain("已修改");
     expect(markup).toContain("1 页已修改");
@@ -404,7 +473,10 @@ describe("content review layout", () => {
 
   it("shows persisted review progress and the unified content block entry", () => {
     const draft = withSlideIds(createDraft());
-    const reviewed = { ...draft, slides: draft.slides.map((slide, index) => index === 0 ? { ...slide, reviewed: true } : slide) };
+    const reviewed = {
+      ...draft,
+      slides: draft.slides.map((slide, index) => (index === 0 ? { ...slide, reviewed: true } : slide)),
+    };
     const markup = renderReview(reviewed, 0, draft);
     expect(markup).toContain("1/2 页已审核");
     expect(markup).toContain("下一未审核页");
@@ -418,7 +490,10 @@ describe("content review layout", () => {
 
   it("keeps the per-page review flag when a draft is sanitized for history", () => {
     const draft = createDraft();
-    const saved = sanitizeDraftForSave({ ...draft, slides: draft.slides.map((slide, index) => ({ ...slide, reviewed: index === 0 })) });
+    const saved = sanitizeDraftForSave({
+      ...draft,
+      slides: draft.slides.map((slide, index) => ({ ...slide, reviewed: index === 0 })),
+    });
     expect(aiDraftSchema.parse(saved).slides.map((slide) => slide.reviewed)).toEqual([true, false]);
   });
 
@@ -464,7 +539,11 @@ describe("content review layout", () => {
     const withTable: AiDraft = {
       ...draft,
       slides: [
-        { ...draft.slides[0]!, title: "数据页", blocks: [{ type: "table-data", header: ["项目", "数值"], rows: [["营收", "38万"]] }] },
+        {
+          ...draft.slides[0]!,
+          title: "数据页",
+          blocks: [{ type: "table-data", header: ["项目", "数值"], rows: [["营收", "38万"]] }],
+        },
         draft.slides[1]!,
       ],
     };
@@ -478,7 +557,16 @@ describe("content review layout", () => {
     const wide: AiDraft = {
       ...withTable,
       slides: [
-        { ...withTable.slides[0]!, blocks: [{ type: "table-data", header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`), rows: [["a"]] }] },
+        {
+          ...withTable.slides[0]!,
+          blocks: [
+            {
+              type: "table-data",
+              header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`),
+              rows: [["a"]],
+            },
+          ],
+        },
         draft.slides[1]!,
       ],
     };
@@ -530,7 +618,10 @@ describe("layout pre-check", () => {
   });
 
   it("hangs the note of a point list on the list it talks about", () => {
-    const notes = slideCapacityNotes({ title: "标题", body: "", speakerNotes: "", plan, blocks: [{ type: "bullet-list", items: ["一", "二", "三"] }] }, 1);
+    const notes = slideCapacityNotes(
+      { title: "标题", body: "", speakerNotes: "", plan, blocks: [{ type: "bullet-list", items: ["一", "二", "三"] }] },
+      1,
+    );
     expect(notes.map((note) => note.scope)).toContain("items");
     expect(notes.every((note) => note.blockIndex === 0)).toBe(true);
   });
@@ -539,9 +630,21 @@ describe("layout pre-check", () => {
     // The advice and the layout have to come from the same thresholds, or the
     // review screen describes a page the generator does not build.
     const items = ["一条要点", "第二条要点", "第三条要点", "第四条要点", "第五条要点"];
-    const notes = slideCapacityNotes({ title: "标题", body: "", speakerNotes: "", plan, blocks: [{ type: "bullet-list", items }] }, 1);
+    const notes = slideCapacityNotes(
+      { title: "标题", body: "", speakerNotes: "", plan, blocks: [{ type: "bullet-list", items }] },
+      1,
+    );
     expect(notes.find((note) => note.message.includes("卡片网格"))!.message).toContain("3 列");
-    expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "structured-text", density: "medium", body: items.join("\n"), blocks: [{ type: "bullet-list", items }] })).toBe("cards");
+    expect(
+      chooseSlideLayout({
+        index: 1,
+        requested: "title-body",
+        visualIntent: "structured-text",
+        density: "medium",
+        body: items.join("\n"),
+        blocks: [{ type: "bullet-list", items }],
+      }),
+    ).toBe("cards");
   });
 
   it("shows the two sides of a comparison next to each other", () => {
@@ -552,7 +655,15 @@ describe("layout pre-check", () => {
         {
           ...draft.slides[0]!,
           title: "方案对比",
-          blocks: [{ type: "comparison", leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["稳定"], rightItems: ["快速"] }],
+          blocks: [
+            {
+              type: "comparison",
+              leftLabel: "方案 A",
+              rightLabel: "方案 B",
+              leftItems: ["稳定"],
+              rightItems: ["快速"],
+            },
+          ],
         },
         draft.slides[1]!,
       ],
@@ -573,7 +684,15 @@ describe("layout pre-check", () => {
         body: "",
         speakerNotes: "",
         plan,
-        blocks: [{ type: "comparison", leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["一", "二", "三", "四"], rightItems: ["一"] }],
+        blocks: [
+          {
+            type: "comparison",
+            leftLabel: "方案 A",
+            rightLabel: "方案 B",
+            leftItems: ["一", "二", "三", "四"],
+            rightItems: ["一"],
+          },
+        ],
       },
       1,
     );

@@ -3,7 +3,10 @@ import type { AiDraft } from "../../services/ai-service";
 import { hasStructuredBlock, requestsTextInImage, visualAssetIssues } from "./visual-asset-review";
 
 /** 一页带配图意图的草稿。 */
-function draftWith(visualAsset: AiDraft["slides"][number]["plan"]["visualAsset"], blocks: AiDraft["slides"][number]["blocks"] = []): AiDraft {
+function draftWith(
+  visualAsset: AiDraft["slides"][number]["plan"]["visualAsset"],
+  blocks: AiDraft["slides"][number]["blocks"] = [],
+): AiDraft {
   return {
     title: "季度业务回顾",
     presentationBrief: {
@@ -15,13 +18,21 @@ function draftWith(visualAsset: AiDraft["slides"][number]["plan"]["visualAsset"]
       narrativeStrategy: "management-report",
       assumptions: [],
     },
-    slides: [{
-      title: "营收达成预算目标",
-      body: "正文内容",
-      speakerNotes: "",
-      plan: { purpose: "页面目的", conclusion: "单一结论", visualIntent: "image-story", density: "medium", visualAsset },
-      blocks,
-    }],
+    slides: [
+      {
+        title: "营收达成预算目标",
+        body: "正文内容",
+        speakerNotes: "",
+        plan: {
+          purpose: "页面目的",
+          conclusion: "单一结论",
+          visualIntent: "image-story",
+          density: "medium",
+          visualAsset,
+        },
+        blocks,
+      },
+    ],
   };
 }
 
@@ -40,10 +51,9 @@ describe("配图意图的合规检查", () => {
   });
 
   it("页面已有结构化内容块时不再配图", () => {
-    const draft = draftWith(
-      { enabled: true, prompt: "明亮的现代化数据中心", role: "side" },
-      [{ type: "timeline", items: [{ label: "一月", text: "启动" }] }],
-    );
+    const draft = draftWith({ enabled: true, prompt: "明亮的现代化数据中心", role: "side" }, [
+      { type: "timeline", items: [{ label: "一月", text: "启动" }] },
+    ]);
     expect(hasStructuredBlock(draft.slides[0]!)).toBe(true);
     const issues = visualAssetIssues(draft);
     expect(issues.some((issue) => issue.kind === "image-on-structured-page")).toBe(true);
@@ -54,7 +64,13 @@ describe("配图意图的合规检查", () => {
       title: "标题",
       body: "正文",
       speakerNotes: "",
-      plan: { purpose: "目的", conclusion: "结论", visualIntent: "image-story" as const, density: "medium" as const, visualAsset: { enabled: true, prompt: "明亮的现代化数据中心", role: "side" as const } },
+      plan: {
+        purpose: "目的",
+        conclusion: "结论",
+        visualIntent: "image-story" as const,
+        density: "medium" as const,
+        visualAsset: { enabled: true, prompt: "明亮的现代化数据中心", role: "side" as const },
+      },
       blocks: [],
     }));
     const draft: AiDraft = { ...draftWith(undefined), slides };

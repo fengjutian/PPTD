@@ -7,7 +7,8 @@ import {
   type CapacityBlockFacts,
 } from "./layout-capacity";
 
-const points = (count: number, length = 8): string[] => Array.from({ length: count }, (_, index) => `${index + 1}. ${"点".repeat(length)}`);
+const points = (count: number, length = 8): string[] =>
+  Array.from({ length: count }, (_, index) => `${index + 1}. ${"点".repeat(length)}`);
 
 function assess(items: string[], overrides: Partial<Parameters<typeof assessLayoutCapacity>[0]> = {}) {
   return assessLayoutCapacity({ index: 1, title: "标题", items, bodyLength: 0, ...overrides });
@@ -61,7 +62,12 @@ describe("layout capacity rules", () => {
   });
 
   it("keeps the cover rules for the first page only", () => {
-    const cover = assessLayoutCapacity({ index: 0, title: "封面", items: points(1), bodyLength: LAYOUT_CAPACITY.coverBodyLength + 1 });
+    const cover = assessLayoutCapacity({
+      index: 0,
+      title: "封面",
+      items: points(1),
+      bodyLength: LAYOUT_CAPACITY.coverBodyLength + 1,
+    });
     expect(cover[0]!.message).toContain("超过封面");
     const content = assessLayoutCapacity({ index: 0, title: "封面", items: points(3), bodyLength: 0 });
     expect(content[0]).toMatchObject({ severity: "warning" });
@@ -76,31 +82,47 @@ describe("layout capacity rules", () => {
   });
 
   it("describes a comparison that is out of balance", () => {
-    const blocks: CapacityBlockFacts[] = [{ index: 0, type: "comparison", itemCount: 5, leftItems: ["a", "b", "c", "d"], rightItems: ["e"] }];
+    const blocks: CapacityBlockFacts[] = [
+      { index: 0, type: "comparison", itemCount: 5, leftItems: ["a", "b", "c", "d"], rightItems: ["e"] },
+    ];
     const notes = assessLayoutCapacity({ index: 1, title: "对比", items: [], bodyLength: 0, blocks });
     expect(notes[0]).toMatchObject({ severity: "warning", scope: "comparison", blockIndex: 0 });
     expect(notes[0]!.message).toContain("两栏相差 3 条");
   });
 
   it("warns about a step row that has more steps than a row can carry", () => {
-    const blocks: CapacityBlockFacts[] = [{ index: 1, type: "timeline", itemCount: LAYOUT_CAPACITY.rowBlockMaxItems + 2 }];
+    const blocks: CapacityBlockFacts[] = [
+      { index: 1, type: "timeline", itemCount: LAYOUT_CAPACITY.rowBlockMaxItems + 2 },
+    ];
     const notes = assessLayoutCapacity({ index: 1, title: "里程碑", items: [], bodyLength: 0, blocks });
     expect(notes[0]).toMatchObject({ severity: "warning", scope: "block", blockIndex: 1 });
     expect(notes[0]!.message).toContain("会全部排上");
     // A row that fits stays silent.
-    const quiet = assessLayoutCapacity({ index: 1, title: "里程碑", items: [], bodyLength: 0, blocks: [{ index: 1, type: "timeline", itemCount: 3 }] });
+    const quiet = assessLayoutCapacity({
+      index: 1,
+      title: "里程碑",
+      items: [],
+      bodyLength: 0,
+      blocks: [{ index: 1, type: "timeline", itemCount: 3 }],
+    });
     expect(quiet).toHaveLength(0);
   });
 
   it("warns about a page that carries more metrics than a card grid can show", () => {
-    const blocks: CapacityBlockFacts[] = Array.from({ length: LAYOUT_CAPACITY.rowBlockMaxItems + 1 }, (_, index) => ({ index, type: "metric" as const, itemCount: 1 }));
+    const blocks: CapacityBlockFacts[] = Array.from({ length: LAYOUT_CAPACITY.rowBlockMaxItems + 1 }, (_, index) => ({
+      index,
+      type: "metric" as const,
+      itemCount: 1,
+    }));
     const notes = assessLayoutCapacity({ index: 1, title: "指标", items: [], bodyLength: 0, blocks });
     expect(notes[0]).toMatchObject({ severity: "warning", scope: "block", blockIndex: 0 });
     expect(notes[0]!.message).toContain("个指标");
   });
 
   it("does not describe a point list that the page does not carry", () => {
-    const blocks: CapacityBlockFacts[] = [{ index: 0, type: "comparison", itemCount: 2, leftItems: ["a"], rightItems: ["b"] }];
+    const blocks: CapacityBlockFacts[] = [
+      { index: 0, type: "comparison", itemCount: 2, leftItems: ["a"], rightItems: ["b"] },
+    ];
     const notes = assessLayoutCapacity({ index: 1, title: "对比", items: points(7), bodyLength: 0, blocks });
     expect(notes.every((note) => note.scope === "comparison")).toBe(true);
   });

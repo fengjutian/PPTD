@@ -24,7 +24,11 @@ export const TABLE_MAX_ROWS = 30;
 
 /** Whether a reviewed table block fits what the document model can persist. */
 export function tableFitsDocumentLimits(header: readonly string[], rows: readonly (readonly string[])[]): boolean {
-  return header.length <= TABLE_MAX_COLUMNS && rows.length <= TABLE_MAX_ROWS && rows.every((row) => row.length <= TABLE_MAX_COLUMNS);
+  return (
+    header.length <= TABLE_MAX_COLUMNS &&
+    rows.length <= TABLE_MAX_ROWS &&
+    rows.every((row) => row.length <= TABLE_MAX_COLUMNS)
+  );
 }
 
 /**

@@ -74,7 +74,7 @@ export function distributeFrames(frames: readonly RectEmu[], axis: "horizontal" 
   const ordered = [...frames].sort((left, right) => (horizontal ? left.x - right.x : left.y - right.y));
   const first = ordered[0]!;
   const last = ordered[ordered.length - 1]!;
-  const span = horizontal ? (last.x + last.width) - first.x : (last.y + last.height) - first.y;
+  const span = horizontal ? last.x + last.width - first.x : last.y + last.height - first.y;
   const occupied = ordered.reduce((sum, frame) => sum + (horizontal ? frame.width : frame.height), 0);
   const gap = (span - occupied) / (ordered.length - 1);
 
@@ -84,9 +84,7 @@ export function distributeFrames(frames: readonly RectEmu[], axis: "horizontal" 
     const size = horizontal ? frame.width : frame.height;
     const position = cursor;
     cursor += size + gap;
-    result.set(frame, horizontal
-      ? { ...frame, x: emu(position) }
-      : { ...frame, y: emu(position) });
+    result.set(frame, horizontal ? { ...frame, x: emu(position) } : { ...frame, y: emu(position) });
   }
   return frames.map((frame) => result.get(frame) ?? frame);
 }

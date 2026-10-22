@@ -50,7 +50,7 @@ export const LAYOUT_CAPACITY = {
  * may claim a different one, and then the page has more or less room, but the
  * review screen has to describe the page it can describe: the standard one.
  */
-export const DEFAULT_CONTENT_REGION = { left: 0.07, right: 0.93, top: 0.20, bottom: 0.87 } as const;
+export const DEFAULT_CONTENT_REGION = { left: 0.07, right: 0.93, top: 0.2, bottom: 0.87 } as const;
 
 /**
  * The geometry a content page lays out into. The renderer and the review
@@ -134,7 +134,7 @@ export function stripListPrefix(value: string): string {
 /** The height of the content area, as a fraction of the page height. */
 export function contentHeightFraction(): number {
   const region = DEFAULT_CONTENT_REGION;
-  const contentTop = region.top + Math.min(CONTENT_REGION.contentTopOffset, (region.bottom - region.top) * 0.30);
+  const contentTop = region.top + Math.min(CONTENT_REGION.contentTopOffset, (region.bottom - region.top) * 0.3);
   return region.bottom - contentTop;
 }
 
@@ -150,7 +150,8 @@ export interface LayoutCapacityNote {
 }
 
 /** The kinds of blocks a page can carry. */
-export type CapacityBlockType = "paragraph" | "bullet-list" | "quote" | "metric" | "timeline" | "process" | "comparison" | "table-data";
+export type CapacityBlockType =
+  "paragraph" | "bullet-list" | "quote" | "metric" | "timeline" | "process" | "comparison" | "table-data";
 
 /**
  * A block of a page, described the way the layout rules see it.
@@ -211,7 +212,12 @@ export function fitComparisonColumn(points: readonly string[], options: Capacity
   const pageHeight = options.pageHeightEmu ?? STANDARD_PAGE_HEIGHT_EMU;
   const pageWidthIn = pageWidth / EMU_PER_INCH;
   const pageHeightIn = pageHeight / EMU_PER_INCH;
-  const widthPt = (DEFAULT_CONTENT_REGION.right - DEFAULT_CONTENT_REGION.left) * CONTENT_REGION.comparisonColumnWidth * pageWidthIn * 72 - 0.07 * pageWidthIn * 72;
+  const widthPt =
+    (DEFAULT_CONTENT_REGION.right - DEFAULT_CONTENT_REGION.left) *
+      CONTENT_REGION.comparisonColumnWidth *
+      pageWidthIn *
+      72 -
+    0.07 * pageWidthIn * 72;
   const headerFraction = (CONTENT_REGION.comparisonLabelFontSizePt * 1.2) / 72 / pageHeightIn + 0.018;
   // The panel grows with its copy up to the content area, so a column is
   // measured against the whole area. The minimum panel height only decides how
@@ -220,7 +226,8 @@ export function fitComparisonColumn(points: readonly string[], options: Capacity
   const value = points.map((point) => `• ${point}`).join("\n\n");
   const preferred = CONTENT_REGION.comparisonItemFontSizePt;
   const minimum = CONTENT_REGION.comparisonMinimumItemFontSizePt;
-  const fitsAt = (size: number) => estimateTextLines(value, widthPt, size, options.fontFamily) * size * BODY_LINE_HEIGHT_RATIO <= availablePt;
+  const fitsAt = (size: number) =>
+    estimateTextLines(value, widthPt, size, options.fontFamily) * size * BODY_LINE_HEIGHT_RATIO <= availablePt;
   let fitted: number = minimum;
   for (let size = preferred; size >= minimum; size -= 1) {
     if (fitsAt(size)) {
@@ -251,7 +258,8 @@ export function assessLayoutCapacity(input: LayoutCapacityInput, options: Capaci
 
   // A title that does not fit its box does not wrap, it pushes into the copy
   // below it, so the writer has to know before the page is built.
-  const titleWidthPt = ((DEFAULT_CONTENT_REGION.right - DEFAULT_CONTENT_REGION.left) * STANDARD_PAGE_WIDTH_EMU) / EMU_PER_POINT;
+  const titleWidthPt =
+    ((DEFAULT_CONTENT_REGION.right - DEFAULT_CONTENT_REGION.left) * STANDARD_PAGE_WIDTH_EMU) / EMU_PER_POINT;
   const titleLines = estimateTextLines(input.title, titleWidthPt, TITLE_FONT_SIZE_PT, options.fontFamily);
   if (input.title.trim() && titleLines > 1) {
     notes.push({
@@ -266,19 +274,49 @@ export function assessLayoutCapacity(input: LayoutCapacityInput, options: Capaci
   if (!comparison && rowBlocks.length === 0) {
     if (input.index === 0) {
       if (count >= LAYOUT_CAPACITY.cardsGridMinItems) {
-        notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `首页有 ${count} 条要点，会排成内容页而不是封面` });
+        notes.push({
+          severity: "warning",
+          scope: "items",
+          blockIndex: input.itemBlockIndex,
+          message: `首页有 ${count} 条要点，会排成内容页而不是封面`,
+        });
       } else if (input.bodyLength > LAYOUT_CAPACITY.coverBodyLength) {
-        notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `首页正文 ${input.bodyLength} 字，超过封面 ${LAYOUT_CAPACITY.coverBodyLength} 字上限` });
+        notes.push({
+          severity: "warning",
+          scope: "items",
+          blockIndex: input.itemBlockIndex,
+          message: `首页正文 ${input.bodyLength} 字，超过封面 ${LAYOUT_CAPACITY.coverBodyLength} 字上限`,
+        });
       }
     } else if (count === 1) {
-      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: "本页只有 1 条要点，会排成一整栏正文，建议补到 2 条以上" });
+      notes.push({
+        severity: "info",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: "本页只有 1 条要点，会排成一整栏正文，建议补到 2 条以上",
+      });
     } else if (count === LAYOUT_CAPACITY.splitMinItems) {
-      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: "本页 2 条要点，排成双栏时每栏只有 1 条" });
+      notes.push({
+        severity: "info",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: "本页 2 条要点，排成双栏时每栏只有 1 条",
+      });
     } else if (count > LAYOUT_CAPACITY.cardsMaxItems) {
-      notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `本页 ${count} 条要点，超过卡片网格的 ${LAYOUT_CAPACITY.cardsMaxItems} 条上限，会挤成双栏或整栏正文，建议拆页` });
+      notes.push({
+        severity: "warning",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: `本页 ${count} 条要点，超过卡片网格的 ${LAYOUT_CAPACITY.cardsMaxItems} 条上限，会挤成双栏或整栏正文，建议拆页`,
+      });
     } else if (count >= LAYOUT_CAPACITY.cardsGridMinItems) {
       const columns = count === 3 || count >= 5 ? 3 : 2;
-      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: `本页 ${count} 条要点，可排成 ${columns} 列卡片网格` });
+      notes.push({
+        severity: "info",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: `本页 ${count} 条要点，可排成 ${columns} 列卡片网格`,
+      });
     }
 
     let longest = { index: -1, length: 0 };
@@ -287,15 +325,35 @@ export function assessLayoutCapacity(input: LayoutCapacityInput, options: Capaci
       if (length > longest.length) longest = { index: pointIndex, length };
     });
     if (longest.length > LAYOUT_CAPACITY.cardItemLengthLimit) {
-      notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过卡片版式 ${LAYOUT_CAPACITY.cardItemLengthLimit} 字上限，这页排不成卡片` });
+      notes.push({
+        severity: "warning",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过卡片版式 ${LAYOUT_CAPACITY.cardItemLengthLimit} 字上限，这页排不成卡片`,
+      });
     } else if (longest.length > LAYOUT_CAPACITY.shortItemLength) {
-      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过单行 ${LAYOUT_CAPACITY.shortItemLength} 字，卡片里会折行` });
+      notes.push({
+        severity: "info",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过单行 ${LAYOUT_CAPACITY.shortItemLength} 字，卡片里会折行`,
+      });
     }
 
     if (input.bodyLength > LAYOUT_CAPACITY.cardBodyLengthLimit) {
-      notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `正文 ${input.bodyLength} 字，超过卡片版式 ${LAYOUT_CAPACITY.cardBodyLengthLimit} 字上限，这页排不成卡片网格` });
+      notes.push({
+        severity: "warning",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: `正文 ${input.bodyLength} 字，超过卡片版式 ${LAYOUT_CAPACITY.cardBodyLengthLimit} 字上限，这页排不成卡片网格`,
+      });
     } else if (input.bodyLength > LAYOUT_CAPACITY.cardBodyLength) {
-      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: `正文 ${input.bodyLength} 字，卡片网格最多排 ${LAYOUT_CAPACITY.cardBodyLength} 字` });
+      notes.push({
+        severity: "info",
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: `正文 ${input.bodyLength} 字，卡片网格最多排 ${LAYOUT_CAPACITY.cardBodyLength} 字`,
+      });
     }
   }
 
@@ -325,15 +383,30 @@ export function assessLayoutCapacity(input: LayoutCapacityInput, options: Capaci
     const right = (comparison.rightItems ?? []).map(stripListPrefix);
     const difference = Math.abs(left.length - right.length);
     if (difference >= 2) {
-      notes.push({ severity: "warning", scope: "comparison", blockIndex: comparison.index, message: `左栏 ${left.length} 条、右栏 ${right.length} 条，两栏相差 ${difference} 条，版面会失衡` });
+      notes.push({
+        severity: "warning",
+        scope: "comparison",
+        blockIndex: comparison.index,
+        message: `左栏 ${left.length} 条、右栏 ${right.length} 条，两栏相差 ${difference} 条，版面会失衡`,
+      });
     }
     const side = left.length >= right.length ? "左栏" : "右栏";
     const longer = left.length >= right.length ? left : right;
     const fit = fitComparisonColumn(longer, options);
     if (!fit.fits) {
-      notes.push({ severity: "warning", scope: "comparison", blockIndex: comparison.index, message: `${side} ${longer.length} 条排不下 ${CONTENT_REGION.comparisonMinimumItemFontSizePt}pt 的可读下限，导出时会溢出` });
+      notes.push({
+        severity: "warning",
+        scope: "comparison",
+        blockIndex: comparison.index,
+        message: `${side} ${longer.length} 条排不下 ${CONTENT_REGION.comparisonMinimumItemFontSizePt}pt 的可读下限，导出时会溢出`,
+      });
     } else if (fit.fittedFontSizePt < fit.preferredFontSizePt) {
-      notes.push({ severity: "info", scope: "comparison", blockIndex: comparison.index, message: `${side} ${longer.length} 条要排到 ${fit.fittedFontSizePt}pt 才排得下` });
+      notes.push({
+        severity: "info",
+        scope: "comparison",
+        blockIndex: comparison.index,
+        message: `${side} ${longer.length} 条要排到 ${fit.fittedFontSizePt}pt 才排得下`,
+      });
     }
   }
 

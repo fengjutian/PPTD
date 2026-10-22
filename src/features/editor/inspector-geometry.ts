@@ -26,7 +26,12 @@ export function unitLabel(unit: LengthUnit): string {
  * follows the ratio the element had before the edit, so the shape never
  * silently changes its proportions.
  */
-export function resizeWithAspectLock(frame: RectEmu, field: "width" | "height", nextEdge: Emu, locked: boolean): RectEmu {
+export function resizeWithAspectLock(
+  frame: RectEmu,
+  field: "width" | "height",
+  nextEdge: Emu,
+  locked: boolean,
+): RectEmu {
   const next = { ...frame, [field]: nextEdge };
   if (!locked || frame.width <= 0 || frame.height <= 0) return next;
   const ratio = frame.width / frame.height;
