@@ -921,6 +921,51 @@ describe("document commands", () => {
     expect(copy.type === "table" && copy.contentBlockId).toBe(result.slides[1]!.content.blocks?.find((block) => block.type === "table-data")?.id);
   });
 
+  it("emphasises a range of a text without touching the approved copy", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "set-text-emphasis", slideId: slide.id, elementId: title.id, start: 0, end: 2, style: { bold: true } }));
+    const element = result.slides[0]!.elements[0]!;
+    expect(element.type === "text" && element.runs).toEqual([{ start: 0, end: 2, bold: true }]);
+    // The copy is content and the emphasis is design: the text itself does not
+    // move and the content hash stays the same.
+    expect(element.type === "text" && element.text).toBe(title.type === "text" ? title.text : "");
+    expect(result.slides[0]!.content.contentHash).toBe(source.slides[0]!.content.contentHash);
+  });
+
+  it("clears the emphasis of a range and keeps the rest of the text", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    const emphasised = produce(source, (draft) => applyCommand(draft, { type: "set-text-emphasis", slideId: slide.id, elementId: title.id, start: 0, end: 4, style: { bold: true } }));
+    const result = produce(emphasised, (draft) => applyCommand(draft, { type: "clear-text-emphasis", slideId: slide.id, elementId: title.id, start: 0, end: 2 }));
+    const element = result.slides[0]!.elements[0]!;
+    expect(element.type === "text" && element.runs).toEqual([{ start: 2, end: 4, bold: true }]);
+  });
+
+  it("drops the emphasis when the copy of the text changes", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    const emphasised = produce(source, (draft) => applyCommand(draft, { type: "set-text-emphasis", slideId: slide.id, elementId: title.id, start: 0, end: 2, style: { bold: true } }));
+    const result = produce(emphasised, (draft) => applyCommand(draft, { type: "edit-text", slideId: slide.id, elementId: title.id, text: "新的标题" }));
+    const element = result.slides[0]!.elements[0]!;
+    // The fragments addressed the old copy, so they would point at other words
+    // now. Dropping them keeps the emphasis honest.
+    expect(element.type === "text" && element.runs).toBeUndefined();
+    expect(element.type === "text" && element.text).toBe("新的标题");
+  });
+
+  it("refuses an emphasis that leaves the text", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    const command = { type: "set-text-emphasis" as const, slideId: slide.id, elementId: title.id, start: 0, end: 999, style: { bold: true } };
+    expect(commandDomain(command)).toBe("design");
+    expect(() => produce(source, (draft) => applyCommand(draft, command))).toThrow("INVALID_TEXT_EMPHASIS");
+  });
+
   it("keeps the table cells in the content so a design command cannot rewrite them", () => {    const source = createDocument();
     const content = {
       title: "检测能力",

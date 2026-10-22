@@ -5,6 +5,7 @@ import versionThreeFixture from "./__fixtures__/v3-document.json";
 import versionFourFixture from "./__fixtures__/v4-document.json";
 import versionFiveFixture from "./__fixtures__/v5-document.json";
 import versionSixFixture from "./__fixtures__/v6-document.json";
+import versionSevenFixture from "./__fixtures__/v7-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -66,6 +67,17 @@ describe("presentation document schema", () => {
     expect(versionSixFixture.schemaVersion).toBe(6);
   });
 
+  it("migrates the fixed version 7 fixture and invents no emphasis", () => {
+    const migrated = parsePresentationDocument(versionSevenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.elements).toHaveLength(1);
+    // A version 7 document predates the styled fragments, so the migration keeps
+    // every page and renders one uniform style per text box.
+    const element = migrated.slides[0]!.elements[0]!;
+    expect(element.type === "text" && element.runs).toBeUndefined();
+    expect(versionSevenFixture.schemaVersion).toBe(7);
+  });
+
   it("accepts a native table that points at a reviewed table block", () => {
     const document = createDocument();
     const block = { id: crypto.randomUUID(), type: "table-data" as const, header: ["项目", "数值"], rows: [["样本量", "38万"]] };
@@ -80,6 +92,22 @@ describe("presentation document schema", () => {
       style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, headerFill: "#3366CC", headerTextColor: "#FFFFFF", bodyTextColor: "#17181c", borderColor: "#E2E7EC", firstColumnBold: true },
     });
     expect(presentationDocumentSchema.parse(document).slides[0]!.elements[1]!.type).toBe("table");
+  });
+
+  it("accepts styled fragments of a text and refuses a fragment outside the text", () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.runs = [{ start: 0, end: 2, bold: true }];
+    expect(presentationDocumentSchema.parse(document).slides[0]!.elements[0]!.type === "text"
+      ? presentationDocumentSchema.parse(document).slides[0]!.elements[0]!.runs
+      : undefined).toEqual([{ start: 0, end: 2, bold: true }]);
+
+    const invalid = createDocument();
+    const broken = invalid.slides[0]!.elements[0]!;
+    if (broken.type !== "text") throw new Error("expected a text element");
+    broken.runs = [{ start: 0, end: -1 }];
+    expect(() => presentationDocumentSchema.parse(invalid)).toThrow();
   });
 
   it("accepts explicit element provenance and rejects an unknown origin", () => {    const document = createDocument();

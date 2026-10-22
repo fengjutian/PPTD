@@ -202,10 +202,10 @@ export async function buildPptx(
           align: element.style.align,
           // The canvas draws text from the top of its frame; the export has to
           // agree or the file no longer looks like what the editor shows.
-          valign: "top",
+          valign: "top" as const,
           margin: 0,
           breakLine: false,
-          fit: "shrink",
+          fit: "shrink" as const,
         };
         // A text with styled fragments is written as real runs, so the emphasis
         // stays editable in PowerPoint instead of being flattened into the

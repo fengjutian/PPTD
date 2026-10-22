@@ -1,3 +1,5 @@
+import type { SchemaVersion } from "./schema";
+
 export type Brand<T, B extends string> = T & { readonly __brand: B };
 export type DocumentId = Brand<string, "DocumentId">;
 export type SlideId = Brand<string, "SlideId">;
@@ -226,7 +228,7 @@ export interface Slide {
 
 export interface PresentationDocument {
   id: DocumentId;
-  schemaVersion: 7;
+  schemaVersion: SchemaVersion;
   title: string;
   pageSize: { width: Emu; height: Emu };
   revisions: Revisions;

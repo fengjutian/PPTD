@@ -241,8 +241,24 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
-  it("refuses to export a table whose cells are gone", async () => {
+  it("writes an emphasised text as real runs so the emphasis stays editable", async () => {
     const document = createDocument();
+    document.slides[0]!.content.status = "approved";
+    const title = document.slides[0]!.elements[0]!;
+    if (title.type !== "text") throw new Error("expected a text element");
+    title.text = "覆盖机构：12万";
+    title.runs = [{ start: 0, end: 4, bold: true }];
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    // Two runs instead of one uniform run: the emphasis is a run of its own.
+    expect((slideXml.match(/<a:r>/g) ?? []).length).toBe(2);
+    expect(slideXml).toContain('b="1"');
+    expect(slideXml).toContain("覆盖机构");
+    expect(slideXml).toContain("：12万");
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("refuses to export a table whose cells are gone", async () => {    const document = createDocument();
     document.slides[0]!.elements.push({
       id: crypto.randomUUID() as never,
       type: "table",

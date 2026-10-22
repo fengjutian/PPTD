@@ -505,35 +505,50 @@ fn recovery_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn save_recovery(app: tauri::AppHandle, mut document: Value) -> Result<(), String> {
+pub fn save_recovery(app: tauri::AppHandle, document: Value) -> Result<(), String> {
     let path = recovery_path(&app)?;
-    externalize_images(&path, &mut document)?;
-    atomic_write_json(&path, &document)?;
-    cleanup_old_asset_versions(&path, &current_asset_version(&document));
+    save_recovery_at(&path, document)
+}
+
+/// 写入恢复副本。落盘用临时文件加原子替换，中断时保留上一个有效版本。
+fn save_recovery_at(path: &Path, mut document: Value) -> Result<(), String> {
+    externalize_images(path, &mut document)?;
+    atomic_write_json(path, &document)?;
+    cleanup_old_asset_versions(path, &current_asset_version(&document));
     Ok(())
 }
 
 #[tauri::command]
 pub fn load_recovery(app: tauri::AppHandle) -> Result<Option<Value>, String> {
     let path = recovery_path(&app)?;
+    load_recovery_at(&path)
+}
+
+/// 读取恢复副本。文件不存在时返回空，文件损坏时报告错误而不是返回半个文档。
+fn load_recovery_at(path: &Path) -> Result<Option<Value>, String> {
     if !path.is_file() {
         return Ok(None);
     }
-    ensure_project_size(&path)?;
-    let file = File::open(&path).map_err(|error| format!("RECOVERY_OPEN_FAILED: {error}"))?;
+    ensure_project_size(path)?;
+    let file = File::open(path).map_err(|error| format!("RECOVERY_OPEN_FAILED: {error}"))?;
     let mut document: Value =
         serde_json::from_reader(file).map_err(|error| format!("RECOVERY_JSON_INVALID: {error}"))?;
-    hydrate_images(&path, &mut document)?;
+    hydrate_images(path, &mut document)?;
     Ok(Some(document))
 }
 
 #[tauri::command]
 pub fn clear_recovery(app: tauri::AppHandle) -> Result<(), String> {
     let path = recovery_path(&app)?;
+    clear_recovery_at(&path)
+}
+
+/// 清除恢复副本与其资源目录。没有恢复文件时也不应该报错。
+fn clear_recovery_at(path: &Path) -> Result<(), String> {
     if path.exists() {
-        fs::remove_file(&path).map_err(|error| format!("RECOVERY_DELETE_FAILED: {error}"))?;
+        fs::remove_file(path).map_err(|error| format!("RECOVERY_DELETE_FAILED: {error}"))?;
     }
-    let assets = assets_root(&path)?;
+    let assets = assets_root(path)?;
     if assets.exists() {
         fs::remove_dir_all(&assets)
             .map_err(|error| format!("RECOVERY_ASSETS_DELETE_FAILED: {error}"))?;
@@ -1484,5 +1499,129 @@ mod tests {
             Some("#F5F1E8")
         );
         assert_eq!(extract_background_color(&themed).as_deref(), Some("bg1"));
+    }
+
+    /// 一份带内嵌图片的恢复文档，用来验证恢复链路真的能把图片带回来。
+    fn recovery_document() -> Value {
+        json!({
+            "schemaVersion": 2,
+            "title": "恢复测试",
+            "revisions": { "document": 3 },
+            "slides": [{
+                "elements": [{
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "type": "image",
+                    "source": { "kind": "embedded", "dataUrl": "data:image/png;base64,iVBORw0KGgo=", "mimeType": "image/png" }
+                }]
+            }]
+        })
+    }
+
+    #[test]
+    fn saves_and_restores_a_recovery_copy() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("latest.pptd");
+        let value = json!({ "schemaVersion": 2, "title": "恢复测试" });
+
+        save_recovery_at(&path, value.clone()).unwrap();
+
+        assert_eq!(load_recovery_at(&path).unwrap(), Some(value));
+    }
+
+    #[test]
+    fn restores_the_embedded_images_of_a_recovery_copy() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("latest.pptd");
+
+        save_recovery_at(&path, recovery_document()).unwrap();
+
+        // 落盘时图片变成资源引用，读回时必须还原成内嵌数据。
+        let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(
+            stored
+                .pointer("/slides/0/elements/0/source/dataUrl")
+                .and_then(Value::as_str),
+            Some("asset://revision-3/33333333-3333-4333-8333-333333333333.png")
+        );
+        let restored = load_recovery_at(&path).unwrap().expect("recovery copy must exist");
+        assert_eq!(
+            restored
+                .pointer("/slides/0/elements/0/source/dataUrl")
+                .and_then(Value::as_str),
+            Some("data:image/png;base64,iVBORw0KGgo=")
+        );
+    }
+
+    #[test]
+    fn reports_a_corrupt_recovery_copy_instead_of_returning_half_a_document() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("latest.pptd");
+        fs::write(&path, b"{ this is not json").unwrap();
+
+        let error = load_recovery_at(&path).unwrap_err();
+
+        assert!(error.starts_with("RECOVERY_JSON_INVALID"));
+    }
+
+    #[test]
+    fn has_no_recovery_copy_until_one_is_written() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("latest.pptd");
+
+        assert_eq!(load_recovery_at(&path).unwrap(), None);
+    }
+
+    #[test]
+    fn clears_the_recovery_copy_and_its_assets() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("latest.pptd");
+        save_recovery_at(&path, recovery_document()).unwrap();
+        assert!(assets_root(&path).unwrap().exists());
+
+        clear_recovery_at(&path).unwrap();
+
+        assert!(!path.exists());
+        assert!(!assets_root(&path).unwrap().exists());
+        // 清除一个不存在的恢复副本不应该是错误。
+        clear_recovery_at(&path).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn keeps_the_previous_version_when_a_save_is_interrupted() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("project.pptd");
+        atomic_write(&path, b"{\"version\":1}").unwrap();
+
+        // 只读目录让写入在落到目标文件之前就失败：这是保存中断的样子。
+        let mut permissions = fs::metadata(directory.path()).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(directory.path(), permissions).unwrap();
+        let error = atomic_write(&path, b"{\"version\":2}").unwrap_err();
+        let mut writable = fs::metadata(directory.path()).unwrap().permissions();
+        writable.set_readonly(false);
+        fs::set_permissions(directory.path(), writable).unwrap();
+
+        assert!(error.starts_with("TEMP_FILE_CREATE_FAILED"), "{error}");
+        // 上一个有效版本必须完好无损。
+        assert_eq!(fs::read(&path).unwrap(), b"{\"version\":1}");
+    }
+
+    #[test]
+    fn replaces_the_previous_version_without_leaving_a_partial_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("project.pptd");
+
+        atomic_write(&path, b"{\"version\":1}").unwrap();
+        atomic_write(&path, b"{\"version\":2}").unwrap();
+
+        assert_eq!(fs::read(&path).unwrap(), b"{\"version\":2}");
+        // 临时文件被替换掉了，目录里只应该剩下目标文件。
+        let leftovers = fs::read_dir(directory.path())
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name() != "project.pptd")
+            .count();
+        assert_eq!(leftovers, 0);
     }
 }
