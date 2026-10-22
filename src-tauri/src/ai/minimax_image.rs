@@ -51,6 +51,17 @@ const ALLOWED_IMAGE_HOST_SUFFIXES: &[&str] = &[
     "minimax.com",
 ];
 
+/// 厂商实际存放生成结果的 OSS 区域端点。
+///
+/// 实测（2026-10-22）厂商并不把图片放在自己的 CDN 上，而是放在阿里云 OSS 的
+/// `hailuo-image-algeng-data` 桶里，主机名形如
+/// `hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com`。
+///
+/// 这里只放行**这一个区域端点**下的桶，而不是整个 `aliyuncs.com`：
+/// 放行整个云厂商域名等于允许厂商把请求引到任意人的桶上，等于没有白名单。
+/// 区域端点与厂商域名一样会变，真变了再改这一行。
+const ALLOWED_OSS_ENDPOINT_SUFFIXES: &[&str] = &["oss-cn-wulanchabu.aliyuncs.com"];
+
 pub static MINIMAX_IMAGE: MiniMaxImageProvider = MiniMaxImageProvider;
 
 #[derive(Clone, Copy)]
@@ -203,7 +214,11 @@ impl ImageProvider for MiniMaxImageProvider {
         let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
         let allowed = ALLOWED_IMAGE_HOST_SUFFIXES
             .iter()
-            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}")));
+            .any(|suffix| host == *suffix || host.ends_with(&format!(".{suffix}")))
+            // 厂商真实存放生成结果的是 OSS 区域端点下的桶。
+            || ALLOWED_OSS_ENDPOINT_SUFFIXES
+                .iter()
+                .any(|suffix| host.ends_with(&format!(".{suffix}")));
         if !allowed {
             return Err(
                 "AI_IMAGE_DOWNLOAD_FAILED: image host is not an official MiniMax domain".into(),
@@ -384,6 +399,31 @@ mod tests {
             MINIMAX_IMAGE
                 .ensure_image_url_allowed(url)
                 .expect("official hosts must be allowed");
+        }
+    }
+
+    #[test]
+    fn allows_downloads_from_the_oss_bucket_the_provider_actually_uses() {
+        // 实测：厂商把生成结果放在阿里云 OSS 的区域端点下。
+        MINIMAX_IMAGE
+            .ensure_image_url_allowed(
+                "https://hailuo-image-algeng-data.oss-cn-wulanchabu.aliyuncs.com/a.jpeg?Expires=1",
+            )
+            .expect("厂商实际使用的 OSS 端点必须放行");
+    }
+
+    #[test]
+    fn refuses_other_clouds_and_other_oss_regions() {
+        // 只放行厂商实际用的那一个区域端点，不是整个阿里云。
+        for url in [
+            "https://someone-else.oss-cn-shanghai.aliyuncs.com/a.jpg",
+            "https://evil.example.oss-cn-wulanchabu.aliyuncs.com.attacker.net/a.jpg",
+            "https://storage.googleapis.com/a.jpg",
+        ] {
+            let error = MINIMAX_IMAGE
+                .ensure_image_url_allowed(url)
+                .expect_err("非厂商端点必须被拒绝");
+            assert!(error.contains("official"), "{error}");
         }
     }
 

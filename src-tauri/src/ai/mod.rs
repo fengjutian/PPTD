@@ -8,6 +8,9 @@ pub mod minimax;
 pub mod minimax_image;
 pub mod stream;
 
+#[cfg(test)]
+mod live_image_tests;
+
 use base64::Engine;
 use serde::Serialize;
 use std::time::Duration;

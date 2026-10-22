@@ -110,31 +110,34 @@ export function resolveVisualAsset(input: {
   return { enabled: true, role: input.requestedRole ?? "side" };
 }
 
-/** 配图占页面多大比例。 */
-export const VISUAL_ASSET_SHARE = {
-  /** 主视觉：图占页面右侧，留出左侧文字区。 */
-  hero: { width: 0.46, height: 1 },
-  /** 侧栏：图占右侧一条。 */
-  side: { width: 0.34, height: 0.52 },
-  /** 通栏：图占整宽一条，压在文字上方。 */
-  band: { width: 1, height: 0.30 },
-} as const;
-
 /**
- * 一页的图会挤掉多少文字区。
+ * 每个角色要一张什么形状的图。
  *
- * 排版引擎用这个数字把文字框收窄，而不是把图叠在文字上面。
+ * 这份尺寸是**图与框共同的契约**：前端按它向图像模型请求，排版引擎按它给图
+ * 留框。两边用同一个数，图和框的比例才相等，填充裁剪才不必切掉画面。
+ *
+ * 之前两边各写各的：框由排版算出来，请求尺寸是随手写的（正方形、16:9），
+ * 结果一张 16:9 的图塞进 7.3:1 的横条里，四分之三的画面被切掉——
+ * 这正是"AI 配图一眼假"的来源之一，而且裁得越狠越像随便贴的素材。
+ *
+ * 尺寸还受厂商限制：边长在 [512, 2048] 之间且是 8 的倍数，所以最宽的比例
+ * 是 4:1（2048×512）。通栏角色因此最多只能是 4:1，再宽就生成不出来。
  */
-export function visualAssetTextShare(role: AiVisualAssetRole): { width: number; height: number; offsetX: number; offsetY: number } {
-  switch (role) {
-    case "hero":
-      return { width: 0.54, height: 1, offsetX: 0, offsetY: 0 };
-    case "side":
-      return { width: 0.62, height: 1, offsetX: 0, offsetY: 0 };
-    case "band":
-      return { width: 1, height: 0.70, offsetX: 0, offsetY: 0.30 };
-  }
-}
+export const VISUAL_ASSET_REQUEST_SIZE: Record<AiVisualAssetRole, { width: number; height: number }> = {
+  /** 主视觉：4:3，落在右半页。 */
+  hero: { width: 1024, height: 768 },
+  /** 侧栏图：2:1，落在右下角。 */
+  side: { width: 1024, height: 512 },
+  /** 通栏图：4:1，落在文字上方。 */
+  band: { width: 2048, height: 512 },
+};
+
+/** 每个角色的图框比例。图框按这个比例留，请求也按这个比例要。 */
+export const VISUAL_ASSET_ASPECT: Record<AiVisualAssetRole, number> = {
+  hero: 4 / 3,
+  side: 2,
+  band: 4,
+};
 
 /** 一个归一化的矩形。 */
 export interface NormalizedRect {
