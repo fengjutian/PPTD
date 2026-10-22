@@ -696,6 +696,8 @@ export function ContentReview({
   restoreUndoSlideIds,
   canUndo,
   canRedo,
+  regenerating,
+  regenerateProgress,
   onActiveIndexChange,
   onDraftTitleChange,
   onSlideFieldChange,

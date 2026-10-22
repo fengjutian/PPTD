@@ -272,3 +272,65 @@ async fn runs_the_whole_deck_pipeline_against_the_real_model() {
         "每页都必须有标题"
     );
 }
+
+/// 内容阶段是否真的产出配图意图。
+///
+/// 这是审核页能看到"这一页要配什么图"的前提。提示词里写了规则不等于模型
+/// 会照做，所以这里用**命令层线上跑的同一份提示词**去问真实模型。
+///
+/// 跑法：
+///
+/// ```text
+/// cargo test --lib content -- --ignored --nocapture
+/// ```
+#[tokio::test]
+#[ignore = "需要网络与真实凭据，按次计费"]
+async fn the_content_stage_really_produces_a_picture_intent() {
+    let api_key = match read_api_key(&MINIMAX) {
+        Ok(key) => key,
+        Err(error) => {
+            eprintln!("跳过：本机没有可用的 MiniMax 凭据（{error}）。");
+            return;
+        }
+    };
+
+    let prompt = crate::commands::ai::draft_prompt(4, TOPIC);
+    let draft = ask(
+        &api_key,
+        "你是 PPTD 的演示文稿写作者。只输出严格 JSON。",
+        &prompt,
+        0.4,
+    )
+    .await;
+
+    let slides = draft["slides"].as_array().cloned().unwrap_or_default();
+    let with_intent = slides
+        .iter()
+        .filter(|slide| slide["plan"]["visualAsset"].is_object())
+        .count();
+    for slide in &slides {
+        let asset = &slide["plan"]["visualAsset"];
+        eprintln!(
+            "  第 {} 页：配图={} role={} prompt={}",
+            slide["title"].as_str().unwrap_or_default(),
+            asset["enabled"].as_bool().unwrap_or(false),
+            asset["role"].as_str().unwrap_or("-"),
+            asset["prompt"].as_str().unwrap_or("-")
+        );
+    }
+    eprintln!("{with_intent}/{} 页带配图意图", slides.len());
+
+    assert!(!slides.is_empty(), "必须产出页面");
+    assert!(
+        with_intent > 0,
+        "内容阶段必须产出至少一页配图意图，否则审核页看不到配图计划"
+    );
+    // 画面描述里不能要求出现文字：生成图里的文字几乎总是错的。
+    for slide in &slides {
+        let prompt = slide["plan"]["visualAsset"]["prompt"].as_str().unwrap_or_default();
+        assert!(
+            !prompt.contains("文字") && !prompt.contains("标题"),
+            "画面描述不该要求画面出现文字：{prompt}"
+        );
+    }
+}
