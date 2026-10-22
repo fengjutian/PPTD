@@ -250,7 +250,10 @@ export function decodePng(bytes: Uint8Array): PixelImage {
   return { width, height, data };
 }
 
-function filterRow(type: number, row: Uint8Array, previous: Uint8Array, bytesPerRow: number, bytesPerPixel: number): Uint8Array {
+/** Bytes of a picture: a plain array or the clamped one the browser uses. */
+type Bytes = Uint8Array | Uint8ClampedArray;
+
+function filterRow(type: number, row: Bytes, previous: Bytes, bytesPerRow: number, bytesPerPixel: number): Uint8Array {
   const out = new Uint8Array(bytesPerRow);
   for (let x = 0; x < bytesPerRow; x += 1) {
     const value = row[x]!;
@@ -297,9 +300,9 @@ export function encodePng(image: PixelImage): Uint8Array {
 
   const bytesPerRow = width * 4;
   const raw = new Uint8Array((bytesPerRow + 1) * height);
-  let previous = new Uint8Array(bytesPerRow);
+  let previous: Bytes = new Uint8Array(bytesPerRow);
   for (let y = 0; y < height; y += 1) {
-    const row = data.subarray(y * bytesPerRow, y * bytesPerRow + bytesPerRow);
+    const row: Bytes = data.subarray(y * bytesPerRow, y * bytesPerRow + bytesPerRow);
     let bestType = 0;
     let bestRow = filterRow(0, row, previous, bytesPerRow, 4);
     let bestCost = filterCost(bestRow);

@@ -208,4 +208,14 @@ interface TextMeasurer {
 
 `fit-text` 命令把溢出文本的字号逐档下调到 8pt，只改 `style.fontSizePt`，属于设计态：不改文字、数字、来源与备注，内容哈希与审核状态不变，可撤销。它使用的溢出阈值与质量门完全一致，因此修复后质量门的溢出报告会真的消失。
 
-已知边界：canvas 只能量到浏览器**实际渲染**的字体，字体未安装时浏览器静默回退且无法被检出；度量解决宽度，不解决与 PowerPoint 之间的断行差异。详见 [0016 真实字体度量与文字适配](decisions/0016-real-text-metrics-port.md)。
+已知边界：度量本身不提供字体是否安装的信息，字体是否安装由 `src/services/font-availability.ts` 单独判定；度量解决宽度，不解决与 PowerPoint 之间的断行差异。详见 [0016 真实字体度量与文字适配](decisions/0016-real-text-metrics-port.md)。
+
+## 13. 导出视觉回归（V0.1 已实现）
+
+结构检查看不出"文件看起来变了"。视觉回归比对把导出的 PPTX 交给真正的演示文稿程序渲染成图片，再和参考图逐像素比较：
+
+- `src/core/rendering/png.ts`：不依赖图像库的 PNG 编解码。PowerPoint 写的是调色板 PNG，所以调色板、真彩色、灰度与带 alpha 的变体都要支持；隔行的图片明确拒绝，不读成错图。
+- `src/core/rendering/pixel-diff.ts`：纯像素比较。颜色通道有容差，尺寸不同不逐像素比较而是单独报出。
+- `src/core/rendering/visual-regression.ts`：回归判定。变化像素比例超过容忍度才算回归，尺寸不同一律算回归。
+
+渲染器是外部程序（首选 PowerPoint，其次 LibreOffice），每个渲染器有自己的一份参考图，参考图与生成它的机器绑定。检查写在 `tools/visual-regression/`，不随产品发布；没有可用渲染器时它会跳过并说明，而不是假装检查通过。详见 [0017 导出视觉回归比对](decisions/0017-export-visual-regression.md)。
