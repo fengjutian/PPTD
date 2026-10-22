@@ -195,7 +195,7 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
   return (
     <>
     <div className="property-form">
-      <PageProperties slideId={slideId} background={background} pageSize={pageSize} unit={unit} onCommand={onCommand} />
+      <PageProperties slideId={slideId} background={background} pageSize={pageSize} unit={unit} palette={palette} onCommand={onCommand} />
 
       {element.type === "text" && <InspectorSection title="内容">
         <label className="field">
@@ -472,22 +472,22 @@ interface PagePropertiesProps {
   background: string;
   pageSize: { width: Emu; height: Emu };
   unit: LengthUnit;
+  palette?: readonly string[];
   onCommand: (command: DocumentCommand) => void;
 }
 
-function PageProperties({ slideId, background, pageSize, unit, onCommand }: PagePropertiesProps) {
+function PageProperties({ slideId, background, pageSize, unit, palette, onCommand }: PagePropertiesProps) {
   return (
-    <section className="inspector-section page-section">
-      <h4>页面</h4>
+    <InspectorSection title="页面">
       <div className="field">
         <span className="field-label">幻灯片尺寸</span>
         {/* The size of the page is a property of the document, so it is read
             and not edited here. */}
         <span className="field-readonly">{`${emuToUnit(pageSize.width, unit).toFixed(2)} × ${emuToUnit(pageSize.height, unit).toFixed(2)} ${unitLabel(unit)}`}</span>
       </div>
-      <ColorField label="背景色" value={background} wide
+      <ColorField label="背景色" value={background} wide swatches={palette}
         onCommit={(next) => onCommand({ type: "set-slide-background", slideId, background: next })} />
-    </section>
+    </InspectorSection>
   );
 }
 
@@ -534,7 +534,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
               <button type="button" onClick={() => execute({ type: "add-shape", slideId: slide.id, shape: "rectangle" })}><Square />矩形</button>
             </div>
           </div>
-          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize} unit={unit} onCommand={execute} />
+          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize} unit={unit} palette={palette} onCommand={execute} />
         </div>}
     </aside>
   );

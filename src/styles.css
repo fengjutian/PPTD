@@ -489,11 +489,17 @@ button { color: inherit; }
 .inspector-warning button:disabled { opacity: .45; cursor: default; }
 .inspector-hint { margin: 10px 0 0; color: #7f838c; font-size: 11px; line-height: 1.6; }
 
-.inspector-section { padding: 14px 0; border-bottom: 1px solid #2c2e33; }
+.inspector-section { border-bottom: 1px solid #2c2e33; }
 .inspector-section:last-child { border-bottom: none; }
-.inspector-section h4 { margin: 0 0 11px; color: #8f939b; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
-.section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
-.section-head h4 { margin: 0; }
+.inspector-section h4 { margin: 0; color: #8f939b; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+/* 分区标题吸附在面板顶部，滚动时始终知道当前字段属于哪一组。 */
+.section-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -16px; padding: 11px 16px 9px; background: var(--panel-surface, #17181b); }
+.section-toggle { display: flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.section-toggle svg { width: 13px; height: 13px; color: #6f737c; transition: transform .15s ease; }
+.section-toggle svg.folded { transform: rotate(-90deg); }
+.section-toggle:hover h4 { color: #c9ccd2; }
+.section-body { padding: 2px 0 14px; }
+.section-tools { display: flex; align-items: center; gap: 6px; }
 .section-tools { display: flex; align-items: center; gap: 6px; }
 .segmented.compact { margin-left: 0; }
 .segmented.compact button { width: auto; padding: 0 8px; font-size: 11px; }
@@ -504,10 +510,22 @@ button { color: inherit; }
 .icon-button:disabled { opacity: .4; cursor: default; }
 .property-form .field { display: grid; gap: 6px; margin-bottom: 12px; }
 .property-form .field-label { color: #8f939b; font-size: 11px; }
+.property-form .field-label.scrubbable { cursor: ew-resize; user-select: none; }
+.property-form .field-label.scrubbable:hover { color: #c9ccd2; }
 .property-form .field-control { position: relative; display: flex; align-items: center; gap: 3px; }
 .property-form .field-control input { flex: 1; min-width: 0; padding-right: 8px; }
 .property-form .field-control input[type="number"] { padding: 8px 6px; }
 .property-form .field-unit { color: #6f737c; font-size: 10px; white-space: nowrap; }
+/* 单位放进输入框里，输入框右缘不再被单位顶出面板。 */
+.property-form .field-input { position: relative; flex: 1; min-width: 0; display: flex; }
+.property-form .field-input input { width: 100%; }
+.property-form .field-input .field-unit { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.property-form .field-input.with-unit input { padding-right: 26px; }
+.color-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.color-chip { width: 16px; height: 16px; padding: 0; border: 1px solid rgba(0, 0, 0, .22); border-radius: 4px; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease; }
+.color-chip:hover:not(:disabled) { transform: scale(1.12); }
+.color-chip.active { box-shadow: 0 0 0 2px var(--panel-surface, #17181b), 0 0 0 3px var(--ppt-accent); }
+.color-chip:disabled { opacity: .45; cursor: default; }
 .property-form input[type="number"]::-webkit-outer-spin-button,
 .property-form input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .property-form input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
@@ -525,6 +543,17 @@ button { color: inherit; }
 .align-group .align-actions { grid-template-columns: repeat(3, 1fr); margin: 0; }
 .align-group .align-actions button { display: grid; place-items: center; height: 28px; }
 .align-group .align-actions svg { width: 14px; height: 14px; }
+/* 对齐九宫格：行是垂直位置，列是水平位置。 */
+.align-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.align-cell { display: grid; place-items: center; height: 32px; padding: 0; border: 1px solid #3b3d44; border-radius: 6px; background: #292b30; color: #c9cbd0; cursor: pointer; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
+.align-cell:hover:not(:disabled) { border-color: var(--ppt-accent); color: #fff; }
+.align-cell:disabled { opacity: .4; cursor: default; }
+.align-mark { width: 15px; height: 15px; }
+.align-page { fill: none; stroke: currentColor; stroke-width: 1; opacity: .45; }
+.align-block { fill: currentColor; }
+/* 属性标题栏里的对象预览。 */
+.element-preview { position: relative; display: block; overflow: hidden; border: 1px solid var(--panel-border, #2c2e33); border-radius: 6px; }
+.element-preview-canvas { position: absolute; }
 .field-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .toggle-button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; border: 1px solid #3b3d44; border-radius: 6px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; }
 .toggle-button svg { width: 13px; height: 13px; }
