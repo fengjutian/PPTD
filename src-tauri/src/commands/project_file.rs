@@ -24,6 +24,16 @@ const MAX_TEMPLATE_PREVIEW_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES: usize = 2_048;
 const MAX_ARCHIVE_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
 const TEMPLATE_RENDER_TIMEOUT: Duration = Duration::from_secs(120);
+/// 缓存格式版本。渲染脚本、导出分辨率或缓存结构变化时递增，旧缓存自然失效。
+const LAYOUT_RENDER_CACHE_VERSION: &str = "v1";
+/// 缓存目录名，位于应用数据目录下，与模板库同级。
+const LAYOUT_RENDER_CACHE_DIR: &str = "layout-render-cache";
+/// 最多保留多少个模板的渲染缓存。
+const LAYOUT_RENDER_CACHE_MAX_TEMPLATES: usize = 8;
+/// 渲染缓存总体积上限，超出后按最旧优先删除。
+const LAYOUT_RENDER_CACHE_MAX_BYTES: u64 = 512 * 1024 * 1024;
+/// 单个模板最多渲染多少个版式。
+const LAYOUT_RENDER_MAX_LAYOUTS: usize = 128;
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -897,6 +907,14 @@ pub async fn render_pptx_template_layouts(
             return Err("TEMPLATE_NOT_FOUND".into());
         }
         validate_pptx_archive(&source)?;
+        // 版式渲染要拉起 PowerPoint 逐个版式导出图片，代价在秒级以上。模板内容
+        // 没变时直接复用上次结果：缓存键跟随内容摘要，模板被替换后自然失效。
+        let cache_root = layout_render_cache_root(&app);
+        let content_hash = template_content_hash(&source)?;
+        let cache_dir = cache_root.join(layout_render_cache_key(&content_hash));
+        if let Some(renders) = read_layout_render_cache(&cache_dir) {
+            return Ok(renders);
+        }
         let working =
             tempfile::tempdir().map_err(|error| format!("TEMPLATE_RENDER_TEMP_FAILED: {error}"))?;
         let working_pptx = working.path().join("template.pptx");
@@ -949,7 +967,7 @@ try {
             .filter_map(|(index, name)| index.parse::<usize>().ok().map(|index| (index, name.trim().to_owned())))
             .collect();
         let mut renders = Vec::new();
-        for index in 1..=128 {
+        for index in 1..=LAYOUT_RENDER_MAX_LAYOUTS {
             let path = output.join(format!("layout{index}.png"));
             if !path.is_file() {
                 continue;
@@ -968,10 +986,178 @@ try {
         if renders.is_empty() {
             return Err("TEMPLATE_LAYOUT_RENDER_EMPTY".into());
         }
+        // 缓存只是加速手段：写缓存或裁剪失败都不影响本次渲染结果。
+        let _ = write_layout_render_cache(&cache_dir, &output);
+        let _ = prune_layout_render_cache(&cache_root);
         Ok(renders)
     })
     .await
     .map_err(|error| format!("TEMPLATE_LAYOUT_RENDER_TASK_FAILED: {error}"))?
+}
+
+/// 渲染缓存与模板库同放在应用数据目录下。
+fn layout_render_cache_root(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join(LAYOUT_RENDER_CACHE_DIR))
+        .unwrap_or_else(|_| PathBuf::from(LAYOUT_RENDER_CACHE_DIR))
+}
+
+/// 模板内容的流式摘要。缓存键跟随内容而不是文件名，同名模板被替换也会重新渲染。
+fn template_content_hash(path: &Path) -> Result<String, String> {
+    let mut file =
+        File::open(path).map_err(|error| format!("TEMPLATE_HASH_READ_FAILED: {error}"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("TEMPLATE_HASH_READ_FAILED: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let digest = hasher.finalize();
+    Ok(hex_digest(&digest))
+}
+
+/// 缓存键包含渲染格式版本：渲染方式变化后旧缓存自动作废。
+fn layout_render_cache_key(content_hash: &str) -> String {
+    format!("{LAYOUT_RENDER_CACHE_VERSION}-{content_hash}")
+}
+
+/// 读回缓存的版式渲染。缓存缺失、不完整或损坏时返回 None，由调用方重新渲染。
+fn read_layout_render_cache(cache_dir: &Path) -> Option<Vec<TemplateLayoutRender>> {
+    let manifest = fs::read_to_string(cache_dir.join("layouts.tsv")).ok()?;
+    let layout_names: std::collections::HashMap<usize, String> = manifest
+        .lines()
+        .filter_map(|line| line.trim_start_matches('\u{feff}').split_once('\t'))
+        .filter_map(|(index, name)| {
+            index
+                .parse::<usize>()
+                .ok()
+                .map(|index| (index, name.trim().to_owned()))
+        })
+        .collect();
+    let mut renders = Vec::new();
+    for index in 1..=LAYOUT_RENDER_MAX_LAYOUTS {
+        let path = cache_dir.join(format!("layout{index}.png"));
+        let Ok(bytes) = fs::read(&path) else {
+            continue;
+        };
+        if bytes.is_empty() || bytes.len() > MAX_TEMPLATE_PREVIEW_BYTES as usize {
+            // 缓存内容异常：当作没有缓存，避免把坏数据交给调用方。
+            return None;
+        }
+        renders.push(TemplateLayoutRender {
+            layout_index: index,
+            layout_name: layout_names.get(&index).cloned().unwrap_or_default(),
+            data_url: format!("data:image/png;base64,{}", BASE64.encode(bytes)),
+        });
+    }
+    if renders.is_empty() {
+        None
+    } else {
+        Some(renders)
+    }
+}
+
+/// 写入渲染缓存。先写临时目录再改名，避免并发读取时看到半截缓存。
+fn write_layout_render_cache(cache_dir: &Path, render_dir: &Path) -> Result<(), String> {
+    let parent = cache_dir
+        .parent()
+        .ok_or_else(|| "TEMPLATE_LAYOUT_CACHE_PATH_INVALID".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("TEMPLATE_LAYOUT_CACHE_DIR_FAILED: {error}"))?;
+    // 临时目录名带进程号与纳秒时间戳，避免同一进程内并发渲染互相踩目录。
+    let staging = parent.join(format!(
+        ".staging-{}-{}-{}",
+        cache_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("cache"),
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default()
+    ));
+    let _ = fs::remove_dir_all(&staging);
+    fs::create_dir_all(&staging)
+        .map_err(|error| format!("TEMPLATE_LAYOUT_CACHE_DIR_FAILED: {error}"))?;
+    fs::copy(render_dir.join("layouts.tsv"), staging.join("layouts.tsv"))
+        .map_err(|error| format!("TEMPLATE_LAYOUT_CACHE_COPY_FAILED: {error}"))?;
+    for index in 1..=LAYOUT_RENDER_MAX_LAYOUTS {
+        let name = format!("layout{index}.png");
+        let source = render_dir.join(&name);
+        if source.is_file() {
+            fs::copy(&source, staging.join(&name))
+                .map_err(|error| format!("TEMPLATE_LAYOUT_CACHE_COPY_FAILED: {error}"))?;
+        }
+    }
+    if cache_dir.exists() {
+        fs::remove_dir_all(cache_dir)
+            .map_err(|error| format!("TEMPLATE_LAYOUT_CACHE_REPLACE_FAILED: {error}"))?;
+    }
+    fs::rename(&staging, cache_dir)
+        .map_err(|error| format!("TEMPLATE_LAYOUT_CACHE_REPLACE_FAILED: {error}"))?;
+    Ok(())
+}
+
+/// 限制缓存体积：超出模板数量或总体积上限时，按最旧优先删除。
+fn prune_layout_render_cache(cache_root: &Path) -> Result<(), String> {
+    let Ok(entries) = fs::read_dir(cache_root) else {
+        return Ok(());
+    };
+    let mut candidates: Vec<(SystemTime, PathBuf, u64)> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let modified = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .unwrap_or(UNIX_EPOCH);
+        let size = directory_size(&path);
+        candidates.push((modified, path, size));
+    }
+    candidates.sort_by_key(|candidate| candidate.0);
+    let mut total: u64 = candidates.iter().map(|(_, _, size)| *size).sum();
+    let mut count = candidates.len();
+    for (_, path, size) in candidates {
+        if count <= LAYOUT_RENDER_CACHE_MAX_TEMPLATES && total <= LAYOUT_RENDER_CACHE_MAX_BYTES {
+            break;
+        }
+        if fs::remove_dir_all(&path).is_ok() {
+            total = total.saturating_sub(size);
+            count = count.saturating_sub(1);
+        }
+    }
+    Ok(())
+}
+
+/// 目录占用的字节数。统计失败按 0 计，不让统计问题阻断缓存写入。
+fn directory_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| {
+            entry
+                .metadata()
+                .map(|metadata| {
+                    if metadata.is_dir() {
+                        directory_size(&entry.path())
+                    } else {
+                        metadata.len()
+                    }
+                })
+                .unwrap_or(0)
+        })
+        .sum()
 }
 
 fn read_zip_text(
@@ -1841,5 +2027,74 @@ mod tests {
             .filter(|entry| entry.file_name() != "project.pptd")
             .count();
         assert_eq!(leftovers, 0);
+    }
+
+    #[test]
+    fn layout_render_cache_round_trips_the_rendered_layouts() {
+        let directory = tempfile::tempdir().unwrap();
+        let render_dir = directory.path().join("renders");
+        fs::create_dir_all(&render_dir).unwrap();
+        fs::write(render_dir.join("layouts.tsv"), "1\t标题页\n2\t正文页\n").unwrap();
+        fs::write(render_dir.join("layout1.png"), b"first").unwrap();
+        fs::write(render_dir.join("layout2.png"), b"second").unwrap();
+
+        let cache_dir = directory.path().join("cache").join("v1-abc");
+        write_layout_render_cache(&cache_dir, &render_dir).unwrap();
+
+        let cached = read_layout_render_cache(&cache_dir).unwrap();
+        assert_eq!(cached.len(), 2);
+        assert_eq!(cached[0].layout_index, 1);
+        assert_eq!(cached[0].layout_name, "标题页");
+        assert!(cached[0].data_url.starts_with("data:image/png;base64,"));
+        assert_eq!(cached[1].layout_name, "正文页");
+    }
+
+    #[test]
+    fn an_incomplete_layout_render_cache_is_treated_as_a_miss() {
+        let directory = tempfile::tempdir().unwrap();
+        let cache_dir = directory.path().join("cache");
+        fs::create_dir_all(&cache_dir).unwrap();
+        // 只有清单没有图片：不算命中，必须重新渲染。
+        fs::write(cache_dir.join("layouts.tsv"), "1\t标题页\n").unwrap();
+        assert!(read_layout_render_cache(&cache_dir).is_none());
+    }
+
+    #[test]
+    fn the_layout_render_cache_key_follows_the_template_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let first = directory.path().join("first.pptx");
+        let second = directory.path().join("second.pptx");
+        fs::write(&first, b"template-one").unwrap();
+        fs::write(&second, b"template-two").unwrap();
+
+        let first_hash = template_content_hash(&first).unwrap();
+        let second_hash = template_content_hash(&second).unwrap();
+        assert_ne!(first_hash, second_hash);
+        // 同一份内容重复上传命中同一份缓存，替换内容则重新渲染。
+        assert_eq!(first_hash, template_content_hash(&first).unwrap());
+        assert_eq!(
+            layout_render_cache_key(&first_hash),
+            layout_render_cache_key(&template_content_hash(&first).unwrap())
+        );
+    }
+
+    #[test]
+    fn pruning_keeps_the_layout_render_cache_within_its_template_limit() {
+        let directory = tempfile::tempdir().unwrap();
+        let cache_root = directory.path().join("cache");
+        fs::create_dir_all(&cache_root).unwrap();
+        for index in 0..(LAYOUT_RENDER_CACHE_MAX_TEMPLATES + 3) {
+            let entry = cache_root.join(format!("v1-{index}"));
+            fs::create_dir_all(&entry).unwrap();
+            fs::write(entry.join("layouts.tsv"), format!("1\t版式{index}\n")).unwrap();
+        }
+
+        prune_layout_render_cache(&cache_root).unwrap();
+
+        let remaining = fs::read_dir(&cache_root).unwrap().count();
+        assert!(
+            remaining <= LAYOUT_RENDER_CACHE_MAX_TEMPLATES,
+            "{remaining}"
+        );
     }
 }

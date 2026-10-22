@@ -27,10 +27,10 @@ button { color: inherit; }
 .app-shell.module-shell { grid-template-rows: 1fr 28px; }
 .topbar { grid-column: 2 / -1; grid-row: 1; display: flex; align-items: center; gap: 22px; padding: 0 16px; background: #101114; border-bottom: 1px solid #303136; z-index: 3; }
 .brand { width: 178px; display: flex; align-items: center; gap: 10px; }
-.brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--ppt-accent); color: #fff; font-weight: 800; font-size: 19px; transform: rotate(-4deg); }
-.brand div { display: flex; flex-direction: column; line-height: 1.15; }
-.brand strong { letter-spacing: .08em; font-size: 15px; }
-.brand small { color: #858991; font-size: 10px; margin-top: 4px; white-space: nowrap; }
+.brand-mark { flex: 0 0 34px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--ppt-accent); color: #fff; font-weight: 800; font-size: 19px; transform: rotate(-4deg); }
+.brand div { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.brand strong { letter-spacing: .08em; font-size: 15px; white-space: nowrap; }
+.brand small { color: #858991; font-size: 10px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .toolbar-group { display: flex; align-items: center; gap: 4px; }
 .insert-tools { margin-left: auto; }
 .separator { width: 1px; height: 24px; background: #34363c; margin: 0 5px; }
