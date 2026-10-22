@@ -152,7 +152,7 @@ pub struct ImageRequest {
 ///
 /// 图片以 data URL 内联返回：厂商给出的下载地址有有效期，页面里的图片需要长期
 /// 留在项目文件里，不能依赖外部链接。
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ImageResult {
     pub data_url: String,
     pub mime_type: String,
@@ -613,10 +613,16 @@ async fn download_image(
     if !(200..300).contains(&status) {
         return Err(format!("AI_IMAGE_DOWNLOAD_FAILED: HTTP {status}"));
     }
+    read_image_body(response, cancel).await
+}
+
+/// 读取下载好的图片，并检查体积上限。
+async fn read_image_body(
+    response: reqwest::Response,
+    cancel: &CancelToken,
+) -> Result<(Vec<u8>, Option<String>), String> {
     if let Some(length) = response.content_length() {
-        if length > MAX_IMAGE_BYTES as u64 {
-            return Err("AI_IMAGE_DOWNLOAD_FAILED: image is too large".into());
-        }
+        ensure_image_size(length)?;
     }
     let content_type = response
         .headers()
@@ -630,10 +636,16 @@ async fn download_image(
     }
     .map_err(|error| format!("AI_IMAGE_DOWNLOAD_FAILED: {error}"))?;
     // 响应可能没有声明长度，读完之后还要再查一次。
-    if bytes.len() > MAX_IMAGE_BYTES {
+    ensure_image_size(bytes.len() as u64)?;
+    Ok((bytes.to_vec(), content_type))
+}
+
+/// 图片体积上限检查。
+fn ensure_image_size(length: u64) -> Result<(), String> {
+    if length > MAX_IMAGE_BYTES as u64 {
         return Err("AI_IMAGE_DOWNLOAD_FAILED: image is too large".into());
     }
-    Ok((bytes.to_vec(), content_type))
+    Ok(())
 }
 
 /// 从图片字节里识别常见格式。
@@ -947,9 +959,183 @@ mod tests {
         );
     }
 
+    /// 图像生成相关测试。
+    mod image_tests {
+        use super::*;
+
+        /// 构造一个只有文件头的 PNG，用来验证尺寸解析。
+        fn png_bytes(width: u32, height: u32) -> Vec<u8> {
+            let mut bytes = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+            bytes.extend_from_slice(&13u32.to_be_bytes());
+            bytes.extend_from_slice(b"IHDR");
+            bytes.extend_from_slice(&width.to_be_bytes());
+            bytes.extend_from_slice(&height.to_be_bytes());
+            bytes.extend_from_slice(&[8, 6, 0, 0, 0]);
+            bytes.extend_from_slice(&0u32.to_be_bytes());
+            bytes
+        }
+
+        /// 构造一个带 SOF0 段的 JPEG，用来验证尺寸解析。
+        fn jpeg_bytes(width: u16, height: u16) -> Vec<u8> {
+            let mut bytes = vec![0xff, 0xd8, 0xff, 0xc0];
+            bytes.extend_from_slice(&17u16.to_be_bytes());
+            bytes.push(8);
+            bytes.extend_from_slice(&height.to_be_bytes());
+            bytes.extend_from_slice(&width.to_be_bytes());
+            bytes.extend_from_slice(&[3, 1, 0x11, 0]);
+            bytes.extend_from_slice(&[0xff, 0xd9]);
+            bytes
+        }
+
+        fn image_provider() -> &'static dyn ImageProvider {
+            let provider = resolve(None).expect("默认厂商必须存在");
+            resolve_image_provider(provider).expect("默认厂商必须支持图像生成")
+        }
+
+        #[test]
+        fn resolves_the_image_model_and_rejects_unknown_ones() {
+            let provider = image_provider();
+            assert_eq!(
+                resolve_image_model(provider, None).unwrap(),
+                provider.default_image_model()
+            );
+            assert_eq!(
+                resolve_image_model(provider, Some("image-01-live".into())).unwrap(),
+                "image-01-live"
+            );
+            // 对话模型名不能传给图像接口。
+            let error = resolve_image_model(provider, Some("MiniMax-M3".into())).unwrap_err();
+            assert!(error.starts_with("AI_IMAGE_MODEL_UNSUPPORTED"), "{error}");
+        }
+
+        #[test]
+        fn reports_a_provider_error_hidden_inside_a_successful_response() {
+            let payload = serde_json::json!({
+                "data": { "image_base64": ["QUJD"] },
+                "base_resp": { "status_code": 1008, "status_msg": "insufficient balance" }
+            });
+            let (code, message) = base_resp_failure(&payload).expect("必须识别出厂商错误码");
+            assert_eq!(code, 1008);
+            assert_eq!(message, "insufficient balance");
+            let ok = serde_json::json!({ "base_resp": { "status_code": 0, "status_msg": "success" } });
+            assert!(base_resp_failure(&ok).is_none());
+        }
+
+        #[test]
+        fn reads_the_pixel_size_of_png_and_jpeg_bytes() {
+            assert_eq!(image_dimensions(&png_bytes(1280, 720)), Some((1280, 720)));
+            assert_eq!(image_dimensions(&jpeg_bytes(640, 480)), Some((640, 480)));
+            assert_eq!(detect_image_mime(&png_bytes(1, 1)), Some("image/png"));
+            assert_eq!(detect_image_mime(&jpeg_bytes(1, 1)), Some("image/jpeg"));
+            assert_eq!(detect_image_mime(b"not an image"), None);
+        }
+
+        #[tokio::test]
+        async fn turns_a_base64_response_into_a_data_url() {
+            let provider = image_provider();
+            let client = reqwest::Client::new();
+            let cancel = CancelToken::new();
+            let encoded = base64::engine::general_purpose::STANDARD.encode(png_bytes(1280, 720));
+            let result = materialize_image(
+                provider,
+                &client,
+                ImagePayload::Base64 {
+                    data: format!("data:image/png;base64,{encoded}"),
+                    mime_type: None,
+                },
+                &cancel,
+                (800, 600),
+            )
+            .await
+            .expect("内嵌图片必须能转成 data URL");
+            assert_eq!(result.mime_type, "image/png");
+            assert_eq!((result.width, result.height), (1280, 720));
+            assert!(result.data_url.starts_with("data:image/png;base64,"));
+        }
+
+        #[tokio::test]
+        async fn refuses_an_image_body_that_is_too_large() {
+            // 只回一次响应头的本地服务器：体积上限必须在读正文之前生效。
+            let url = spawn_static_server(
+                "HTTP/1.1 200 OK\r\nContent-Length: 30000000\r\nContent-Type: image/png\r\n\r\n",
+            );
+            let response = reqwest::get(&url).await.expect("本地服务器必须应答");
+            let error = read_image_body(response, &CancelToken::new())
+                .await
+                .expect_err("超大响应体必须被拒绝");
+            assert!(error.contains("too large"), "{error}");
+        }
+
+        #[tokio::test]
+        async fn refuses_to_download_an_image_from_a_foreign_host() {
+            // 地址检查发生在发请求之前：厂商返回的地址不能被当成任意 URL。
+            let provider = image_provider();
+            let client = reqwest::Client::new();
+            let error = download_image(
+                provider,
+                &client,
+                "https://evil.example.com/a.png",
+                &CancelToken::new(),
+            )
+            .await
+            .expect_err("非官方域名必须被拒绝");
+            assert!(error.contains("official"), "{error}");
+        }
+
+        #[tokio::test]
+        async fn refuses_to_download_an_image_over_plain_http() {
+            let url = spawn_static_server("HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\nx");
+            let provider = image_provider();
+            let client = reqwest::Client::new();
+            let error = download_image(provider, &client, &url, &CancelToken::new())
+                .await
+                .expect_err("明文地址必须被拒绝");
+            assert!(error.contains("https"), "{error}");
+        }
+
+        #[tokio::test]
+        async fn image_generation_gives_up_immediately_when_the_task_was_cancelled() {
+            let provider = image_provider();
+            let cancel = CancelToken::new();
+            cancel.cancel();
+            let body = ImageRequest {
+                model: provider.default_image_model().to_string(),
+                prompt: "取消测试".into(),
+                width: None,
+                height: None,
+            };
+            let error = generate_image(
+                provider,
+                "unused-key",
+                &body,
+                Duration::from_secs(30),
+                &cancel,
+            )
+            .await
+            .expect_err("已取消的任务不能产出图片");
+            assert_eq!(error, REQUEST_CANCELLED_ERROR);
+        }
+    }
+
+    /// 起一个只回一次固定响应的本地服务器，返回它的地址。
+    fn spawn_static_server(response: &'static str) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a test port");
+        let address = listener.local_addr().expect("read the test address");
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            use std::io::{Read, Write};
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request);
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        });
+        format!("http://{address}/image")
+    }
+
     #[tokio::test]
-    async fn chat_gives_up_immediately_when_the_task_was_cancelled() {
-        // 取消后不应该再发出请求，也不应该等待厂商把整份草稿写完。
+    async fn chat_gives_up_immediately_when_the_task_was_cancelled() {        // 取消后不应该再发出请求，也不应该等待厂商把整份草稿写完。
         let provider = resolve(None).unwrap();
         let cancel = CancelToken::new();
         cancel.cancel();

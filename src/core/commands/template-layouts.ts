@@ -10,6 +10,7 @@
 
 import type { BackgroundRange } from "../rendering/contrast";
 import type { AiComposition, AiDensityTarget, AiEmphasis, AiPalette } from "./design-intent";
+import type { AiVisualAsset } from "./visual-asset";
 
 export interface AiNormalizedRect { x: number; y: number; width: number; height: number }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
@@ -67,6 +68,14 @@ export interface AiSlideDesign {
    * the palette of its template while the choice still has an effect.
    */
   palette?: AiPalette;
+  /**
+   * Whether this page carries a picture, and what the picture shows.
+   *
+   * The model decides that a page wants an image and describes the image; the
+   * renderer decides where the image goes. A model that placed pictures by
+   * hand would produce pages nobody can edit.
+   */
+  visualAsset?: AiVisualAsset;
   safeRegion?: AiNormalizedRect;
   obstacleRegions?: AiNormalizedRect[];
   hierarchyAction?: "keep" | "strengthen-title" | "reduce-density" | "increase-whitespace";

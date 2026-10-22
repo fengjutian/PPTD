@@ -87,6 +87,16 @@ export const aiPresentationDesignSchema = z.object({
       title: aiPaletteRoleSchema.optional(),
       body: aiPaletteRoleSchema.optional(),
     }).optional(),
+    /**
+     * Whether this page carries a picture. The model says yes or no and
+     * describes the picture; the renderer decides where it goes.
+     */
+    visualAsset: z.object({
+      enabled: z.boolean(),
+      /** What the picture shows. It describes the scene, never the wording. */
+      prompt: z.string().max(600).optional(),
+      role: z.enum(["hero", "side", "band"]).optional(),
+    }).optional(),
   })).min(1),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;

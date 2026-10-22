@@ -2455,7 +2455,7 @@ mod tests {
         clear_recovery_at(&path).unwrap();
     }
 
-    #[test]
+        #[test]
     fn never_exposes_a_half_written_file() {
         // 保存中断的可观测后果只有一个：读者永远只能看到完整的旧版本或完整的新版本，
         // 不能看到写了一半的文件。

@@ -20,6 +20,7 @@ import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout
 import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, stripListPrefix } from "./layout-capacity";
 import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, resolvePageDesign, type CompositionFacts } from "./design-intent";
 import { planDeckCompositions } from "./deck-composition";
+import { planVisualAssetLayout, resolveVisualAsset, type AiVisualAssetRole } from "./visual-asset";
 
 export type {
   AiElementRepair,
@@ -44,6 +45,27 @@ export type AiContentBlock =
   | { type: "process"; items: Array<{ label: string; text: string }> }
   | { type: "table-data"; header: string[]; rows: string[][] };
 export interface AiSlideDraft { title: string; body: string; speakerNotes: string; blocks?: AiContentBlock[]; plan?: { visualIntent: "hero" | "quote" | "timeline" | "comparison" | "process" | "data-chart" | "image-story" | "summary" | "structured-text" } }
+
+/**
+ * 一页已经生成好的配图。
+ *
+ * 图片是外部依赖的产物：可能没有凭据、可能超时、可能只生成了几页。
+ * 因此它是可选的，缺哪页就少哪页，文稿照常成立。
+ */
+export interface AiVisualAssetData {
+  /** 页面索引。 */
+  slideIndex: number;
+  /** 图片数据。 */
+  dataUrl: string;
+  /** 图片类型。 */
+  mimeType: SupportedImageMimeType;
+  /** 图片的原始像素宽。 */
+  naturalWidth: number;
+  /** 图片的原始像素高。 */
+  naturalHeight: number;
+  /** 替代文字，导出与无障碍读取都用它。 */
+  altText: string;
+}
 
 /**
  * The theme of the source template. It is design state: it describes the
@@ -150,7 +172,7 @@ const VERTICAL_ALIGN: Record<string, VerticalAlign | undefined> = { top: "top", 
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; templateTheme?: AiTemplateTheme; backgroundRhythm?: BackgroundRhythm }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; templateTheme?: AiTemplateTheme; backgroundRhythm?: BackgroundRhythm; visualAssets?: AiVisualAssetData[] }
   | { type: "relayout-slide"; slideId: SlideId }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
@@ -573,6 +595,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const shortItems = items.every((item) => cleanPoint(item).length <= LAYOUT_CAPACITY.shortItemLength);
       const longestItemLength = items.reduce((longest, item) => Math.max(longest, cleanPoint(item).length), 0);
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock);
+      // A picture for this page. It is generated outside the document, so a page
+      // without one simply has no picture: the deck still stands without it.
+      const visualAsset = command.visualAssets?.find((asset) => asset.slideIndex === index);
       // The rendered artwork and the placeholder geometry describe the same
       // layout, so editable text has to land on the geometry of the layout that
       // was actually chosen. Dropping the geometry whenever a background image

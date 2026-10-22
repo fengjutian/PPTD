@@ -867,7 +867,22 @@ pub async fn generate_presentation_design(
 
 palette 对象按 background、accent、title、body 四个位置各选一个角色。四个角色可以不同，例如封面用 surface 背景配 accent-2 强调，章节页用 primary 背景配 inverse 文字。
 
-六、输出合同
+六、视觉素材
+一页没有配图，就只剩文字和矩形。因此要在合适的地方给出配图意图。visualAsset 对象：
+- enabled：这一页是否配图，只能是布尔值。
+- prompt：画面描述，写画面本身（"一座明亮的现代化数据中心，几何线条构成的上升箭头"），不要写标题或正文文字，生成图里的文字几乎总是错的。
+- role：配图在页面上的角色，只能是以下之一：
+  - hero：整幅主视觉，图是这一页的主体，用于封面和章节页。
+  - side：侧栏配图，图在文字旁边，用于图文叙事页。
+  - band：通栏配图，图在文字上方或下方成一条横带。
+
+配图规则：
+1. 只给确实需要视觉锚点的页面配图：封面、章节页、图文叙事的正文页。每一页都配图会让整套演示变成相册。
+2. 有 quote、comparison、timeline、process、metric 或 table 内容块的页面不配图：内容块自己就是版面。
+3. 要点超过 4 条的页面不配图：图会挤掉正文。
+4. prompt 只描述画面，不要出现文字、字母或数字。
+
+七、输出合同
 1. 仅输出一个合法 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
 2. slides 数量必须与输入内容页数完全一致，顺序必须一致。
 3. 所有颜色必须为六位十六进制格式，例如 #1A2B3C。
@@ -876,7 +891,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 6. 不得输出坐标、字号、正文或装饰元素；这些由确定性排版引擎生成。
 
 严格输出结构：
-{"slides":[{"layout":"cover","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333"}]}"##;
+{"slides":[{"layout":"cover","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","visualAsset":{"enabled":true,"prompt":"一座明亮的现代化数据中心，几何线条构成的上升箭头","role":"hero"}}]}"##;
     let user_prompt = format!(
         "请依据 SlideBrief 为以下演示文稿选择逐页版式、构图、层级、密度和配色角色。SlideBrief 是页面目的、结论、视觉意图和密度的事实来源；不要跳过或改写它。\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、版式匹配 visualIntent 和 density、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
     );
