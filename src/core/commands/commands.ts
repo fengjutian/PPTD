@@ -1330,11 +1330,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         return ((right - left) * (bottom - top)) / area;
       };
       const pageArea = pageWidth * pageHeight;
-      const containsFrame = (outer: RectEmu, inner: RectEmu, tolerance = 9144): boolean =>
-        inner.x >= outer.x - tolerance
-        && inner.y >= outer.y - tolerance
-        && inner.x + inner.width <= outer.x + outer.width + tolerance
-        && inner.y + inner.height <= outer.y + outer.height + tolerance;
+      const overlapArea = (left: RectEmu, right: RectEmu): number => {
+        const width = Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x);
+        const height = Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y);
+        return width > 0 && height > 0 ? width * height : 0;
+      };
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
         // Text that sits inside a generated card, header bar or panel belongs to
@@ -1343,10 +1343,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // deck ends up with copy outside its boxes. Geometry repairs therefore
         // stop at the shape boundary; restyling is still allowed.
         const elementArea = element.frame.width * element.frame.height;
+        // The text frame is allowed to stand a little outside its container (a
+        // centred label can be a few points taller than the bar that carries
+        // it), so "belongs to" is measured by overlap, not full containment.
         const container = elementArea > 0
           ? slide.elements.find((candidate) => candidate.type === "shape"
             && candidate.frame.width * candidate.frame.height < pageArea * 0.4
-            && containsFrame(candidate.frame, element.frame))
+            && overlapArea(candidate.frame, element.frame) / elementArea >= 0.8)
           : undefined;
         const repair = element.text === content.title ? titleRepair : element.text === content.body ? bodyRepair : undefined;
         if (repair) {
@@ -1447,9 +1450,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.elements.forEach((element, elementIndex) => {
         if (element.type !== "text") return;
         let carrying: string | undefined;
+        const carrierArea = element.frame.width * element.frame.height;
         for (let candidateIndex = 0; candidateIndex < elementIndex; candidateIndex += 1) {
           const candidate = slide.elements[candidateIndex]!;
-          if (candidate.type === "shape" && containsFrame(candidate.frame, element.frame)) carrying = candidate.style.fill;
+          if (candidate.type === "shape" && carrierArea > 0 && overlapArea(candidate.frame, element.frame) / carrierArea >= 0.8) carrying = candidate.style.fill;
         }
         const large = isLargeText(element.style.fontSizePt, element.style.bold);
         if (!carrying && keepsArtwork) {

@@ -28,6 +28,12 @@ export const TARGET_TIER = {
 
 export type TargetTier = (typeof TARGET_TIER)[keyof typeof TARGET_TIER];
 
+/** 一条参考线。x 方向的线是竖线，y 方向的线是横线。 */
+export interface SnapGuide {
+  axis: SnapAxis;
+  position: number;
+}
+
 export interface SnapTarget {
   /** 目标在轴上的位置，EMU。 */
   position: number;

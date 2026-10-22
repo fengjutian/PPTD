@@ -87,9 +87,14 @@ function splitByConnectors(title: string): { segments: string[]; connectors: str
   return { segments, connectors };
 }
 
-/** 去掉标题两端的空白和句末标点。 */
+/**
+ * 去掉标题两端的空白和句末标点。
+ *
+ * 标点先规范化：半角逗号夹在中文中间时，它不是连接词，是模型没写完的活儿。
+ * 不规范化就直接拿它切段，会把几页本来结构不同的标题判成"共用同一句法骨架"。
+ */
 function normalize(title: string): string {
-  return title.trim().replace(/[。.!！?？；;]+$/u, "");
+  return normalizeChinesePunctuation(title.trim()).replace(/[。.!！?？；;]+$/u, "");
 }
 
 /** 标题是不是某个栏目名，或者"栏目名 + 后缀"。 */

@@ -157,7 +157,14 @@ async fn runs_the_whole_deck_pipeline_against_the_real_model() {
         .await;
         let title = slide["title"].as_str().unwrap_or_default().to_string();
         let body = slide["body"].as_str().unwrap_or_default().to_string();
-        eprintln!("=== 第 {} 页 ===", pages.iter().position(|p| p["title"] == page["title"]).map(|i| i + 1).unwrap_or(0));
+        eprintln!(
+            "=== 第 {} 页 ===",
+            pages
+                .iter()
+                .position(|p| p["title"] == page["title"])
+                .map(|i| i + 1)
+                .unwrap_or(0)
+        );
         eprintln!("  标题：{title}");
         eprintln!("  正文：{}", body.replace('\n', " / "));
         slides.push(slide);
@@ -184,7 +191,7 @@ async fn runs_the_whole_deck_pipeline_against_the_real_model() {
 5. 整套演示的 accent 不要每页都一样。
 
 仅返回严格 JSON：{{"slides":[{{"layout":"cover","background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","composition":"auto","emphasis":"balanced","densityTarget":"balanced","visualAsset":{{"enabled":true,"prompt":"画面描述","role":"hero"}}}}]}}"##,
-            draft.to_string(),
+            draft,
             slides.len()
         ),
         0.3,

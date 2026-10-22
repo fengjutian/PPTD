@@ -11,7 +11,7 @@ import { join } from "node:path";
 const CHROME = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const URL = process.argv[2] ?? "http://localhost:4178/";
 const profile = mkdtempSync(join(tmpdir(), "pptd-cdp-"));
-const port = 9223;
+const port = 9224;
 
 const chrome = spawn(CHROME, [
   "--headless=new",
@@ -68,122 +68,126 @@ const evaluate = async (expression) => {
   return result.result?.result?.value;
 };
 
-// 画布辅助层的存在性
-const layers = await evaluate(`(() => ({
+const clickToolbar = (label) => evaluate(`(() => {
+  const b = [...document.querySelectorAll('.assist-tools .tool-button, .insert-tools .tool-button')]
+    .find((x) => x.getAttribute('aria-label') === '${label}');
+  b?.click();
+  return !!b;
+})()`);
+
+const canvasBox = () => evaluate(`(() => { const r = document.querySelector('.slide-canvas').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2 }; })()`);
+
+const report = {};
+
+// 1. 初始状态
+report.initial = await evaluate(`(() => ({
   grid: !!document.querySelector('.canvas-grid-layer'),
   guides: document.querySelectorAll('.canvas-guide').length,
-  toolbar: document.querySelectorAll('.assist-tools .tool-button').length,
-  canvas: !!document.querySelector('.slide-canvas'),
-  canvasBox: (() => { const c = document.querySelector('.slide-canvas'); const r = c?.getBoundingClientRect(); return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null; })(),
+  assistButtons: [...document.querySelectorAll('.assist-tools .tool-button')].map((b) => b.getAttribute('aria-label')),
 }))()`);
-console.log("初始状态:", JSON.stringify(layers));
+console.log("初始状态:", JSON.stringify(report.initial));
 
-// 点击"添加垂直参考线"和"添加水平参考线"
-await evaluate(`(() => {
-  const buttons = [...document.querySelectorAll('.assist-tools .tool-button')];
-  buttons.find((b) => b.getAttribute('aria-label') === '添加垂直参考线')?.click();
-  buttons.find((b) => b.getAttribute('aria-label') === '添加水平参考线')?.click();
-  return true;
-})()`);
-await sleep(500);
-
-const afterGuides = await evaluate(`(() => ({
+// 2. 添加参考线
+await clickToolbar("添加垂直参考线");
+await clickToolbar("添加水平参考线");
+await sleep(400);
+report.afterGuides = await evaluate(`(() => ({
   guides: document.querySelectorAll('.canvas-guide').length,
   vertical: document.querySelectorAll('.canvas-guide.vertical').length,
   horizontal: document.querySelectorAll('.canvas-guide.horizontal').length,
   positions: [...document.querySelectorAll('.canvas-guide')].map((g) => ({ axis: g.className.includes('vertical') ? 'x' : 'y', left: g.style.left, top: g.style.top })),
 }))()`);
-console.log("添加参考线后:", JSON.stringify(afterGuides));
+console.log("添加参考线后:", JSON.stringify(report.afterGuides));
 
-// 网格开关
-await evaluate(`(() => {
-  const buttons = [...document.querySelectorAll('.assist-tools .tool-button')];
-  buttons.find((b) => b.getAttribute('aria-label') === '关闭网格')?.click();
-  return true;
-})()`);
-await sleep(300);
-const gridOff = await evaluate(`!!document.querySelector('.canvas-grid-layer')`);
-console.log("关闭网格后网格层存在:", gridOff);
-await evaluate(`(() => {
-  const buttons = [...document.querySelectorAll('.assist-tools .tool-button')];
-  buttons.find((b) => b.getAttribute('aria-label') === '显示网格')?.click();
-  return true;
-})()`);
-await sleep(300);
-const gridOn = await evaluate(`!!document.querySelector('.canvas-grid-layer')`);
-console.log("重新打开网格后网格层存在:", gridOn);
+// 3. 网格显示开关
+await clickToolbar("关闭网格");
+await sleep(250);
+report.gridOff = await evaluate(`!!document.querySelector('.canvas-grid-layer')`);
+console.log("关闭网格后网格层仍存在:", report.gridOff);
+await clickToolbar("显示网格");
+await sleep(250);
+report.gridOn = await evaluate(`!!document.querySelector('.canvas-grid-layer')`);
+console.log("重新打开网格后网格层存在:", report.gridOn);
 
-// 加一个形状，然后拖它，观察是否吸附到页面中线
-await evaluate(`(() => {
-  const buttons = [...document.querySelectorAll('.insert-tools .tool-button')];
-  buttons.find((b) => b.getAttribute('aria-label') === '矩形')?.click();
-  return true;
+// 4. 网格吸附开关（与显示网格相互独立）
+await clickToolbar("吸附到网格");
+await sleep(250);
+report.gridSnapLabel = await evaluate(`(() => {
+  const b = [...document.querySelectorAll('.assist-tools .tool-button')].find((x) => x.getAttribute('aria-label') === '关闭网格吸附');
+  return !!b;
 })()`);
+console.log("网格吸附已开启:", report.gridSnapLabel);
+await clickToolbar("关闭网格吸附");
+await sleep(250);
+
+// 5. 加一个矩形并拖动
+await clickToolbar("矩形");
 await sleep(500);
-
+const canvas = await canvasBox();
 const before = await evaluate(`(() => {
-  const el = document.querySelector('.slide-element.selected') || document.querySelector('.slide-element');
+  const el = document.querySelector('.slide-element.selected');
   const r = el?.getBoundingClientRect();
   return r ? { x: r.x, y: r.y, w: r.width, h: r.height, cx: r.x + r.width / 2 } : null;
 })()`);
-console.log("拖拽前:", JSON.stringify(before));
+console.log("拖拽前:", JSON.stringify(before), " 画布:", JSON.stringify(canvas));
 
-if (before) {
-  // 把它拖到接近页面中线的位置：中心离中线差 3 像素，阈值内应吸附
-  const canvas = await evaluate(`(() => { const r = document.querySelector('.slide-canvas').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`);
-  const targetCenterX = canvas.x + canvas.w / 2;
+const dispatch = (type, x, y) => evaluate(`(() => {
+  const el = document.querySelector('.slide-element.selected');
+  if (!el) return false;
+  const ev = new PointerEvent('${type}', { clientX: ${x}, clientY: ${y}, bubbles: true, pointerId: 1, isPrimary: true, button: 0, buttons: ${type === 'pointerup' ? 0 : 1} });
+  el.dispatchEvent(ev);
+  return true;
+})()`);
+
+const dragTo = async (endX, endY) => {
   const startX = before.x + before.w / 2;
   const startY = before.y + before.h / 2;
-  const endX = targetCenterX + 3; // 故意偏 3 像素
-  const endY = startY;
-
-  const dispatch = async (type, x, y) => evaluate(`(() => {
-    const el = document.querySelector('.slide-element.selected') || document.querySelector('.slide-element');
-    const ev = new PointerEvent('${type}', { clientX: ${x}, clientY: ${y}, bubbles: true, pointerId: 1, isPrimary: true, button: 0, buttons: ${type === 'pointerup' ? 0 : 1} });
-    el.dispatchEvent(ev);
-    return true;
-  })()`);
-
   await dispatch("pointerdown", startX, startY);
-  await sleep(120);
+  await sleep(100);
   await dispatch("pointermove", endX, endY);
-  await sleep(200);
+  await sleep(180);
   const during = await evaluate(`(() => {
     const el = document.querySelector('.slide-element.selected');
     const r = el?.getBoundingClientRect();
     const snap = document.querySelector('.canvas-snap-line');
-    return { cx: r ? r.x + r.width / 2 : null, snapLine: !!snap, snapLeft: snap?.style.left ?? null };
+    return { cx: r ? r.x + r.width / 2 : null, snapShown: !!snap, snapLeft: snap?.style.left ?? null };
   })()`);
-  console.log("拖拽中:", JSON.stringify(during));
   await dispatch("pointerup", endX, endY);
-  await sleep(300);
-
+  await sleep(250);
   const after = await evaluate(`(() => {
     const el = document.querySelector('.slide-element.selected');
     const r = el?.getBoundingClientRect();
     return r ? { cx: r.x + r.width / 2, x: r.x } : null;
   })()`);
-  console.log("拖拽后:", JSON.stringify(after));
-  const canvas2 = await evaluate(`(() => { const r = document.querySelector('.slide-canvas').getBoundingClientRect(); return { x: r.x, w: r.width }; })()`);
-  console.log("页面中线 x =", canvas2.x + canvas2.w / 2, "  元素中心 x =", after?.cx);
-  console.log("吸附误差(px) =", after ? Math.abs(after.cx - (canvas2.x + canvas2.w / 2)) : "n/a");
-}
+  return { during, after };
+};
 
-// 撤销后网格与参考线仍在（它们不属于文稿）
+// 5a. 拖到离页面中线 3 像素处：应该吸到中线
+const centerDrag = await dragTo(canvas.cx + 3, before.y + before.h / 2);
+console.log("拖到中线附近 →", JSON.stringify(centerDrag));
+console.log("  页面中线 x =", canvas.cx, " 元素中心 x =", centerDrag.after?.cx, " 误差 =", centerDrag.after ? Math.abs(centerDrag.after.cx - canvas.cx).toFixed(2) : "n/a");
+report.centerDrag = centerDrag;
+
+// 5b. 拖到参考线上（参考线在页面中线，所以同一个位置）
+const guideDrag = await dragTo(canvas.cx + 40, before.y + before.h / 2);
+console.log("拖到参考线之外 →", JSON.stringify(guideDrag));
+console.log("  元素中心 x =", guideDrag.after?.cx, "（离中线 40 像素，超阈值，不应吸附）");
+report.awayDrag = guideDrag;
+
+// 6. 撤销：辅助层保留，文稿对象回退
 await evaluate(`(() => {
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
   return true;
 })()`);
 await sleep(400);
-const afterUndo = await evaluate(`(() => ({
+report.afterUndo = await evaluate(`(() => ({
   guides: document.querySelectorAll('.canvas-guide').length,
   grid: !!document.querySelector('.canvas-grid-layer'),
   elements: document.querySelectorAll('.slide-element').length,
 }))()`);
-console.log("撤销后（辅助层应保留，文稿元素应回退）:", JSON.stringify(afterUndo));
+console.log("撤销后（辅助层保留，对象回退）:", JSON.stringify(report.afterUndo));
 
-writeFileSync(join(tmpdir(), "pptd-cdp-result.json"), JSON.stringify({ layers, afterGuides, gridOff, gridOn, before, afterUndo }, null, 2));
+writeFileSync(join(tmpdir(), "pptd-cdp-result.json"), JSON.stringify(report, null, 2));
 socket.close();
 chrome.kill();
 console.log("完成");
