@@ -393,6 +393,103 @@ fn is_content_addressed_reference(reference: &str) -> bool {
         && name.chars().all(|character| character.is_ascii_hexdigit())
 }
 
+/// A save reports what it could not carry over.
+///
+/// A document keeps its pictures as references, and a reference without a file
+/// behind it is not a smaller document: it is a page that renders blank. The
+/// caller has to be able to say so, otherwise losing the template artwork is
+/// indistinguishable from the author never having used one.
+#[derive(Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetReport {
+    /// References the document still points at, but which have no file.
+    pub missing_assets: Vec<String>,
+}
+
+/// The asset references a document points at, de-duplicated in document order.
+fn document_asset_references(document: &Value) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut references = Vec::new();
+    let Some(slides) = document.pointer("/slides").and_then(Value::as_array) else {
+        return references;
+    };
+    for slide in slides {
+        let Some(elements) = slide.get("elements").and_then(Value::as_array) else {
+            continue;
+        };
+        for element in elements {
+            if element.get("type").and_then(Value::as_str) != Some("image") {
+                continue;
+            }
+            let Some(reference) = element
+                .pointer("/source/dataUrl")
+                .and_then(Value::as_str)
+                .and_then(|value| value.strip_prefix("asset://"))
+            else {
+                continue;
+            };
+            if seen.insert(reference.to_owned()) {
+                references.push(reference.to_owned());
+            }
+        }
+    }
+    references
+}
+
+/// A reference has to name a plain file inside the asset directory. Anything
+/// absolute or climbing out of it is refused rather than joined onto the root.
+fn is_safe_asset_reference(reference: &str) -> bool {
+    if reference.is_empty() {
+        return false;
+    }
+    let relative = Path::new(reference);
+    !relative.is_absolute()
+        && relative
+            .components()
+            .all(|component| matches!(component, std::path::Component::Normal(_)))
+}
+
+/// Finds the bytes of a picture in the template layout render cache.
+///
+/// Template artwork is rendered from the template once and then handed to the
+/// document as an inline picture, which is externalized into a
+/// content-addressed file. When that file is gone the same bytes are usually
+/// still in the render cache, and the digest in the file name is the SHA-256 of
+/// those bytes, so a hit is the identical picture and never a look-alike.
+///
+/// Only used on the failure path, and only for the content-addressed shape: the
+/// legacy `revision-N/…` shape carries no digest to match on.
+fn find_layout_render_asset(cache_root: &Path, reference: &str) -> Option<PathBuf> {
+    if !is_content_addressed_reference(reference) {
+        return None;
+    }
+    let (digest, _) = reference.rsplit_once('.')?;
+    let Ok(templates) = fs::read_dir(cache_root) else {
+        return None;
+    };
+    for template in templates.flatten() {
+        let directory = template.path();
+        if !directory.is_dir() {
+            continue;
+        }
+        let Ok(layouts) = fs::read_dir(&directory) else {
+            continue;
+        };
+        for layout in layouts.flatten() {
+            let path = layout.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("png") {
+                continue;
+            }
+            if let Ok(bytes) = fs::read(&path) {
+                if hex_digest(&bytes) == digest {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    None
+}
+
 fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
     let directory = assets_root(path)?;
     fs::create_dir_all(&directory)
@@ -601,16 +698,40 @@ pub async fn read_image_asset(project_path: String, reference: String) -> Result
 }
 
 #[tauri::command]
-pub async fn save_project(path: String, document: Value) -> Result<(), String> {
+pub async fn save_project(
+    app: tauri::AppHandle,
+    path: String,
+    document: Value,
+    source_path: Option<String>,
+) -> Result<AssetReport, String> {
+    let layout_cache_root = layout_render_cache_root(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let path = validate_path(&path, "pptd")?;
-        let mut document = document;
-        externalize_images(&path, &mut document)?;
-        atomic_write_json(&path, &document)?;
-        Ok(())
+        let source = source_path.map(PathBuf::from);
+        save_project_at(&path, document, source.as_deref(), Some(&layout_cache_root))
     })
     .await
     .map_err(|error| format!("PROJECT_SAVE_TASK_FAILED: {error}"))?
+}
+
+/// Writes a project and makes sure every picture it references is behind it.
+///
+/// Saving to another path used to rely on the front end having inlined every
+/// picture first. A document that still carries references would be written as
+/// references, and `externalize_images` leaves a reference alone because it
+/// expects the file to be there — so the project came out of "另存为" with the
+/// references intact and nothing behind them. Carrying the files here closes
+/// that without depending on the caller having done it first.
+fn save_project_at(
+    path: &Path,
+    mut document: Value,
+    source_path: Option<&Path>,
+    layout_cache_root: Option<&Path>,
+) -> Result<AssetReport, String> {
+    externalize_images(path, &mut document)?;
+    let missing_assets = copy_referenced_assets(path, &document, source_path, layout_cache_root)?;
+    atomic_write_json(path, &document)?;
+    Ok(AssetReport { missing_assets })
 }
 
 #[tauri::command]
@@ -661,26 +782,31 @@ pub async fn save_recovery(
     app: tauri::AppHandle,
     source_path: Option<String>,
     document: Value,
-) -> Result<(), String> {
+) -> Result<AssetReport, String> {
+    let layout_cache_root = layout_render_cache_root(&app);
     tauri::async_runtime::spawn_blocking(move || {
         let path = recovery_path(&app)?;
         let source = source_path.map(PathBuf::from);
-        save_recovery_at(&path, document, source.as_deref())
+        save_recovery_at(&path, document, source.as_deref(), Some(&layout_cache_root))
     })
     .await
     .map_err(|error| format!("RECOVERY_SAVE_TASK_FAILED: {error}"))?
 }
 
 /// 写入恢复副本。落盘用临时文件加原子替换，中断时保留上一个有效版本。
+///
+/// 返回没能带上文件的图片引用。副本照样写盘：丢的是一张图而不是整份文稿，
+/// 自动保存不该因为一张图就整个失败，但缺口必须能报给前端显示出来。
 fn save_recovery_at(
     path: &Path,
     mut document: Value,
     source_path: Option<&Path>,
-) -> Result<(), String> {
+    layout_cache_root: Option<&Path>,
+) -> Result<AssetReport, String> {
     externalize_images(path, &mut document)?;
-    copy_referenced_assets(path, &document, source_path)?;
+    let missing_assets = copy_referenced_assets(path, &document, source_path, layout_cache_root)?;
     atomic_write_json(path, &document)?;
-    Ok(())
+    Ok(AssetReport { missing_assets })
 }
 
 /// 把文档引用的图片复制到这份副本自己的资源目录。
@@ -689,56 +815,55 @@ fn save_recovery_at(
 /// project they belong to. A recovery copy written next to that project would
 /// keep the references but not the files behind them, so the restored document
 /// would come back without its pictures.
+///
+/// 找不到的文件不再被静默跳过，而是被收集起来报给调用方。悄悄跳过的结果是一份
+/// 引用齐全、文件全无的副本：它能打开、能编辑，恢复出来却是二十页空白。
+/// 返回引用列表而不是错误，是因为丢一张图不该让整份文稿的自动保存一起失败，
+/// 但它必须被说出来。
 fn copy_referenced_assets(
     path: &Path,
     document: &Value,
     source_path: Option<&Path>,
-) -> Result<(), String> {
-    let Some(source_path) = source_path else {
-        return Ok(());
-    };
-    let source_root = assets_root(source_path)?;
+    layout_cache_root: Option<&Path>,
+) -> Result<Vec<String>, String> {
+    let references = document_asset_references(document);
+    if references.is_empty() {
+        return Ok(Vec::new());
+    }
     let target_root = assets_root(path)?;
-    let Some(slides) = document.pointer("/slides").and_then(Value::as_array) else {
-        return Ok(());
+    fs::create_dir_all(&target_root)
+        .map_err(|error| format!("ASSET_DIRECTORY_CREATE_FAILED: {error}"))?;
+    let source_root = match source_path {
+        Some(source_path) => Some(assets_root(source_path)?),
+        None => None,
     };
-    for slide in slides {
-        let Some(elements) = slide.get("elements").and_then(Value::as_array) else {
+    let mut missing = Vec::new();
+    for reference in references {
+        if !is_safe_asset_reference(&reference) {
+            missing.push(reference);
+            continue;
+        }
+        let target = target_root.join(&reference);
+        if target.is_file() {
+            continue;
+        }
+        // 来源项目优先：那里存的就是这份文档自己的图片。来源没有时再按内容摘要
+        // 去模板版式渲染缓存里找回同一份字节，版式背景属于后者。
+        let origin = source_root
+            .as_ref()
+            .map(|root| root.join(&reference))
+            .filter(|candidate| candidate.is_file())
+            .or_else(|| {
+                layout_cache_root
+                    .and_then(|cache_root| find_layout_render_asset(cache_root, &reference))
+            });
+        let Some(origin) = origin else {
+            missing.push(reference);
             continue;
         };
-        for element in elements {
-            if element.get("type").and_then(Value::as_str) != Some("image") {
-                continue;
-            }
-            let Some(reference) = element
-                .pointer("/source/dataUrl")
-                .and_then(Value::as_str)
-                .and_then(|value| value.strip_prefix("asset://"))
-            else {
-                continue;
-            };
-            let relative = Path::new(reference);
-            if relative.is_absolute()
-                || relative
-                    .components()
-                    .any(|component| !matches!(component, std::path::Component::Normal(_)))
-            {
-                continue;
-            }
-            let target = target_root.join(relative);
-            if target.is_file() {
-                continue;
-            }
-            let origin = source_root.join(relative);
-            if !origin.is_file() {
-                continue;
-            }
-            fs::create_dir_all(&target_root)
-                .map_err(|error| format!("ASSET_DIRECTORY_CREATE_FAILED: {error}"))?;
-            fs::copy(&origin, &target).map_err(|error| format!("ASSET_COPY_FAILED: {error}"))?;
-        }
+        fs::copy(&origin, &target).map_err(|error| format!("ASSET_COPY_FAILED: {error}"))?;
     }
-    Ok(())
+    Ok(missing)
 }
 
 #[tauri::command]
