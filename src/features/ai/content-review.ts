@@ -1,8 +1,17 @@
+import { TABLE_MAX_COLUMNS } from "../../core/document-model/table-data";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
 import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
 
 export type DraftSlide = AiDraft["slides"][number];
 export type AiDraftSaveState = "saving" | "saved";
+
+/**
+ * The review screen edits a table through the draft schema, which stores at
+ * most 20 rows, while the document model allows 30. Cells can also be dropped
+ * on the way in, so the tighter of the two is what the writer may build.
+ */
+export const TABLE_REVIEW_MAX_ROWS = 20;
+export const TABLE_REVIEW_MAX_COLUMNS = TABLE_MAX_COLUMNS;
 
 export const narrativeStrategyLabels: Record<AiDraft["presentationBrief"]["narrativeStrategy"], string> = {
   "management-report": "管理层汇报",
@@ -107,7 +116,7 @@ export function missingTitleIndexes(draft: AiDraft): number[] {
   return draft.slides.flatMap((slide, index) => (slide.title.trim() ? [] : [index]));
 }
 
-export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title";
+export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title" | "table-too-large" | "table-ragged";
 export type ReviewIssue = {
   kind: ReviewIssueKind;
   /** Pages the issue applies to, in page order. The first one is the jump target. */
@@ -149,12 +158,76 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
       blocking: false,
     });
   }
+  // A table wider or taller than the document model cannot become a project
+  // file, and clamping it for the writer would silently drop reviewed cells.
+  const oversized = draft.slides.flatMap((slide, index) => (slide.blocks.some((block) => block.type === "table-data" && tableBlockOversized(block)) ? [index] : []));
+  if (oversized.length > 0) {
+    issues.push({
+      kind: "table-too-large",
+      indexes: oversized,
+      message: `还有 ${oversized.length} 页表格超过上限（最多 ${TABLE_REVIEW_MAX_COLUMNS} 列、${TABLE_REVIEW_MAX_ROWS} 行）`,
+      blocking: true,
+    });
+  }
+  // A row wider than the header keeps its extra cells in the draft but loses
+  // them when the table is exported, so the writer has to fill the header or
+  // delete the column instead of the cell silently disappearing later.
+  const ragged = draft.slides.flatMap((slide, index) => (slide.blocks.some((block) => block.type === "table-data" && tableBlockRagged(block)) ? [index] : []));
+  if (ragged.length > 0) {
+    issues.push({ kind: "table-ragged", indexes: ragged, message: `还有 ${ragged.length} 页表格行比表头宽，导出会丢失多出的列`, blocking: true });
+  }
   return issues;
+}
+
+/** Whether a table has cells that the header has no column for. */
+export function tableBlockRagged(block: Extract<ContentBlock, { type: "table-data" }>): boolean {
+  return block.rows.some((row) => row.length > block.header.length);
+}
+
+/** Whether a table block still exceeds what the review screen and document allow. */
+export function tableBlockOversized(block: Extract<ContentBlock, { type: "table-data" }>): boolean {
+  return (
+    block.header.length > TABLE_REVIEW_MAX_COLUMNS ||
+    block.rows.length > TABLE_REVIEW_MAX_ROWS ||
+    block.rows.some((row) => row.length > TABLE_REVIEW_MAX_COLUMNS)
+  );
+}
+
+/**
+ * A table is the one block whose cells can all be blank while the structure
+ * stays in place, so it only counts as page content once a cell carries text.
+ */
+function blockHasContent(block: ContentBlock): boolean {
+  if (block.type !== "table-data") return true;
+  return block.header.some((cell) => cell.trim()) || block.rows.some((row) => row.some((cell) => cell.trim()));
 }
 
 /** A page needs something the renderer can draw, not just a heading. */
 export function slideHasContent(slide: DraftSlide): boolean {
-  return sanitizeBlocks(slide.blocks).length > 0 || splitBodyItems(slide.body).length > 0;
+  const blocks = sanitizeBlocks(slide.blocks);
+  // Blocks are the reviewed fact source; the body string is only their
+  // projection, so a page with blocks is judged by the blocks alone.
+  if (blocks.length > 0) return blocks.some(blockHasContent);
+  return splitBodyItems(slide.body).length > 0;
+}
+
+export type TableKeyAction = { type: "focus"; row: number } | { type: "append-row"; row: number };
+
+/**
+ * Table cells move like a grid: Enter and the vertical arrows walk down a
+ * column, and Enter below the last row appends one so the writer never has to
+ * reach for the add button while typing a row of figures. The caller keeps the
+ * cell's own column, since the helper only decides which row comes next.
+ */
+export function tableCellKeyAction(key: string, row: number, rowCount: number, canAppendRow: boolean): TableKeyAction | undefined {
+  const lastRow = rowCount - 1;
+  if (key === "ArrowDown") return { type: "focus", row: Math.min(lastRow, row + 1) };
+  if (key === "ArrowUp") return { type: "focus", row: Math.max(0, row - 1) };
+  if (key === "Enter") {
+    if (row < lastRow) return { type: "focus", row: row + 1 };
+    return canAppendRow ? { type: "append-row", row: row + 1 } : undefined;
+  }
+  return undefined;
 }
 
 /**

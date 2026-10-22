@@ -13,7 +13,13 @@ import {
   nearestSlideIndex,
   outlineNavTarget,
   reviewIssues,
+  slideHasContent,
   slideMetrics,
+  TABLE_REVIEW_MAX_COLUMNS,
+  TABLE_REVIEW_MAX_ROWS,
+  tableBlockOversized,
+  tableBlockRagged,
+  tableCellKeyAction,
   visualIntentLabels,
   withSlideIds,
 } from "./content-review";
@@ -192,6 +198,69 @@ describe("structured content editing", () => {
     expect(cleaned.slides[0]!.title.trim()).toBe("");
     expect(cleaned.title.trim()).toBe("");
   });
+
+  it("stores a cleared table header cell as a placeholder instead of failing validation", () => {
+    const draft = createDraft();
+    const table = { type: "table-data" as const, header: ["项目", ""], rows: [["营收", ""]] };
+    const cleaned = sanitizeDraftForSave({ ...draft, slides: [{ ...draft.slides[0]!, blocks: [table] }] });
+    expect(() => aiDraftSchema.parse(cleaned)).not.toThrow();
+    const stored = cleaned.slides[0]!.blocks[0]!;
+    expect(stored.type === "table-data" && stored.header[1]).toBe(" ");
+    // Blank body cells are legitimate data, so they are kept untouched.
+    expect(stored.type === "table-data" && stored.rows[0]![1]).toBe("");
+  });
+
+  it("trims blank table cells out of the plain-text projection", () => {
+    expect(bodyFromBlocks([{ type: "table-data", header: ["项目", " "], rows: [["营收", ""]] }])).toBe("项目 | \n营收 | ");
+  });
+});
+
+describe("table grid editing", () => {
+  const table = { type: "table-data" as const, header: ["项目", "数值"], rows: [["营收", "38万"], ["成本", "12万"]] };
+
+  it("moves between cells like a grid and appends a row from the last one", () => {
+    expect(tableCellKeyAction("ArrowDown", 0, 2, true)).toEqual({ type: "focus", row: 1 });
+    expect(tableCellKeyAction("ArrowUp", 1, 2, true)).toEqual({ type: "focus", row: 0 });
+    expect(tableCellKeyAction("ArrowUp", 0, 2, true)).toEqual({ type: "focus", row: 0 });
+    expect(tableCellKeyAction("Enter", 0, 2, true)).toEqual({ type: "focus", row: 1 });
+    expect(tableCellKeyAction("Enter", 1, 2, true)).toEqual({ type: "append-row", row: 2 });
+    expect(tableCellKeyAction("Enter", 1, 2, false)).toBeUndefined();
+    expect(tableCellKeyAction("Tab", 0, 2, true)).toBeUndefined();
+  });
+
+  it("flags a table the document model cannot store", () => {
+    expect(tableBlockOversized(table)).toBe(false);
+    expect(tableBlockOversized({ ...table, header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`) })).toBe(true);
+    expect(tableBlockOversized({ ...table, rows: Array.from({ length: TABLE_REVIEW_MAX_ROWS + 1 }, () => ["a", "b"]) })).toBe(true);
+    // A wider row is storable but is called out separately: the export would
+    // drop the cells the header has no column for.
+    expect(tableBlockOversized({ ...table, rows: [["a", "b", "c"]] })).toBe(false);
+    expect(tableBlockRagged({ ...table, rows: [["a", "b", "c"]] })).toBe(true);
+    expect(tableBlockRagged(table)).toBe(false);
+
+    const draft = createDraft();
+    const wide: AiDraft = {
+      ...draft,
+      slides: [{ ...draft.slides[0]!, blocks: [{ ...table, header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`) }] }],
+    };
+    expect(reviewIssues(wide)).toEqual([
+      { kind: "table-too-large", indexes: [0], message: `还有 1 页表格超过上限（最多 ${TABLE_REVIEW_MAX_COLUMNS} 列、${TABLE_REVIEW_MAX_ROWS} 行）`, blocking: true },
+    ]);
+
+    const ragged: AiDraft = { ...draft, slides: [{ ...draft.slides[0]!, blocks: [{ ...table, rows: [["营收", "38万", "备注"]] }] }] };
+    expect(reviewIssues(ragged)).toEqual([
+      { kind: "table-ragged", indexes: [0], message: "还有 1 页表格行比表头宽，导出会丢失多出的列", blocking: true },
+    ]);
+  });
+
+  it("treats a table whose cells are all blank as a page without content", () => {
+    const draft = createDraft();
+    const blank: AiDraft = { ...draft, slides: [{ ...draft.slides[0]!, body: "", blocks: [{ type: "table-data", header: ["", ""], rows: [["", ""]] }] }] };
+    expect(slideHasContent(blank.slides[0]!)).toBe(false);
+    expect(slideHasContent({ ...blank.slides[0]!, blocks: [{ type: "table-data", header: ["项目", ""], rows: [["", ""]] }] })).toBe(true);
+    // Pages without blocks still fall back to their body copy.
+    expect(slideHasContent({ ...draft.slides[0]!, blocks: [], body: "纯文本正文" })).toBe(true);
+  });
 });
 
 function renderReview(draft: AiDraft, activeIndex = 0) {
@@ -257,5 +326,35 @@ describe("content review layout", () => {
     const markup = renderReview(empty);
     expect(markup).toContain("本页还没有内容，补全后才能确认");
     expect(markup).toContain("还有 2 页没有内容");
+  });
+
+  it("edits table cells in place and can still shrink an oversized table", () => {
+    const draft = withSlideIds(createDraft());
+    const withTable: AiDraft = {
+      ...draft,
+      slides: [
+        { ...draft.slides[0]!, title: "数据页", blocks: [{ type: "table-data", header: ["项目", "数值"], rows: [["营收", "38万"]] }] },
+        draft.slides[1]!,
+      ],
+    };
+    const markup = renderReview(withTable);
+    expect(markup).toContain("第 1 页表格表头第 2 列");
+    expect(markup).toContain("第 1 页表格第 1 行第 1 列");
+    expect(markup).toContain("删除第 1 页表格第 2 列");
+    expect(markup).toContain("添加一列");
+    expect(markup).toContain("导出为可编辑的 PowerPoint 表格");
+
+    const wide: AiDraft = {
+      ...withTable,
+      slides: [
+        { ...withTable.slides[0]!, blocks: [{ type: "table-data", header: Array.from({ length: TABLE_REVIEW_MAX_COLUMNS + 1 }, (_, i) => `列${i}`), rows: [["a"]] }] },
+        draft.slides[1]!,
+      ],
+    };
+    const wideMarkup = renderReview(wide);
+    expect(wideMarkup).toContain("表格超过可编辑上限");
+    expect(wideMarkup).toContain("还有 1 页表格超过上限");
+    // The extra column can still be removed, so no column is read-only.
+    expect(wideMarkup.match(/删除第 1 页表格第 \d+ 列/g)).toHaveLength(TABLE_REVIEW_MAX_COLUMNS + 1);
   });
 });

@@ -202,10 +202,24 @@ button { color: inherit; }
 .block-row .link-action, .block-add { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; }
 .block-row .link-action svg, .block-add svg { width: 11px; height: 11px; }
 .block-table { overflow-x: auto; }
-.block-table table { width: 100%; border-collapse: collapse; font-size: 10px; }
-.block-table th, .block-table td { padding: 5px 8px; border: 1px solid #2f3137; color: #c9ccd2; text-align: left; }
+.block-table table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; }
+.block-table th, .block-table td { padding: 3px; border: 1px solid #2f3137; color: #c9ccd2; text-align: left; }
 .block-table th { color: #8f949d; background: #191a1e; font-weight: 700; }
 .block-table small { display: block; margin-top: 6px; color: #777c85; font-size: 9px; }
+/* Cell inputs are borderless so the grid lines stay the table's own styling. */
+.block-table input { width: 100%; min-width: 0; padding: 4px 5px; border: 1px solid transparent; border-radius: 5px; color: inherit; background: transparent; font: inherit; }
+.block-table input:hover { border-color: #3a3d44; }
+.block-table input:focus { border-color: #e6ae62; background: #191a1e; outline: none; }
+.block-table th .table-cell { display: flex; align-items: center; gap: 2px; }
+.block-table .table-cell input { flex: 1 1 auto; }
+.block-table .table-cell .icon-action, .block-table .table-row-actions .icon-action { flex: none; width: 18px; height: 18px; padding: 0; }
+.block-table .icon-action svg { width: 10px; height: 10px; }
+.block-table .table-row-actions { width: 26px; padding: 3px 2px; }
+.block-table.oversized th, .block-table.oversized td { border-color: #8a4f2b; }
+.block-table .table-warning { color: #e6ae62; }
+.table-actions { display: flex; gap: 14px; margin-top: 6px; }
+.table-actions .link-action { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; }
+.table-actions .link-action svg { width: 11px; height: 11px; }
 .block-empty-note { margin-top: 8px; }
 :root[data-theme="light"] .block-row, :root[data-theme="green"] .block-row, :root[data-theme="blue"] .block-row { border-color: #e1e4e9; background: #f7f8fa; }
 :root[data-theme="light"] .block-row .icon-action, :root[data-theme="green"] .block-row .icon-action, :root[data-theme="blue"] .block-row .icon-action { border-color: #d4d7dc; color: #5f646d; }
@@ -991,3 +1005,27 @@ button { color: inherit; }
 .fatal-error p { max-width: 680px; color: #a3a7af; line-height: 1.6; }
 .fatal-error pre { max-width: 720px; max-height: 220px; overflow: auto; padding: 14px; border: 1px solid #4a3034; border-radius: 8px; color: #ee9199; background: #241d1f; white-space: pre-wrap; }
 .fatal-error > div { display: flex; gap: 10px; }
+
+/* The light themes style every review input, so the table cells repeat their
+   own treatment last: the grid lines belong to the table, not to each cell. */
+:root[data-theme="light"] .block-table input,
+:root[data-theme="amber"] .block-table input,
+:root[data-theme="green"] .block-table input,
+:root[data-theme="blue"] .block-table input { border-color: transparent; color: inherit; background: transparent; }
+:root[data-theme="light"] .block-table input:hover,
+:root[data-theme="amber"] .block-table input:hover,
+:root[data-theme="green"] .block-table input:hover,
+:root[data-theme="blue"] .block-table input:hover { border-color: #c9ced6; }
+:root[data-theme="light"] .block-table input:focus,
+:root[data-theme="amber"] .block-table input:focus,
+:root[data-theme="green"] .block-table input:focus,
+:root[data-theme="blue"] .block-table input:focus { border-color: #8a4f0e; background: #fff; }
+:root[data-theme="light"] .block-table.oversized th, :root[data-theme="light"] .block-table.oversized td,
+:root[data-theme="amber"] .block-table.oversized th, :root[data-theme="amber"] .block-table.oversized td,
+:root[data-theme="green"] .block-table.oversized th, :root[data-theme="green"] .block-table.oversized td,
+:root[data-theme="blue"] .block-table.oversized th, :root[data-theme="blue"] .block-table.oversized td { border-color: #b4653a; }
+:root[data-theme="light"] .block-table .table-warning, :root[data-theme="amber"] .block-table .table-warning,
+:root[data-theme="green"] .block-table .table-warning, :root[data-theme="blue"] .block-table .table-warning { color: #9a5b12; }
+:root[data-theme="amber"] .block-table input:hover { border-color: #d8c9b0; }
+:root[data-theme="light"] .block-table .table-cell .icon-action, :root[data-theme="amber"] .block-table .table-cell .icon-action,
+:root[data-theme="green"] .block-table .table-cell .icon-action, :root[data-theme="blue"] .block-table .table-cell .icon-action { color: #5f646d; }

@@ -88,13 +88,19 @@ export function sanitizeBlocks(blocks: ContentBlock[]): ContentBlock[] {
  */
 export function sanitizeDraftForSave(draft: AiDraft): AiDraft {
   const keepTitle = (title: string) => (title.trim() ? title : " ");
+  // Header cells are the one table field the storage schema requires to be
+  // present, so a cleared header cell is stored as a placeholder too. Rows may
+  // hold blank cells, and the review screen trims values, so neither reads as
+  // filled in until the writer types something.
+  const keepTable = (block: ContentBlock): ContentBlock =>
+    block.type === "table-data" ? { ...block, header: block.header.map((cell) => (cell.trim() ? cell : " ")) } : block;
   return {
     ...draft,
     title: keepTitle(draft.title),
     slides: draft.slides.map((slide) => ({
       ...slide,
       title: keepTitle(slide.title),
-      blocks: sanitizeBlocks(slide.blocks),
+      blocks: sanitizeBlocks(slide.blocks).map(keepTable),
     })),
   };
 }

@@ -14,6 +14,10 @@ import {
   reviewIssues,
   slideHasContent,
   slideMetrics,
+  TABLE_REVIEW_MAX_COLUMNS,
+  TABLE_REVIEW_MAX_ROWS,
+  tableBlockOversized,
+  tableCellKeyAction,
   visualIntentLabels,
   type AiDraftSaveState,
 } from "./content-review";
@@ -159,6 +163,174 @@ function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
 }
 
 /**
+ * Tables are edited as a grid because the exported PowerPoint table holds the
+ * same cells: the block is the reviewed data, and the grid points at it. Adding
+ * or removing a row or column therefore changes the reviewed content, which is
+ * why the writer does it here rather than in the design stage.
+ */
+function TableEditor({
+  pageLabel,
+  block,
+  onChange,
+}: {
+  pageLabel: string;
+  block: Extract<ContentBlock, { type: "table-data" }>;
+  onChange: (block: Extract<ContentBlock, { type: "table-data" }>) => void;
+}) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const columnCount = Math.max(block.header.length, ...block.rows.map((row) => row.length), 1);
+  const oversized = tableBlockOversized(block);
+
+  const focusHeaderCell = (column: number) => {
+    window.requestAnimationFrame(() => {
+      tableRef.current?.querySelector<HTMLInputElement>(`thead input[data-cell-column="${column}"]`)?.focus();
+    });
+  };
+  const focusCell = (row: number, column: number) => {
+    window.requestAnimationFrame(() => {
+      tableRef.current?.querySelector<HTMLInputElement>(`input[data-cell-row="${row}"][data-cell-column="${column}"]`)?.focus();
+    });
+  };
+
+  const setHeaderCell = (column: number, value: string) =>
+    // A row may be wider than the header, and typing in that column is the
+    // writer saying the column exists, so the header grows to cover it.
+    onChange({
+      ...block,
+      header: Array.from({ length: Math.max(block.header.length, column + 1) }, (_, cellIndex) =>
+        cellIndex === column ? value : block.header[cellIndex] ?? "",
+      ),
+    });
+  // A row may arrive shorter than the header, so editing one cell pads the row
+  // with empty cells instead of shifting the columns of the visible grid.
+  const setBodyCell = (row: number, column: number, value: string) =>
+    onChange({
+      ...block,
+      rows: block.rows.map((cells, rowIndex) =>
+        rowIndex === row ? Array.from({ length: columnCount }, (_, cellIndex) => (cellIndex === column ? value : cells[cellIndex] ?? "")) : cells,
+      ),
+    });
+  const addColumn = () => {
+    // Adding a column aligns every row with the header, so a page that arrived
+    // with ragged rows ends up with one square grid.
+    onChange({
+      ...block,
+      header: Array.from({ length: columnCount + 1 }, (_, column) => block.header[column] ?? ""),
+      rows: block.rows.map((row) => Array.from({ length: columnCount + 1 }, (_, column) => row[column] ?? "")),
+    });
+    focusHeaderCell(columnCount);
+  };
+  const removeColumn = (column: number) =>
+    onChange({
+      ...block,
+      header: block.header.filter((_, cellIndex) => cellIndex !== column),
+      rows: block.rows.map((row) => row.filter((_, cellIndex) => cellIndex !== column)),
+    });
+  const addRow = () => {
+    onChange({ ...block, rows: [...block.rows, block.header.map(() => "")] });
+    focusCell(block.rows.length, 0);
+  };
+  const removeRow = (row: number) => onChange({ ...block, rows: block.rows.filter((_, rowIndex) => rowIndex !== row) });
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>, row: number, column: number) => {
+    const action = tableCellKeyAction(event.key, row, block.rows.length, block.rows.length < TABLE_REVIEW_MAX_ROWS);
+    if (!action) return;
+    event.preventDefault();
+    if (action.type === "append-row") {
+      onChange({ ...block, rows: [...block.rows, block.header.map(() => "")] });
+      focusCell(block.rows.length, column);
+      return;
+    }
+    focusCell(Math.max(0, action.row), column);
+  };
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLInputElement>, column: number) => {
+    if (event.key !== "Enter" && event.key !== "ArrowDown") return;
+    handleKeyDown(event, -1, column);
+  };
+
+  return (
+    <div className={`block-table ${oversized ? "oversized" : ""}`}>
+      <table ref={tableRef}>
+        <thead>
+          <tr>
+            {Array.from({ length: columnCount }, (_, column) => (
+              <th key={column}>
+                <div className="table-cell">
+                  <input
+                    aria-label={`${pageLabel}表格表头第 ${column + 1} 列`}
+                    data-cell-column={column}
+                    maxLength={100}
+                    placeholder={`表头 ${column + 1}`}
+                    value={block.header[column] ?? ""}
+                    onKeyDown={(event) => handleHeaderKeyDown(event, column)}
+                    onChange={(event) => setHeaderCell(column, event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="icon-action"
+                    aria-label={`删除${pageLabel}表格第 ${column + 1} 列`}
+                    disabled={columnCount <= 1}
+                    onClick={() => removeColumn(column)}
+                  >
+                    <X />
+                  </button>
+                </div>
+              </th>
+            ))}
+            <th className="table-row-actions" aria-hidden="true" />
+          </tr>
+        </thead>
+        <tbody>
+          {block.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {Array.from({ length: columnCount }, (_, column) => (
+                <td key={column}>
+                  <input
+                    aria-label={`${pageLabel}表格第 ${rowIndex + 1} 行第 ${column + 1} 列`}
+                    data-cell-row={rowIndex}
+                    data-cell-column={column}
+                    maxLength={500}
+                    value={row[column] ?? ""}
+                    onKeyDown={(event) => handleKeyDown(event, rowIndex, column)}
+                    onChange={(event) => setBodyCell(rowIndex, column, event.target.value)}
+                  />
+                </td>
+              ))}
+              <td className="table-row-actions">
+                <button
+                  type="button"
+                  className="icon-action"
+                  aria-label={`删除${pageLabel}表格第 ${rowIndex + 1} 行`}
+                  disabled={block.rows.length <= 1}
+                  onClick={() => removeRow(rowIndex)}
+                >
+                  <X />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="table-actions">
+        <button type="button" className="link-action" disabled={columnCount >= TABLE_REVIEW_MAX_COLUMNS} onClick={addColumn}>
+          <Plus />
+          添加一列
+        </button>
+        <button type="button" className="link-action" disabled={block.rows.length >= TABLE_REVIEW_MAX_ROWS} onClick={addRow}>
+          <Plus />
+          添加一行
+        </button>
+      </div>
+      <small className={oversized ? "table-warning" : undefined}>
+        {oversized
+          ? `表格超过可编辑上限（最多 ${TABLE_REVIEW_MAX_COLUMNS} 列、${TABLE_REVIEW_MAX_ROWS} 行），请删减后再确认。`
+          : "单元格作为结构化数据保存，导出为可编辑的 PowerPoint 表格。"}
+      </small>
+    </div>
+  );
+}
+
+/**
  * Structured pages are edited through their blocks, because a block is what
  * the renderer draws. Editing only the body string here used to flatten a
  * metric, comparison or timeline page into a bullet list.
@@ -253,19 +425,7 @@ function BlockEditor({ slideIndex, blocks, onChange }: { slideIndex: number; blo
               </>
             )}
             {block.type === "table-data" && (
-              <div className="block-table">
-                <table>
-                  <thead>
-                    <tr>{block.header.map((cell, cellIndex) => <th key={cellIndex}>{cell}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {block.rows.map((row, rowIndex) => (
-                      <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>
-                    ))}
-                  </tbody>
-                </table>
-                <small>表格已按结构化单元格保存，生成后可在编辑器中逐格修改。</small>
-              </div>
+              <TableEditor pageLabel={pageLabel} block={block} onChange={(next) => replace(index, next)} />
             )}
           </section>
         );
