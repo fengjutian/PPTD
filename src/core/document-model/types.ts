@@ -141,6 +141,31 @@ export interface ShapeElement extends ElementBase {
 }
 
 /**
+ * One level of the type scale a theme declares.
+ *
+ * The generator reads these instead of hard-coded point sizes, so a template or
+ * a built-in theme can own its own hierarchy: a 26pt title and a 16pt body keep
+ * their relation without every layout branch repeating the numbers.
+ */
+export interface TextStyleToken {
+  fontSizePt: number;
+  bold?: boolean;
+  color?: string;
+  /** Multiple of the font size. Absent means the renderer's default leading. */
+  lineHeight?: number;
+  letterSpacingPt?: number;
+}
+
+/** The named levels of a theme's type scale. */
+export interface DocumentTextStyles {
+  display?: TextStyleToken;
+  title?: TextStyleToken;
+  subtitle?: TextStyleToken;
+  body?: TextStyleToken;
+  caption?: TextStyleToken;
+}
+
+/**
  * The theme of the template the deck was designed against. It is design state:
  * it never carries reviewed copy, so it may change without touching the content
  * version.
@@ -151,6 +176,8 @@ export interface DocumentTheme {
   minorFont: string;
   /** Theme color slots in scheme order, e.g. dk1, lt1, accent1. */
   colors: Array<{ name: string; value: string }>;
+  /** Named type levels. Absent levels fall back to the generator defaults. */
+  textStyles?: DocumentTextStyles;
 }
 
 /**

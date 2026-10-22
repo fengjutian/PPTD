@@ -231,4 +231,14 @@ mod tests {
         assert!(examples.contains(name.as_str()));
         assert!(examples.contains(suffix.as_str()));
     }
+
+    #[test]
+    fn the_image_rules_come_from_the_lexicon() {
+        let lexicon = TitleLexicon::load();
+        let prompt = lexicon.image_prompt_rules_prompt();
+        // 提示里的词必须来自词表：检测端用的就是同一批词。
+        assert!(prompt.contains("文字"));
+        assert!(prompt.contains(&lexicon.max_images_per_deck.to_string()));
+        assert!(prompt.contains("画面"));
+    }
 }

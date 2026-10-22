@@ -39,13 +39,24 @@ function estimateEntryBytes(entry: HistoryEntry): number {
 interface EditorState {
   document: PresentationDocument;
   activeSlideId: SlideId;
-  selectedElementId: ElementId | null;
+  /**
+   * 选中的对象。
+   *
+   * 多选是这个数组，不是一个可选的 id：只选一个时数组里只有一个元素。
+   * 选中状态不进入文档，所以它不改变 revision，也不进撤销栈。
+   */
+  selectedElementIds: ElementId[];
   undoStack: HistoryEntry[];
   redoStack: HistoryEntry[];
   execute: (command: DocumentCommand) => void;
   replaceDocument: (document: PresentationDocument, change?: ChangeDomain) => void;
   selectSlide: (slideId: SlideId) => void;
+  /** 只选这一个对象，替换当前选择。 */
   selectElement: (elementId: ElementId | null) => void;
+  /** 增减一个对象的选中状态（Ctrl 或 Shift 点击）。 */
+  toggleElement: (elementId: ElementId) => void;
+  /** 直接设定选中的一组对象（框选）。 */
+  selectElements: (elementIds: ElementId[]) => void;
   undo: () => void;
   redo: () => void;
   newDocument: () => void;
@@ -63,10 +74,23 @@ const pushHistory = (stack: HistoryEntry[], entry: HistoryEntry): HistoryEntry[]
   return next;
 };
 
+/**
+ * 丢掉已经不在文档里的选中项。
+ *
+ * 删除、重排、换页都会让旧选择失效。选择状态必须跟着文档走，否则属性面板
+ * 会显示一个已经不存在的对象。
+ */
+function pruneSelection(selected: ElementId[], document: PresentationDocument): ElementId[] {
+  if (selected.length === 0) return selected;
+  const alive = new Set(document.slides.flatMap((slide) => slide.elements.map((element) => element.id)));
+  const next = selected.filter((id) => alive.has(id));
+  return next.length === selected.length ? selected : next;
+}
+
 export const useEditorStore = create<EditorState>((set) => ({
   document: initial,
   activeSlideId: initial.slides[0]!.id,
-  selectedElementId: null,
+  selectedElementIds: [],
   undoStack: [],
   redoStack: [],
 
@@ -92,20 +116,20 @@ export const useEditorStore = create<EditorState>((set) => ({
     }
     // Design edits on the selected element must not drop the selection, otherwise
     // handles disappear after a drag and repeated keyboard nudges stop working.
-    let selectedElementId: ElementId | null = state.selectedElementId;
+    let selectedElementIds = state.selectedElementIds;
     if (command.type === "add-text" || command.type === "add-shape" || command.type === "add-image") {
-      selectedElementId = document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id;
+      selectedElementIds = [document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id];
     }
     if (command.type === "duplicate-element") {
       const slide = document.slides.find((item) => item.id === command.slideId)!;
       const sourceIndex = state.document.slides.find((item) => item.id === command.slideId)!.elements.findIndex((item) => item.id === command.elementId);
-      selectedElementId = slide.elements[sourceIndex + 1]!.id;
+      selectedElementIds = [slide.elements[sourceIndex + 1]!.id];
     }
-    if (command.type === "set-element-lock") selectedElementId = command.elementId;
-    if (command.type === "delete-element" && selectedElementId === command.elementId) selectedElementId = null;
-    if (command.type === "add-slide" || command.type === "duplicate-slide" || command.type === "delete-slide" || command.type === "move-slide" || command.type === "apply-ai-draft" || command.type === "apply-ai-designed-draft") selectedElementId = null;
-    if (selectedElementId && !document.slides.some((slide) => slide.elements.some((element) => element.id === selectedElementId))) selectedElementId = null;
-    return { ...state, document, activeSlideId, selectedElementId, undoStack: pushHistory(state.undoStack, { forward, inverse }), redoStack: [] };
+    if (command.type === "set-element-lock") selectedElementIds = [command.elementId];
+    if (command.type === "delete-element") selectedElementIds = selectedElementIds.filter((id) => id !== command.elementId);
+    if (command.type === "add-slide" || command.type === "duplicate-slide" || command.type === "delete-slide" || command.type === "move-slide" || command.type === "apply-ai-draft" || command.type === "apply-ai-designed-draft") selectedElementIds = [];
+    selectedElementIds = pruneSelection(selectedElementIds, document);
+    return { ...state, document, activeSlideId, selectedElementIds, undoStack: pushHistory(state.undoStack, { forward, inverse }), redoStack: [] };
   }),
 
   replaceDocument: (document, change = "both") => set((state) => {
@@ -134,34 +158,40 @@ export const useEditorStore = create<EditorState>((set) => ({
       ...state,
       document: nextDocument,
       activeSlideId: nextDocument.slides[0]!.id,
-      selectedElementId: null,
+      selectedElementIds: [],
       undoStack: pushHistory(state.undoStack, { forward, inverse }),
       redoStack: [],
     };
   }),
 
-  selectSlide: (activeSlideId) => set({ activeSlideId, selectedElementId: null }),
-  selectElement: (selectedElementId) => set({ selectedElementId }),
+  selectSlide: (activeSlideId) => set({ activeSlideId, selectedElementIds: [] }),
+  selectElement: (elementId) => set({ selectedElementIds: elementId ? [elementId] : [] }),
+  toggleElement: (elementId) => set((state) => ({
+    selectedElementIds: state.selectedElementIds.includes(elementId)
+      ? state.selectedElementIds.filter((id) => id !== elementId)
+      : [...state.selectedElementIds, elementId],
+  })),
+  selectElements: (elementIds) => set({ selectedElementIds: [...new Set(elementIds)] }),
 
   undo: () => set((state) => {
     const entry = state.undoStack.at(-1);
     if (!entry) return state;
     const document = applyPatches(state.document, entry.inverse);
-    return { ...state, document, activeSlideId: document.slides.some((s) => s.id === state.activeSlideId) ? state.activeSlideId : document.slides[0]!.id, undoStack: state.undoStack.slice(0, -1), redoStack: [...state.redoStack, entry], selectedElementId: null };
+    return { ...state, document, activeSlideId: document.slides.some((s) => s.id === state.activeSlideId) ? state.activeSlideId : document.slides[0]!.id, undoStack: state.undoStack.slice(0, -1), redoStack: [...state.redoStack, entry], selectedElementIds: [] };
   }),
 
   redo: () => set((state) => {
     const entry = state.redoStack.at(-1);
     if (!entry) return state;
     const document = applyPatches(state.document, entry.forward);
-    return { ...state, document, activeSlideId: document.slides.some((s) => s.id === state.activeSlideId) ? state.activeSlideId : document.slides[0]!.id, undoStack: pushHistory(state.undoStack, entry), redoStack: state.redoStack.slice(0, -1), selectedElementId: null };
+    return { ...state, document, activeSlideId: document.slides.some((s) => s.id === state.activeSlideId) ? state.activeSlideId : document.slides[0]!.id, undoStack: pushHistory(state.undoStack, entry), redoStack: state.redoStack.slice(0, -1), selectedElementIds: [] };
   }),
   newDocument: () => set(() => {
     const document = createDocument();
-    return { document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] };
+    return { document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] };
   }),
   loadDocument: (document) => set(() => {
     refreshContentHashes(document);
-    return { document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] };
+    return { document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] };
   }),
 }));

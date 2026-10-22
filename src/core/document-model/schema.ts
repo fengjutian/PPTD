@@ -83,11 +83,26 @@ const chartElement = base.extend({
   }),
 });
 
+const textStyleTokenSchema = z.object({
+  fontSizePt: z.number().positive().max(200),
+  bold: z.boolean().optional(),
+  color: hexColor.optional(),
+  lineHeight: z.number().min(0.8).max(3).optional(),
+  letterSpacingPt: z.number().min(-2).max(20).optional(),
+});
+
 const themeSchema = z.object({
   name: z.string().min(1).max(200),
   majorFont: z.string().min(1).max(200),
   minorFont: z.string().min(1).max(200),
   colors: z.array(z.object({ name: z.string().min(1).max(64), value: hexColor })).max(64),
+  textStyles: z.object({
+    display: textStyleTokenSchema.optional(),
+    title: textStyleTokenSchema.optional(),
+    subtitle: textStyleTokenSchema.optional(),
+    body: textStyleTokenSchema.optional(),
+    caption: textStyleTokenSchema.optional(),
+  }).optional(),
 });
 
 const slideLayoutSchema = z.object({

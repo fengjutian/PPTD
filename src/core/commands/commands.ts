@@ -1,4 +1,4 @@
-import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
+import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTextStyles, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
 import { createDocument, createSlide, inches, parseMetricValue, applyTextRun, subtractTextRange, type TextRunStyle } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { alignFrames, distributeFrames, unionFrame, type ArrangeHorizontal, type ArrangeVertical } from "./arrange";
@@ -79,9 +79,38 @@ export interface AiTemplateTheme {
   majorFont?: string;
   minorFont?: string;
   colors?: Array<{ name: string; value: string }>;
+  /** The type scale of the theme, when the template or preset declares one. */
+  textStyles?: DocumentTextStyles;
 }
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+const TEXT_STYLE_LEVELS = ["display", "title", "subtitle", "body", "caption"] as const;
+
+/**
+ * Reads the named type levels of a theme.
+ *
+ * The value arrives from outside the domain (a template analysis or a preset),
+ * so every level is re-validated: a missing or absurd size is dropped instead of
+ * silently scaling the whole deck.
+ */
+function readTextStyles(input: AiTemplateTheme["textStyles"]): DocumentTheme["textStyles"] {
+  if (!input) return undefined;
+  const result: NonNullable<DocumentTheme["textStyles"]> = {};
+  for (const level of TEXT_STYLE_LEVELS) {
+    const token = input[level];
+    if (!token || !Number.isFinite(token.fontSizePt)) continue;
+    const fontSizePt = Math.min(120, Math.max(8, token.fontSizePt));
+    result[level] = {
+      fontSizePt,
+      ...(typeof token.bold === "boolean" ? { bold: token.bold } : {}),
+      ...(typeof token.color === "string" && HEX_COLOR_PATTERN.test(token.color) ? { color: token.color } : {}),
+      ...(typeof token.lineHeight === "number" && Number.isFinite(token.lineHeight) ? { lineHeight: token.lineHeight } : {}),
+      ...(typeof token.letterSpacingPt === "number" && Number.isFinite(token.letterSpacingPt) ? { letterSpacingPt: token.letterSpacingPt } : {}),
+    };
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
 
 function readTemplateTheme(theme: AiTemplateTheme | undefined): DocumentTheme | undefined {
   if (!theme) return undefined;

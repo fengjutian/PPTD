@@ -235,6 +235,15 @@ button { color: inherit; }
 .slide-plan-body { display: grid; gap: 5px; padding: 0 12px 10px; }
 .slide-plan-body p { margin: 0; color: #8f949d; font-size: 10px; line-height: 1.55; }
 .slide-plan-body p strong { margin-right: 8px; color: #c9ccd2; }
+.visual-asset-controls { display: flex; align-items: center; gap: 10px; }
+.visual-asset-toggle { display: inline-flex; align-items: center; gap: 6px; color: #8f949d; font-size: 10px; cursor: pointer; }
+.visual-asset-controls select { padding: 4px 8px; border: 1px solid #2f3137; border-radius: 6px; color: #c9ccd2; background: #1b1c21; font-size: 11px; }
+.visual-asset-prompt { width: 100%; min-height: 48px; padding: 7px 9px; border: 1px solid #2f3137; border-radius: 7px; color: #e6e8ec; background: #141519; resize: vertical; font-size: 12px; line-height: 1.6; }
+.visual-asset-prompt:disabled { opacity: .55; }
+.visual-asset-hint { margin: 0; color: #6f747d; font-size: 10px; }
+.visual-asset-issues { display: grid; gap: 5px; margin: 4px 0 0; padding: 0; list-style: none; }
+.visual-asset-issues li { display: flex; align-items: center; gap: 6px; color: #e0a86a; font-size: 10px; }
+.visual-asset-issues svg { width: 12px; height: 12px; flex: 0 0 auto; }
 .block-editor { display: grid; gap: 8px; margin-top: 12px; }
 .block-row { display: grid; gap: 7px; padding: 10px 12px; border: 1px solid #2f3137; border-radius: 9px; background: #1b1c21; }
 .block-row-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -818,6 +827,7 @@ button { color: inherit; }
 :root[data-theme="light"] .slide-plan summary { color: #686e77; }
 :root[data-theme="light"] .slide-plan-body p { color: #686e77; }
 :root[data-theme="light"] .slide-plan-body p strong { color: #343942; }
+:root[data-theme="light"] .visual-asset-prompt { color: #24272c; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .visual-asset-controls select { color: #3a3f47; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .visual-asset-toggle { color: #5f646d; } :root[data-theme="light"] .visual-asset-hint { color: #6d727b; } :root[data-theme="light"] .visual-asset-issues li { color: #9a5b12; }
 :root[data-theme="light"] .draft-notes { border-color: #e3e5e8; }
 :root[data-theme="light"] .draft-notes summary { color: #686e77; }
 :root[data-theme="light"] .ai-history { background: #f7f8fa; border-right-color: #d9dce1; } :root[data-theme="light"] .ai-history-heading { color: #353a42; } :root[data-theme="light"] .ai-history-empty { color: #6d727b; border-color: #ccd0d7; } :root[data-theme="light"] .ai-history > button { color: #5d636d; background: #fff; border-color: #d4d7dc; } :root[data-theme="light"] .ai-history > button:hover { border-color: var(--ppt-accent); background: #fff8f5; } :root[data-theme="light"] .ai-history > button strong { color: #272b31; }
@@ -894,6 +904,7 @@ button { color: inherit; }
 :root[data-theme="amber"] .slide-plan summary { color: #75695a; }
 :root[data-theme="amber"] .slide-plan-body p { color: #75695a; }
 :root[data-theme="amber"] .slide-plan-body p strong { color: #3d342a; }
+:root[data-theme="amber"] .visual-asset-prompt { color: #322b22; background: #fffdf8; border-color: #ded1bb; } :root[data-theme="amber"] .visual-asset-controls select { color: #453c2f; background: #fffdf8; border-color: #ded1bb; } :root[data-theme="amber"] .visual-asset-toggle { color: #5f5344; } :root[data-theme="amber"] .visual-asset-hint { color: #75695a; } :root[data-theme="amber"] .visual-asset-issues li { color: #8a4f0e; }
 :root[data-theme="amber"] .draft-notes { border-color: #e3d6c0; }
 :root[data-theme="amber"] .draft-notes summary { color: #75695a; }
 :root[data-theme="amber"] .ai-history { background: #f7f0e2; border-right-color: #e3d6c0; } :root[data-theme="amber"] .ai-history-heading { color: #3a3229; } :root[data-theme="amber"] .ai-history-heading span { color: #7d7263; } :root[data-theme="amber"] .ai-history-empty { color: #6f6557; border-color: #ddd0ba; } :root[data-theme="amber"] .ai-history > button { color: #5d5346; background: #fffdf8; border-color: #ded1bb; } :root[data-theme="amber"] .ai-history > button:hover { background: #fdf2e2; } :root[data-theme="amber"] .ai-history > button strong { color: #2f2820; }
@@ -1160,6 +1171,11 @@ button { color: inherit; }
 :root[data-theme="blue"] .font-badge { border-color: #d2d0ce; color: #605e5c; }
 :root[data-theme="blue"] .font-badge.missing { border-color: #c2a678; color: #8a5a12; background: #fdf3e2; }
 :root[data-theme="blue"] .settings-actions { background: linear-gradient(transparent, #f3f2f1 22%); }
+:root[data-theme="blue"] .slide-plan { border-color: #d2d0ce; background: #f3f2f1; }
+:root[data-theme="blue"] .slide-plan summary { color: #605e5c; }
+:root[data-theme="blue"] .slide-plan-body p { color: #605e5c; }
+:root[data-theme="blue"] .slide-plan-body p strong { color: #323130; }
+:root[data-theme="blue"] .visual-asset-prompt { color: #323130; background: #fff; border-color: #d2d0ce; } :root[data-theme="blue"] .visual-asset-controls select { color: #3a3b3e; background: #fff; border-color: #d2d0ce; } :root[data-theme="blue"] .visual-asset-toggle { color: #48494d; } :root[data-theme="blue"] .visual-asset-hint { color: #605e5c; } :root[data-theme="blue"] .visual-asset-issues li { color: #8a5300; }
 :root[data-theme="green"] .workflow-steps span.active, :root[data-theme="green"] .section-kicker { color: #107c41; }
 :root[data-theme="green"] .draft-outline-index, :root[data-theme="green"] .draft-slide-number, :root[data-theme="green"] .slide-plan summary small { color: #107c41; }
 :root[data-theme="green"] .draft-review label { color: #484644; }
@@ -1179,6 +1195,7 @@ button { color: inherit; }
 :root[data-theme="green"] .slide-plan summary { color: #605e5c; }
 :root[data-theme="green"] .slide-plan-body p { color: #605e5c; }
 :root[data-theme="green"] .slide-plan-body p strong { color: #323130; }
+:root[data-theme="green"] .visual-asset-prompt { color: #323130; background: #fff; border-color: #d2d0ce; } :root[data-theme="green"] .visual-asset-controls select { color: #3b3a38; background: #fff; border-color: #d2d0ce; } :root[data-theme="green"] .visual-asset-toggle { color: #484644; } :root[data-theme="green"] .visual-asset-hint { color: #605e5c; } :root[data-theme="green"] .visual-asset-issues li { color: #8a5300; }
 :root[data-theme="green"] .draft-notes { border-color: #e1dfdd; }
 :root[data-theme="green"] .draft-notes summary { color: #605e5c; }
 
