@@ -894,8 +894,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(shape(frame(contentBox.x, rowY, 0.006, rowHeight), design.accent));
           // The number sits on the first line of its row, so the column of
           // numbers reads as one straight line even when the rows below it
-          // need a second line.
-          const numberBox = { x: contentBox.x + 0.015, y: rowY, width: numberWidth, height: rowHeight };
+          // need a second line. Its own line box is the height of one line
+          // of the row, so a larger number does not push it down.
+          const numberLineHeight = flowHeightFraction(row.fontSizePt * 1.25);
+          const numberBox = { x: contentBox.x + 0.015, y: rowY, width: numberWidth, height: numberLineHeight };
           slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), frame(numberBox.x, numberBox.y, numberBox.width, numberBox.height), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
           const itemBox = { x: contentBox.x + numberWidth + 0.03, y: rowY, width: listWidth - numberWidth - 0.03, height: rowHeight };
           slide.elements.push(text(row.text, frame(itemBox.x, itemBox.y, itemBox.width, itemBox.height), row.fontSizePt, bodyInk, false, "left", undefined, contentTextLuminance));
@@ -913,7 +915,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // quote really needs, so a short quote does not leave a hole under
           // the mark and a long one does not push the label off the panel.
           const markSize = 62;
-          const markHeightPt = markSize;
+          // The quote mark keeps its own size: shrinking it to fit the panel
+          // made the largest ornament of the page the smallest object on it.
+          // The height is one line of the mark, so the fitting step of the text
+          // helper does not shrink it either.
+          const markHeightPt = markSize * 1.25;
           const labelHeightPt = 12 * 1.25;
           const markTopPt = 8;
           const labelBottomMarginPt = 10;
@@ -937,7 +943,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             if (height <= quoteAreaPt) break;
           }
           const quoteFrame = frame(panelX + 0.05, contentBox.y + quoteTopPt / pageHeightPt, panelWidth - 0.10, quoteHeightPt / pageHeightPt);
-          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.12, markHeightPt / pageHeightPt), markSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.20, markHeightPt / pageHeightPt), markSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(text(panelQuote, quoteFrame, quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
           // The rule and the label keep their place under the quote, so the
           // panel always ends the same way.
