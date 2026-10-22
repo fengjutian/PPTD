@@ -99,9 +99,9 @@ describe("presentation document schema", () => {
     const element = document.slides[0]!.elements[0]!;
     if (element.type !== "text") throw new Error("expected a text element");
     element.runs = [{ start: 0, end: 2, bold: true }];
-    expect(presentationDocumentSchema.parse(document).slides[0]!.elements[0]!.type === "text"
-      ? presentationDocumentSchema.parse(document).slides[0]!.elements[0]!.runs
-      : undefined).toEqual([{ start: 0, end: 2, bold: true }]);
+    const parsed = presentationDocumentSchema.parse(document);
+    const parsedElement = parsed.slides[0]!.elements[0]!;
+    expect(parsedElement.type === "text" ? parsedElement.runs : undefined).toEqual([{ start: 0, end: 2, bold: true }]);
 
     const invalid = createDocument();
     const broken = invalid.slides[0]!.elements[0]!;

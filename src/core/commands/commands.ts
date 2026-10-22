@@ -1,4 +1,4 @@
-import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle, TextRun } from "../document-model";
+import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
 import { createDocument, createSlide, inches, parseMetricValue, applyTextRun, subtractTextRange, type TextRunStyle } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";

@@ -112,6 +112,24 @@ describe("inspector panel", () => {
     expect(markup).toContain("架构示意图");
   });
 
+  it("offers the emphasis of a part of the text and shows what is already marked", () => {
+    const markup = renderView(textElement());
+    // Without a selection there is nothing to emphasise, so the control waits.
+    expect(markup).toContain("加粗所选");
+    expect(buttonDisabled(markup, "加粗所选")).toBe(true);
+  });
+
+  it("lists the emphasised fragments of the text", () => {
+    const element = textElement();
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.text = "覆盖机构：12万";
+    element.runs = [{ start: 0, end: 4, bold: true }];
+    const markup = renderView(element);
+    expect(markup).toContain("已强调 1 处");
+    expect(markup).toContain("覆盖机构");
+    expect(buttonDisabled(markup, "清除全部强调")).toBe(false);
+  });
+
   it("keeps the geometry section and the layer actions", () => {
     const markup = renderView(textElement());
     expect(markup).toContain("位置与尺寸");

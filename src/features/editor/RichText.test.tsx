@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createDocument, type ElementId, type TextElement } from "../../core/document-model";
+import { createDocument, type TextElement } from "../../core/document-model";
 import { RichText } from "./RichText";
 
 function textElement(text: string, runs?: TextElement["runs"]): TextElement {

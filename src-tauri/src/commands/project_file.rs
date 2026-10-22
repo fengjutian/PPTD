@@ -5,6 +5,7 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
+    sync::Mutex,
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -246,7 +247,36 @@ fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> R
     }
 }
 
+/// 同一进程内的写操作串行化。
+///
+/// 自动保存与手动保存可能撞在一起，两个任务同时替换同一个文件时后者会拿到
+/// "拒绝访问"。把写操作排成队，比让用户看到一次失败的保存更合理。
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+/// 替换目标文件，失败时重试。
+///
+/// Windows 上只要还有句柄指向目标文件，替换就会失败——哪怕那个句柄只是刚好
+/// 读了一下。句柄通常很短命，所以重试几次就能挤过去。
+fn persist_with_retry(temporary: NamedTempFile, path: &Path) -> Result<(), String> {
+    let mut pending = temporary;
+    for attempt in 0..5_u32 {
+        match pending.persist(path) {
+            Ok(_) => return Ok(()),
+            Err(error) => {
+                let detail = error.error;
+                pending = error.file;
+                if attempt == 4 {
+                    return Err(format!("FILE_REPLACE_FAILED: {detail}"));
+                }
+                std::thread::sleep(Duration::from_millis(25 * u64::from(attempt) + 25));
+            }
+        }
+    }
+    Err("FILE_REPLACE_FAILED".into())
+}
+
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let parent = path.parent().ok_or("INVALID_PARENT_PATH")?;
     let mut temporary = NamedTempFile::new_in(parent)
         .map_err(|error| format!("TEMP_FILE_CREATE_FAILED: {error}"))?;
@@ -257,13 +287,11 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .as_file()
         .sync_all()
         .map_err(|error| format!("FILE_SYNC_FAILED: {error}"))?;
-    temporary
-        .persist(path)
-        .map_err(|error| format!("FILE_REPLACE_FAILED: {}", error.error))?;
-    Ok(())
+    persist_with_retry(temporary, path)
 }
 
 fn atomic_write_json(path: &Path, document: &Value) -> Result<(), String> {
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|error| error.into_inner());
     let parent = path.parent().ok_or("INVALID_PARENT_PATH")?;
     let mut temporary = NamedTempFile::new_in(parent)
         .map_err(|error| format!("TEMP_FILE_CREATE_FAILED: {error}"))?;
@@ -285,10 +313,7 @@ fn atomic_write_json(path: &Path, document: &Value) -> Result<(), String> {
         .as_file()
         .sync_all()
         .map_err(|error| format!("FILE_SYNC_FAILED: {error}"))?;
-    temporary
-        .persist(path)
-        .map_err(|error| format!("FILE_REPLACE_FAILED: {}", error.error))?;
-    Ok(())
+    persist_with_retry(temporary, path)
 }
 
 fn assets_root(path: &Path) -> Result<PathBuf, String> {
@@ -1543,7 +1568,9 @@ mod tests {
                 .and_then(Value::as_str),
             Some("asset://revision-3/33333333-3333-4333-8333-333333333333.png")
         );
-        let restored = load_recovery_at(&path).unwrap().expect("recovery copy must exist");
+        let restored = load_recovery_at(&path)
+            .unwrap()
+            .expect("recovery copy must exist");
         assert_eq!(
             restored
                 .pointer("/slides/0/elements/0/source/dataUrl")
@@ -1586,25 +1613,81 @@ mod tests {
         clear_recovery_at(&path).unwrap();
     }
 
-    #[cfg(windows)]
     #[test]
-    fn keeps_the_previous_version_when_a_save_is_interrupted() {
+    fn never_exposes_a_half_written_file() {
+        // 保存中断的可观测后果只有一个：读者永远只能看到完整的旧版本或完整的新版本，
+        // 不能看到写了一半的文件。
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("project.pptd");
-        atomic_write(&path, b"{\"version\":1}").unwrap();
+        let first = vec![b'a'; 64 * 1024];
+        let second = vec![b'b'; 64 * 1024];
+        atomic_write(&path, &first).unwrap();
 
-        // 只读目录让写入在落到目标文件之前就失败：这是保存中断的样子。
-        let mut permissions = fs::metadata(directory.path()).unwrap().permissions();
-        permissions.set_readonly(true);
-        fs::set_permissions(directory.path(), permissions).unwrap();
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = stop.clone();
+        let reader_path = path.clone();
+        let reader_first = first.clone();
+        let reader_second = second.clone();
+        let reader = std::thread::spawn(move || {
+            while !flag.load(std::sync::atomic::Ordering::SeqCst) {
+                if let Ok(bytes) = fs::read(&reader_path) {
+                    assert!(
+                        bytes == reader_first || bytes == reader_second,
+                        "a reader must never see a half-written file"
+                    );
+                }
+            }
+        });
+        for _ in 0..30 {
+            atomic_write(&path, &second).unwrap();
+            atomic_write(&path, &first).unwrap();
+        }
+        stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        reader.join().unwrap();
+    }
+
+    #[test]
+    fn a_failed_replacement_leaves_the_previous_version_intact() {
+        // 目标是已存在的目录时替换必然失败：失败不能留下半截文件。
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("project.pptd");
+        fs::create_dir(&path).unwrap();
+
         let error = atomic_write(&path, b"{\"version\":2}").unwrap_err();
-        let mut writable = fs::metadata(directory.path()).unwrap().permissions();
-        writable.set_readonly(false);
-        fs::set_permissions(directory.path(), writable).unwrap();
 
-        assert!(error.starts_with("TEMP_FILE_CREATE_FAILED"), "{error}");
-        // 上一个有效版本必须完好无损。
-        assert_eq!(fs::read(&path).unwrap(), b"{\"version\":1}");
+        assert!(error.starts_with("FILE_REPLACE_FAILED"), "{error}");
+        assert!(path.is_dir());
+        assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn concurrent_saves_do_not_fail_each_other() {
+        // 自动保存和手动保存可能同时触发。两个任务都写同一个文件时，
+        // 后替换的那个不应该拿到"拒绝访问"。
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("project.pptd");
+        let failures = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut handles = Vec::new();
+        for worker in 0..4_u8 {
+            let path = path.clone();
+            let failures = failures.clone();
+            handles.push(std::thread::spawn(move || {
+                for round in 0..10 {
+                    let payload = format!("{{\"worker\":{worker},\"round\":{round}}}");
+                    if let Err(error) = atomic_write(&path, payload.as_bytes()) {
+                        failures.lock().unwrap().push(error);
+                    }
+                }
+            }));
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        let failures = failures.lock().unwrap();
+        assert!(failures.is_empty(), "{failures:?}");
+        // 最后写入的内容必须是某一次完整写入的结果。
+        let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(stored.get("worker").is_some());
     }
 
     #[test]

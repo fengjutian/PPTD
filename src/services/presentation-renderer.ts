@@ -12,18 +12,6 @@ function isImageRenderFailure(error: unknown): boolean {
   return error instanceof Error && error.message.includes("VISUAL_RENDER_IMAGE_FAILED");
 }
 
-function wrapText(context: CanvasRenderingContext2D, text: string, width: number): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.split("\n")) {
-    let line = "";
-    for (const character of paragraph) {
-      if (line && context.measureText(line + character).width > width) { lines.push(line); line = character; } else line += character;
-    }
-    lines.push(line);
-  }
-  return lines;
-}
-
 async function renderSlide(document: PresentationDocument, slide: Slide, width: number, includeText = true, tolerateImageErrors = false): Promise<HTMLCanvasElement> {
   const height = Math.round(width * document.pageSize.height / document.pageSize.width);
   const canvas = window.document.createElement("canvas"); canvas.width = width; canvas.height = height;
