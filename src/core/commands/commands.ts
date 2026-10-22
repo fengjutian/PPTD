@@ -1526,6 +1526,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // Otherwise the title runs underneath the picture.
         const clippedTitle = clipToTextArea(coverTitle, contentAreaEmu);
         const clippedBody = clipToTextArea(coverBody, contentAreaEmu);
+        // A four-character title at display size looks like a caption on a
+        // 13-inch page. A short cover title may grow to hold the page; a long
+        // one keeps the display size, because the frame is the limit.
+        const coverTitleSize =
+          templateTitleSize ?? (content.title.trim().length <= 8 ? Math.min(72, Math.round(typeScale.display * 1.5)) : typeScale.display);
         if (!keepsArtwork)
           slide.elements.push(
             shape(frame(0, 0, 0.035, 1), design.accent),
@@ -1535,7 +1540,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           text(
             content.title,
             clippedTitle,
-            templateTitleSize ?? typeScale.display,
+            coverTitleSize,
             titleInk,
             true,
             "left",

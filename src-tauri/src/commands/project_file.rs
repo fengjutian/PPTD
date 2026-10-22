@@ -227,6 +227,7 @@ fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> R
         script,
         source,
         output,
+        None,
         TEMPLATE_RENDER_TIMEOUT,
         PowerShellErrorCodes {
             unavailable: "TEMPLATE_RENDERER_UNAVAILABLE",
@@ -249,10 +250,12 @@ fn run_powershell_script(
     script: &Path,
     source: &Path,
     output: &Path,
+    indexes: Option<&str>,
     timeout: Duration,
     codes: PowerShellErrorCodes,
 ) -> Result<(), String> {
-    let mut child = Command::new("powershell.exe")
+    let mut command = Command::new("powershell.exe");
+    command
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -264,7 +267,11 @@ fn run_powershell_script(
         .arg("-Source")
         .arg(source)
         .arg("-Output")
-        .arg(output)
+        .arg(output);
+    if let Some(indexes) = indexes {
+        command.arg("-Indexes").arg(indexes);
+    }
+    let mut child = command
         .spawn()
         .map_err(|error| format!("{}: {error}", codes.unavailable))?;
     let deadline = Instant::now() + timeout;
@@ -982,9 +989,14 @@ pub fn write_pptx_raw(request: Request<'_>) -> Result<(), String> {
 /// 渲染出来的画面，而不是画布上的一次近似重绘。
 ///
 /// 宏被显式禁用：文稿是机器生成的中间产物，不需要也不能执行其中的任何脚本。
-const REVIEW_RASTER_SCRIPT: &str = r#"param([string]$Source, [string]$Output)
+const REVIEW_RASTER_SCRIPT: &str = r#"param([string]$Source, [string]$Output, [string]$Indexes)
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $Output)) { New-Item -ItemType Directory -Path $Output | Out-Null }
+# 只导出请求的页。没有索引时导出全部，保持旧的调用方式可用。
+$wanted = @()
+if (-not [string]::IsNullOrWhiteSpace($Indexes)) {
+  $wanted = $Indexes.Split(',') | ForEach-Object { [int]$_.Trim() }
+}
 $powerPoint = $null
 $presentation = $null
 try {
@@ -992,6 +1004,7 @@ try {
   $powerPoint.AutomationSecurity = 3
   $presentation = $powerPoint.Presentations.Open($Source, -1, 0, 0)
   for ($index = 1; $index -le $presentation.Slides.Count; $index += 1) {
+    if ($wanted.Count -gt 0 -and -not ($wanted -contains $index)) { continue }
     $target = Join-Path $Output ("slide{0}.png" -f $index)
     $presentation.Slides.Item($index).Export($target, 'PNG', 1280, 720)
   }
@@ -1009,8 +1022,51 @@ try {
 /// a JSON array of numbers. PowerPoint may be missing, disabled by policy or
 /// simply not installed; the command then fails and the caller falls back to
 /// the canvas preview. Failing here is not a failure of the generation.
+#[derive(serde::Serialize)]
+pub struct ReviewRasterPage {
+    /// 1-based page number, matching `slideN.png`.
+    pub index: usize,
+    pub image: String,
+}
+
 #[tauri::command]
-pub async fn rasterize_pptx_for_review(request: Request<'_>) -> Result<Vec<String>, String> {
+pub async fn rasterize_pptx_for_review(
+    request: Request<'_>,
+) -> Result<Vec<ReviewRasterPage>, String> {
+    // 页索引来自请求头，逗号分隔、1 起算。只渲染发生变化的页，未变化的页
+    // 由前端复用上一轮的图；没有这个头时仍然导出全部，保持旧行为。
+    let requested = match request.headers().get("x-pptd-slide-indexes") {
+        None => None,
+        Some(value) => {
+            let raw = value.to_str().map_err(|_| "REVIEW_RASTER_INDEX_INVALID")?;
+            let mut indexes = Vec::new();
+            for part in raw.split(',') {
+                let index: usize = part
+                    .trim()
+                    .parse()
+                    .map_err(|_| "REVIEW_RASTER_INDEX_INVALID")?;
+                if index == 0 || index > REVIEW_RASTER_MAX_SLIDES {
+                    return Err("REVIEW_RASTER_INDEX_INVALID".into());
+                }
+                if !indexes.contains(&index) {
+                    indexes.push(index);
+                }
+            }
+            if indexes.is_empty() {
+                return Err("REVIEW_RASTER_INDEX_INVALID".into());
+            }
+            indexes.sort_unstable();
+            Some(indexes)
+        }
+    };
+    let index_argument = requested.as_ref().map(|indexes| {
+        indexes
+            .iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    });
+    let candidates = requested.unwrap_or_else(|| (1..=REVIEW_RASTER_MAX_SLIDES).collect());
     let InvokeBody::Raw(raw) = request.body() else {
         return Err("REVIEW_RASTER_BODY_NOT_RAW".into());
     };
@@ -1039,6 +1095,7 @@ pub async fn rasterize_pptx_for_review(request: Request<'_>) -> Result<Vec<Strin
             &script,
             &source,
             &output,
+            index_argument.as_deref(),
             REVIEW_RASTER_TIMEOUT,
             PowerShellErrorCodes {
                 unavailable: "REVIEW_RASTERER_UNAVAILABLE",
@@ -1048,7 +1105,7 @@ pub async fn rasterize_pptx_for_review(request: Request<'_>) -> Result<Vec<Strin
             },
         )?;
         let mut renders = Vec::new();
-        for index in 1..=REVIEW_RASTER_MAX_SLIDES {
+        for index in candidates {
             let path = output.join(format!("slide{index}.png"));
             if !path.is_file() {
                 continue;
@@ -1058,7 +1115,10 @@ pub async fn rasterize_pptx_for_review(request: Request<'_>) -> Result<Vec<Strin
             if data.is_empty() || data.len() > MAX_TEMPLATE_PREVIEW_BYTES as usize {
                 return Err("REVIEW_RASTER_IMAGE_INVALID".into());
             }
-            renders.push(format!("data:image/png;base64,{}", BASE64.encode(data)));
+            renders.push(ReviewRasterPage {
+                index,
+                image: format!("data:image/png;base64,{}", BASE64.encode(data)),
+            });
         }
         if renders.is_empty() {
             return Err("REVIEW_RASTER_EMPTY".into());

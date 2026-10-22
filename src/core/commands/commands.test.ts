@@ -580,7 +580,7 @@ describe("document commands", () => {
     expect(result.slides[0]!.elements[2]).toMatchObject({
       type: "text",
       text: "已审核标题",
-      style: { fontFamily: "Arial", fontSizePt: 42 },
+      style: { fontFamily: "Arial", fontSizePt: 63 },
     });
   });
 
@@ -3769,5 +3769,21 @@ describe("手工路径的 AI 配图", () => {
       (element): element is TextElement => element.type === "text" && element.contentRef === "body",
     )!;
     expect(body.frame.width).toBe(inches(11.7));
+  });
+
+  it("grows a short cover title and keeps a long one at the display size", () => {
+    const coverSize = (title: string) => {
+      const source = createDocument();
+      const design = { layout: "cover" as const, background: "#FBFAF7", accent: "#2F6B5F", titleColor: "#1E2A32", bodyColor: "#333333" };
+      const result = produce(source, (draft) =>
+        applyCommand(draft, { type: "apply-ai-designed-draft", title: "封面", slides: [{ title, body: "", speakerNotes: "" }], designs: [design] }),
+      );
+      const element = result.slides[0]!.elements.find(
+        (candidate): candidate is TextElement => candidate.type === "text" && candidate.text === title,
+      )!;
+      return element.style.fontSizePt;
+    };
+    expect(coverSize("岳阳楼记")).toBe(63);
+    expect(coverSize("从洞庭湖到岳阳楼：一篇记文的地理与心事")).toBe(42);
   });
 });

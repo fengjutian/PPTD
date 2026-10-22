@@ -39,7 +39,10 @@ export interface DesignQualityStageOptions {
    * 画布上的一次近似重绘。本机没有 PowerPoint 时命令失败，评审降级到画布
    * 渲染继续进行。
    */
-  renderRealPptxForReview?: (document: PresentationDocument) => Promise<{ slides: string[]; contactSheet: string }>;
+  renderRealPptxForReview?: (
+    document: PresentationDocument,
+    options?: { slideIndexes?: number[]; previousSlides?: string[] },
+  ) => Promise<{ slides: string[]; contactSheet: string }>;
   /** 采样文字下方真实像素。测试可替换。 */
   inspectContrast?: (document: PresentationDocument) => Promise<RenderedContrastReport>;
   /** 确定性质量门。测试可替换。 */
@@ -160,6 +163,8 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let reviewSlideCount = 0;
   /** 部分批次失败的原因，评审不能因为一批失败就整体作废。 */
   let partialReviewReason: string | undefined;
+  /** 上一轮成功渲染的设计与整册画面，用于只重画变化页。 */
+  let lastRealRender: { designs: AiSlideDesign[]; slides: string[]; contactSheet: string } | undefined;
 
   try {
     const aligned = await runVisualAlignmentLoop<AiSlideDesign[]>({
@@ -177,7 +182,27 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         let real: { slides: string[]; contactSheet: string } | undefined;
         if (options.renderRealPptxForReview) {
           try {
-            real = await options.renderRealPptxForReview(document);
+            const previous = lastRealRender;
+            // 只有设计真的变了的页需要重画。未变化的页沿用上一轮的图，
+            // 缩略图墙仍由整册画面重新拼。
+            const changed = previous
+              ? current.flatMap((design, slideIndex) =>
+                  JSON.stringify(design) === JSON.stringify(previous.designs[slideIndex]) ? [] : [slideIndex],
+                )
+              : undefined;
+            if (previous && changed && changed.length === 0) {
+              real = { slides: previous.slides, contactSheet: previous.contactSheet };
+            } else {
+              real = await options.renderRealPptxForReview(document, {
+                slideIndexes: changed,
+                previousSlides: previous?.slides,
+              });
+              lastRealRender = {
+                designs: structuredClone(current),
+                slides: real.slides,
+                contactSheet: real.contactSheet,
+              };
+            }
           } catch (error) {
             if (isGenerationCancelled(error)) throw error;
             realRenderFailure = error instanceof Error ? error.message : String(error);

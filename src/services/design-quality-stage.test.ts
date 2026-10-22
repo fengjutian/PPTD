@@ -293,6 +293,68 @@ describe("设计质检阶段", () => {
     expect(result.degraded).toBe(false);
   });
 
+  it("只重画设计发生变化的页面，并复用上一轮画面", async () => {
+    const calls: Array<{ slideIndexes?: number[]; previousSlides?: string[] }> = [];
+    let reviewRound = 0;
+    const result = await runDesignQualityStage({
+      initialDesigns: [design(), design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async () => {
+          reviewRound += 1;
+          return reviewRound === 1
+            ? {
+                ...passingReview,
+                overallScore: 70,
+                issues: [
+                  {
+                    slideIndex: 0,
+                    severity: "error" as const,
+                    issue: "misalignment" as const,
+                    elementIds: [],
+                    suggestion: "换一种版式",
+                  },
+                ],
+              }
+            : passingReview;
+        },
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 0,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "第一页需要换版式",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderRealPptxForReview: async (_document, options) => {
+        calls.push(options ?? {});
+        if (!options?.slideIndexes) return { slides: ["page-0", "page-1"], contactSheet: "sheet" };
+        const slides = [...(options.previousSlides ?? [])];
+        for (const index of options.slideIndexes) slides[index] = `page-${index}-updated`;
+        return { slides, contactSheet: "sheet" };
+      },
+      inspectContrast: contrastStub,
+    });
+
+    // 第一轮渲染整册，第二轮只请求第 1 页（索引 0），并带上上一轮画面。
+    expect(calls[0]!.slideIndexes).toBeUndefined();
+    expect(calls[1]!.slideIndexes).toEqual([0]);
+    expect(calls[1]!.previousSlides).toEqual(["page-0", "page-1"]);
+    expect(result.designs[0]!.layout).toBe("cards");
+    expect(result.designs[1]!.layout).toBe("title-body");
+  });
+
   it("真实渲染不可用时降级到画布预览，并说清楚原因", async () => {
     const result = await runDesignQualityStage({
       initialDesigns: [design()],

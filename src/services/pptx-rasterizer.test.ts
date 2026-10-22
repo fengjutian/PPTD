@@ -43,4 +43,13 @@ describe("真实 PPTX 栅格化", () => {
     await rasterizePptxForReview(bytes);
     expect(invokeMock).toHaveBeenCalledWith("rasterize_pptx_for_review", bytes);
   });
+
+  it("增量渲染只把变化页的索引放进请求头", async () => {
+    invokeMock.mockResolvedValue([]);
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+    await rasterizePptxForReview(bytes, [2, 0, 2]);
+    expect(invokeMock).toHaveBeenCalledWith("rasterize_pptx_for_review", bytes, {
+      headers: { "x-pptd-slide-indexes": "1,3" },
+    });
+  });
 });

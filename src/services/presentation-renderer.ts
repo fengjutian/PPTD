@@ -405,6 +405,21 @@ export function composeContactSheet(
   return sheet.toDataURL("image/jpeg", 0.84);
 }
 
+/**
+ * 用一组 data URL 重新拼缩略图墙。
+ *
+ * 增量渲染时只有变化页拿到了新图，未变化页沿用上一轮的 data URL；缩略图必须
+ * 反映合并后的整册画面，不能停留在上一轮。
+ */
+export async function composeContactSheetFromDataUrls(
+  slides: string[],
+  pageSize: { width: number; height: number },
+): Promise<string | undefined> {
+  if (slides.length === 0) return undefined;
+  const images = await Promise.all(slides.map(loadImage));
+  return composeContactSheet(images, pageSize);
+}
+
 export async function renderPresentationForVisualReview(
   document: PresentationDocument,
   width = 1280,
