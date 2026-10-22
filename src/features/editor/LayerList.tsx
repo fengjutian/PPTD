@@ -20,32 +20,42 @@ function ElementIcon({ element }: { element: SlideElement }) {
 
 export interface LayerListProps {
   slide: Slide;
-  selectedElementId: ElementId | null;
+  /** 选中的对象，可以有多个。 */
+  selectedElementIds: readonly ElementId[];
   onSelect: (elementId: ElementId) => void;
+  /** 增减一个对象的选中状态。 */
+  onToggle: (elementId: ElementId) => void;
 }
 
 /**
  * Layer list of the current page, topmost element first. It only reports the
  * selection; every other change still goes through a document command.
  */
-export const LayerList = memo(function LayerList({ slide, selectedElementId, onSelect }: LayerListProps) {
+export const LayerList = memo(function LayerList({ slide, selectedElementIds, onSelect, onToggle }: LayerListProps) {
   const ordered = [...slide.elements].reverse();
   return (
     <div className="layer-list">
       {ordered.length === 0 && <p className="layer-empty">当前页没有对象</p>}
-      {ordered.map((element) => (
-        <button
-          type="button"
-          key={element.id}
-          className={`layer-row ${element.id === selectedElementId ? "active" : ""}`}
-          aria-current={element.id === selectedElementId ? "true" : undefined}
-          onClick={() => onSelect(element.id)}
-        >
-          <ElementIcon element={element} />
-          <span className="layer-name">{elementLabel(element)}</span>
-          {element.locked && <Lock className="layer-lock" />}
-        </button>
-      ))}
+      {ordered.map((element) => {
+        const selected = selectedElementIds.includes(element.id);
+        return (
+          <button
+            type="button"
+            key={element.id}
+            className={`layer-row ${selected ? "active" : ""}`}
+            aria-current={selected ? "true" : undefined}
+            onClick={(event) => {
+              // Ctrl、Cmd 或 Shift 点选是增减选中，普通点击是只选这一个。
+              if (event.ctrlKey || event.metaKey || event.shiftKey) onToggle(element.id);
+              else onSelect(element.id);
+            }}
+          >
+            <ElementIcon element={element} />
+            <span className="layer-name">{elementLabel(element)}</span>
+            {element.locked && <Lock className="layer-lock" />}
+          </button>
+        );
+      })}
     </div>
   );
 });

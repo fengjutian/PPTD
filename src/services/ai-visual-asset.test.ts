@@ -48,8 +48,8 @@ describe("配图计划", () => {
 
   it("没有配图意图时用设计阶段的建议", () => {
     const { decisions, prompts } = planVisualAssets({
-      designs: [design({ visualAsset: { enabled: true, prompt: "设计阶段给的画面", role: "hero" } })],
-      itemCounts: [2],
+      designs: [design({ layout: "cover", visualAsset: { enabled: true, prompt: "设计阶段给的画面", role: "hero" } })],
+      itemCounts: [0],
       deterministicBlocks: [false],
       topic: "季度业务回顾",
     });

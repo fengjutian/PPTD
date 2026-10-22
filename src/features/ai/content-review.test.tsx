@@ -288,8 +288,21 @@ describe("table grid editing", () => {
     ]);
   });
 
-  it("treats a table whose cells are all blank as a page without content", () => {
+  it("reports a picture prompt that asks for text in the picture", () => {
     const draft = createDraft();
+    const withImage: AiDraft = {
+      ...draft,
+      slides: [{
+        ...draft.slides[0]!,
+        plan: { ...draft.slides[0]!.plan, visualAsset: { enabled: true, prompt: "一块写着「季度增长」的指示牌", role: "side" } },
+      }],
+    };
+    const issues = reviewIssues(withImage);
+    // 配图的问题不阻塞审核：内容本身没问题，图的事可以之后再定。
+    expect(issues).toContainEqual({ kind: "image-text-request", indexes: [0], message: "画面描述里要求出现文字或字母，生成图的文字几乎总是错的", blocking: false });
+  });
+
+  it("treats a table whose cells are all blank as a page without content", () => {    const draft = createDraft();
     const blank: AiDraft = { ...draft, slides: [{ ...draft.slides[0]!, body: "", blocks: [{ type: "table-data", header: ["", ""], rows: [["", ""]] }] }] };
     expect(slideHasContent(blank.slides[0]!)).toBe(false);
     expect(slideHasContent({ ...blank.slides[0]!, blocks: [{ type: "table-data", header: ["项目", ""], rows: [["", ""]] }] })).toBe(true);

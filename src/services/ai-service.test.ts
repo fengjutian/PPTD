@@ -14,8 +14,28 @@ describe("AI structured outputs", () => {
     });
     expect(draft.slides).toHaveLength(25);
   });
-  it("accepts a typed slide brief without presentation content", () => {
-    const result = slideBriefsSchema.parse({ briefs: [{ slideIndex: 0, purpose: "建立背景", conclusion: "理解作品背景有助于理解主题", visualIntent: "hero", density: "low" }] });
+  it("reads the picture intent a slide carries", () => {
+    const draft = aiDraftSchema.parse({
+      title: "季度业务回顾",
+      slides: [{
+        title: "营收达成预算目标",
+        body: "正文",
+        speakerNotes: "",
+        plan: { purpose: "目的", conclusion: "结论", visualIntent: "image-story", density: "medium", visualAsset: { enabled: true, prompt: "一间明亮的现代化数据中心", role: "side" } },
+      }],
+    });
+    expect(draft.slides[0]!.plan.visualAsset).toMatchObject({ enabled: true, prompt: "一间明亮的现代化数据中心", role: "side" });
+  });
+
+  it("keeps drafts that carry no picture intent usable", () => {
+    const draft = aiDraftSchema.parse({
+      title: "季度业务回顾",
+      slides: [{ title: "营收达成预算目标", body: "正文", speakerNotes: "" }],
+    });
+    expect(draft.slides[0]!.plan.visualAsset).toBeUndefined();
+  });
+
+  it("accepts a typed slide brief without presentation content", () => {    const result = slideBriefsSchema.parse({ briefs: [{ slideIndex: 0, purpose: "建立背景", conclusion: "理解作品背景有助于理解主题", visualIntent: "hero", density: "low" }] });
     expect(result.briefs[0]!.visualIntent).toBe("hero");
     expect(result.briefs[0]).not.toHaveProperty("body");
   });

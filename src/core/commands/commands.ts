@@ -20,6 +20,8 @@ import {
 } from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
 import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, PANEL_TYPE_SCALE, stripListPrefix } from "./layout-capacity";
+import { resolveTypeScale } from "../design/type-scale";
+import { findThemePreset } from "../design/theme-presets";
 import { coverCrop } from "../rendering/image-fit";
 import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, resolvePageDesign, type CompositionFacts } from "./design-intent";
 import { planDeckCompositions } from "./deck-composition";
@@ -119,12 +121,14 @@ function readTemplateTheme(theme: AiTemplateTheme | undefined): DocumentTheme | 
   const colors = (theme.colors ?? [])
     .filter((color) => typeof color.name === "string" && color.name.trim() && HEX_COLOR_PATTERN.test(color.value))
     .map((color) => ({ name: color.name.trim(), value: color.value.toUpperCase() }));
-  if (!majorFont && !minorFont && colors.length === 0) return undefined;
+  const textStyles = readTextStyles(theme.textStyles);
+  if (!majorFont && !minorFont && colors.length === 0 && !textStyles) return undefined;
   return {
     name: theme.name?.trim() || "模板主题",
     majorFont: majorFont || minorFont || "Calibri",
     minorFont: minorFont || majorFont || "Calibri",
     colors,
+    ...(textStyles ? { textStyles } : {}),
   };
 }
 
@@ -206,7 +210,7 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
-  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; templateTheme?: AiTemplateTheme; backgroundRhythm?: BackgroundRhythm; visualAssets?: AiVisualAssetData[] }
+  | { type: "apply-ai-designed-draft"; title: string; slides: AiSlideDraft[]; designs: AiSlideDesign[]; pageSize?: { width: Emu; height: Emu }; fontFamily?: string; bodyFontFamily?: string; templateDecorations?: AiTemplateDecoration[]; templateLayouts?: AiTemplateLayout[]; templateTheme?: AiTemplateTheme; backgroundRhythm?: BackgroundRhythm; visualAssets?: AiVisualAssetData[]; themePresetId?: string }
   | { type: "relayout-slide"; slideId: SlideId }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
@@ -581,8 +585,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (!command.title.trim() || command.slides.length < 1 || command.slides.length > 20 || command.designs.length !== command.slides.length) throw new Error("AI_DESIGN_INVALID");
     if (command.pageSize) document.pageSize = command.pageSize;
     const templateTheme = readTemplateTheme(command.templateTheme);
-    if (templateTheme) document.theme = templateTheme;
+    // A preset is the fallback for a deck generated without a template: it owns
+    // the palette, the font pairing and the type scale. A real template always
+    // wins over it.
+    const preset = command.themePresetId ? findThemePreset(command.themePresetId) : undefined;
+    const theme = templateTheme ?? preset?.theme;
+    if (theme) document.theme = theme;
     else delete document.theme;
+    // The type scale of the template or preset. Every branch reads this instead
+    // of repeating point sizes, so the deck keeps one hierarchy.
+    const typeScale = resolveTypeScale(document.theme);
     // The design replaces every page, so the layouts of the previous template
     // must not survive as empty references.
     const layouts: SlideLayoutSpec[] = [];
@@ -939,22 +951,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const clippedTitle = clipToTextArea(coverTitle, contentAreaEmu);
         const clippedBody = clipToTextArea(coverBody, contentAreaEmu);
         if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
-        slide.elements.push(text(content.title, clippedTitle, templateTitleSize ?? 42, titleInk, true, "left", undefined, titleLuminance));
-        if (content.body.trim()) slide.elements.push(text(content.body, clippedBody, templateBodySize ?? 19, bodyInk, false, "left", undefined, contentTextLuminance));
+        slide.elements.push(text(content.title, clippedTitle, templateTitleSize ?? typeScale.display, titleInk, true, "left", undefined, titleLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, clippedBody, templateBodySize ?? typeScale.subtitle, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (design.layout === "section" && !hasDeterministicBlock) {
         const sectionTitle = safeFrame(recipeTitle, [0.39, 0.30, 0.50, 0.22], 0.25, 0.04);
         const sectionBody = safeFrame(recipeContent, [0.39, 0.56, 0.47, 0.20], 0.25, 0.08);
         // The template draws its own section number into the artwork, so PPTD must
         // not add a second one on top of it.
         if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.32, 1), design.accent), text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left", undefined, accentLuminance));
-        slide.elements.push(text(content.title, clipToTextArea(sectionTitle, contentAreaEmu), templateTitleSize ?? 36, titleInk, true, "left", undefined, titleLuminance));
-        if (content.body.trim()) slide.elements.push(text(content.body, clipToTextArea(sectionBody, contentAreaEmu), templateBodySize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
+        slide.elements.push(text(content.title, clipToTextArea(sectionTitle, contentAreaEmu), templateTitleSize ?? typeScale.section, titleInk, true, "left", undefined, titleLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, clipToTextArea(sectionBody, contentAreaEmu), templateBodySize ?? typeScale.body, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (timelineBlock) {
         // Every reviewed step is drawn. A timeline that cut its last steps
         // would drop reviewed copy from the exported file, so the row narrows
         // and the type shrinks instead.
         const timelineItems = timelineBlock.items;
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         const startX = contentBox.x + contentBox.width * 0.05; const endX = contentBox.x + contentBox.width * 0.95;
         const lineY = contentBox.y + contentBox.height * 0.45;
@@ -983,7 +995,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text(item.text, stepTextFrame, stepTextSize, bodyInk, false, "center", undefined, contentTextLuminance));
         });
       } else if (comparisonBlock) {
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         const columnWidth = contentBox.width * CONTENT_REGION.comparisonColumnWidth;
         const columnGap = contentBox.width * CONTENT_REGION.comparisonColumnGap;
         const columns = [
@@ -1026,7 +1038,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       } else if (tableBlock) {
         const tableIndex = blocks.indexOf(tableBlock);
         const tableContent = contentBlocks?.[tableIndex];
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         // The table element holds no cells of its own: it points at the reviewed
         // table block, so editing the numbers keeps the grid in sync.
@@ -1054,7 +1066,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // would drop reviewed numbers from the exported file, so the grid
         // grows a row and the type shrinks instead.
         const metrics = metricBlocks;
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         // The metrics of a page are the reviewed numbers of the page. When they
         // are numbers of the same unit, they are drawn as a native chart: the
@@ -1120,7 +1132,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // would drop reviewed copy from the exported file, so the row narrows
         // and the type shrinks instead.
         const processItems = processBlock.items;
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         const stepGap = 0.03 * density.gap;
         const stepWidth = (contentBox.width - stepGap * Math.max(processItems.length - 1, 0)) / Math.max(processItems.length, 1);
@@ -1193,7 +1205,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const panelX = contentBox.x + contentBox.width * 0.60;
         const panelWidth = contentBox.width * 0.37;
         const numberWidth = Math.min(0.07, listWidth * 0.16);
-        const itemSize = Math.max(17, Math.min(20, templateBodySize ?? 20));
+        const itemSize = Math.max(17, Math.min(20, templateBodySize ?? typeScale.body));
         const cleanItems = listItems.map(cleanPoint);
         // The rows are measured instead of divided into equal slots. A row that
         // needs two lines and a row that needs one leave a different amount of
@@ -1216,7 +1228,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const rowGapPt = listFlow.gapPt;
         const flowHeightFraction = (points: number) => points / (pageHeightIn * 72);
         const numberSize = Math.max(PANEL_TYPE_SCALE.railNumberMinPt, Math.min(PANEL_TYPE_SCALE.railNumberMaxPt, flowFontPt * PANEL_TYPE_SCALE.railNumberRatio));
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         listFlow.rows.forEach((row, itemIndex) => {
           const rowY = contentBox.y + flowHeightFraction(row.topPt);
@@ -1305,7 +1317,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text("本页要点", frame(panelX + 0.05, footerY, panelWidth - 0.10, 0.06), PANEL_TYPE_SCALE.labelPt, "#FFFFFF", false, "left", undefined, accentFillLuminance));
         }
       } else if (composition === "grid" && items.length > 1 && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
-        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) {
           // A single-page deck has no footer, so the page index is its own mark.
           // A longer deck prints the number in the footer; repeating it at the
@@ -1353,7 +1365,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, Math.max(0.04, Math.min(cardTextBox.height, fittedHeight))), fittedCardSize, "#293241", false, "left", undefined, cardLuminance));
         });
       } else if (composition === "columns" && items.length > 1) {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
         const middle = Math.ceil(items.length / 2);
         const columnCopy = (columnItems: string[]) => columnItems
@@ -1394,7 +1406,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // it as a single text box was the reason a five-point page looked like a
         // small block stranded in a large empty canvas.
         const listItems = items.slice(0, 6);
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
         const rowGap = Math.min(0.012 * density.gap, contentBox.height * 0.02);
         const rowHeight = (contentBox.height - rowGap * (listItems.length - 1)) / listItems.length;
@@ -1406,13 +1418,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const cleanItem = cleanPoint(item);
           slide.elements.push(shape(frame(contentBox.x, rowY, 0.008, rowHeight), design.accent));
           slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), centeredBlock(String(itemIndex + 1).padStart(2, "0"), { x: contentBox.x + 0.022, y: rowY, width: numberWidth, height: rowHeight }, numberSize), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
-          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: contentBox.x + numberWidth + 0.025, y: rowY, width: itemWidth, height: rowHeight }, templateBodySize ?? 18), templateBodySize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
+          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, { x: contentBox.x + numberWidth + 0.025, y: rowY, width: itemWidth, height: rowHeight }, templateBodySize ?? typeScale.body), templateBodySize ?? typeScale.body, bodyInk, false, "left", undefined, contentTextLuminance));
           if (itemIndex < listItems.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + rowGap / 2 - 0.003, contentBox.width, 0.006), cardStroke));
         });
       } else {
-        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
+        slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? typeScale.title, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
-        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeContent, [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.25, 0.12), templateBodySize ?? 20, bodyInk, false, "left", undefined, contentTextLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, safeFrame(recipeContent, [alignmentGrid.left + 0.01, alignmentGrid.contentY, alignmentGrid.right - alignmentGrid.left - 0.02, alignmentGrid.contentBottom - alignmentGrid.contentY], 0.25, 0.12), templateBodySize ?? typeScale.body, bodyInk, false, "left", undefined, contentTextLuminance));
       }
       // Link rendered title/body text back to semantic content. Structured
       // layouts (cards, timeline items, metrics) stay decorative because one

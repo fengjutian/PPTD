@@ -221,4 +221,22 @@ describe("presentation document schema", () => {
     });
     expect(() => presentationDocumentSchema.parse(empty)).toThrow();
   });
+
+  it("accepts a theme that names its type scale and rejects an impossible size", () => {
+    const document = createDocument();
+    document.theme = {
+      name: "纸墨",
+      majorFont: "华文中宋",
+      minorFont: "微软雅黑",
+      colors: [{ name: "accent", value: "#2F6B5F" }],
+      textStyles: { title: { fontSizePt: 28, bold: true }, body: { fontSizePt: 16, lineHeight: 1.5 } },
+    };
+    const parsed = parsePresentationDocument(document);
+    expect(parsed.theme?.textStyles?.title?.fontSizePt).toBe(28);
+    expect(parsed.theme?.textStyles?.body?.lineHeight).toBe(1.5);
+
+    const broken = structuredClone(document);
+    broken.theme!.textStyles!.title!.fontSizePt = 0;
+    expect(() => presentationDocumentSchema.parse(broken)).toThrow();
+  });
 });

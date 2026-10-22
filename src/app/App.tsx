@@ -12,6 +12,9 @@ import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOver
 import { useSnapContext, type SnapContext } from "../features/editor/use-snap-context";
 import { resizeEdgesOf, snapMovingFrame, snapResizedFrame } from "../core/rendering/snap";
 import { useCanvasGuidesStore } from "../store/canvas-guides-store";
+import { useGroupDragStore } from "../store/group-drag-store";
+import { unionFrame } from "../core/commands/arrange";
+import { useMarqueeSelection } from "../features/editor/use-marquee-selection";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
@@ -121,7 +124,13 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
   const execute = useEditorStore((s) => s.execute);
   const activeSlideId = useEditorStore((s) => s.activeSlideId);
   const selectElement = useEditorStore((s) => s.selectElement);
+  const toggleElement = useEditorStore((s) => s.toggleElement);
+  const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const setActiveSnap = useCanvasGuidesStore((s) => s.setActiveSnap);
+  const groupDrag = useGroupDragStore((s) => s.groupDrag);
+  const beginGroupDrag = useGroupDragStore((s) => s.beginGroupDrag);
+  const updateGroupDrag = useGroupDragStore((s) => s.updateGroupDrag);
+  const endGroupDrag = useGroupDragStore((s) => s.endGroupDrag);
   const rootRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<{
     kind: "move" | "resize" | "rotate";
@@ -132,10 +141,21 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
     frame: RectEmu;
     rotation: number;
     startAngle?: number;
+    /** 一起移动的对象，以及拖动开始时它们的外接框。 */
+    groupIds?: ElementId[];
+    groupUnion?: RectEmu;
   } | null>(null);
   const [previewFrame, setPreviewFrame] = useState<RectEmu | null>(null);
   const [previewRotation, setPreviewRotation] = useState<number | null>(null);
-  const frame = previewFrame ?? element.frame;
+  // 跟着整组一起动的对象，用整组的位移渲染；握鼠标的那个自己画预览。
+  const followerOffset = groupDrag && groupDrag.leaderId !== element.id && groupDrag.ids.includes(element.id)
+    ? { x: groupDrag.dx, y: groupDrag.dy }
+    : { x: 0, y: 0 };
+  const frame = previewFrame
+    ? previewFrame
+    : followerOffset.x || followerOffset.y
+      ? { ...element.frame, x: emu(element.frame.x + followerOffset.x), y: emu(element.frame.y + followerOffset.y) }
+      : element.frame;
   const rotation = previewRotation ?? element.rotationMilliDegree;
   const style: React.CSSProperties = {
     left: frame.x * scale, top: frame.y * scale,
@@ -179,12 +199,25 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
   const begin = (kind: "move" | "resize" | "rotate", event: React.PointerEvent, direction?: ResizeDirection) => {
     event.stopPropagation();
     event.preventDefault();
-    selectElement(element.id);
+    // Ctrl、Cmd 或 Shift 点选是增减选中，不该顺手拖动对象。
+    if (kind === "move" && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+      toggleElement(element.id);
+      return;
+    }
+    // 拖动已经在选中的对象时，整组一起走；点未选中的对象则只选它一个。
+    const groupIds = kind === "move" && selectedElementIds.length > 1 && selectedElementIds.includes(element.id)
+      ? selectedElementIds.filter((id) => !slide.elements.find((item) => item.id === id)?.locked)
+      : undefined;
+    if (!groupIds || groupIds.length < 2) selectElement(element.id);
     if (element.locked) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const rect = rootRef.current?.getBoundingClientRect();
     const centerX = rect ? rect.left + rect.width / 2 : event.clientX;
     const centerY = rect ? rect.top + rect.height / 2 : event.clientY;
+    const groupUnion = groupIds && groupIds.length > 1
+      ? unionFrame(slide.elements.filter((item) => groupIds.includes(item.id)).map((item) => item.frame))
+      : undefined;
+    if (groupUnion) beginGroupDrag(groupIds!, element.id);
     interaction.current = {
       kind,
       direction,
@@ -194,7 +227,24 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
       frame: { ...element.frame },
       rotation: element.rotationMilliDegree,
       startAngle: kind === "rotate" ? Math.atan2(event.clientY - centerY, event.clientX - centerX) : undefined,
+      groupIds,
+      groupUnion,
     };
+  };
+
+  /**
+   * 拖动中算出的位移。
+   *
+   * 多选时吸附的是整组的外接框：整组贴到网格线上，而不是某一个成员贴上去
+   * 而其他成员留在原地。
+   */
+  const dragDelta = (current: NonNullable<typeof interaction.current>, event: React.PointerEvent) => {
+    const dx = (event.clientX - current.startX) / scale;
+    const dy = (event.clientY - current.startY) / scale;
+    if (!current.groupUnion) return { dx, dy };
+    const moved = { ...current.groupUnion, x: emu(current.groupUnion.x + dx), y: emu(current.groupUnion.y + dy) };
+    const snapped = applyMoveSnap(moved, true);
+    return { dx: snapped.frame.x - current.groupUnion.x, dy: snapped.frame.y - current.groupUnion.y };
   };
 
   const pointerMove = (event: React.PointerEvent) => {
@@ -203,7 +253,12 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
     const dx = (event.clientX - current.startX) / scale;
     const dy = (event.clientY - current.startY) / scale;
     if (current.kind === "move") {
-      const candidate = { ...current.frame, x: emu(current.frame.x + dx), y: emu(current.frame.y + dy) };
+      const delta = dragDelta(current, event);
+      if (current.groupIds && current.groupIds.length > 1) {
+        updateGroupDrag(emu(delta.dx), emu(delta.dy));
+        return;
+      }
+      const candidate = { ...current.frame, x: emu(current.frame.x + delta.dx), y: emu(current.frame.y + delta.dy) };
       setPreviewFrame(applyMoveSnap(candidate, true).frame);
       return;
     }
@@ -227,10 +282,18 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected,
     setPreviewFrame(null);
     setPreviewRotation(null);
     setActiveSnap({});
+    endGroupDrag();
     if (cancelled) return;
     const dx = (event.clientX - current.startX) / scale;
     const dy = (event.clientY - current.startY) / scale;
     if (current.kind === "move") {
+      const delta = dragDelta(current, event);
+      if (current.groupIds && current.groupIds.length > 1) {
+        if (!delta.dx && !delta.dy) return;
+        // 整组一起移动是一个意图，所以是一个命令、一个撤销项。
+        execute({ type: "move-elements", slideId: activeSlideId, elementIds: current.groupIds, dx: emu(delta.dx), dy: emu(delta.dy) });
+        return;
+      }
       if (!dx && !dy) return;
       const candidate = { ...current.frame, x: emu(current.frame.x + dx), y: emu(current.frame.y + dy) };
       const snapped = applyMoveSnap(candidate, false);
@@ -293,7 +356,7 @@ const SlideThumbnail = memo(function SlideThumbnail({ slide, pageWidth, pageHeig
 });
 
 export function App() {
-  const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, replaceDocument, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
+  const { document, activeSlideId, selectedElementIds, undoStack, redoStack, execute, replaceDocument, selectSlide, selectElement, selectElements, toggleElement, undo, redo, newDocument, loadDocument } = useEditorStore();
   const [projectPath, setProjectPath] = useState<string>();
   const [projectMtime, setProjectMtime] = useState<number>();
   const [saving, setSaving] = useState(false);
@@ -370,6 +433,8 @@ export function App() {
   const addGuideToSlide = useCanvasGuidesStore((s) => s.addGuide);
   const clearGuidesOnSlide = useCanvasGuidesStore((s) => s.clearGuides);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
+  // 多选时"当前对象"是最后被选中的那个：属性面板和快捷键都以它为准。
+  const selectedElementId = selectedElementIds.length > 0 ? selectedElementIds[selectedElementIds.length - 1]! : null;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
   const activeGuides = useCanvasGuidesStore((s) => s.guidesBySlide[activeSlideId]) ?? [];
   const addGuide = (axis: "x" | "y", position: number) => addGuideToSlide(activeSlide.id, axis, emu(position));
@@ -377,6 +442,17 @@ export function App() {
   const canvasHeight = document.pageSize.height * scale;
   // 吸附目标一页只算一次，画布上的所有对象共用同一份。
   const snapContext = useSnapContext(activeSlide.id, document.pageSize.width, document.pageSize.height, scale);
+  // 多选时属性面板显示这一组的公共信息，而不是某一个对象。
+  const selectedElements = useMemo(
+    () => activeSlide.elements.filter((element) => selectedElementIds.includes(element.id)),
+    [activeSlide.elements, selectedElementIds],
+  );
+  const marquee = useMarqueeSelection({
+    scale,
+    elements: activeSlide.elements,
+    onSelect: (ids) => selectElements(ids),
+    onClear: () => selectElement(null),
+  });
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
@@ -1397,15 +1473,25 @@ export function App() {
               <button aria-label="删除页面" title="删除页面" disabled={document.slides.length === 1} onClick={() => execute({ type: "delete-slide", slideId: slide.id })}><Trash2 /></button>
             </div>}
           </div>)}
-        </div> : <LayerList slide={activeSlide} selectedElementId={selectedElementId} onSelect={selectElement} />}
+        </div> : <LayerList slide={activeSlide} selectedElementIds={selectedElementIds} onSelect={selectElement} onToggle={toggleElement} />}
       </aside>
 
-      <main className="workspace" onPointerDown={() => selectElement(null)}>
+      <main className="workspace">
         <div className="canvas-ruler">13.33 × 7.5 in</div>
-        <div className="slide-canvas" style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }}>
+        <div className="slide-canvas" style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }} onPointerDown={marquee.onPointerDown}>
           <CanvasGridLayer scale={scale} />
-          {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={element.id === selectedElementId} snap={snapContext} />)}
+          {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={selectedElementIds.includes(element.id)} snap={snapContext} />)}
           <CanvasGuideLayer slideId={activeSlide.id} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} scale={scale} />
+          {marquee.band && (
+            <div
+              className="canvas-marquee"
+              aria-hidden="true"
+              style={{
+                left: marquee.band.x * scale, top: marquee.band.y * scale,
+                width: marquee.band.width * scale, height: marquee.band.height * scale,
+              }}
+            />
+          )}
         </div>
       </main>
 

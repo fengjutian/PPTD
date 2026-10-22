@@ -954,6 +954,37 @@ describe("document commands", () => {
     expect(textLikelyOverflows(title)).toBe(false);
   });
 
+  it("uses the type scale a theme declares", () => {
+    const source = createDocument();
+    const content = { title: "标题", body: "正文内容", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
+    const templateTheme = {
+      name: "青编",
+      majorFont: "华文中宋",
+      minorFont: "微软雅黑",
+      colors: [{ name: "accent", value: "#0F7869" }],
+      textStyles: { display: { fontSizePt: 44 }, title: { fontSizePt: 26 }, body: { fontSizePt: 16 }, caption: { fontSizePt: 10 } },
+    };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "字号", slides: [content], designs: [design], templateTheme }));
+    const title = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.text === content.title)!;
+    const body = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.text === content.body)!;
+    expect(title.style.fontSizePt).toBe(26);
+    expect(body.style.fontSizePt).toBe(16);
+    expect(result.theme?.textStyles?.title?.fontSizePt).toBe(26);
+  });
+
+  it("falls back to a built-in preset when no template is selected", () => {
+    const source = createDocument();
+    const content = { title: "标题", body: "正文内容", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "预设", slides: [content], designs: [design], themePresetId: "paper-ink" }));
+    const title = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.text === content.title)!;
+    const body = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.text === content.body)!;
+    expect(result.theme?.name).toBe("纸墨");
+    expect(title.style.fontSizePt).toBe(30);
+    expect(body.style.fontSizePt).toBe(16);
+  });
+
   it("paints a local scrim with the page colour instead of the design background", () => {
     const source = createDocument();
     const content = { title: "页", body: "正文", speakerNotes: "" };
