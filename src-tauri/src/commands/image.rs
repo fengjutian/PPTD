@@ -3,23 +3,13 @@
 //! 命令只做三件事：校验请求、解析厂商与凭据、把结果整成前端能直接用的 data URL。
 //! 厂商协议细节都在 `ai` 层。
 
-use crate::ai::{self, CancelRegistry, ImageRequest};
+use crate::ai::{self, CancelRegistry, ImageLimits, ImageRequest};
 use serde::Deserialize;
 use serde::Serialize;
 use std::time::Duration;
 
 /// 图像生成的超时。图像模型比对话模型慢得多，但也不该无限等。
 const IMAGE_TIMEOUT: Duration = Duration::from_secs(120);
-
-/// 提示词长度上限，取厂商文档规定的 1500 字符。
-///
-/// 这里用字符数而不是字节数：中文提示词按字节算会被误判为超长。
-const MAX_PROMPT_CHARS: usize = 1500;
-
-/// 像素尺寸的取值范围与步进，取自厂商文档。
-const MIN_IMAGE_EDGE: u32 = 512;
-const MAX_IMAGE_EDGE: u32 = 2048;
-const IMAGE_EDGE_STEP: u32 = 8;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -49,23 +39,29 @@ pub struct GenerateImageResponse {
 ///
 /// 校验放在命令层而不是只依赖厂商：厂商的参数错误码没有覆盖所有情况
 /// （例如只给宽不给高），本地先拦住能省掉一次计费请求。
-fn validate_request(request: &GenerateImageRequest) -> Result<(), String> {
+/// 长度与尺寸的限制由厂商端口给出，命令层不写死数字。
+fn validate_request(request: &GenerateImageRequest, limits: &ImageLimits) -> Result<(), String> {
     let prompt = request.prompt.trim();
     if prompt.is_empty() {
         return Err("AI_IMAGE_REQUEST_INVALID: prompt is empty".into());
     }
-    if prompt.chars().count() > MAX_PROMPT_CHARS {
+    // 按字符数而不是字节数：中文提示词按字节算会被误判为超长。
+    if prompt.chars().count() > limits.max_prompt_chars {
         return Err(format!(
-            "AI_IMAGE_REQUEST_INVALID: prompt is longer than {MAX_PROMPT_CHARS} characters"
+            "AI_IMAGE_REQUEST_INVALID: prompt is longer than {} characters",
+            limits.max_prompt_chars
         ));
     }
     match (request.width, request.height) {
         (None, None) => {}
         (Some(width), Some(height)) => {
             for edge in [width, height] {
-                if !(MIN_IMAGE_EDGE..=MAX_IMAGE_EDGE).contains(&edge) || edge % IMAGE_EDGE_STEP != 0 {
+                if !(limits.min_edge..=limits.max_edge).contains(&edge)
+                    || edge % limits.edge_step != 0
+                {
                     return Err(format!(
-                        "AI_IMAGE_REQUEST_INVALID: width and height must be between {MIN_IMAGE_EDGE} and {MAX_IMAGE_EDGE} and a multiple of {IMAGE_EDGE_STEP}"
+                        "AI_IMAGE_REQUEST_INVALID: width and height must be between {} and {} and a multiple of {}",
+                        limits.min_edge, limits.max_edge, limits.edge_step
                     ));
                 }
             }
@@ -89,11 +85,11 @@ pub async fn generate_presentation_image(
     cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<GenerateImageResponse, String> {
     let cancel = cancels.token_for(request.task_id);
-    validate_request(&request)?;
 
     let provider = ai::resolve(request.provider.as_deref())?;
     // 先确认厂商支持图像生成，再去读凭据：能力不支持时不该碰用户的密钥存储。
     let image_provider = ai::resolve_image_provider(provider)?;
+    validate_request(&request, &image_provider.image_limits())?;
     let api_key = ai::read_api_key(provider)?;
     let model = ai::resolve_image_model(image_provider, request.model)?;
 
@@ -123,6 +119,12 @@ pub async fn generate_presentation_image(
 mod tests {
     use super::*;
 
+    fn limits() -> ImageLimits {
+        let provider = ai::resolve(None).expect("默认厂商必须存在");
+        let image_provider = ai::resolve_image_provider(provider).expect("默认厂商必须支持图像");
+        image_provider.image_limits()
+    }
+
     fn request(prompt: &str, width: Option<u32>, height: Option<u32>) -> GenerateImageRequest {
         GenerateImageRequest {
             prompt: prompt.to_string(),
@@ -136,42 +138,48 @@ mod tests {
 
     #[test]
     fn rejects_an_empty_prompt() {
-        let error = validate_request(&request("   ", None, None)).expect_err("空提示词必须被拒绝");
+        let error = validate_request(&request("   ", None, None), &limits())
+            .expect_err("空提示词必须被拒绝");
         assert!(error.starts_with("AI_IMAGE_REQUEST_INVALID"), "{error}");
     }
 
     #[test]
     fn rejects_a_prompt_longer_than_the_provider_limit() {
-        let long = "描".repeat(MAX_PROMPT_CHARS + 1);
-        let error = validate_request(&request(&long, None, None)).expect_err("超长提示词必须被拒绝");
+        let limit = limits();
+        let long = "描".repeat(limit.max_prompt_chars + 1);
+        let error = validate_request(&request(&long, None, None), &limit)
+            .expect_err("超长提示词必须被拒绝");
         assert!(error.starts_with("AI_IMAGE_REQUEST_INVALID"), "{error}");
     }
 
     #[test]
     fn accepts_a_prompt_at_the_provider_limit() {
-        let limit = "描".repeat(MAX_PROMPT_CHARS);
-        validate_request(&request(&limit, None, None)).expect("边界长度必须通过");
+        let limit = limits();
+        let at_limit = "描".repeat(limit.max_prompt_chars);
+        validate_request(&request(&at_limit, None, None), &limit).expect("边界长度必须通过");
     }
 
     #[test]
     fn rejects_a_size_that_is_given_only_once() {
-        let error =
-            validate_request(&request("配图", Some(1024), None)).expect_err("只给宽必须被拒绝");
+        let error = validate_request(&request("配图", Some(1024), None), &limits())
+            .expect_err("只给宽必须被拒绝");
         assert!(error.starts_with("AI_IMAGE_REQUEST_INVALID"), "{error}");
     }
 
     #[test]
     fn rejects_a_size_outside_the_documented_range() {
-        let error = validate_request(&request("配图", Some(100), Some(100)))
+        let limit = limits();
+        let error = validate_request(&request("配图", Some(100), Some(100)), &limit)
             .expect_err("越界尺寸必须被拒绝");
         assert!(error.starts_with("AI_IMAGE_REQUEST_INVALID"), "{error}");
-        let error = validate_request(&request("配图", Some(1023), Some(768)))
+        let error = validate_request(&request("配图", Some(1023), Some(768)), &limit)
             .expect_err("非 8 的倍数必须被拒绝");
         assert!(error.starts_with("AI_IMAGE_REQUEST_INVALID"), "{error}");
     }
 
     #[test]
     fn accepts_a_size_inside_the_documented_range() {
-        validate_request(&request("配图", Some(1024), Some(768))).expect("合法尺寸必须通过");
+        validate_request(&request("配图", Some(1024), Some(768)), &limits())
+            .expect("合法尺寸必须通过");
     }
 }

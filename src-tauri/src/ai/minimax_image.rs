@@ -14,7 +14,7 @@
 
 use serde_json::Value;
 
-use super::{ImagePayload, ImageProvider, ImageRequest};
+use super::{ImageLimits, ImagePayload, ImageProvider, ImageRequest};
 
 pub const PROVIDER_ID: &str = "minimax";
 
@@ -28,12 +28,13 @@ const MINIMAX_IMAGE_MODELS: &[&str] = &["image-01", "image-01-live"];
 
 /// 提示词长度上限。官方文档规定 `prompt` 最长 1500 字符，这里按字符数而不是字节数
 /// 计算，避免中文提示词被按字节误判为超长。
-pub const MAX_PROMPT_CHARS: usize = 1500;
+const MAX_PROMPT_CHARS: usize = 1500;
 
 /// 官方文档规定 `width` / `height` 取值范围 [512, 2048] 且必须是 8 的倍数，
 /// 并且必须同时设置。
-pub const MIN_IMAGE_EDGE: u32 = 512;
-pub const MAX_IMAGE_EDGE: u32 = 2048;
+const MIN_IMAGE_EDGE: u32 = 512;
+const MAX_IMAGE_EDGE: u32 = 2048;
+const IMAGE_EDGE_STEP: u32 = 8;
 
 /// 未指定尺寸时使用的宽高比。官方文档里 `16:9` 对应 1280x720，贴合演示页面比例。
 const DEFAULT_ASPECT_RATIO: &str = "16:9";
@@ -78,6 +79,15 @@ impl ImageProvider for MiniMaxImageProvider {
 
     fn default_image_size(&self) -> (u32, u32) {
         (1280, 720)
+    }
+
+    fn image_limits(&self) -> ImageLimits {
+        ImageLimits {
+            max_prompt_chars: MAX_PROMPT_CHARS,
+            min_edge: MIN_IMAGE_EDGE,
+            max_edge: MAX_IMAGE_EDGE,
+            edge_step: IMAGE_EDGE_STEP,
+        }
     }
 
     /// 与对话接口同样的 Bearer 鉴权。
