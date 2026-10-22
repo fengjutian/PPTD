@@ -22,7 +22,7 @@ import { AiImageDialog } from "../features/editor/AiImageDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, mergeStreamProgress, polishPresentationTopic, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
+import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, mergeStreamProgress, polishPresentationTopic, type AiDraft, type AiGenerationProgress, type AiVisualAssetIntent } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, recoveryProjectPath, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -884,6 +884,22 @@ export function App() {
     }) }));
   };
 
+  /**
+   * 这一页的配图意图变了。
+   *
+   * 审核阶段是唯一还没花钱生成图片的时机：这里改一句画面描述，后面少生成一张
+   * 不想要的图。改完这一页就不再是"已审核"状态，因为它变了。
+   */
+  const updateAiVisualAsset = (index: number, intent: AiVisualAssetIntent) => {
+    forgetRestoreBackup(index);
+    updateAiDraftWithHistory(`slide:${index}:visualAsset`, (draft) => ({
+      ...draft,
+      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index
+        ? { ...slide, plan: { ...slide.plan, visualAsset: intent }, reviewed: false }
+        : slide)),
+    }));
+  };
+
   const updateAiBlocks = (index: number, blocks: AiDraft["slides"][number]["blocks"], separateHistory = false) => {
     forgetRestoreBackup(index);
     updateAiDraftWithHistory(`slide:${index}:blocks`, (draft) => ({
@@ -1102,6 +1118,8 @@ export function App() {
         itemCounts: aiDraft.slides.map((slide) => countSlidePoints(slide)),
         deterministicBlocks: aiDraft.slides.map((slide) => (slide.blocks ?? []).some((block) => block.type !== "paragraph" && block.type !== "bullet-list" && block.type !== "quote")),
         topic: aiDraft.title,
+        // 内容阶段产出的配图意图是用户审核过的，它优先于设计阶段的建议。
+        intents: aiDraft.slides.map((slide) => slide.plan?.visualAsset),
       });
       const visualAssets = await generateDeckVisualAssets({ decisions: assetPlan.decisions, prompts: assetPlan.prompts });
       const generationCommand: DocumentCommand = {
@@ -1427,6 +1445,7 @@ export function App() {
           onActiveIndexChange={selectAiDraftSlide}
           onDraftTitleChange={updateAiDraftTitle}
           onSlideFieldChange={updateAiSlide}
+          onSlideVisualAssetChange={updateAiVisualAsset}
           onSlideBlocksChange={updateAiBlocks}
           onSlideReviewedChange={updateAiSlideReviewed}
           onReviewAllSlides={reviewAllAiSlides}

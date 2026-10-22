@@ -77,6 +77,9 @@ export function normalizeDraftPunctuation(draft: AiDraft): AiDraft {
             ...slide.plan,
             purpose: normalizeChinesePunctuation(slide.plan.purpose),
             conclusion: normalizeChinesePunctuation(slide.plan.conclusion),
+            ...(slide.plan.visualAsset
+              ? { visualAsset: { ...slide.plan.visualAsset, prompt: normalizeChinesePunctuation(slide.plan.visualAsset.prompt) } }
+              : {}),
           },
         }
         : {}),

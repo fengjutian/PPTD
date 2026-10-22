@@ -19,11 +19,28 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("process"), items: z.array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) })).min(1).max(10) }),
   z.object({ type: z.literal("table-data"), header: z.array(z.string().min(1).max(100)).min(1).max(10), rows: z.array(z.array(z.string().max(500)).max(10)).min(1).max(20) }),
 ]);
+/**
+ * 一页想配什么图。
+ *
+ * 这是**意图**，不是图片：模型只说"这一页要一张什么样的图"，图什么时候生成、
+ * 落在哪里，由排版引擎决定。用户可以在内容审核阶段改这段描述——那时是唯一
+ * 一个还没花钱生成图片、也最容易改的时机。
+ */
+const visualAssetIntentSchema = z.object({
+  enabled: z.boolean().default(true),
+  /** 画面描述。只描述画面本身，不要要求画面出现文字。 */
+  prompt: z.string().max(300).default(""),
+  /** 图在页面上的角色。 */
+  role: z.enum(["hero", "side", "band"]).default("side"),
+});
+export type AiVisualAssetIntent = z.infer<typeof visualAssetIntentSchema>;
+
 const slidePlanSchema = z.object({
   purpose: z.string().min(1).max(300),
   conclusion: z.string().min(1).max(300),
   visualIntent: z.enum(["hero", "quote", "timeline", "comparison", "process", "data-chart", "image-story", "summary", "structured-text"]),
   density: z.enum(["low", "medium", "high"]),
+  visualAsset: visualAssetIntentSchema.optional(),
 });
 const legacySlidePlan = { purpose: "传达本页已审核内容", conclusion: "以本页标题和正文为准", visualIntent: "structured-text" as const, density: "medium" as const };
 export const aiDraftSchema = z.object({

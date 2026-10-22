@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, CheckCheck, CircleAlert, Copy, Plus, Redo2, RotateCcw, Trash2, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { AiDraft, ContentBlock } from "../../services/ai-service";
+import type { AiDraft, AiVisualAssetIntent, ContentBlock } from "../../services/ai-service";
 import {
   blockTypeLabels,
   countCharacters,
@@ -19,6 +19,7 @@ import {
   tableBlockOversized,
   tableCellKeyAction,
   visualIntentLabels,
+  visualAssetRoleLabels,
   type AiDraftSaveState,
   type SlideCapacityNote,
 } from "./content-review";
@@ -59,6 +60,8 @@ export type ContentReviewProps = {
   onActiveIndexChange: (index: number) => void;
   onDraftTitleChange: (title: string) => void;
   onSlideFieldChange: (index: number, field: SlideField, value: string) => void;
+  /** 这一页的配图意图变了。审核阶段是唯一还没花钱生成图片的时机。 */
+  onSlideVisualAssetChange: (index: number, intent: AiVisualAssetIntent) => void;
   onSlideBlocksChange: (index: number, blocks: ContentBlock[], separateHistory?: boolean) => void;
   onSlideReviewedChange: (index: number, reviewed: boolean) => void;
   onReviewAllSlides: () => void;
@@ -522,6 +525,7 @@ export function ContentReview({
   onActiveIndexChange,
   onDraftTitleChange,
   onSlideFieldChange,
+  onSlideVisualAssetChange,
   onSlideBlocksChange,
   onSlideReviewedChange,
   onReviewAllSlides,
@@ -726,6 +730,7 @@ export function ContentReview({
             if (index !== activeIndex) return null;
             const slideStat = slideStats[index]!;
             const notes = slideNotes[index] ?? [];
+            const imageIssues = issues.filter((issue) => issue.kind.startsWith("image-") && issue.indexes.includes(index));
             const missing = !slide.title.trim();
             const empty = !slideHasContent(slide);
             const original = slide.id ? originalSlidesById.get(slide.id) : undefined;
@@ -834,6 +839,60 @@ export function ContentReview({
                     </p>
                   </div>
                 </details>
+
+                {slide.plan.visualAsset && (
+                  <details className="slide-plan visual-asset-plan" open={imageIssues.length > 0}>
+                    <summary>
+                      <span>页面配图</span>
+                      <small>
+                        {slide.plan.visualAsset.enabled
+                          ? `${visualAssetRoleLabels[slide.plan.visualAsset.role]} · ${slide.plan.visualAsset.prompt.trim() ? "已描述" : "没有画面描述"}`
+                          : "不配图"}
+                      </small>
+                    </summary>
+                    <div className="slide-plan-body">
+                      <div className="visual-asset-controls">
+                        <label className="visual-asset-toggle">
+                          <input
+                            type="checkbox"
+                            checked={slide.plan.visualAsset.enabled}
+                            onChange={(event) => onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, enabled: event.target.checked })}
+                          />
+                          这一页配图
+                        </label>
+                        <select
+                          aria-label={`第 ${index + 1} 页配图角色`}
+                          value={slide.plan.visualAsset.role}
+                          disabled={!slide.plan.visualAsset.enabled}
+                          onChange={(event) => onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, role: event.target.value as AiVisualAssetIntent["role"] })}
+                        >
+                          {Object.entries(visualAssetRoleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </div>
+                      <textarea
+                        className="visual-asset-prompt"
+                        aria-label={`第 ${index + 1} 页画面描述`}
+                        placeholder="例如：一间明亮的现代化数据中心，几何线条构成的上升箭头"
+                        maxLength={300}
+                        rows={2}
+                        disabled={!slide.plan.visualAsset.enabled}
+                        value={slide.plan.visualAsset.prompt}
+                        onChange={(event) => onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, prompt: event.target.value })}
+                      />
+                      <p className="visual-asset-hint">只描述画面本身，不要写标题或正文文字——生成的文字在演示里几乎总是错的。</p>
+                      {imageIssues.length > 0 && (
+                        <ul className="visual-asset-issues" aria-label={`第 ${index + 1} 页的配图问题`}>
+                          {imageIssues.map((issue) => (
+                            <li key={issue.kind}>
+                              <CircleAlert />
+                              {issue.message}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </details>
+                )}
 
                 {slide.blocks.length > 0 ? (
                   <BlockEditor slideIndex={index} blocks={slide.blocks} notes={notes} onChange={(blocks, separateHistory) => onSlideBlocksChange(index, blocks, separateHistory)} />

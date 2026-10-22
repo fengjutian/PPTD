@@ -120,6 +120,17 @@ export interface VisualAssetDecision {
 }
 
 /**
+ * 内容阶段产出的配图意图。
+ *
+ * 它比设计阶段的建议更可信：用户在审核页看过、改过。设计阶段只是兜底。
+ */
+export interface VisualAssetIntent {
+  enabled: boolean;
+  prompt: string;
+  role: AiVisualAssetRole;
+}
+
+/**
  * 决定哪些页配图、怎么配。
  *
  * 决定权来自两处：AI 说这一页想配图，排版引擎说这一页配得下。两者都同意
@@ -133,17 +144,23 @@ export function planVisualAssets(input: {
   deterministicBlocks: readonly boolean[];
   /** 整套演示的主题，写进提示词。 */
   topic: string;
+  /** 内容阶段的配图意图。审核过的意图优先于设计阶段的建议。 */
+  intents?: readonly (VisualAssetIntent | undefined)[];
 }): { decisions: VisualAssetDecision[]; prompts: Map<number, string> } {
   const decisions: VisualAssetDecision[] = [];
   const prompts = new Map<number, string>();
   let granted = 0;
   input.designs.forEach((design, index) => {
+    const intent = input.intents?.[index];
+    const requested = intent ? intent.enabled : Boolean(design.visualAsset?.enabled);
+    const requestedRole = intent?.enabled ? intent.role : design.visualAsset?.role;
+    const description = intent?.enabled && intent.prompt.trim() ? intent.prompt : design.visualAsset?.prompt;
     const decision = resolveVisualAsset({
       layout: design.layout,
       itemCount: input.itemCounts[index] ?? 0,
       hasDeterministicBlock: input.deterministicBlocks[index] ?? false,
-      requested: Boolean(design.visualAsset?.enabled),
-      requestedRole: design.visualAsset?.role,
+      requested,
+      requestedRole,
     });
     if (!decision.enabled) {
       decisions.push({ enabled: false, reason: decision.reason });
@@ -155,7 +172,7 @@ export function planVisualAssets(input: {
     }
     granted += 1;
     decisions.push({ enabled: true, role: decision.role });
-    prompts.set(index, buildVisualAssetPrompt(design.visualAsset?.prompt, input.topic));
+    prompts.set(index, buildVisualAssetPrompt(description, input.topic));
   });
   return { decisions, prompts };
 }

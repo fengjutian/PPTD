@@ -133,5 +133,32 @@
       "《": "》",
       "“": "”"
     }
+  },
+  "imagePrompt": {
+    "description": "配图提示词的合规规则。生成图里的文字几乎总是错的，所以提示词里不该要求画面出现文字、字母或数字；整册配图也不能太多，否则演示变成相册。提示端与检测端共用这一份表。",
+    "textRequestWords": [
+      "文字",
+      "字母",
+      "数字",
+      "文案",
+      "标语",
+      "标题",
+      "字幕",
+      "海报文字",
+      "招牌",
+      "路牌",
+      "书名",
+      "商标",
+      "logo",
+      "水印"
+    ],
+    "maxImagesPerDeck": 4,
+    "structuredBlockTypes": [
+      "timeline",
+      "comparison",
+      "process",
+      "table-data",
+      "metric"
+    ]
   }
 }

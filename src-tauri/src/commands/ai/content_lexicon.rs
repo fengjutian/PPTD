@@ -15,6 +15,7 @@ const LEXICON_JSON: &str = include_str!("../../../../assets/content-lexicon.json
 struct LexiconFile {
     title_rules: TitleRules,
     punctuation: Punctuation,
+    image_prompt: ImagePromptRules,
 }
 
 #[derive(Deserialize)]
@@ -35,6 +36,16 @@ struct Punctuation {
     half_width_to_full_width: std::collections::BTreeMap<String, String>,
 }
 
+/// 配图提示词的规则。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ImagePromptRules {
+    /// 提示词里不该出现的词：生成图里的文字几乎总是错的。
+    text_request_words: Vec<String>,
+    /// 整册配图的上限。
+    max_images_per_deck: usize,
+}
+
 /// 标题规则。
 #[derive(Debug, Clone)]
 pub struct TitleLexicon {
@@ -50,6 +61,10 @@ pub struct TitleLexicon {
     pub connectors: Vec<String>,
     /// 半角标点到全角标点的对照表。
     pub half_width_to_full_width: std::collections::BTreeMap<String, String>,
+    /// 配图提示词里不该出现的词。
+    pub image_text_request_words: Vec<String>,
+    /// 整册配图的上限。
+    pub max_images_per_deck: usize,
 }
 
 impl TitleLexicon {
@@ -64,7 +79,27 @@ impl TitleLexicon {
             empty_tail_phrases: file.title_rules.empty_tail_phrases,
             connectors: file.title_rules.connectors,
             half_width_to_full_width: file.punctuation.half_width_to_full_width,
+            image_text_request_words: file.image_prompt.text_request_words,
+            max_images_per_deck: file.image_prompt.max_images_per_deck,
         }
+    }
+
+    /// 配图纪律，写进内容生成提示。
+    ///
+    /// 配图意图在内容阶段就产出，用户在审核页看得见、改得动。所以这里要求
+    /// 模型给的是**画面**，而不是"带标题的图"——生成图里的文字几乎总是错的。
+    pub fn image_prompt_rules_prompt(&self) -> String {
+        format!(
+            "【配图意图】\n\
+             1. plan.visualAsset 是可选的。只有这一页真的需要一张画面才能讲清楚时才输出，\
+             不要每页都配图，整册最多 {} 张。\n\
+             2. 格式：{{\"enabled\":true,\"prompt\":\"画面描述\",\"role\":\"hero|side|band\"}}。\n\
+             3. prompt 只描述画面本身，不要出现文字、字母或数字（不要写{}）。\n\
+             4. role 表示图在页面上的位置：hero 右侧整块，side 右下角一块，band 标题下一条。\n\
+             5. 已经有时间线、对比、流程、表格或指标块的页面不要配图：那类页面版面已经满了。",
+            self.max_images_per_deck,
+            join_or(&self.image_text_request_words),
+        )
     }
 
     /// 中文标点纪律，写进生成提示。

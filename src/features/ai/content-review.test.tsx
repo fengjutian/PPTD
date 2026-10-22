@@ -311,6 +311,7 @@ function renderReview(draft: AiDraft, activeIndex = 0, originalDraft?: AiDraft) 
       onActiveIndexChange={() => undefined}
       onDraftTitleChange={() => undefined}
       onSlideFieldChange={() => undefined}
+      onSlideVisualAssetChange={() => undefined}
       onSlideBlocksChange={() => undefined}
       onSlideReviewedChange={() => undefined}
       onReviewAllSlides={() => undefined}

@@ -1,6 +1,7 @@
 import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
 import { createDocument, createSlide, inches, parseMetricValue, applyTextRun, subtractTextRange, type TextRunStyle } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
+import { alignFrames, distributeFrames, unionFrame, type ArrangeHorizontal, type ArrangeVertical } from "./arrange";
 import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 import { layoutFlow } from "../rendering/flow";
 import {
@@ -171,6 +172,8 @@ export type AlignTarget =
 const HORIZONTAL_ALIGN: Record<string, HorizontalAlign | undefined> = { left: "left", center: "center", right: "right" };
 const VERTICAL_ALIGN: Record<string, VerticalAlign | undefined> = { top: "top", middle: "middle", bottom: "bottom" };
 
+export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
+
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
@@ -191,6 +194,9 @@ export type DocumentCommand =
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
   | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: AlignTarget }
+  | { type: "align-elements"; slideId: SlideId; elementIds: ElementId[]; align: { horizontal?: ArrangeHorizontal; vertical?: ArrangeVertical } }
+  | { type: "distribute-elements"; slideId: SlideId; elementIds: ElementId[]; axis: "horizontal" | "vertical" }
+  | { type: "move-elements"; slideId: SlideId; elementIds: ElementId[]; dx: Emu; dy: Emu }
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
@@ -404,6 +410,9 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-table-style":
     case "set-image-alt-text":
     case "set-image-crop": return "design";
+    case "align-elements":
+    case "distribute-elements":
+    case "move-elements": return "design";
     case "edit-text":
     case "delete-element": {
       if (!document) return command.type === "edit-text" ? "content" : "design";
@@ -1086,30 +1095,33 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         const stepGap = 0.03 * density.gap;
         const stepWidth = (contentBox.width - stepGap * Math.max(processItems.length - 1, 0)) / Math.max(processItems.length, 1);
-        const labelSize = 17; const textSize = 14; const badgeSize = 15;
-        const badgeDiameter = 0.5;
+        const labelSize = 18; const textSize = 14; const badgeSize = 14;
+        const badgeDiameter = 0.42;
         const badgeHeight = badgeDiameter / pageHeightIn;
-        // A step card holds a label and a sentence. Sizing it to that content
-        // keeps the row compact instead of leaving a tall empty panel.
-        const stepHeight = Math.min(0.26, contentBox.height * 0.44);
-        const stepTop = contentBox.y + (contentBox.height - stepHeight) * 0.34;
+        const padding = 0.045;
+        // The card is sized by what it carries: a badge, a label and one or two
+        // lines of copy. Centring the copy in a fixed 1.95in panel left a hole
+        // under every label and pushed the whole row into the upper third.
+        const labelHeight = pointsToFraction(labelSize * 1.3);
+        const bodyHeight = Math.max(...processItems.map((item) => blockHeight(item.text, stepWidth - padding * 2, textSize)));
+        const stepHeight = Math.min(0.28, Math.max(0.16, padding * 2 + badgeHeight + 0.02 + labelHeight + 0.01 + bodyHeight));
+        const stepTop = contentBox.y + (contentBox.height - stepHeight) * 0.5;
         processItems.forEach((item, itemIndex) => {
           const x = contentBox.x + itemIndex * (stepWidth + stepGap);
-          const badgeY = stepTop - 0.01 - badgeHeight / 2;
-          slide.elements.push(shape(frame(x, stepTop, stepWidth, stepHeight), cardFill, "rectangle", cardStroke, 0.75), shape(circleFrame(x + 0.02, badgeY, badgeDiameter), accentFill, "ellipse"));
-          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.02, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, badgeSize), badgeSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          // The step card narrows with every extra step, so its label and its
-          // sentence are fitted to the card instead of spilling out of it.
-          const stepLabelFrame = centeredBlock(item.label, { x: x + 0.025, y: stepTop + stepHeight * 0.12, width: stepWidth - 0.05, height: stepHeight * 0.28 }, labelSize);
-          const fittedLabelSize = fittedFontSize(item.label, frame(stepLabelFrame.x, stepLabelFrame.y, stepLabelFrame.width, stepLabelFrame.height), labelSize, 9);
-          slide.elements.push(text(item.label, stepLabelFrame, fittedLabelSize, titleInk, true, "center", undefined, cardLuminance));
-          const stepCopyFrame = centeredBlock(item.text, { x: x + 0.025, y: stepTop + stepHeight * 0.44, width: stepWidth - 0.05, height: stepHeight * 0.46 }, textSize);
-          const fittedTextSize = fittedFontSize(item.text, frame(stepCopyFrame.x, stepCopyFrame.y, stepCopyFrame.width, stepCopyFrame.height), textSize, 9);
-          slide.elements.push(text(item.text, stepCopyFrame, fittedTextSize, bodyInk, false, "center", undefined, cardLuminance));
-          if (itemIndex < processItems.length - 1) {
-            const arrowHeight = pointsToFraction(22 * 1.2);
-            slide.elements.push(text("→", frame(x + stepWidth, stepTop + stepHeight / 2 - arrowHeight / 2, stepGap, arrowHeight), 22, design.accent, true, "center", undefined, contentTextLuminance));
-          }
+          const badgeX = x + padding;
+          const badgeY = stepTop + padding;
+          slide.elements.push(shape(frame(x, stepTop, stepWidth, stepHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, stepTop, stepWidth, 0.008), design.accent));
+          slide.elements.push(shape(circleFrame(badgeX, badgeY, badgeDiameter), accentFill, "ellipse"));
+          slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: badgeX, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, badgeSize), badgeSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
+          // Left aligned type reads as an editorial column; centring every line
+          // in four identical boxes is what made the page look like a template.
+          const labelY = badgeY + badgeHeight + 0.02;
+          const labelFrame = frame(x + padding, labelY, stepWidth - padding * 2, labelHeight);
+          const fittedLabelSize = fittedFontSize(item.label, labelFrame, labelSize, 9);
+          slide.elements.push(text(item.label, labelFrame, fittedLabelSize, titleInk, true, "left", undefined, cardLuminance));
+          const copyFrame = frame(x + padding, labelY + labelHeight + 0.01, stepWidth - padding * 2, Math.max(0.04, bodyHeight));
+          const fittedTextSize = fittedFontSize(item.text, copyFrame, textSize, 9);
+          slide.elements.push(text(item.text, copyFrame, fittedTextSize, bodyInk, false, "left", undefined, cardLuminance));
         });
       } else if ((design.layout === "quote" || quoteBlock) && items.length < 3) {
         const quoteText = quoteBlock?.text ?? content.body;
@@ -1747,6 +1759,36 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       origin: "user",
       style: { fill: "#d35230", stroke: "#7f2f1d", strokeWidthPt: 1.5, radiusPt: 12 },
     });
+    return;
+  }
+
+  // 多选的三个命令在单元素解析之前处理：它们一次动一组对象，没有
+  // 单一的 elementId。
+  if (command.type === "align-elements") {
+    // 多选对齐以这一组的外接框为基准：把三个对象的左边推齐，和把它们推齐
+    // 到页面左边，是两件事。前者才是"对齐"。
+    const targets = slide.elements.filter((item) => command.elementIds.includes(item.id) && !item.locked);
+    if (targets.length === 0) return;
+    const reference = unionFrame(targets.map((item) => item.frame));
+    if (!reference) return;
+    const aligned = alignFrames(targets.map((item) => item.frame), reference, command.align);
+    targets.forEach((item, index) => { item.frame = aligned[index]!; });
+    return;
+  }
+  if (command.type === "distribute-elements") {
+    const targets = slide.elements.filter((item) => command.elementIds.includes(item.id) && !item.locked);
+    if (targets.length < 3) return;
+    const distributed = distributeFrames(targets.map((item) => item.frame), command.axis);
+    targets.forEach((item, index) => { item.frame = distributed[index]!; });
+    return;
+  }
+  if (command.type === "move-elements") {
+    // 整组一起移动是一个意图，所以是一个命令、一个撤销项。
+    if (!Number.isSafeInteger(command.dx) || !Number.isSafeInteger(command.dy)) throw new Error("INVALID_ELEMENT_TRANSFORM");
+    for (const item of slide.elements) {
+      if (!command.elementIds.includes(item.id) || item.locked) continue;
+      item.frame = { ...item.frame, x: (item.frame.x + command.dx) as Emu, y: (item.frame.y + command.dy) as Emu };
+    }
     return;
   }
 

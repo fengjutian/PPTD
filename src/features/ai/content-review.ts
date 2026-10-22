@@ -3,6 +3,7 @@ import { assessLayoutCapacity, type CapacityBlockFacts, type LayoutCapacityNote 
 import { describeTitleSkeleton, findRepeatedTitlePatterns, analyzeTitle } from "../../core/content/title-quality";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
 import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
+import { visualAssetIssues } from "./visual-asset-review";
 
 export type DraftSlide = AiDraft["slides"][number];
 export type AiDraftSaveState = "saving" | "saved";
@@ -41,6 +42,13 @@ export const densityLabels: Record<SlideBrief["density"], string> = {
   low: "低信息密度",
   medium: "中等信息密度",
   high: "高信息密度",
+};
+
+/** 配图角色在审核页上的名字。顺序与视觉素材层一致。 */
+export const visualAssetRoleLabels: Record<"hero" | "side" | "band", string> = {
+  hero: "主视觉",
+  side: "侧栏图",
+  band: "通栏图",
 };
 
 export const blockTypeLabels: Record<ContentBlock["type"], string> = {
@@ -176,7 +184,7 @@ export function missingTitleIndexes(draft: AiDraft): number[] {
   return draft.slides.flatMap((slide, index) => (slide.title.trim() ? [] : [index]));
 }
 
-export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title" | "table-too-large" | "table-ragged" | "templated-title" | "repeated-title-pattern";
+export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title" | "table-too-large" | "table-ragged" | "templated-title" | "repeated-title-pattern" | "image-text-request" | "image-empty-prompt" | "image-on-structured-page" | "image-over-limit";
 export type ReviewIssue = {
   kind: ReviewIssueKind;
   /** Pages the issue applies to, in page order. The first one is the jump target. */
@@ -267,6 +275,11 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
       blocking: false,
     });
   }
+  // 配图意图也在内容阶段就产出了，所以它的合规问题在这里一并报出来。
+  // 配图的问题不阻塞审核：内容本身没有问题，图的事可以之后再定。
+  visualAssetIssues(draft).forEach((issue) => {
+    issues.push({ kind: issue.kind, indexes: [issue.slideIndex], message: issue.message, blocking: false });
+  });
   return issues;
 }
 

@@ -1148,7 +1148,7 @@ describe("document commands", () => {
     const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "流程", slides: [content], designs: [design] }));
     const texts = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text);
-    expect(texts).toEqual(["实施流程", "1", "分析", "确认目标", "→", "2", "执行", "完成交付"]);
+    expect(texts).toEqual(["实施流程", "1", "分析", "确认目标", "2", "执行", "完成交付"]);
     expect(result.slides[0]!.elements.every((element) => element.type === "text" || element.type === "shape")).toBe(true);
   });
 
