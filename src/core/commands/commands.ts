@@ -912,15 +912,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // quote mark, the quote and the label are placed by the height the
           // quote really needs, so a short quote does not leave a hole under
           // the mark and a long one does not push the label off the panel.
-          const markHeightPt = 62 * 1.25;
+          const markSize = 62;
+          const markHeightPt = markSize;
           const labelHeightPt = 12 * 1.25;
           const markTopPt = 8;
           const labelBottomMarginPt = 10;
           const labelTopPt = panelHeightPt - labelHeightPt - labelBottomMarginPt;
-          // The quote takes the room between the mark and the label.
-          const quoteAreaTopPt = markTopPt + markHeightPt + 6;
-          const quoteAreaBottomPt = labelTopPt - 12;
-          const quoteAreaPt = Math.max(20, quoteAreaBottomPt - quoteAreaTopPt);
+          // The quote sits directly under the mark. The room that is left
+          // collects above the rule at the bottom of the panel, so the panel
+          // reads as one block instead of a mark, a hole and a quote.
+          const quoteTopPt = markTopPt + markHeightPt + 4;
+          const quoteAreaPt = Math.max(20, labelTopPt - 14 - quoteTopPt);
           // The font size is the largest one whose quote still fits the area.
           // Picking it by the length of the text instead ignored the width of
           // the panel and produced quotes of three different sizes.
@@ -930,17 +932,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           for (const size of quoteSizes) {
             const lines = estimateTextLines(panelQuote, quoteWidthPt, size, command.fontFamily || "Microsoft YaHei");
             const height = lines * size * 1.25;
-            if (height <= quoteAreaPt) {
-              quoteSize = size;
-              quoteHeightPt = height;
-              break;
-            }
             quoteSize = size;
             quoteHeightPt = height;
+            if (height <= quoteAreaPt) break;
           }
-          const quoteTopPt = quoteAreaTopPt + Math.max(0, (quoteAreaPt - quoteHeightPt) / 2);
           const quoteFrame = frame(panelX + 0.05, contentBox.y + quoteTopPt / pageHeightPt, panelWidth - 0.10, quoteHeightPt / pageHeightPt);
-          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.12, markHeightPt / pageHeightPt), 62, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.12, markHeightPt / pageHeightPt), markSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(text(panelQuote, quoteFrame, quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
           // The rule and the label keep their place under the quote, so the
           // panel always ends the same way.
