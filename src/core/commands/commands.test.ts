@@ -5,6 +5,7 @@ import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout
 import { createDocument, inches } from "../document-model";
 import { contrastRatio, contrastRatioAgainstLuminance } from "../rendering/contrast";
 import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
+import { VISUAL_ASSET_REQUEST_SIZE } from "./visual-asset";
 
 describe("document commands", () => {
   it("keeps design commands out of content", () => {
@@ -356,9 +357,34 @@ describe("document commands", () => {
     expect(picture!.frame.x).toBeGreaterThan(titleElement.frame.x + titleElement.frame.width);
   });
 
-  it("leaves the page alone when no picture was generated for it", () => {
+  it("does not cut a picture whose proportions match the box it lands in", () => {
+    // 生成的图按契约请求，图框也按同一个比例留：两者一致时不该裁掉画面。
+    // 裁剪是"图比框宽/高"时才需要的补丁，不是常态。
     const source = createDocument();
     const content = { title: "封面", body: "一句话副标题", speakerNotes: "" };
+    const design = {
+      layout: "cover" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+      visualAsset: { enabled: true, prompt: "一座明亮的现代化数据中心", role: "hero" as const },
+    };
+    const requested = VISUAL_ASSET_REQUEST_SIZE.hero;
+    const result = produce(source, (draft) => applyCommand(draft, {
+      type: "apply-ai-designed-draft",
+      title: "配图",
+      slides: [content],
+      designs: [design],
+      visualAssets: [{ slideIndex: 0, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" as const, naturalWidth: requested.width, naturalHeight: requested.height, altText: "现代化数据中心" }],
+    }));
+    const picture = result.slides[0]!.elements.find((element): element is Extract<typeof element, { type: "image" }> => element.type === "image");
+    expect(picture).toBeDefined();
+    expect(picture!.crop).toBeUndefined();
+  });
+
+  it("leaves the page alone when no picture was generated for it", () => {
+    const source = createDocument();    const content = { title: "封面", body: "一句话副标题", speakerNotes: "" };
     const design = { layout: "cover" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333", visualAsset: { enabled: true, role: "hero" as const } };
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "配图", slides: [content], designs: [design] }));
     expect(result.slides[0]!.elements.some((element) => element.type === "image")).toBe(false);

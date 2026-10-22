@@ -47,7 +47,10 @@ async fn probe_the_live_response_shape() {
         height: None,
     });
 
-    eprintln!("请求体字段：{:?}", body.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+    eprintln!(
+        "请求体字段：{:?}",
+        body.as_object().map(|o| o.keys().collect::<Vec<_>>())
+    );
 
     let response = MINIMAX_IMAGE
         .apply_auth(client.post(MINIMAX_IMAGE.image_endpoint()), &api_key)
@@ -189,7 +192,10 @@ async fn honours_an_explicit_pixel_size() {
         .await
         .unwrap_or_else(|error| panic!("请求 {width}x{height} 失败：{error}"));
 
-        eprintln!("请求 {width}x{height} → 实际 {}x{}", result.width, result.height);
+        eprintln!(
+            "请求 {width}x{height} → 实际 {}x{}",
+            result.width, result.height
+        );
         assert_eq!(
             (result.width, result.height),
             (width, height),
