@@ -47,7 +47,7 @@ const MAX_HANGING = 2;
 
 /** A Latin word, a number, or one part of them. */
 function isWordCharacter(text: string): boolean {
-  return /^[A-Za-z0-9.\-]$/.test(text);
+  return /^[A-Za-z0-9.-]$/.test(text);
 }
 
 /**
