@@ -2,6 +2,7 @@ import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, Element
 import { createDocument, createSlide, inches, parseMetricValue, applyTextRun, subtractTextRange, type TextRunStyle } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
 import { estimateTextLines } from "../rendering/text-fit";
+import { layoutFlow } from "../rendering/flow";
 import {
   planTemplateLayouts,
   templateColumnRegions,
@@ -865,52 +866,87 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const listWidth = contentBox.width * 0.56;
         const panelX = contentBox.x + contentBox.width * 0.60;
         const panelWidth = contentBox.width * 0.37;
-        const rowGap = 0.006;
-        const rowHeight = (contentBox.height - rowGap * (listItems.length - 1)) / listItems.length;
         const numberWidth = Math.min(0.07, listWidth * 0.16);
-        const numberSize = Math.max(16, Math.min(22, rowHeight * pageHeightIn * 72 * 0.48));
         const itemSize = Math.max(17, Math.min(20, templateBodySize ?? 20));
+        const cleanItems = listItems.map(cleanPoint);
+        // The rows are measured instead of divided into equal slots. A row that
+        // needs two lines and a row that needs one leave a different amount of
+        // white space around them when both get the same slot, and the rhythm
+        // of the column breaks.
+        const listFlow = layoutFlow({
+          items: cleanItems,
+          widthPt: (listWidth - numberWidth - 0.03) * pageWidthIn * 72,
+          availableHeightPt: contentBox.height * pageHeightIn * 72,
+          preferredFontSizePt: itemSize,
+          minimumFontSizePt: 14,
+          minimumGapPt: 6 * 72 * 0.0139,
+          fontFamily: command.fontFamily || "Microsoft YaHei",
+        });
+        const flowFontPt = listFlow.fontSizePt;
+        const rowGapPt = listFlow.gapPt;
+        const flowHeightFraction = (points: number) => points / (pageHeightIn * 72);
+        const numberSize = Math.max(16, Math.min(22, flowFontPt * 1.05));
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
-        listItems.forEach((item, itemIndex) => {
-          const rowY = contentBox.y + itemIndex * (rowHeight + rowGap);
-          const cleanItem = cleanPoint(item);
+        listFlow.rows.forEach((row, itemIndex) => {
+          const rowY = contentBox.y + flowHeightFraction(row.topPt);
+          const rowHeight = flowHeightFraction(row.heightPt);
           slide.elements.push(shape(frame(contentBox.x, rowY, 0.006, rowHeight), design.accent));
-          slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), centeredBlock(String(itemIndex + 1).padStart(2, "0"), { x: contentBox.x + 0.015, y: rowY, width: numberWidth, height: rowHeight }, numberSize), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
+          // The number sits on the first line of its row, so the column of
+          // numbers reads as one straight line even when the rows below it
+          // need a second line.
+          const numberBox = { x: contentBox.x + 0.015, y: rowY, width: numberWidth, height: rowHeight };
+          slide.elements.push(text(String(itemIndex + 1).padStart(2, "0"), frame(numberBox.x, numberBox.y, numberBox.width, numberBox.height), numberSize, design.accent, true, "left", undefined, contentTextLuminance));
           const itemBox = { x: contentBox.x + numberWidth + 0.03, y: rowY, width: listWidth - numberWidth - 0.03, height: rowHeight };
-          const fittedItemSize = fittedFontSize(cleanItem, frame(itemBox.x, itemBox.y, itemBox.width, itemBox.height), itemSize, 14);
-          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, itemBox, fittedItemSize), fittedItemSize, bodyInk, false, "left", undefined, contentTextLuminance));
-          if (itemIndex < listItems.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + rowGap / 2 - 0.002, listWidth, 0.004), cardStroke));
+          slide.elements.push(text(row.text, frame(itemBox.x, itemBox.y, itemBox.width, itemBox.height), row.fontSizePt, bodyInk, false, "left", undefined, contentTextLuminance));
+          if (itemIndex < listFlow.rows.length - 1) slide.elements.push(shape(frame(contentBox.x, rowY + rowHeight + flowHeightFraction(rowGapPt) / 2 - 0.002, listWidth, 0.004), cardStroke));
         });
         slide.elements.push(shape(frame(panelX, contentBox.y, panelWidth, contentBox.height), accentFill, "rectangle"));
         if (pullQuote) {
-          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + 0.02, 0.12, 0.13), 62, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           const quoteAttribution = quoteBlock?.attribution?.trim();
-          // Prefer a punctuation boundary near the middle over an arbitrary
-          // CJK wrap. This is display-only; the reviewed body stays unchanged.
-          const displayQuote = (value: string) => {
-            if (value.includes("\n")) return value;
-            const characters = [...value];
-            if (characters.length < 12) return value;
-            const candidates = characters
-              .map((character, characterIndex) => (/[，,、；;]/.test(character) ? characterIndex + 1 : -1))
-              .filter((breakIndex) => breakIndex > 0 && breakIndex < characters.length - 1)
-              .filter((breakIndex) => breakIndex >= characters.length * 0.35 && breakIndex <= characters.length * 0.65);
-            if (candidates.length === 0) return value;
-            const breakIndex = candidates.sort((left, right) => Math.abs(left - characters.length / 2) - Math.abs(right - characters.length / 2))[0]!;
-            return `${characters.slice(0, breakIndex).join("")}\n${characters.slice(breakIndex).join("").trimStart()}`;
-          };
-          const panelQuote = quoteAttribution ? `${displayQuote(pullQuote)}\n— ${quoteAttribution}` : displayQuote(pullQuote);
-          const quoteSize = panelQuote.length > 60 ? 16 : panelQuote.length > 40 ? 18 : 22;
-          // Anchor the quote to the top of the panel. Centering a multi-line
-          // quote inside a tall slot pushed the last line into the rule and the
-          // "关键摘录" label. The reviewed copy is unchanged; this only sets
-          // the display box.
-          const quoteFrame = frame(panelX + 0.05, contentBox.y + contentBox.height * 0.36, panelWidth - 0.10, Math.max(0.12, contentBox.height * 0.35));
-          const quoteBottom = quoteFrame.y / pageHeight + quoteFrame.height / pageHeight;
+          const panelQuote = quoteAttribution ? `${pullQuote}\n— ${quoteAttribution}` : pullQuote;
+          const quoteWidthPt = (panelWidth - 0.10) * pageWidthIn * 72;
+          const panelHeightPt = contentBox.height * pageHeightIn * 72;
+          const pageHeightPt = pageHeightIn * 72;
+          // The panel is measured instead of split into fixed fractions. The
+          // quote mark, the quote and the label are placed by the height the
+          // quote really needs, so a short quote does not leave a hole under
+          // the mark and a long one does not push the label off the panel.
+          const markHeightPt = 62 * 1.25;
+          const labelHeightPt = 12 * 1.25;
+          const markTopPt = 8;
+          const labelBottomMarginPt = 10;
+          const labelTopPt = panelHeightPt - labelHeightPt - labelBottomMarginPt;
+          // The quote takes the room between the mark and the label.
+          const quoteAreaTopPt = markTopPt + markHeightPt + 6;
+          const quoteAreaBottomPt = labelTopPt - 12;
+          const quoteAreaPt = Math.max(20, quoteAreaBottomPt - quoteAreaTopPt);
+          // The font size is the largest one whose quote still fits the area.
+          // Picking it by the length of the text instead ignored the width of
+          // the panel and produced quotes of three different sizes.
+          const quoteSizes = [22, 20, 18, 16, 14];
+          let quoteSize = quoteSizes[quoteSizes.length - 1]!;
+          let quoteHeightPt = 0;
+          for (const size of quoteSizes) {
+            const lines = estimateTextLines(panelQuote, quoteWidthPt, size, command.fontFamily || "Microsoft YaHei");
+            const height = lines * size * 1.25;
+            if (height <= quoteAreaPt) {
+              quoteSize = size;
+              quoteHeightPt = height;
+              break;
+            }
+            quoteSize = size;
+            quoteHeightPt = height;
+          }
+          const quoteTopPt = quoteAreaTopPt + Math.max(0, (quoteAreaPt - quoteHeightPt) / 2);
+          const quoteFrame = frame(panelX + 0.05, contentBox.y + quoteTopPt / pageHeightPt, panelWidth - 0.10, quoteHeightPt / pageHeightPt);
+          slide.elements.push(text("“", frame(panelX + 0.04, contentBox.y + markTopPt / pageHeightPt, 0.12, markHeightPt / pageHeightPt), 62, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(text(panelQuote, quoteFrame, quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
-          slide.elements.push(shape(frame(panelX + 0.05, quoteBottom + 0.02, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("关键摘录", frame(panelX + 0.05, quoteBottom + 0.05, panelWidth - 0.10, 0.06), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          // The rule and the label keep their place under the quote, so the
+          // panel always ends the same way.
+          const ruleY = contentBox.y + labelTopPt / pageHeightPt;
+          slide.elements.push(shape(frame(panelX + 0.05, ruleY - 0.006, panelWidth - 0.10, 0.004), "#FFFFFF"));
+          slide.elements.push(text("关键摘录", frame(panelX + 0.05, ruleY, panelWidth - 0.10, labelHeightPt / pageHeightPt), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
         } else {
           const countText = String(items.length).padStart(2, "0");
           // The numeral is the anchor, so measure its own block and place the

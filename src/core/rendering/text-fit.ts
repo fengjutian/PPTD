@@ -1,4 +1,5 @@
 import type { TextElement } from "../document-model";
+import { breakIntoLines } from "./cjk-linebreak";
 import { getTextMeasurer } from "./text-metrics";
 
 /**
@@ -35,15 +36,19 @@ export function measureTextWidthEm(text: string, fontFamily?: string): number {
 }
 
 /**
- * Approximate line count for a text frame. Uses the same estimator as the visual
- * gate, and the real font when the application registered a measurer.
+ * How many lines a text needs in a frame.
+ *
+ * The line breaking is the one the renderer uses, so the layout engine, the
+ * quality gate and the picture the reviewer looks at all count the same
+ * lines. Counting whole paragraphs by width instead would disagree with the
+ * renderer wherever a Latin word or a piece of punctuation decides a break.
  */
 export function estimateTextLines(text: string, widthPt: number, fontSizePt: number, fontFamily?: string): number {
-  const unitsPerLine = Math.max(1, widthPt / fontSizePt);
-  return text.split("\n").reduce((total, paragraph) => {
-    const units = measureTextWidthEm(paragraph, fontFamily);
-    return total + Math.max(1, Math.ceil(units / unitsPerLine));
-  }, 0);
+  const widthEm = Math.max(1, widthPt / fontSizePt);
+  return breakIntoLines(text, {
+    widthEm,
+    widthOf: (character) => measureTextWidthEm(character, fontFamily),
+  }).length;
 }
 
 /**

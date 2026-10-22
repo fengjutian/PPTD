@@ -1,4 +1,5 @@
 import { formatChartValue, resolveChartData, resolveFragmentStyle, resolveTableData, textFragments, type ChartElement, type PresentationDocument, type Slide, type TableElement, type TextElement } from "../core/document-model";
+import { breakAtoms } from "../core/rendering/cjk-linebreak";
 import { resolveImageUrl } from "./image-url-service";
 
 export interface PresentationRender { slides: string[]; contactSheet: string }
@@ -188,6 +189,25 @@ function styledCharacters(element: TextElement): StyledCharacter[] {
 }
 
 /**
+ * The characters of a text, split into the paragraphs a line break in the
+ * copy starts.
+ */
+function splitStyledParagraphs(characters: StyledCharacter[]): StyledCharacter[][] {
+  const paragraphs: StyledCharacter[][] = [];
+  let current: StyledCharacter[] = [];
+  for (const styled of characters) {
+    if (styled.character === "\n") {
+      paragraphs.push(current);
+      current = [];
+      continue;
+    }
+    current.push(styled);
+  }
+  paragraphs.push(current);
+  return paragraphs;
+}
+
+/**
  * Draws a text with its styled fragments.
  *
  * The review sees a picture of the page, so a text with emphasised words has
@@ -198,29 +218,17 @@ function drawText(context: CanvasRenderingContext2D, element: TextElement, width
   const fontSize = element.style.fontSizePt * scale * 914_400 / 72;
   const fontFor = (bold: boolean) => `${bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
   const characters = styledCharacters(element);
-  // Greedy wrap: the characters that fit on one line stay together, and a line
-  // break in the copy always starts a new line.
+  // The same line breaker the layout engine uses, so the picture the reviewer
+  // looks at breaks exactly where the quality gate counted the lines.
   const lines: StyledCharacter[][] = [];
-  let line: StyledCharacter[] = [];
-  let lineWidth = 0;
-  for (const styled of characters) {
-    if (styled.character === "\n") {
-      if (line.length > 0) lines.push(line);
-      line = [];
-      lineWidth = 0;
-      continue;
-    }
-    context.font = fontFor(styled.bold);
-    const advance = context.measureText(styled.character).width;
-    if (line.length > 0 && lineWidth + advance > width) {
-      lines.push(line);
-      line = [];
-      lineWidth = 0;
-    }
-    line.push(styled);
-    lineWidth += advance;
+  for (const paragraph of splitStyledParagraphs(characters)) {
+    const atoms = paragraph.map((styled) => {
+      context.font = fontFor(styled.bold);
+      return { value: styled, text: styled.character, width: context.measureText(styled.character).width };
+    });
+    if (atoms.length === 0) continue;
+    for (const line of breakAtoms(atoms, width)) lines.push(line.map((atom) => atom.value));
   }
-  if (line.length > 0) lines.push(line);
   const lineHeight = fontSize * 1.25;
   context.textBaseline = "top";
   context.textAlign = "left";
