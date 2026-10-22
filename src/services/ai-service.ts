@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { z } from "zod";
 import { LAYOUT_CAPACITY } from "../core/commands/layout-capacity";
+import type { AiPaletteRole } from "../core/commands/design-intent";
+import { contrastRatio as colorContrastRatio } from "../core/rendering/contrast";
 import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 
@@ -56,6 +58,7 @@ export type SlideBrief = z.infer<typeof slideBriefSchema>;
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
   return draft.slides.map((slide, slideIndex) => ({ slideIndex, ...slide.plan }));
 }
+const aiPaletteRoleSchema = z.enum(["surface", "surface-alt", "accent-1", "accent-2", "accent-3", "primary", "secondary", "inverse", "template-default"]);
 export const aiPresentationDesignSchema = z.object({
   slides: z.array(z.object({
     layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
@@ -63,6 +66,27 @@ export const aiPresentationDesignSchema = z.object({
     accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     titleColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
     bodyColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    /**
+     * The composition family of the page. The renderer checks the request
+     * against the reviewed content, so an impossible request is refused
+     * instead of producing a page that cannot carry its own content.
+     */
+    composition: z.enum(["auto", "stacked", "columns", "grid", "editorial", "showcase"]).optional(),
+    /** Which level of the hierarchy carries the weight of the page. */
+    emphasis: z.enum(["balanced", "title-dominant", "body-dominant"]).optional(),
+    /** How much white space the page is willing to spend. */
+    densityTarget: z.enum(["airy", "balanced", "compact"]).optional(),
+    /**
+     * The slots of the template palette the page paints itself with. The model
+     * picks a slot instead of a colour value, so the deck stays inside the
+     * palette of its template and the choice still has an effect.
+     */
+    palette: z.object({
+      background: aiPaletteRoleSchema.optional(),
+      accent: aiPaletteRoleSchema.optional(),
+      title: aiPaletteRoleSchema.optional(),
+      body: aiPaletteRoleSchema.optional(),
+    }).optional(),
   })).min(1).max(20),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
@@ -162,23 +186,122 @@ function mixColor(foreground: string, background: string, amount: number): strin
   return `#${blended.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
 }
 
-/**
- * Template colors are authoritative. AI selects structure, but cannot invent a
- * competing palette. The title keeps the full strength of the template ink and
- * the body steps one level back, so a page keeps a readable hierarchy instead of
- * two blocks of identically coloured text.
- */
-export function constrainDesignToTemplate(design: AiPresentationDesign, template: DesignTemplateContext): AiPresentationDesign {
+/** The palette of a template, resolved into the slots a page can pick. */
+interface TemplatePalette {
+  /** The background the template paints its pages with. */
+  background: string;
+  /** The main ink of the template. */
+  primary: string;
+  /** The accents of the template, in the order the theme declares them. */
+  accents: string[];
+  /** The light surfaces of the template. */
+  surfaces: string[];
+  /** Whether the template declares a palette at all. */
+  hasColors: boolean;
+}
+
+/** The inks a page uses on the background it ended up with. */
+interface DerivedInk {
+  /** The ink that reads on the background. */
+  ink: string;
+  /** The ink that reads on the background and steps one level back. */
+  secondary: string;
+}
+
+function templatePalette(template: DesignTemplateContext): TemplatePalette {
   const colors = new Map(template.themeColors.map((color) => [color.name.toLowerCase(), color.value.toUpperCase()]));
-  const accent = colors.get("accent1") ?? colors.get("accent2");
+  const accent1 = colors.get("accent1");
+  const accent2 = colors.get("accent2");
+  const accent3 = colors.get("accent3");
   const light = colors.get("lt1") ?? colors.get("lt2");
   const dark = colors.get("dk1") ?? colors.get("dk2");
-  if (!accent && !light && !dark) return design;
   const rawBackground = template.defaultBackgroundColor;
   const background = rawBackground?.startsWith("#") ? rawBackground.toUpperCase() : rawBackground ? colors.get(rawBackground.toLowerCase()) ?? light ?? "#FFFFFF" : light ?? "#FFFFFF";
   const foreground = dark ?? (colorLuminance(background) > 0.45 ? "#1F2937" : "#FFFFFF");
-  const bodyForeground = mixColor(foreground, background, colorLuminance(background) > 0.45 ? 0.22 : 0.16);
-  return { slides: design.slides.map((slide) => ({ ...slide, background, accent: accent ?? slide.accent, titleColor: foreground, bodyColor: bodyForeground })) };
+  return {
+    background,
+    primary: foreground,
+    accents: [accent1, accent2, accent3].filter((value): value is string => Boolean(value)),
+    surfaces: [light, colors.get("lt2")].filter((value): value is string => Boolean(value)),
+    hasColors: Boolean(accent1 || accent2 || light || dark),
+  };
+}
+
+/**
+ * The inks of a page, derived from the background the page actually uses.
+ *
+ * A page that paints itself with a dark surface of the template cannot keep
+ * the dark ink of that template, so the inks are mixed against the background
+ * the page ended up with and not against the one the template defaults to.
+ */
+function deriveInk(palette: TemplatePalette, background: string): DerivedInk {
+  const onLight = (colorLuminance(background) ?? 1) > 0.45;
+  const ink = onLight ? palette.primary : palette.surfaces[0] ?? "#FFFFFF";
+  return { ink, secondary: mixColor(ink, background, onLight ? 0.22 : 0.16) };
+}
+
+/**
+ * The colour of a palette slot.
+ *
+ * The model picks a slot of the template palette instead of a colour value, so
+ * the deck stays inside the palette of its template while the choice the
+ * model made still decides what the page looks like. A slot the template does
+ * not have falls back to the closest one it does have.
+ */
+function roleColor(role: AiPaletteRole | undefined, palette: TemplatePalette, derived: DerivedInk): string | undefined {
+  switch (role) {
+    case "surface":
+      return palette.surfaces[0] ?? palette.background;
+    case "surface-alt":
+      return palette.surfaces[1] ?? palette.surfaces[0] ?? palette.background;
+    case "accent-1":
+      return palette.accents[0] ?? derived.ink;
+    case "accent-2":
+      return palette.accents[1] ?? palette.accents[0] ?? derived.ink;
+    case "accent-3":
+      return palette.accents[2] ?? palette.accents[1] ?? palette.accents[0] ?? derived.ink;
+    case "primary":
+      return palette.primary;
+    case "secondary":
+      return derived.secondary;
+    case "inverse":
+      return derived.ink;
+    case "template-default":
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Resolves the colours of every page inside the palette of the template.
+ *
+ * The template owns the colours: a generated deck has to stay inside the
+ * palette of the template it was built with. The model still chooses, but it
+ * chooses a slot of that palette rather than an arbitrary value. A model that
+ * picks no slot keeps the colours of the template, which is what the previous
+ * behaviour did.
+ */
+export function constrainDesignToTemplate(design: AiPresentationDesign, template: DesignTemplateContext): AiPresentationDesign {
+  const palette = templatePalette(template);
+  if (!palette.hasColors) return design;
+  return {
+    slides: design.slides.map((slide) => {
+      const background = roleColor(slide.palette?.background, palette, deriveInk(palette, palette.background)) ?? palette.background;
+      // The inks are derived from the background the page actually uses, not
+      // from the background the template defaults to.
+      const derived = deriveInk(palette, background);
+      const accent = roleColor(slide.palette?.accent, palette, derived) ?? palette.accents[0] ?? slide.accent;
+      // A slot of the palette only decides the tone. An ink that cannot be read
+      // on the background the page ended up with is not a choice, it is a
+      // mistake, so it falls back to the ink that reads.
+      const chosenTitle = roleColor(slide.palette?.title, palette, derived);
+      const chosenBody = roleColor(slide.palette?.body, palette, derived);
+      const titleColor = chosenTitle && (colorContrastRatio(chosenTitle, background) ?? 0) >= 4.5 ? chosenTitle : derived.ink;
+      const bodyColor = chosenBody && (colorContrastRatio(chosenBody, background) ?? 0) >= 4.5 ? chosenBody : derived.secondary;
+      return { ...slide, background, accent, titleColor, bodyColor };
+    }),
+  };
 }
 /** 当前选中的厂商与模型。调用方不再关心具体厂商，由设置决定。 */
 async function aiSelection(): Promise<{ provider: string; model: string }> {

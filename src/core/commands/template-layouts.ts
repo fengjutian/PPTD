@@ -9,6 +9,7 @@
  */
 
 import type { BackgroundRange } from "../rendering/contrast";
+import type { AiComposition, AiDensityTarget, AiEmphasis, AiPalette } from "./design-intent";
 
 export interface AiNormalizedRect { x: number; y: number; width: number; height: number }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
@@ -22,6 +23,22 @@ export interface AiSlideDesign {
   accent: string;
   titleColor: string;
   bodyColor: string;
+  /**
+   * The composition family the page asked for. The renderer checks the request
+   * against the reviewed content and refuses it when the content cannot carry
+   * it, so this is an intent and never a command.
+   */
+  composition?: AiComposition;
+  /** Which level of the hierarchy carries the weight of the page. */
+  emphasis?: AiEmphasis;
+  /** How much white space the page is willing to spend. */
+  densityTarget?: AiDensityTarget;
+  /**
+   * The slots of the template palette the page paints itself with. The model
+   * picks a slot instead of a colour value, so the generated deck stays inside
+   * the palette of its template while the choice still has an effect.
+   */
+  palette?: AiPalette;
   safeRegion?: AiNormalizedRect;
   obstacleRegions?: AiNormalizedRect[];
   hierarchyAction?: "keep" | "strengthen-title" | "reduce-density" | "increase-whitespace";
