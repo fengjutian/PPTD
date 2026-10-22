@@ -962,6 +962,25 @@ export function ContentReview({
           </div>
         </div>
 
+        {regenerating && (
+          <div className="draft-regenerate-progress" role="status" aria-live="polite">
+            <div>
+              <strong>{regenerateProgress?.label || "正在重新生成整份草稿…"}</strong>
+              <span>生成期间当前内容保持不变；新版本替换后可以用撤销回到这一版。</span>
+            </div>
+            <div
+              className="design-progress-track"
+              aria-label="草稿重新生成进度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={regenerateProgress?.percent ?? 0}
+              role="progressbar"
+            >
+              <i style={{ width: `${regenerateProgress?.percent ?? 0}%` }} />
+            </div>
+          </div>
+        )}
+
         {issues.length > 0 && (
           <div className="draft-validation" role="alert">
             <CircleAlert />
