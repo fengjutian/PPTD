@@ -342,21 +342,25 @@ export function ContentReview({
           {draft.slides.map((slide, index) => {
             const slideStat = slideMetrics(slide);
             const missing = !slide.title.trim();
+            const empty = !slideHasContent(slide);
             return (
               <button
                 type="button"
                 className={activeIndex === index ? "active" : ""}
                 aria-current={activeIndex === index ? "page" : undefined}
+                data-outline-index={index}
+                tabIndex={activeIndex === index ? 0 : -1}
                 key={slide.id ?? index}
                 onClick={() => goToSlide(index)}
+                onKeyDown={(event) => handleOutlineKeyDown(event, index)}
               >
                 <span className="draft-outline-index">{String(index + 1).padStart(2, "0")}</span>
                 <div>
                   <strong className={missing ? "missing" : ""}>{slide.title.trim() || "未命名页面"}</strong>
-                  <small className={missing ? "missing" : ""}>
-                    {missing ? "缺少标题" : `${slideStat.points} 条要点 · ${slideStat.characters} 字`}
+                  <small className={missing || empty ? "missing" : ""}>
+                    {missing ? "缺少标题" : empty ? "还没有内容" : `${slideStat.points} 条要点 · ${slideStat.characters} 字`}
                   </small>
-                  {!missing && slideStat.preview && <p>{slideStat.preview}</p>}
+                  {!missing && !empty && slideStat.preview && <p>{slideStat.preview}</p>}
                 </div>
               </button>
             );
@@ -394,16 +398,20 @@ export function ContentReview({
           </label>
         </div>
 
-        {firstMissing !== undefined && (
+        {issues.length > 0 && (
           <div className="draft-validation" role="alert">
             <CircleAlert />
             <div>
-              <strong>还有 {missingIndexes.length} 页缺少标题</strong>
+              {issues.map((issue) => (
+                <p key={issue.kind} className={issue.blocking ? "" : "warning"}>
+                  <strong>{issue.message}</strong>
+                  <button type="button" className="link-action" onClick={() => goToSlide(issue.indexes[0]!)}>
+                    定位到第 {issue.indexes[0]! + 1} 页
+                  </button>
+                </p>
+              ))}
               <span>补全后才能确认内容并进入模板选择。</span>
             </div>
-            <button type="button" className="link-action" onClick={() => goToSlide(firstMissing)}>
-              定位到第 {firstMissing + 1} 页
-            </button>
           </div>
         )}
 
@@ -411,12 +419,13 @@ export function ContentReview({
           {draft.slides.map((slide, index) => {
             const slideStat = slideMetrics(slide);
             const missing = !slide.title.trim();
+            const empty = !slideHasContent(slide);
             const edited = isSlideEdited(slide, originalDraft?.slides[index]);
             const canUndoRestore = restoreUndoIndexes.includes(index);
             return (
               <article
                 id={`draft-slide-${index}`}
-                className={`draft-slide-card ${missing ? "invalid" : ""}`}
+                className={`draft-slide-card ${missing || empty ? "invalid" : ""}`}
                 data-slide-index={index}
                 aria-labelledby={`draft-slide-heading-${index}`}
                 key={slide.id ?? index}
@@ -468,6 +477,13 @@ export function ContentReview({
                     )}
                   </div>
                 </header>
+
+                {empty && (
+                  <small className="draft-field-error block-empty-note">
+                    <CircleAlert />
+                    本页还没有内容，补全后才能确认
+                  </small>
+                )}
 
                 <details className="slide-plan">
                   <summary>

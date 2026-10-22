@@ -12,7 +12,7 @@ import { TableView } from "../features/editor/TableView";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { LayerList } from "../features/editor/LayerList";
 import { ContentReview } from "../features/ai/ContentReview";
-import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
+import { draftMetrics, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
