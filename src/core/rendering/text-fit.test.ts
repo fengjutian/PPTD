@@ -25,7 +25,7 @@ describe("text fit estimation", () => {
     const element = document.slides[0]!.elements[0]!;
     if (element.type !== "text") throw new Error("expected a text element");
     element.text = "标题";
-    element.frame = { ...element.frame, width: emu(2_000_000), height: emu(24 * 12_700) };
+    element.frame = { ...element.frame, width: emu(2_000_000), height: emu(24 * 12_700) as typeof element.frame.height };
     element.style = { ...element.style, fontSizePt: 20, lineHeight: 1.2 };
     expect(textLikelyOverflows(element)).toBe(false);
     element.style = { ...element.style, lineHeight: 1.6 };
