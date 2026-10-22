@@ -330,8 +330,8 @@ describe("PPTX export", () => {
       type: "table-data" as const,
       header: ["项目", "数量"],
       rows: [
-        ["样本量", "38万"],
-        ["覆盖机构", "12万"],
+        ["样本量", "380000"],
+        ["覆盖机构", "120000"],
       ],
     };
     document.slides[0]!.content.blocks = [block];
@@ -350,6 +350,9 @@ describe("PPTX export", () => {
         bodyTextColor: "#17181c",
         borderColor: "#E2E7EC",
         firstColumnBold: true,
+        bandingFill: "#F3F5F7",
+        cellPaddingPt: 6,
+        borderWidthPt: 0.75,
       },
     });
     const result = await buildPptx(document);
@@ -358,8 +361,11 @@ describe("PPTX export", () => {
     const slideXml = strFromU8(entries["ppt/slides/slide1.xml"]!);
     expect(slideXml).toContain("<a:tbl>");
     expect(slideXml).toContain("项目");
-    expect(slideXml).toContain("38万");
-    expect(slideXml).toContain("12万");
+    expect(slideXml).toContain("380000");
+    expect(slideXml).toContain("120000");
+    // The figure column is right-aligned and the alternate row carries the band.
+    expect(slideXml).toContain('algn="r"');
+    expect(slideXml.toUpperCase()).toContain("F3F5F7");
     expect(result.report.nativeTableCount).toBe(1);
     expect(result.report.package.valid).toBe(true);
   });

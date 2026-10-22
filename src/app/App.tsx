@@ -114,7 +114,7 @@ import {
   type TemplateRecord,
 } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
-import { THEME_PRESETS } from "../core/design/theme-presets";
+import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
 import { defaultPresentationVisualGoal } from "../services/visual-alignment";
 import {
@@ -558,6 +558,39 @@ const SlideThumbnail = memo(function SlideThumbnail({
     </div>
   );
 });
+
+/**
+ * The template context of a deck that is not built from a PPTX.
+ *
+ * A preset owns the palette, the fonts and the type scale, but it is not a
+ * layout: the analysis is deliberately empty of slides and layouts so the
+ * design stage cannot reference a placeholder that does not exist. Page size
+ * matches the default 16:9 document.
+ */
+function presetTemplateAnalysis(preset: ThemePreset): TemplateAnalysis {
+  const color = (slot: string) => preset.theme.colors.find((entry) => entry.name === slot)?.value ?? "#FFFFFF";
+  return {
+    slideCount: 0,
+    slideWidthEmu: 12192000,
+    slideHeightEmu: 6858000,
+    masterCount: 0,
+    layoutCount: 0,
+    themeCount: 1,
+    themeColors: [
+      { name: "accent1", value: color("accent") },
+      { name: "accent2", value: color("muted") },
+      { name: "lt1", value: color("surface") },
+      { name: "dk1", value: color("primary") },
+    ],
+    majorFont: preset.theme.majorFont,
+    minorFont: preset.theme.minorFont,
+    defaultBackgroundColor: color("surface"),
+    defaultDecorations: [],
+    slides: [],
+    layouts: [],
+    warnings: [],
+  };
+}
 
 export function App() {
   const {
@@ -1667,15 +1700,19 @@ export function App() {
     setTemplatePickerOpen(true);
   };
 
-  const generateFromDraft = async () => {
-    if (!aiDraft || !selectedTemplate || !templateAnalysis) return;
+  const generateFromDraft = async (mode: "template" | "preset" = "template") => {
+    if (!aiDraft) return;
+    if (mode === "template" && (!selectedTemplate || !templateAnalysis)) return;
+    const preset = mode === "preset" ? (findThemePreset(themePresetId || inferThemePresetId(aiTopic)) ?? defaultThemePreset()) : undefined;
+    const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
+    const deckName = preset ? preset.name : selectedTemplate!.name;
     designCancelRef.current = false;
     setDesignQualityReport(undefined);
     designTaskId.current += 1;
     const taskId = designTaskId.current;
     setDesignBusy(true);
     setDesignProgress({ percent: 8, label: "正在准备内容与模板数据" });
-    setTaskStatus("AI 正在依据模板生成并渲染 PPT…");
+    setTaskStatus(`AI 正在依据${preset ? "内置主题" : "模板"}生成并渲染 PPT…`);
     const progressTimer = window.setInterval(() => {
       setDesignProgress((current) => {
         if (current.percent >= 82) return current;
@@ -1688,21 +1725,21 @@ export function App() {
       setDesignProgress({ percent: 18, label: "正在规划逐页设计意图" });
       const briefs = briefsFromDraft(aiDraft);
       setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
-      const design = await generatePresentationDesign(aiDraft, briefs, templateAnalysis, { taskId });
+      const design = await generatePresentationDesign(aiDraft, briefs, analysis, { taskId });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
-      const hasTemplateSize = templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu;
+      const hasTemplateSize = analysis.slideWidthEmu && analysis.slideHeightEmu;
       const templateColors = new Map(
-        templateAnalysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]),
+        analysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]),
       );
       const resolveTemplateColor = (value: string | null) =>
         value?.startsWith("#") ? value : value ? templateColors.get(value.toLowerCase()) : undefined;
       setDesignProgress({ percent: 94, label: "正在渲染可编辑页面" });
       const templateLayoutSources = hasTemplateSize
-        ? templateAnalysis.layouts.length > 0
-          ? templateAnalysis.layouts
-          : templateAnalysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))
+        ? analysis.layouts.length > 0
+          ? analysis.layouts
+          : analysis.slides.map((slide) => ({ ...slide, name: slide.layout ?? slide.title }))
         : [];
       const normalizeRegion = (region: {
         role: "title" | "body" | "image";
@@ -1713,10 +1750,10 @@ export function App() {
       }) => ({
         role: region.role,
         frame: {
-          x: region.x / templateAnalysis.slideWidthEmu!,
-          y: region.y / templateAnalysis.slideHeightEmu!,
-          width: region.width / templateAnalysis.slideWidthEmu!,
-          height: region.height / templateAnalysis.slideHeightEmu!,
+          x: region.x / analysis.slideWidthEmu!,
+          y: region.y / analysis.slideHeightEmu!,
+          width: region.width / analysis.slideWidthEmu!,
+          height: region.height / analysis.slideHeightEmu!,
         },
       });
       // Measure the rendered artwork under each placeholder so the command layer
@@ -1760,23 +1797,23 @@ export function App() {
         slides: aiDraft.slides,
         designs: design.slides,
         pageSize: hasTemplateSize
-          ? { width: emu(templateAnalysis.slideWidthEmu!), height: emu(templateAnalysis.slideHeightEmu!) }
+          ? { width: emu(analysis.slideWidthEmu!), height: emu(analysis.slideHeightEmu!) }
           : undefined,
-        fontFamily: templateAnalysis.majorFont || templateAnalysis.minorFont || undefined,
-        bodyFontFamily: templateAnalysis.minorFont || templateAnalysis.majorFont || undefined,
-        templateDecorations: hasTemplateSize
-          ? (templateAnalysis.defaultDecorations ?? []).map((item) => ({
+        fontFamily: preset ? undefined : analysis.majorFont || analysis.minorFont || undefined,
+        bodyFontFamily: preset ? undefined : analysis.minorFont || analysis.majorFont || undefined,
+        templateDecorations: preset ? undefined : hasTemplateSize
+          ? (analysis.defaultDecorations ?? []).map((item) => ({
               shape: item.shape,
               fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent,
               frame: {
-                x: item.x / templateAnalysis.slideWidthEmu!,
-                y: item.y / templateAnalysis.slideHeightEmu!,
-                width: item.width / templateAnalysis.slideWidthEmu!,
-                height: item.height / templateAnalysis.slideHeightEmu!,
+                x: item.x / analysis.slideWidthEmu!,
+                y: item.y / analysis.slideHeightEmu!,
+                width: item.width / analysis.slideWidthEmu!,
+                height: item.height / analysis.slideHeightEmu!,
               },
             }))
           : undefined,
-        templateLayouts: hasTemplateSize
+        templateLayouts: preset ? undefined : hasTemplateSize
           ? templateLayoutSources.map((layout) => ({
               index: layout.index,
               name: layout.name,
@@ -1788,10 +1825,10 @@ export function App() {
                 shape: item.shape,
                 fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent,
                 frame: {
-                  x: item.x / templateAnalysis.slideWidthEmu!,
-                  y: item.y / templateAnalysis.slideHeightEmu!,
-                  width: item.width / templateAnalysis.slideWidthEmu!,
-                  height: item.height / templateAnalysis.slideHeightEmu!,
+                  x: item.x / analysis.slideWidthEmu!,
+                  y: item.y / analysis.slideHeightEmu!,
+                  width: item.width / analysis.slideWidthEmu!,
+                  height: item.height / analysis.slideHeightEmu!,
                 },
               })),
               regions: layout.regions.map((region) => ({
@@ -1804,12 +1841,14 @@ export function App() {
         // The theme of the template travels with the design, so the exported
         // deck keeps the typography and the palette of the template.
         themePresetId: themePresetId || undefined,
-        templateTheme: {
-          name: selectedTemplate.name,
-          majorFont: templateAnalysis.majorFont ?? undefined,
-          minorFont: templateAnalysis.minorFont ?? undefined,
-          colors: templateAnalysis.themeColors.map((color) => ({ name: color.name, value: color.value })),
-        },
+        templateTheme: preset
+          ? undefined
+          : {
+              name: selectedTemplate!.name,
+              majorFont: analysis.majorFont ?? undefined,
+              minorFont: analysis.minorFont ?? undefined,
+              colors: analysis.themeColors.map((color) => ({ name: color.name, value: color.value })),
+            },
         backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
         visualAssets: visualAssets.map((asset) => ({
           slideIndex: asset.slideIndex,
@@ -1857,14 +1896,14 @@ export function App() {
         setDesignQualityReport(undefined);
         setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
         setActiveView("editor");
-        setTaskStatus(`PPT 已按模板完成 AI 设计：${selectedTemplate.name}`);
+        setTaskStatus(`PPT 已完成 AI 设计：${deckName}`);
         if (visualNote) window.setTimeout(() => setTaskStatus(visualNote), 50);
       } else {
         // 文档已经写进项目，问题只作为报告展示。界面不自动跳进编辑器，
         // 由用户决定先调整还是稍后处理。
         setDesignProgress({ percent: 100, label: "生成完成，存在待调整的排版问题" });
         setDesignQualityReport({
-          templateName: selectedTemplate.name,
+          templateName: deckName,
           issues: [
             ...new Map(
               stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),
@@ -2983,6 +3022,14 @@ export function App() {
                 onClick={() => setTemplatePickerOpen(false)}
               >
                 取消
+              </button>
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={designBusy || templatePreviewBusy}
+                onClick={() => void generateFromDraft("preset")}
+              >
+                不用模板，用内置主题
               </button>
               <button
                 type="button"

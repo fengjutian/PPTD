@@ -51,4 +51,21 @@ describe("table view", () => {
     expect(markup).toContain("表格数据缺失");
     expect(markup).not.toContain("<table");
   });
+
+  it("bands alternate rows and right-aligns a column of figures", () => {
+    const document = createDocument();
+    const block = {
+      id: crypto.randomUUID(),
+      type: "table-data" as const,
+      header: ["项目", "金额"],
+      rows: [["样本量", "1,200"], ["覆盖机构", "3,400"], ["合作方", "5,600"]],
+    };
+    document.slides[0]!.content.blocks = [block];
+    const element = tableElement(block.id);
+    element.style = { ...element.style, bandingFill: "#F3F5F7", cellPaddingPt: 6, borderWidthPt: 0.75 };
+    const markup = renderToStaticMarkup(<TableView element={element} slide={document.slides[0]!} scale={1} />);
+    expect(markup).toContain("background:#F3F5F7");
+    expect(markup).toContain("text-align:right");
+    expect(markup).toContain("padding:");
+  });
 });

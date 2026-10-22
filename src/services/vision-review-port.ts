@@ -45,6 +45,7 @@ export interface VisionReviewPort {
     goal: PresentationVisualGoal,
     slideIndexes?: number[],
     taskId?: number,
+    options?: { includeContactSheet?: boolean },
   ): Promise<VisualReview>;
   planRepairs(
     review: VisualReview,
@@ -142,7 +143,9 @@ export function planRepairsByRule(review: VisualReview, minimumOverall = 85): Vi
         ...(layout === undefined ? {} : { layout }),
         backgroundAction,
         hierarchyAction,
-        ...(guide === undefined ? {} : { safeRegion: guide.safeRegion, obstacleRegions: [...guide.logoRegions, ...guide.busyRegions] }),
+        ...(guide === undefined
+          ? {}
+          : { safeRegion: guide.safeRegion, obstacleRegions: [...guide.logoRegions, ...guide.busyRegions] }),
         elementActions,
         reason: issues
           .map((issue) => issue.suggestion)
@@ -162,8 +165,13 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     goal: PresentationVisualGoal,
     slideIndexes?: number[],
     taskId?: number,
+    options?: { includeContactSheet?: boolean },
   ): Promise<VisualReview> {
     validateVisualRenderPayload(render);
+    // The deck overview is the same picture for every batch. Sending it with
+    // each request multiplied the most expensive image by the number of
+    // batches; the caller sends it once, with the first batch.
+    const includeContactSheet = options?.includeContactSheet ?? true;
     const indexes = (slideIndexes ?? render.slides.map((_, index) => index)).slice(0, 6);
     if (indexes.length === 0 || indexes.some((index) => !render.slides[index]))
       throw new Error("AI_VISION_SLIDE_INDEX_INVALID");
@@ -175,7 +183,7 @@ export class TauriVisionReviewPort implements VisionReviewPort {
           request: {
             goal,
             slideImages: indexes.map((index) => render.slides[index]!),
-            contactSheet: render.contactSheet,
+            ...(includeContactSheet ? { contactSheet: render.contactSheet } : {}),
             slideIndexes: indexes,
             model: settings.aiModel,
             provider: settings.aiProviderId,

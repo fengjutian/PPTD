@@ -92,6 +92,36 @@ describe("视觉评审端口", () => {
     expect(call?.[1]).toMatchObject({ request: { taskId: 77, slideIndexes: [0, 1, 2] } });
   });
 
+  it("整套缩略图只在需要的那一批发送，不随每批重复上传", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "load_app_settings") return null;
+      if (command === "review_presentation_visuals") {
+        return {
+          overallScore: 90,
+          hierarchyScore: 90,
+          alignmentScore: 90,
+          readabilityScore: 90,
+          consistencyScore: 90,
+          issues: [],
+          slideGuidance: [],
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const port = new TauriVisionReviewPort();
+    await port.review(render(7), goal, [0], 1, { includeContactSheet: true });
+    await port.review(render(7), goal, [1], 1, { includeContactSheet: false });
+
+    const calls = vi
+      .mocked(invoke)
+      .mock.calls.filter((item) => item[0] === "review_presentation_visuals")
+      .map((item) => (item[1] as { request: { contactSheet?: string } }).request);
+    expect(calls[0]!.contactSheet).toBe(JPEG);
+    // 缺省即不发送，而不是发送一个空字符串。
+    expect(calls[1]!.contactSheet).toBeUndefined();
+  });
+
   it("任务被取消时立刻放弃，不再重试一次", async () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "load_app_settings") return null;

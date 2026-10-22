@@ -43,3 +43,21 @@ export function resolveTableData(slide: Slide, element: TableElement): ResolvedT
   if (block.header.length === 0 || block.rows.length === 0) return undefined;
   return { header: [...block.header], rows: block.rows.map((row) => [...row]) };
 }
+
+/** A cell that reads as a number, a percentage or a grouped number. */
+const NUMERIC_CELL = /^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?$/;
+
+/**
+ * Whether a column is a number column.
+ *
+ * A table that right-aligns its numbers is easier to scan than one where every
+ * cell is left-aligned. The decision is made per column from the reviewed
+ * cells, so a column of labels stays left and a column of figures lines up on
+ * the decimal side; the table style itself carries no per-column flags.
+ */
+export function tableColumnAlignsRight(rows: readonly (readonly string[])[], column: number): boolean {
+  const values = rows.map((row) => (row[column] ?? "").trim()).filter((value) => value.length > 0);
+  if (values.length === 0) return false;
+  const numeric = values.filter((value) => NUMERIC_CELL.test(value)).length;
+  return numeric >= Math.ceil(values.length * 0.6);
+}

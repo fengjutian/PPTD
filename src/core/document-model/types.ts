@@ -270,6 +270,14 @@ export interface TableElementStyle {
   borderColor: string;
   /** The first column carries the row names and is set in bold. */
   firstColumnBold: boolean;
+  /** Alternating body row fill. Absent keeps every body row flat. */
+  bandingFill?: string;
+  /** Header cells are bold. Defaults to true when absent. */
+  headerBold?: boolean;
+  /** Cell padding on each side, in points. */
+  cellPaddingPt?: number;
+  /** Border width, in points. */
+  borderWidthPt?: number;
 }
 
 /**

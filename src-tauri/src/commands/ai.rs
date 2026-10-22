@@ -204,7 +204,9 @@ const MAX_BATCH_PAGES: usize = 5;
 pub struct ReviewVisualsRequest {
     goal: serde_json::Value,
     slide_images: Vec<String>,
-    contact_sheet: String,
+    /// 整套缩略图。只在第一批评审时发送一次；重复发送同一张图既费 token
+    /// 又容易撞上请求体上限。
+    contact_sheet: Option<String>,
     slide_indexes: Vec<usize>,
     model: Option<String>,
     provider: Option<String>,
@@ -232,7 +234,9 @@ pub async fn review_presentation_visuals(
     {
         return Err("AI_VISION_REQUEST_INVALID".into());
     }
-    validate_review_image(&request.contact_sheet)?;
+    if let Some(sheet) = &request.contact_sheet {
+        validate_review_image(sheet)?;
+    }
     for image in &request.slide_images {
         validate_review_image(image)?;
     }
@@ -249,13 +253,26 @@ pub async fn review_presentation_visuals(
     let model = ai::resolve_model(provider, request.model)?;
     let indexes =
         serde_json::to_string(&request.slide_indexes).map_err(|_| "AI_VISION_REQUEST_INVALID")?;
+    let has_contact_sheet = request.contact_sheet.is_some();
+    let image_instructions = if has_contact_sheet {
+        format!(
+            "1. 第一张图片是整套演示的缩略图总览，用于判断跨页节奏、重复度、风格一致性和章节层级。\n2. 后续图片是需要重点检查的单页高清图，按顺序对应页面索引 {indexes}。\n3. 缩略图只用于整套判断；文字清晰度、局部对齐、安全区和背景冲突必须以单页高清图为准。"
+        )
+    } else {
+        format!(
+            "1. 本批图片全部是单页高清图，按顺序对应页面索引 {indexes}。\n2. 本批没有整套缩略图总览：不要评价跨页节奏或整套一致性。consistencyScore 只表示这一批页面彼此是否一致。"
+        )
+    };
+    let overview_step = if has_contact_sheet {
+        "第一步：观察整套缩略图，判断封面、章节、内容、重点和总结页面是否有清晰角色；检查背景变化是否有节奏但不杂乱，相邻页面是否机械重复，标题轴线、字体、配色和组件语言是否稳定。"
+    } else {
+        "第一步：本批没有整套缩略图，跳过跨页节奏判断；只比较本批页面之间的标题轴线、字体、配色和组件语言是否一致。"
+    };
     let prompt = format!(
         r#"你是 PPTD 的资深演示文稿视觉总监与质量评审器。你的任务不是重写内容，而是依据真实渲染图评价整套 PPT 的视觉质量，并给确定性排版引擎提供可执行、克制且可验证的设计指导。
 
 【输入图片】
-1. 第一张图片是整套演示的缩略图总览，用于判断跨页节奏、重复度、风格一致性和章节层级。
-2. 后续图片是需要重点检查的单页高清图，按顺序对应页面索引 {indexes}。
-3. 缩略图只用于整套判断；文字清晰度、局部对齐、安全区和背景冲突必须以单页高清图为准。
+{image_instructions}
 
 【不可违反的边界】
 1. 页面正文、标题、数字、引用、备注和页面顺序均为已审核内容。不得改写、删减、扩写、纠错、翻译、概括或重新排序。
@@ -265,7 +282,7 @@ pub async fn review_presentation_visuals(
 5. 只报告能够从渲染图中明确观察到的问题，不为凑数量制造问题。
 
 【评审流程】
-第一步：观察整套缩略图，判断封面、章节、内容、重点和总结页面是否有清晰角色；检查背景变化是否有节奏但不杂乱，相邻页面是否机械重复，标题轴线、字体、配色和组件语言是否稳定。
+{overview_step}
 第二步：逐页观察高清图，检查信息层级、视觉重心、对齐、间距、留白、文字对比度、背景干扰、Logo/页脚避让、卡片比例、长短文本平衡和阅读路径。
 第三步：为每个被检查页面识别适合放置可编辑内容的最大连续安全区，并给出最适合其现有内容语义的版式。安全区不能覆盖 Logo、网址、页码、强装饰、复杂纹理或视觉焦点。
 
@@ -303,8 +320,11 @@ pub async fn review_presentation_visuals(
 【重试纠正要求】
 {repair_hint}"#
     );
-    let mut images = Vec::with_capacity(request.slide_images.len() + 1);
-    images.push(request.contact_sheet);
+    let mut images =
+        Vec::with_capacity(request.slide_images.len() + usize::from(has_contact_sheet));
+    if let Some(sheet) = request.contact_sheet {
+        images.push(sheet);
+    }
     images.extend(request.slide_images);
     let content = ai::vision_chat(
         provider,

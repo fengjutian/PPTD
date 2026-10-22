@@ -215,3 +215,16 @@ interface TextMeasurer {
 - `src/core/rendering/visual-regression.ts`：回归判定。变化像素比例超过容忍度才算回归，尺寸不同一律算回归。
 
 渲染器是外部程序（首选 PowerPoint，其次 LibreOffice），每个渲染器有自己的一份参考图，参考图与生成它的机器绑定。检查写在 `tools/visual-regression/`，不随产品发布；没有可用渲染器时它会跳过并说明，而不是假装检查通过。详见 [0017 导出视觉回归比对](decisions/0017-export-visual-regression.md)。
+
+## 14. 运行时视觉评审的执行边界
+
+生成流程里的 AI 视觉评审（`src/services/design-quality-stage.ts`）受以下边界约束：
+
+- 评审上限为 40 页，与 PPTX 栅格化器一致；超过上限或评审不可用时报告“本次未做视觉评审”，不假装通过。
+- 内容隔离由 `documentContentFingerprint` 从真实文档快照计算，覆盖标题、正文、结构化块、备注和页序。
+- 模型没给出逐页指导时保持缺失；规则降级和模型修复计划都只能作用于评审指出问题的页面。
+- 评分下降或停滞时回退到评分最高的设计；修复前后设计等价时以 `no-change` 停止，不再重复渲染与评审。
+- 分批请求互相独立，部分批次失败时保留成功结论，并如实报告覆盖页数。
+- 整套缩略图只随第一批请求发送；跨页一致性评分只取看到总览的那一批。
+
+详见 [0037 运行时视觉评审的执行边界](decisions/0037-visual-review-execution-bounds.md)。

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { EMU_PER_INCH, resolveTableData, type Slide, type TableElement } from "../../core/document-model";
+import { EMU_PER_INCH, resolveTableData, tableColumnAlignsRight, type Slide, type TableElement } from "../../core/document-model";
 
 /**
  * The canvas view of a native table.
@@ -21,7 +21,10 @@ export function TableView({
   compact?: boolean;
 }) {
   const resolved = useMemo(() => resolveTableData(slide, element), [slide, element]);
-  const fontSize = Math.max(4, (element.style.fontSizePt * scale * EMU_PER_INCH) / 72);
+  const unit = (scale * EMU_PER_INCH) / 72;
+  const fontSize = Math.max(4, element.style.fontSizePt * unit);
+  const padding = (element.style.cellPaddingPt ?? 4) * unit;
+  const borderWidth = (element.style.borderWidthPt ?? 0.75) * unit;
   if (!resolved) {
     return (
       <div className="table-view table-missing" style={{ fontSize, color: element.style.bodyTextColor }}>
@@ -29,6 +32,7 @@ export function TableView({
       </div>
     );
   }
+  const headerBold = element.style.headerBold ?? true;
   return (
     <table
       className={`table-view${compact ? " compact" : ""}`}
@@ -43,6 +47,10 @@ export function TableView({
                 background: element.style.headerFill,
                 color: element.style.headerTextColor,
                 borderColor: element.style.borderColor,
+                borderWidth,
+                padding,
+                fontWeight: headerBold ? 700 : 400,
+                textAlign: tableColumnAlignsRight(resolved.rows, index) ? "right" : "left",
               }}
             >
               {cell}
@@ -59,7 +67,11 @@ export function TableView({
                 style={{
                   color: element.style.bodyTextColor,
                   borderColor: element.style.borderColor,
+                  borderWidth,
+                  padding,
+                  background: rowIndex % 2 === 1 ? element.style.bandingFill : undefined,
                   fontWeight: element.style.firstColumnBold && cellIndex === 0 ? 700 : 400,
+                  textAlign: tableColumnAlignsRight(resolved.rows, cellIndex) ? "right" : "left",
                 }}
               >
                 {cell}

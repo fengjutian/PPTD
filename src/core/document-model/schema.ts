@@ -110,6 +110,10 @@ const tableElement = base.extend({
     bodyTextColor: hexColor,
     borderColor: hexColor,
     firstColumnBold: z.boolean(),
+    bandingFill: hexColor.optional(),
+    headerBold: z.boolean().optional(),
+    cellPaddingPt: z.number().min(0).max(30).optional(),
+    borderWidthPt: z.number().min(0).max(10).optional(),
   }),
 });
 

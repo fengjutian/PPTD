@@ -68,13 +68,16 @@ export function isGenerationCancelled(error: unknown): boolean {
   return message.includes("AI_GENERATION_CANCELLED") || message.includes("AI_REQUEST_CANCELLED");
 }
 
-function mergeReviews(reviews: VisualReview[]): VisualReview {
+function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualReview {
   return {
     overallScore: Math.min(...reviews.map((item) => item.overallScore)),
     hierarchyScore: Math.min(...reviews.map((item) => item.hierarchyScore)),
     alignmentScore: Math.min(...reviews.map((item) => item.alignmentScore)),
     readabilityScore: Math.min(...reviews.map((item) => item.readabilityScore)),
-    consistencyScore: Math.min(...reviews.map((item) => item.consistencyScore)),
+    // Cross-page consistency is only observable from the deck overview. Take it
+    // from the batch that actually saw the contact sheet; other batches only
+    // compared themselves.
+    consistencyScore: overview?.consistencyScore ?? Math.min(...reviews.map((item) => item.consistencyScore)),
     issues: reviews.flatMap((item) => item.issues),
     slideGuidance: reviews.flatMap((item) => item.slideGuidance),
   };
@@ -82,8 +85,7 @@ function mergeReviews(reviews: VisualReview[]): VisualReview {
 
 /** 把视觉评审失败的错误码翻译成用户能读懂的一句话。 */
 export function describeVisualReviewFailure(reason: string): string {
-  if (reason.includes("AI_VISION_SLIDE_COUNT_INVALID"))
-    return `文稿页数超过视觉评审上限（${MAX_REVIEWED_SLIDES} 页）`;
+  if (reason.includes("AI_VISION_SLIDE_COUNT_INVALID")) return `文稿页数超过视觉评审上限（${MAX_REVIEWED_SLIDES} 页）`;
   if (reason.includes("VISUAL_ALIGNMENT_CONTENT_MUTATION")) return "视觉修复试图修改已审核内容，已拒绝该轮修复";
   return reason;
 }
@@ -196,12 +198,19 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         reviewSlideCount = render.slides.length;
         partialReviewReason = undefined;
         const outcomes = await Promise.allSettled(
-          batches.map((indexes) => options.vision.review(render, goal, indexes, options.taskId)),
+          batches.map((indexes, batchIndex) =>
+            options.vision.review(render, goal, indexes, options.taskId, {
+              // 整套缩略图只跟第一批一起发，避免每批重复上传同一张图。
+              includeContactSheet: batchIndex === 0,
+            }),
+          ),
         );
         const reviews: VisualReview[] = [];
+        let overviewReview: VisualReview | undefined;
         outcomes.forEach((outcome, index) => {
           if (outcome.status === "fulfilled") {
             reviews.push(outcome.value);
+            if (index === 0) overviewReview = outcome.value;
             reviewedSlideCount += batches[index]!.length;
             return;
           }
@@ -209,7 +218,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           partialReviewReason ??= outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
         });
         if (reviews.length === 0) throw outcomes.find((outcome) => outcome.status === "rejected")?.reason;
-        return mergeReviews(reviews);
+        return mergeReviews(reviews, overviewReview);
       },
       repair: async (current, review, goal) => {
         options.onProgress?.("视觉评审已收到问题，正在生成修复计划", 97);
@@ -251,7 +260,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     });
     designs = aligned.value;
     notes.push(`视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`);
-    if (aligned.reverted) notes.push("最后一轮修复降低了评分，已回退到评分更高的设计");
+    if (aligned.reverted) notes.push("最后一轮修复没有提升评分，已保留评分更高的设计");
     if (reviewSlideCount > 0 && reviewedSlideCount < reviewSlideCount) {
       degraded = true;
       notes.push(

@@ -5,6 +5,7 @@ import {
   resolveChartData,
   resolveFragmentStyle,
   resolveTableData,
+  tableColumnAlignsRight,
   textFragments,
   type ChartElement,
   type ImageCrop,
@@ -337,17 +338,20 @@ export async function buildPptx(
         const resolved = resolveTableData(model, element);
         if (!resolved) throw new Error("EXPORT_TABLE_DATA_INVALID");
         const columnCount = resolved.header.length;
-        const border = { type: "solid" as const, pt: 0.75, color: color(element.style.borderColor) };
-        const header = resolved.header.map((cell) => ({
+        const border = { type: "solid" as const, pt: element.style.borderWidthPt ?? 0.75, color: color(element.style.borderColor) };
+        const alignsRight = (column: number) => tableColumnAlignsRight(resolved.rows, column);
+        const headerBold = element.style.headerBold ?? true;
+        const header = resolved.header.map((cell, index) => ({
           text: cell,
           options: {
-            bold: true,
+            bold: headerBold,
             color: color(element.style.headerTextColor),
             fill: { color: color(element.style.headerFill) },
+            align: alignsRight(index) ? "right" as const : "left" as const,
             border,
           },
         }));
-        const body = resolved.rows.map((row) => {
+        const body = resolved.rows.map((row, rowIndex) => {
           const cells = row.slice(0, columnCount);
           while (cells.length < columnCount) cells.push("");
           return cells.map((cell, cellIndex) => ({
@@ -355,6 +359,10 @@ export async function buildPptx(
             options: {
               color: color(element.style.bodyTextColor),
               bold: element.style.firstColumnBold && cellIndex === 0,
+              ...(rowIndex % 2 === 1 && element.style.bandingFill
+                ? { fill: { color: color(element.style.bandingFill) } }
+                : {}),
+              align: alignsRight(cellIndex) ? "right" as const : "left" as const,
               border,
             },
           }));
@@ -371,7 +379,7 @@ export async function buildPptx(
           fontSize: element.style.fontSizePt,
           color: color(element.style.bodyTextColor),
           valign: "middle",
-          margin: 0.05,
+          margin: (element.style.cellPaddingPt ?? 4) / 72,
           autoPage: false,
           border,
         });

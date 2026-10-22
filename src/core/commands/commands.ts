@@ -567,6 +567,14 @@ function assertTableStyle(style: Partial<TableElementStyle>): void {
     throw new Error("INVALID_TABLE_STYLE");
   if (style.firstColumnBold !== undefined && typeof style.firstColumnBold !== "boolean")
     throw new Error("INVALID_TABLE_STYLE");
+  if (style.bandingFill !== undefined && !HEX_COLOR_PATTERN.test(style.bandingFill))
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.headerBold !== undefined && typeof style.headerBold !== "boolean")
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.cellPaddingPt !== undefined && (!Number.isFinite(style.cellPaddingPt) || style.cellPaddingPt < 0 || style.cellPaddingPt > 30))
+    throw new Error("INVALID_TABLE_STYLE");
+  if (style.borderWidthPt !== undefined && (!Number.isFinite(style.borderWidthPt) || style.borderWidthPt < 0 || style.borderWidthPt > 10))
+    throw new Error("INVALID_TABLE_STYLE");
 }
 
 /**
@@ -1794,6 +1802,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               bodyTextColor: bodyInk,
               borderColor: cardStroke,
               firstColumnBold: true,
+              bandingFill: cardFill,
+              headerBold: true,
+              cellPaddingPt: 6,
+              borderWidthPt: 0.75,
             },
           });
         }

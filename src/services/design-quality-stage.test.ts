@@ -135,7 +135,15 @@ describe("设计质检阶段", () => {
     const review = {
       ...passingReview,
       overallScore: 70,
-      issues: [{ slideIndex: 0, severity: "warning" as const, issue: "misalignment" as const, elementIds: [], suggestion: "对齐" }],
+      issues: [
+        {
+          slideIndex: 0,
+          severity: "warning" as const,
+          issue: "misalignment" as const,
+          elementIds: [],
+          suggestion: "对齐",
+        },
+      ],
     };
     const result = await runDesignQualityStage({
       initialDesigns: [design(), design({ layout: "title-body" })],
@@ -146,7 +154,17 @@ describe("设计质检阶段", () => {
         available: true,
         review: async () => review,
         planRepairs: async () => ({
-          repairs: [{ slideIndex: 1, layout: "cards", backgroundAction: "keep", hierarchyAction: "keep", obstacleRegions: [], elementActions: [], reason: "顺手改一页" }],
+          repairs: [
+            {
+              slideIndex: 1,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "顺手改一页",
+            },
+          ],
         }),
       },
       taskId: 1,

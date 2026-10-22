@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDocument, emu } from "./factory";
-import { resolveTableData } from "./table-data";
+import { resolveTableData, tableColumnAlignsRight } from "./table-data";
 import type { TableElement } from "./types";
 
 function tableOf(contentBlockId: string): TableElement {
@@ -63,5 +63,11 @@ describe("table data", () => {
     const empty = { id: crypto.randomUUID(), type: "table-data" as const, header: [], rows: [] };
     document.slides[0]!.content.blocks = [empty];
     expect(resolveTableData(document.slides[0]!, tableOf(empty.id))).toBeUndefined();
+  });
+
+  it("right aligns a column of figures and keeps a label column left", () => {
+    expect(tableColumnAlignsRight([["A", "1,200"], ["B", "3.5%"]], 1)).toBe(true);
+    expect(tableColumnAlignsRight([["A", "120"], ["B", "未披露"]], 1)).toBe(false);
+    expect(tableColumnAlignsRight([["A", ""], ["B", ""]], 1)).toBe(false);
   });
 });
