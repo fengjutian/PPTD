@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildVisualAssetPrompt, planVisualAssetLayout, resolveVisualAsset, VISUAL_ASSET_ASPECT, VISUAL_ASSET_REQUEST_SIZE, VISUAL_ASSET_STYLE_HINT } from "./visual-asset";
+import { buildVisualAssetPrompt, planManualVisualAssetLayout, planVisualAssetLayout, resolveVisualAsset, VISUAL_ASSET_ASPECT, VISUAL_ASSET_REQUEST_SIZE, VISUAL_ASSET_STYLE_HINT } from "./visual-asset";
 import { coverCrop } from "../rendering/image-fit";
 
 describe("视觉素材意图", () => {
@@ -91,6 +91,52 @@ describe("配图与文字的几何", () => {
         expect(edge % 8).toBe(0);
       }
       expect(width / height).toBeCloseTo(VISUAL_ASSET_ASPECT[role], 6);
+    }
+  });
+});
+
+describe("手工路径的配图图位", () => {
+  const pageWidth = 12_191_695;
+  const pageHeight = 6_858_000;
+
+  it("主视觉落在右侧，文字区在它左边", () => {
+    const layout = planManualVisualAssetLayout("hero", pageWidth, pageHeight);
+    expect(layout.image.x).toBeGreaterThan(0.4);
+    expect(layout.text.x + layout.text.width).toBeLessThanOrEqual(layout.image.x);
+  });
+
+  it("侧栏图落在右下角", () => {
+    const layout = planManualVisualAssetLayout("side", pageWidth, pageHeight);
+    expect(layout.image.y + layout.image.height).toBeGreaterThan(0.6);
+    expect(layout.image.x + layout.image.width).toBeLessThanOrEqual(1);
+  });
+
+  it("通栏图横贯整页，文字区在它下方", () => {
+    const layout = planManualVisualAssetLayout("band", pageWidth, pageHeight);
+    expect(layout.image.width).toBeGreaterThan(0.8);
+    expect(layout.text.y).toBeGreaterThan(layout.image.y + layout.image.height);
+  });
+
+  it("图框比例和请求图片的比例一致，图片填进框里一点都不用切", () => {
+    // 手工路径和 AI 路径共用同一份比例契约，图片落到哪都是原样。
+    for (const role of ["hero", "side", "band"] as const) {
+      const layout = planManualVisualAssetLayout(role, pageWidth, pageHeight);
+      const requested = VISUAL_ASSET_REQUEST_SIZE[role];
+      const crop = coverCrop(requested, {
+        width: layout.image.width * pageWidth,
+        height: layout.image.height * pageHeight,
+      });
+      expect(crop, `${role} 角色的手工图框比例应与请求比例一致`).toBeUndefined();
+    }
+  });
+
+  it("图位始终落在页面里", () => {
+    for (const role of ["hero", "side", "band"] as const) {
+      const layout = planManualVisualAssetLayout(role, pageWidth, pageHeight);
+      expect(layout.image.x).toBeGreaterThanOrEqual(0);
+      expect(layout.image.y).toBeGreaterThanOrEqual(0);
+      expect(layout.image.x + layout.image.width).toBeLessThanOrEqual(1.0001);
+      expect(layout.image.y + layout.image.height).toBeLessThanOrEqual(1.0001);
     }
   });
 });

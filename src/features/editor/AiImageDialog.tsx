@@ -14,9 +14,9 @@ import type { AiVisualAssetRole } from "../../core/commands/visual-asset";
 
 /** 角色选项。顺序与视觉素材层一致。 */
 const ROLE_OPTIONS: ReadonlyArray<{ role: AiVisualAssetRole; label: string; hint: string }> = [
-  { role: "hero", label: "主视觉", hint: "4:3，右侧整块" },
-  { role: "side", label: "侧栏图", hint: "2:1，右侧小图" },
-  { role: "band", label: "通栏图", hint: "4:1，横贯一条" },
+  { role: "hero", label: "主视觉", hint: "右侧整块" },
+  { role: "side", label: "侧栏图", hint: "右下角一块" },
+  { role: "band", label: "通栏图", hint: "标题下一条" },
 ];
 
 export interface AiImageDialogProps {
@@ -40,19 +40,21 @@ export function AiImageDialogView({ busy, error, onClose, onGenerate }: AiImageD
   const trimmed = prompt.trim();
 
   return (
-    <div className="dialog-backdrop" role="presentation" onClick={busy ? undefined : onClose}>
-      <div className="dialog-card ai-image-dialog" role="dialog" aria-modal="true" aria-label="AI 配图" onClick={(event) => event.stopPropagation()}>
-        <header className="dialog-head">
-          <Sparkles />
+    <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!busy && event.target === event.currentTarget) onClose(); }}>
+      <section className="upload-dialog ai-image-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-image-title" aria-busy={busy}>
+        <div className="upload-dialog-heading">
           <div>
-            <h2>AI 配图</h2>
-            <p>描述画面内容，生成一张可以放进这一页的图片。</p>
+            <Sparkles />
+            <div>
+              <h2 id="ai-image-title">AI 配图</h2>
+              <p>描述画面内容，生成一张可以放进这一页的图片。</p>
+            </div>
           </div>
-          <button type="button" className="dialog-close" aria-label="关闭" title="关闭" onClick={onClose} disabled={busy}><X /></button>
-        </header>
+          <button type="button" aria-label="关闭 AI 配图窗口" onClick={onClose} disabled={busy}><X /></button>
+        </div>
 
-        <label className="field">
-          <span className="field-label">画面描述</span>
+        <label className="ai-image-field">
+          <span className="ai-image-label">画面描述</span>
           <textarea
             className="ai-image-prompt"
             value={prompt}
@@ -63,8 +65,8 @@ export function AiImageDialogView({ busy, error, onClose, onGenerate }: AiImageD
         </label>
         <p className="ai-image-hint">描述画面本身，不要写标题或正文文字——生成的文字在演示里几乎总是错的。</p>
 
-        <div className="field">
-          <span className="field-label">图片位置</span>
+        <div className="ai-image-field">
+          <span className="ai-image-label">图片位置</span>
           <div className="ai-image-roles">
             {ROLE_OPTIONS.map((option) => (
               <button
@@ -84,13 +86,13 @@ export function AiImageDialogView({ busy, error, onClose, onGenerate }: AiImageD
 
         {error && <p className="ai-image-error" role="alert">{error}</p>}
 
-        <footer className="dialog-actions">
+        <div className="upload-dialog-actions">
           <button type="button" className="secondary-action" onClick={onClose} disabled={busy}>取消</button>
           <button type="button" className="primary-action" disabled={busy || !trimmed} onClick={() => onGenerate(trimmed, role)}>
             {busy ? <><Loader2 className="spin" />生成中</> : <><ImagePlus />生成配图</>}
           </button>
-        </footer>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

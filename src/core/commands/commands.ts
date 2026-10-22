@@ -22,7 +22,7 @@ import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, PANEL_TYPE_SCA
 import { coverCrop } from "../rendering/image-fit";
 import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, resolvePageDesign, type CompositionFacts } from "./design-intent";
 import { planDeckCompositions } from "./deck-composition";
-import { planVisualAssetLayout, resolveVisualAsset } from "./visual-asset";
+import { isVisualAssetRole, planManualVisualAssetLayout, planVisualAssetLayout, resolveVisualAsset, type AiVisualAssetRole, type NormalizedRect } from "./visual-asset";
 
 export type {
   AiElementRepair,
@@ -184,7 +184,7 @@ export type DocumentCommand =
   | { type: "set-slide-background-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType }
   | { type: "remove-slide-background-image"; slideId: SlideId }
   | { type: "add-text"; slideId: SlideId }
-  | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string; naturalWidth?: number; naturalHeight?: number }
+  | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string; naturalWidth?: number; naturalHeight?: number; role?: AiVisualAssetRole }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
@@ -319,6 +319,73 @@ function imageFrame(naturalWidth?: number, naturalHeight?: number): RectEmu {
     width: inches(width),
     height: inches(height),
   };
+}
+
+/**
+ * 一个归一化的矩形换成页面上的实际矩形。
+ *
+ * 归一化坐标按页宽页高各算一份：归一化的宽高比不等于像素的宽高比，
+ * 直接拿归一化的宽高当成像素宽高，框就不是想要的比例了。
+ */
+function normalizedToEmuRect(rect: NormalizedRect, pageSize: { width: number; height: number }): RectEmu {
+  return {
+    x: Math.round(rect.x * pageSize.width) as Emu,
+    y: Math.round(rect.y * pageSize.height) as Emu,
+    width: Math.round(rect.width * pageSize.width) as Emu,
+    height: Math.round(rect.height * pageSize.height) as Emu,
+  };
+}
+
+/** 页面上的实际矩形换成归一化的矩形。 */
+function emuToNormalizedRect(frame: RectEmu, pageSize: { width: number; height: number }): NormalizedRect {
+  return {
+    x: frame.x / pageSize.width,
+    y: frame.y / pageSize.height,
+    width: frame.width / pageSize.width,
+    height: frame.height / pageSize.height,
+  };
+}
+
+/**
+ * 把一张图放进一个框里。
+ *
+ * 图按自己的像素比例落位：比例和框一致时正好铺满，一点都不切；不一致时
+ * 宁可留白也不拉伸——拉伸过的图一眼就假。
+ */
+function fitImageIntoBox(box: RectEmu, naturalWidth?: number, naturalHeight?: number): RectEmu {
+  if (!naturalWidth || !naturalHeight || !Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) return box;
+  const aspect = naturalWidth / naturalHeight;
+  const boxAspect = box.width / box.height;
+  const width = aspect >= boxAspect ? box.width : Math.round(box.height * aspect);
+  const height = aspect >= boxAspect ? Math.round(box.width / aspect) : box.height;
+  return {
+    x: Math.round(box.x + (box.width - width) / 2) as Emu,
+    y: Math.round(box.y + (box.height - height) / 2) as Emu,
+    width: width as Emu,
+    height: height as Emu,
+  };
+}
+
+/**
+ * 给图腾地方。
+ *
+ * 只动正文框的几何，不动一个字：内容已经审过，图片进来不能把正文挤没。
+ * 让位之后正文小到读不了，就宁可不动——让用户自己挪。
+ */
+function makeRoomForAsset(slide: Slide, textArea: NormalizedRect, pageSize: { width: number; height: number }): void {
+  const body = slide.elements.find((element) => element.type === "text" && element.contentRef === "body" && !element.locked);
+  if (!body) return;
+  const current = emuToNormalizedRect(body.frame, pageSize);
+  const left = Math.max(current.x, textArea.x);
+  const top = Math.max(current.y, textArea.y);
+  const right = Math.min(current.x + current.width, textArea.x + textArea.width);
+  const bottom = Math.min(current.y + current.height, textArea.y + textArea.height);
+  const width = right - left;
+  const height = bottom - top;
+  // 让位之后正文几乎没了，这一页就废了；不动比动更合适。
+  if (width <= 0.02 || height <= 0.02) return;
+  if (Math.abs(width - current.width) < 0.001 && Math.abs(height - current.height) < 0.001) return;
+  body.frame = normalizedToEmuRect({ x: left, y: top, width, height }, pageSize);
 }
 
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
@@ -856,14 +923,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const stepGap = timelineItems.length > 1 ? (endX - startX) / (timelineItems.length - 1) : endX - startX;
         const itemWidth = Math.min(0.22, contentBox.width * 0.18, stepGap * 0.92);
         slide.elements.push(shape(frame(startX, lineY, endX - startX, 0.008), design.accent));
+        const lineGap = 0.03;
+        const labelFraction = pointsToFraction(15 * 1.3);
+        const textFraction = pointsToFraction(13 * 1.3 * 2);
         timelineItems.forEach((item, itemIndex) => {
           const x = timelineItems.length === 1 ? (startX + endX) / 2 : startX + itemIndex * stepGap;
           const above = itemIndex % 2 === 0;
           slide.elements.push(shape(circleFrame(x, lineY - 0.15 / pageHeightIn, 0.3), design.accent, "ellipse"));
-          const labelFrame = frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.30 : lineY + contentBox.height * 0.11, itemWidth, contentBox.height * 0.11);
+          // Label and sentence each stay on their own side of the line. The old
+          // frames were anchored to the line by a fraction of the content area
+          // and were taller than the space they were given, so the sentence of
+          // an above item was drawn across the line and its dots.
+          const itemLeft = Math.max(contentBox.x, Math.min(x - itemWidth / 2, contentBox.x + contentBox.width - itemWidth));
+          const labelY = above ? lineY - lineGap - textFraction - 0.005 - labelFraction : lineY + lineGap;
+          const textY = above ? lineY - lineGap - textFraction : labelY + labelFraction + 0.005;
+          const labelFrame = frame(itemLeft, Math.max(contentBox.y, labelY), itemWidth, labelFraction);
+          const stepTextFrame = frame(itemLeft, textY, itemWidth, textFraction);
           const labelSize = fittedFontSize(item.label, labelFrame, 15, 10);
           slide.elements.push(text(item.label, labelFrame, labelSize, design.accent, true, "center", undefined, contentTextLuminance));
-          const stepTextFrame = frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.18 : lineY + contentBox.height * 0.23, itemWidth, contentBox.height * 0.22);
           const stepTextSize = fittedFontSize(item.text, stepTextFrame, 13, 9);
           slide.elements.push(text(item.text, stepTextFrame, stepTextSize, bodyInk, false, "center", undefined, contentTextLuminance));
         });
@@ -1625,6 +1702,27 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const payload = command.dataUrl.slice(expectedPrefix.length);
     if (!command.dataUrl.startsWith(expectedPrefix) || command.dataUrl.length > 360_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload) || command.altText.length > 500) {
       throw new Error("INVALID_IMAGE_SOURCE");
+    }
+    if (command.role !== undefined && !isVisualAssetRole(command.role)) {
+      throw new Error("INVALID_VISUAL_ASSET_ROLE");
+    }
+    // 带角色的图走确定性图位：图落在引擎算好的地方，正文给它让出位置。
+    // 不带角色的图是用户随手插的图片，沿用原来的行为——放在页面中间那块空地。
+    if (command.role) {
+      const layout = planManualVisualAssetLayout(command.role, document.pageSize.width, document.pageSize.height);
+      const box = normalizedToEmuRect(layout.image, document.pageSize);
+      slide.elements.push({
+        id: crypto.randomUUID() as ElementId,
+        type: "image",
+        frame: fitImageIntoBox(box, command.naturalWidth, command.naturalHeight),
+        rotationMilliDegree: 0,
+        locked: false,
+        origin: "user",
+        source: { kind: "embedded", dataUrl: command.dataUrl, mimeType: command.mimeType },
+        altText: command.altText,
+      });
+      makeRoomForAsset(slide, layout.text, document.pageSize);
+      return;
     }
     slide.elements.push({
       id: crypto.randomUUID() as ElementId,

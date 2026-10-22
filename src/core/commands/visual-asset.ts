@@ -139,6 +139,25 @@ export const VISUAL_ASSET_ASPECT: Record<AiVisualAssetRole, number> = {
   band: 4,
 };
 
+/**
+ * 手工路径下图框落在哪里。
+ *
+ * AI 设计路径的图位由页面的内容区决定（`planVisualAssetLayout`），因为那一页
+ * 的版面是刚排出来的、还没人动过。手工路径不一样：页面上的东西已经摆好了，
+ * 图位必须避开正文，否则一张图压住三行字。
+ *
+ * 所以这里给每个角色一个**固定图位**，不依赖页面的现有内容：
+ *
+ * - hero: 右侧一整块，图是这一页视觉上的主体。
+ * - side: 右下角一块小图，不抢正文的注意力。
+ * - band: 标题下方一条通栏图，横贯整页。
+ *
+ * 图位仍然由代码算，不是用户拖。用户拖是之后的事，默认位置先得站得住。
+ *
+ * 比例和 [`VISUAL_ASSET_ASPECT`] 一致，也就是和前端请求图片时用的比例一致：
+ * 图和框的比例相同，图填进框里什么都不用切。
+ */
+
 /** 一个归一化的矩形。 */
 export interface NormalizedRect {
   x: number;
@@ -153,6 +172,76 @@ export interface VisualAssetLayout {
   image: NormalizedRect;
   /** 图让出的文字区。 */
   text: NormalizedRect;
+}
+
+/**
+ * 手工路径下图框落在哪里。
+ *
+ * AI 设计路径的图位由页面的内容区决定（`planVisualAssetLayout`），因为那一页
+ * 的版面是刚排出来的、还没人动过。手工路径不一样：页面上的东西已经摆好了，
+ * 图位必须避开正文，否则一张图压住三行字。
+ *
+ * 所以这里给每个角色一个**固定图位**，不依赖页面的现有内容：
+ *
+ * - hero: 右侧一整块，图是这一页视觉上的主体。
+ * - side: 右下角一块小图，不抢正文的注意力。
+ * - band: 标题下方一条通栏图，横贯整页。
+ *
+ * 图位仍然由代码算，不是用户拖。用户拖是之后的事，默认位置先得站得住。
+ *
+ * 比例和 [`VISUAL_ASSET_ASPECT`] 一致，也就是和前端请求图片时用的比例一致：
+ * 图和框的比例相同，图填进框里什么都不用切。
+ */
+export function planManualVisualAssetLayout(
+  role: AiVisualAssetRole,
+  pageWidthEmu: number,
+  pageHeightEmu: number,
+): VisualAssetLayout {
+  const aspect = VISUAL_ASSET_ASPECT[role];
+  const pageWidthPx = pageWidthEmu;
+  const pageHeightPx = pageHeightEmu;
+
+  switch (role) {
+    case "hero": {
+      // 右侧整块，高度撑满内容区，宽度按比例跟着走；放不下就按宽度收。
+      const maxWidthPx = pageWidthPx * 0.42;
+      const maxHeightPx = pageHeightPx * 0.66;
+      let widthPx = maxWidthPx;
+      let heightPx = widthPx / aspect;
+      if (heightPx > maxHeightPx) {
+        heightPx = maxHeightPx;
+        widthPx = heightPx * aspect;
+      }
+      const x = pageWidthPx - widthPx - pageWidthPx * 0.05;
+      const y = pageHeightPx * 0.17;
+      return {
+        image: { x: x / pageWidthPx, y: y / pageHeightPx, width: widthPx / pageWidthPx, height: heightPx / pageHeightPx },
+        text: { x: 0.06, y: 0.17, width: (x - pageWidthPx * 0.05 - pageWidthPx * 0.06) / pageWidthPx, height: maxHeightPx / pageHeightPx },
+      };
+    }
+    case "side": {
+      // 右下角一块小图。正文在它上面和左边。
+      const widthPx = pageWidthPx * 0.32;
+      const heightPx = widthPx / aspect;
+      const x = pageWidthPx - widthPx - pageWidthPx * 0.05;
+      const y = pageHeightPx * 0.78 - heightPx;
+      return {
+        image: { x: x / pageWidthPx, y: y / pageHeightPx, width: widthPx / pageWidthPx, height: heightPx / pageHeightPx },
+        text: { x: 0.06, y: 0.17, width: (x - pageWidthPx * 0.05 - pageWidthPx * 0.06) / pageWidthPx, height: 0.6 },
+      };
+    }
+    case "band": {
+      // 通栏图横贯标题下方，宽度用满内容区。
+      const widthPx = pageWidthPx * 0.88;
+      const heightPx = widthPx / aspect;
+      const x = pageWidthPx * 0.06;
+      const y = pageHeightPx * 0.15;
+      return {
+        image: { x: x / pageWidthPx, y: y / pageHeightPx, width: widthPx / pageWidthPx, height: heightPx / pageHeightPx },
+        text: { x: 0.06, y: (y + heightPx + pageHeightPx * 0.03) / pageHeightPx, width: 0.88, height: (pageHeightPx * 0.85 - y - heightPx) / pageHeightPx },
+      };
+    }
+  }
 }
 
 /**

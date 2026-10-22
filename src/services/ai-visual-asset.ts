@@ -44,6 +44,54 @@ interface ImageResult {
 }
 
 /**
+ * 请求一张配图，并把失败原因说出来。
+ *
+ * 整册生成用不到失败原因——少一张图的文稿照样成立，所以那里用会吞掉错误的
+ * `generateVisualAsset`。手工路径不一样：用户是主动点"生成配图"的，失败了
+ * 必须告诉他为什么，否则他只会以为应用坏了。
+ */
+export async function requestVisualAsset(input: {
+  prompt: string;
+  role: AiVisualAssetRole;
+}): Promise<{ ok: true; asset: GeneratedVisualAsset } | { ok: false; error: string }> {
+  const size = VISUAL_ASSET_REQUEST_SIZE[input.role];
+  try {
+    const result = await invoke<ImageResult>("generate_presentation_image", {
+      request: { prompt: input.prompt, width: size.width, height: size.height },
+    });
+    if (!result?.dataUrl) return { ok: false, error: "图像服务没有返回图片" };
+    return {
+      ok: true,
+      asset: {
+        slideIndex: -1,
+        dataUrl: result.dataUrl,
+        mimeType: result.mimeType,
+        naturalWidth: result.width,
+        naturalHeight: result.height,
+        altText: input.prompt.slice(0, 200),
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: describeImageFailure(error) };
+  }
+}
+
+/**
+ * 把失败翻译成一句人话。
+ *
+ * 常见的两类：没有配凭据，和请求本身被厂商拒绝。两者的处置不同——
+ * 前者要先去设置里填 API Key，后者只能重试或改描述。
+ */
+function describeImageFailure(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (/credential|api.?key|unauthorized|401/i.test(raw)) return "没有可用的图像服务凭据，请先在设置里填写 API Key";
+  if (/timeout|timed out/i.test(raw)) return "图像生成超时了，可以再试一次";
+  if (/rate|429|too many/i.test(raw)) return "图像服务限流了，稍后再试";
+  if (/network|connection|fetch/i.test(raw)) return "连不上图像服务，请检查网络";
+  return `图像生成失败：${raw.slice(0, 120)}`;
+}
+
+/**
  * 为一页生成配图。
  *
  * 尺寸跟着角色走，和排版引擎留的图框用的是同一份契约
@@ -54,24 +102,8 @@ export async function generateVisualAsset(input: {
   prompt: string;
   role: AiVisualAssetRole;
 }): Promise<GeneratedVisualAsset | undefined> {
-  const size = VISUAL_ASSET_REQUEST_SIZE[input.role];
-  try {
-    const result = await invoke<ImageResult>("generate_presentation_image", {
-      request: { prompt: input.prompt, width: size.width, height: size.height },
-    });
-    if (!result?.dataUrl) return undefined;
-    return {
-      slideIndex: -1,
-      dataUrl: result.dataUrl,
-      mimeType: result.mimeType,
-      naturalWidth: result.width,
-      naturalHeight: result.height,
-      altText: input.prompt.slice(0, 200),
-    };
-  } catch {
-    // 图片生成失败不是文稿失败。少一张图的文稿仍然是可以导出的文稿。
-    return undefined;
-  }
+  const result = await requestVisualAsset(input);
+  return result.ok ? result.asset : undefined;
 }
 
 /** 一次生成里配图的上限。整册都配图会变成相册，也会烧掉大量额度。 */

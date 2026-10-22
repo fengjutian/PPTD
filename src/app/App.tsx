@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, Grid2x2, Grid3x3, ImagePlus, Info, LayoutDashboard, Magnet, MoveHorizontal, MoveVertical, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type Slide, type SlideElement } from "../core/document-model";
+import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type Slide, type SlideElement, type SupportedImageMimeType } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
@@ -16,7 +16,9 @@ import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
 import { countSlidePoints, draftMetrics, resolveActiveSlideIndex, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
-import { generateDeckVisualAssets, planVisualAssets } from "../services/ai-visual-asset";
+import { generateDeckVisualAssets, planVisualAssets, requestVisualAsset } from "../services/ai-visual-asset";
+import type { AiVisualAssetRole } from "../core/commands/visual-asset";
+import { AiImageDialog } from "../features/editor/AiImageDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
@@ -352,6 +354,12 @@ export function App() {
   /** 质量门未过时保留报告，让用户决定进入编辑器调整还是稍后处理。 */
   const [designQualityReport, setDesignQualityReport] = useState<{ templateName: string; issues: PresentationQualityIssue[]; notes: string[] }>();
   const imageInputRef = useRef<HTMLInputElement>(null);
+  /** AI 配图对话框是否打开。 */
+  const [aiImageOpen, setAiImageOpen] = useState(false);
+  /** AI 配图是否正在生成。 */
+  const [aiImageBusy, setAiImageBusy] = useState(false);
+  /** AI 配图失败的原因，对话框里如实显示。 */
+  const [aiImageError, setAiImageError] = useState<string>();
   const clipboardElementId = useRef<ElementId | null>(null);
   const gridEnabled = useCanvasGuidesStore((s) => s.gridEnabled);
   const gridSnapEnabled = useCanvasGuidesStore((s) => s.gridSnapEnabled);
@@ -581,6 +589,38 @@ export function App() {
       });
     };
     reader.readAsDataURL(file);
+  };
+
+  /**
+   * 生成一张配图并插到当前页。
+   *
+   * 图落在哪、多大不由这里决定：命令层按角色算出图位，正文给它让出位置。
+   * 这里只负责把用户的画面描述变成一张图，以及失败时说实话。
+   */
+  const handleAiImageGenerate = async (prompt: string, role: AiVisualAssetRole) => {
+    setAiImageBusy(true);
+    setAiImageError(undefined);
+    const result = await requestVisualAsset({ prompt, role });
+    setAiImageBusy(false);
+    if (!result.ok) {
+      setAiImageError(result.error);
+      return;
+    }
+    const mimeType: SupportedImageMimeType = result.asset.mimeType === "image/jpeg" || result.asset.mimeType === "image/webp"
+      ? result.asset.mimeType
+      : "image/png";
+    execute({
+      type: "add-image",
+      slideId: activeSlide.id,
+      dataUrl: result.asset.dataUrl,
+      mimeType,
+      altText: result.asset.altText,
+      naturalWidth: result.asset.naturalWidth,
+      naturalHeight: result.asset.naturalHeight,
+      role,
+    });
+    setAiImageOpen(false);
+    setTaskStatus("已生成配图并插入当前页");
   };
 
   const handleAiGenerate = async () => {
@@ -1298,6 +1338,7 @@ export function App() {
           <ToolButton label="矩形" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "rectangle" })}><Square /></ToolButton>
           <ToolButton label="椭圆" onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}><Circle /></ToolButton>
           <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}><ImagePlus /></ToolButton>
+          <ToolButton label="AI 配图" onClick={() => { setAiImageError(undefined); setAiImageOpen(true); }} disabled={aiImageBusy}><Sparkles /></ToolButton>
           <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { handleImageFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
           <ToolButton label="重排版式（保留手工对象）" onClick={() => { execute({ type: "relayout-slide", slideId: activeSlide.id }); setTaskStatus("已按当前内容重新应用版式，手工添加的图片、文本和锁定对象已保留"); }}><Wand2 /></ToolButton>
         </div>
@@ -1416,6 +1457,8 @@ export function App() {
         <header className="feature-header"><div><Settings /><div><h1>设置</h1><p>管理模型连接、安全凭据和 PPTD 应用外观</p></div></div></header>
         <div className="feature-scroll"><SettingsWorkspace onMessage={setTaskStatus} /></div>
       </main>}
+
+      {aiImageOpen && <AiImageDialog busy={aiImageBusy} error={aiImageError} onClose={() => setAiImageOpen(false)} onGenerate={(prompt, role) => void handleAiImageGenerate(prompt, role)} />}
 
       {templateUploadOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTemplateUploadOpen(false); }}><section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="upload-template-title"><div className="upload-dialog-heading"><div><FileUp /><div><h2 id="upload-template-title">上传 PPT 模板</h2><p>模板将保存到 PPTD 模板库。</p></div></div><button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}><X /></button></div><button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}><FileUp /><strong>选择 PPTX 模板</strong><span>从电脑中选择一个 PowerPoint 模板文件</span><small>支持 .pptx，最大 512 MB</small></button><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setTemplateUploadOpen(false)}>取消</button></div></section></div>}
 

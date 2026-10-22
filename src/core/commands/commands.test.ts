@@ -813,6 +813,31 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(content.body);
   });
 
+  it("keeps timeline copy on its own side of the line", () => {
+    const source = createDocument();
+    const steps = [
+      { label: "宋代以降", text: "成为士人立身行事的常见表述" },
+      { label: "明清诗文", text: "常化用为抒怀言志的典故" },
+      { label: "政治语境", text: "被引为治国理政与官员操守" },
+      { label: "近代以来", text: "成为担当精神与公仆意识表达" },
+    ];
+    const content = { title: "先忧后乐", body: "", speakerNotes: "", blocks: [{ type: "timeline" as const, items: steps }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "时间线", slides: [content], designs: [design] }));
+    const elements = result.slides[0]!.elements;
+    const line = elements.find((element) => element.type === "shape"
+      && element.frame.width > result.pageSize.width * 0.5
+      && element.frame.height < result.pageSize.height * 0.02)!;
+    const lineTop = line.frame.y;
+    const lineBottom = line.frame.y + line.frame.height;
+    for (const element of elements) {
+      if (element.type !== "text" || element.text === content.title) continue;
+      const top = element.frame.y;
+      const bottom = element.frame.y + element.frame.height;
+      expect(bottom <= lineTop || top >= lineBottom).toBe(true);
+    }
+  });
+
   it("renders comparison blocks as two labeled editable columns", () => {
     const source = createDocument();
     const content = { title: "方案对比", body: "保留的审核正文", speakerNotes: "", blocks: [{ type: "comparison" as const, leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["稳定"], rightItems: ["快速"] }] };
@@ -1598,4 +1623,82 @@ describe("document commands", () => {
     expect(result.layouts?.some((layout) => layout.id === resultSlide.layoutId)).toBe(true);
   });
 
+});
+
+describe("手工路径的 AI 配图", () => {
+  const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+  const bodyStyle = { fontFamily: "Microsoft YaHei", fontSizePt: 20, color: "#30343A", bold: false, align: "left" as const };
+
+  /** 一页有标题和一整块正文的页面。 */
+  function pageWithBody() {
+    const source = createDocument();
+    source.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "text",
+      contentRef: "body",
+      text: "正文内容",
+      frame: { x: inches(0.8), y: inches(1.8), width: inches(11.7), height: inches(3.4) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: bodyStyle,
+    });
+    return source;
+  }
+
+  it("按角色把图放在引擎算出的图位上", () => {
+    const source = pageWithBody();
+    const slideId = source.slides[0]!.id;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/png", altText: "配图", naturalWidth: 1024, naturalHeight: 768, role: "hero" }));
+    const image = result.slides[0]!.elements.find((element) => element.type === "image")!;
+    // 主视觉在右半页，不是页面中间那块空地。
+    expect(image.frame.x).toBeGreaterThan(source.pageSize.width * 0.45);
+  });
+
+  it("给图腾地方时只动正文的几何，一个字都不改", () => {
+    const source = pageWithBody();
+    const slideId = source.slides[0]!.id;
+    const contentBefore = JSON.stringify(source.slides[0]!.content);
+    const result = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/png", altText: "配图", naturalWidth: 1024, naturalHeight: 768, role: "hero" }));
+    const image = result.slides[0]!.elements.find((element) => element.type === "image")!;
+    const body = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.contentRef === "body")!;
+    expect(body.frame.x + body.frame.width).toBeLessThanOrEqual(image.frame.x);
+    expect(body.text).toBe("正文内容");
+    expect(JSON.stringify(result.slides[0]!.content)).toBe(contentBefore);
+  });
+
+  it("通栏图把正文推到图的下方", () => {
+    const source = pageWithBody();
+    const slideId = source.slides[0]!.id;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/png", altText: "配图", naturalWidth: 2048, naturalHeight: 512, role: "band" }));
+    const image = result.slides[0]!.elements.find((element) => element.type === "image")!;
+    const body = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.contentRef === "body")!;
+    expect(body.frame.y).toBeGreaterThan(image.frame.y + image.frame.height);
+  });
+
+  it("锁定的正文不因为配图被挪动", () => {
+    const source = pageWithBody();
+    const slideId = source.slides[0]!.id;
+    const body = source.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.contentRef === "body")!;
+    body.locked = true;
+    const before = body.frame.width;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/png", altText: "配图", naturalWidth: 1024, naturalHeight: 768, role: "hero" }));
+    const after = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.contentRef === "body")!;
+    expect(after.frame.width).toBe(before);
+  });
+
+  it("拒绝不认识的角色", () => {
+    const source = pageWithBody();
+    const slideId = source.slides[0]!.id;
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/png", altText: "配图", role: "giant" as never }))).toThrow("INVALID_VISUAL_ASSET_ROLE");
+  });
+
+  it("不带角色时沿用原来的插图位置", () => {
+    const source = pageWithBody();
+    const slideId = source.slides[0]!.id;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "add-image", slideId, dataUrl, mimeType: "image/png", altText: "配图", naturalWidth: 1024, naturalHeight: 768 }));
+    const image = result.slides[0]!.elements.find((element) => element.type === "image")!;
+    expect(image.frame.x).toBe(inches(2));
+    const body = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.contentRef === "body")!;
+    expect(body.frame.width).toBe(inches(11.7));
+  });
 });
