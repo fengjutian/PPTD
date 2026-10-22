@@ -1,5 +1,5 @@
 import { CircleAlert, FilePlus2, Plus, RotateCcw, Undo2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { AiDraft, ContentBlock } from "../../services/ai-service";
 import {
   blockTypeLabels,
@@ -7,8 +7,9 @@ import {
   densityLabels,
   draftMetrics,
   isSlideEdited,
-  missingTitleIndexes,
   narrativeStrategyLabels,
+  reviewIssues,
+  slideHasContent,
   slideMetrics,
   visualIntentLabels,
   type AiDraftSaveState,
@@ -273,7 +274,7 @@ export function ContentReview({
     else if (activeRect.bottom > outlineRect.bottom) outline.scrollTop += activeRect.bottom - outlineRect.bottom + 6;
   }, [activeIndex]);
 
-  const goToSlide = (index: number) => {
+  const goToSlide = (index: number, focus: "title" | "outline" = "title") => {
     onActiveIndexChange(index);
     scrollLock.current = index;
     window.clearTimeout(scrollLockTimer.current);
@@ -282,7 +283,26 @@ export function ContentReview({
     }, 450);
     const card = listRef.current?.querySelector<HTMLElement>(`[data-slide-index="${index}"]`);
     card?.scrollIntoView({ block: "start", behavior: "smooth" });
-    document.getElementById(`draft-slide-title-${index}`)?.focus({ preventScroll: true });
+    if (focus === "title") document.getElementById(`draft-slide-title-${index}`)?.focus({ preventScroll: true });
+  };
+
+  // The outline is one tab stop with arrow-key movement, so a ten page draft
+  // does not require ten Tab presses before the writer reaches the page body.
+  const focusOutline = (index: number) => {
+    goToSlide(index, "outline");
+    outlineRef.current?.querySelector<HTMLElement>(`[data-outline-index="${index}"]`)?.focus({ preventScroll: true });
+  };
+
+  const handleOutlineKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = draft.slides.length - 1;
+    let next: number | undefined;
+    if (event.key === "ArrowDown") next = Math.min(last, index + 1);
+    else if (event.key === "ArrowUp") next = Math.max(0, index - 1);
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = last;
+    if (next === undefined) return;
+    event.preventDefault();
+    focusOutline(next);
   };
 
   // The outline follows the page the reader is actually looking at. The lock

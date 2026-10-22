@@ -445,7 +445,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // The same line estimator the quality gate uses decides whether a size
       // fits, so a page that passes generation cannot be reported as overflow.
       for (let size = preferredPt; size >= minimumPt; size -= 1) {
-        if (estimateTextLines(value, widthPt, size) * size * 1.2 <= heightPt) return size;
+        if (estimateTextLines(value, widthPt, size, command.fontFamily || "Microsoft YaHei") * size * 1.2 <= heightPt) return size;
       }
       return minimumPt;
     };
@@ -644,7 +644,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const pointsToFraction = (points: number) => points / 72 / (pageHeight / 914400);
       const blockHeight = (value: string, widthFraction: number, fontSizePt: number) => {
         const widthPt = widthFraction * (pageWidth / 914400) * 72;
-        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt) * fontSizePt * 1.25);
+        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt, command.fontFamily || "Microsoft YaHei") * fontSizePt * 1.25);
       };
       const centeredBlock = (value: string, slot: { x: number; y: number; width: number; height: number }, fontSizePt: number) => {
         const height = blockHeight(value, slot.width, fontSizePt) * 1.04;

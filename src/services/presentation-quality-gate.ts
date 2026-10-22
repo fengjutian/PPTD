@@ -18,7 +18,7 @@ const contains = (outer: AiNormalizedRect, inner: AiNormalizedRect): boolean => 
  */
 function renderedTextHeight(element: TextElement, pageHeight: number): number {
   const widthPt = element.frame.width / 12_700;
-  const heightPt = estimateTextLines(element.text, widthPt, element.style.fontSizePt) * element.style.fontSizePt * 1.25;
+  const heightPt = estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) * element.style.fontSizePt * 1.25;
   return (heightPt * 12_700) / pageHeight;
 }
 

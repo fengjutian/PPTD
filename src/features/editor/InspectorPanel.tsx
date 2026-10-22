@@ -4,6 +4,7 @@ import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type 
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
 import { isFontAvailable } from "../../core/validation/export-validation";
+import { textLikelyOverflows } from "../../core/rendering/text-fit";
 import { useEditorStore } from "../../store/editor-store";
 import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
@@ -163,6 +164,9 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
   const contrast = element.type === "text" ? contrastRatio(element.style.color, background) : undefined;
   const required = element.type === "text" ? requiredContrast(element.style.fontSizePt, element.style.bold) : 0;
   const lowContrast = contrast !== undefined && contrast < required;
+  // The overflow is judged with the real font when the application registered
+  // a measurer, so the warning matches what the export will look like.
+  const overflows = element.type === "text" && textLikelyOverflows(element);
 
   return (
     <div className="property-form">
@@ -316,6 +320,14 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
               if (luminance === undefined) return;
               setTextStyle({ color: readableTextColor(element.type === "text" ? element.style.color : "#000000", luminance, isLargeText(element.type === "text" ? element.style.fontSizePt : 12, element.type === "text" ? element.style.bold : false)) });
             }}>换成可读颜色</button>
+          </div>
+        </div>}
+        {overflows && <div className="inspector-warning" role="status">
+          <CircleAlert />
+          <div>
+            <strong>文字超出文本框</strong>
+            <span>按当前字体的真实宽度量出的高度超过可用空间，导出后可能被 PowerPoint 缩小或裁切。</span>
+            <button type="button" disabled={locked} onClick={() => onCommand({ type: "fit-text", slideId, elementId: element.id })}>适配文字</button>
           </div>
         </div>}
         {!fontAvailable && <div className="inspector-warning" role="status">

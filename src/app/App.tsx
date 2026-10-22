@@ -226,7 +226,7 @@ export function App() {
   const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
-  const exportController = useRef<AbortController | undefined>(undefined);
+  const exportCancelRef = useRef<(() => void) | undefined>(undefined);
   const setTaskStatus = (text?: string) => setMessage(text ? { id: Date.now(), text, kind: /失败|错误|无效|必须|不可用/.test(text) ? "error" : /完成|成功|已保存|已添加|已打开|已新建|已恢复|已确认/.test(text) ? "success" : "info" } : undefined);
   const [activeView, setActiveView] = useState<AppView>("editor");
   const [aiTopic, setAiTopic] = useState("");
@@ -384,17 +384,24 @@ export function App() {
 
   const handleExport = async () => {
     if (exportBusy) {
-      exportController.current?.abort();
+      exportCancelRef.current?.();
       return;
     }
-    const controller = new AbortController();
-    exportController.current = controller;
     setExportBusy(true);
     setExportReport(undefined);
     setTaskStatus("正在生成 PPTX…");
     try {
-      const { buildPptx } = await import("../features/pptx-export/export-pptx");
-      const { bytes, report } = await buildPptx(document, { signal: controller.signal });
+      // 预检在主线程完成（含字体探测），重活交给 Worker，导出期间画布不冻结。
+      const { validatePresentationForExport, isFontAvailable } = await import("../core/validation/export-validation");
+      const issues = await validatePresentationForExport(document, { fontAvailable: isFontAvailable });
+      const blocking = issues.filter((issue) => issue.severity === "error");
+      if (blocking.length > 0) {
+        throw new Error(`EXPORT_VALIDATION_FAILED: ${blocking.map((issue) => issue.message).join("；")}`);
+      }
+      const { buildPptxInWorker } = await import("../features/pptx-export/export-worker-client");
+      const task = buildPptxInWorker(document, issues);
+      exportCancelRef.current = task.cancel;
+      const { bytes, report } = await task.promise;
       const path = await choosePptxPath(document.title);
       if (path) await writePptx(path, bytes);
       else if (!isDesktopRuntime()) {
@@ -411,7 +418,7 @@ export function App() {
       else setTaskStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setExportBusy(false);
-      exportController.current = undefined;
+      exportCancelRef.current = undefined;
     }
   };
 
