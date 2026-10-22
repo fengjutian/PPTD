@@ -118,7 +118,10 @@ impl ImageProvider for MiniMaxImageProvider {
                 object.insert("height".into(), serde_json::json!(height));
             }
             _ => {
-                object.insert("aspect_ratio".into(), serde_json::json!(DEFAULT_ASPECT_RATIO));
+                object.insert(
+                    "aspect_ratio".into(),
+                    serde_json::json!(DEFAULT_ASPECT_RATIO),
+                );
             }
         }
         body
@@ -188,8 +191,8 @@ impl ImageProvider for MiniMaxImageProvider {
 
     /// 只允许从厂商官方域名下载生成结果。
     fn ensure_image_url_allowed(&self, url: &str) -> Result<(), String> {
-        let parsed =
-            reqwest::Url::parse(url).map_err(|_| "AI_IMAGE_DOWNLOAD_FAILED: image url is invalid")?;
+        let parsed = reqwest::Url::parse(url)
+            .map_err(|_| "AI_IMAGE_DOWNLOAD_FAILED: image url is invalid")?;
         if parsed.scheme() != "https" {
             return Err("AI_IMAGE_DOWNLOAD_FAILED: image url must use https".into());
         }
@@ -329,7 +332,8 @@ mod tests {
             ImagePayload::Base64 { data, .. } => assert_eq!(data, "QUJD"),
             other => panic!("expected base64 payload, got {other:?}"),
         }
-        let payload = json!({ "data": { "images": [{ "url": "https://cdn.hailuoai.com/prod/c.jpg" }] } });
+        let payload =
+            json!({ "data": { "images": [{ "url": "https://cdn.hailuoai.com/prod/c.jpg" }] } });
         match MINIMAX_IMAGE.parse_image_response(payload).unwrap() {
             ImagePayload::Url { url } => assert_eq!(url, "https://cdn.hailuoai.com/prod/c.jpg"),
             other => panic!("expected url payload, got {other:?}"),

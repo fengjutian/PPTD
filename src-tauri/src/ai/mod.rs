@@ -164,7 +164,10 @@ pub struct ImageResult {
 #[derive(Clone, Debug)]
 pub enum ImagePayload {
     /// 内嵌的 base64 数据，可能带 `data:` 前缀。
-    Base64 { data: String, mime_type: Option<String> },
+    Base64 {
+        data: String,
+        mime_type: Option<String>,
+    },
     /// 需要下载的图片地址。
     Url { url: String },
 }
@@ -204,8 +207,11 @@ pub trait ImageProvider: Send + Sync {
     /// 厂商对提示词长度与像素尺寸的限制。
     fn image_limits(&self) -> ImageLimits;
     /// 附加厂商鉴权。
-    fn apply_auth(&self, request: reqwest::RequestBuilder, api_key: &str)
-        -> reqwest::RequestBuilder;
+    fn apply_auth(
+        &self,
+        request: reqwest::RequestBuilder,
+        api_key: &str,
+    ) -> reqwest::RequestBuilder;
     /// 构造厂商请求体。
     fn build_image_request(&self, request: &ImageRequest) -> serde_json::Value;
     /// 从厂商响应中取出图片。
@@ -829,7 +835,8 @@ pub async fn generate_image(
                     let image = provider
                         .parse_image_response(response)
                         .map_err(|detail| format!("AI_IMAGE_RESPONSE_INVALID: {detail}"))?;
-                    return materialize_image(provider, &client, image, cancel, fallback_size).await;
+                    return materialize_image(provider, &client, image, cancel, fallback_size)
+                        .await;
                 }
             }
             Err(ProviderFailure::Status(status, detail)) => {
@@ -1017,7 +1024,8 @@ mod tests {
             let (code, message) = base_resp_failure(&payload).expect("必须识别出厂商错误码");
             assert_eq!(code, 1008);
             assert_eq!(message, "insufficient balance");
-            let ok = serde_json::json!({ "base_resp": { "status_code": 0, "status_msg": "success" } });
+            let ok =
+                serde_json::json!({ "base_resp": { "status_code": 0, "status_msg": "success" } });
             assert!(base_resp_failure(&ok).is_none());
         }
 
@@ -1135,7 +1143,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn chat_gives_up_immediately_when_the_task_was_cancelled() {        // 取消后不应该再发出请求，也不应该等待厂商把整份草稿写完。
+    async fn chat_gives_up_immediately_when_the_task_was_cancelled() {
+        // 取消后不应该再发出请求，也不应该等待厂商把整份草稿写完。
         let provider = resolve(None).unwrap();
         let cancel = CancelToken::new();
         cancel.cancel();
