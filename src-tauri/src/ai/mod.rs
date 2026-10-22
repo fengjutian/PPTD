@@ -5,8 +5,10 @@
 
 pub mod cancel;
 pub mod minimax;
+pub mod minimax_image;
 pub mod stream;
 
+use base64::Engine;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -130,6 +132,99 @@ fn validate_model(model: &str) -> Result<(), String> {
         return Err("AI_MODEL_INVALID".into());
     }
     Ok(())
+}
+
+/// 图像生成请求（厂商无关）。
+///
+/// 与对话请求分开：图像接口的模型、参数与错误语义都和文本模型不同，
+/// 混在同一个结构里会让两端都背上对方的约束。
+#[derive(Clone)]
+pub struct ImageRequest {
+    pub model: String,
+    pub prompt: String,
+    /// 明确指定像素宽度。与 `height` 同时出现才生效。
+    pub width: Option<u32>,
+    /// 明确指定像素高度。与 `width` 同时出现才生效。
+    pub height: Option<u32>,
+}
+
+/// 图像生成结果。
+///
+/// 图片以 data URL 内联返回：厂商给出的下载地址有有效期，页面里的图片需要长期
+/// 留在项目文件里，不能依赖外部链接。
+#[derive(Clone)]
+pub struct ImageResult {
+    pub data_url: String,
+    pub mime_type: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// 从厂商响应里取出的图片，可能是内嵌数据，也可能还需要下载。
+#[derive(Clone, Debug)]
+pub enum ImagePayload {
+    /// 内嵌的 base64 数据，可能带 `data:` 前缀。
+    Base64 { data: String, mime_type: Option<String> },
+    /// 需要下载的图片地址。
+    Url { url: String },
+}
+
+/// 图像生成端口。
+///
+/// 与 [`ChatProvider`] 平行：同一个厂商可以只支持对话、只支持图像，或两者都支持。
+pub trait ImageProvider: Send + Sync {
+    /// 稳定的厂商标识，与对应 [`ChatProvider`] 的标识一致。
+    fn id(&self) -> &'static str;
+    /// 图像生成接口地址。
+    fn image_endpoint(&self) -> &'static str;
+    /// 默认图像模型。
+    fn default_image_model(&self) -> &'static str;
+    /// 覆盖默认图像模型的环境变量名。
+    fn image_model_env_var(&self) -> &'static str;
+    /// 厂商支持的图像模型白名单。
+    fn supported_image_models(&self) -> &'static [&'static str];
+    /// 未指定尺寸时的默认像素尺寸。
+    fn default_image_size(&self) -> (u32, u32);
+    /// 附加厂商鉴权。
+    fn apply_auth(&self, request: reqwest::RequestBuilder, api_key: &str)
+        -> reqwest::RequestBuilder;
+    /// 构造厂商请求体。
+    fn build_image_request(&self, request: &ImageRequest) -> serde_json::Value;
+    /// 从厂商响应中取出图片。
+    fn parse_image_response(&self, payload: serde_json::Value) -> Result<ImagePayload, String>;
+    /// 校验图片下载地址，只允许厂商官方域名。
+    fn ensure_image_url_allowed(&self, url: &str) -> Result<(), String>;
+}
+
+/// 支持图像生成的厂商。新增厂商只在这里登记。
+pub const IMAGE_PROVIDERS: &[&dyn ImageProvider] = &[&minimax_image::MINIMAX_IMAGE];
+
+/// 找到厂商对应的图像生成实现；厂商不支持图像时返回 `AI_IMAGE_UNSUPPORTED:{id}`。
+pub fn resolve_image_provider(
+    provider: &dyn ChatProvider,
+) -> Result<&'static dyn ImageProvider, String> {
+    IMAGE_PROVIDERS
+        .iter()
+        .copied()
+        .find(|image_provider| image_provider.id() == provider.id())
+        .ok_or_else(|| format!("AI_IMAGE_UNSUPPORTED:{}", provider.id()))
+}
+
+/// 解析本次图像请求使用的模型。
+///
+/// 与 [`resolve_model`] 分开：对话模型和图像模型是两套命名，把对话模型名传给
+/// 图像接口只会换来厂商的参数错误，不如在本地就拦住。
+pub fn resolve_image_model(
+    provider: &dyn ImageProvider,
+    model: Option<String>,
+) -> Result<String, String> {
+    let model = model
+        .or_else(|| std::env::var(provider.image_model_env_var()).ok())
+        .unwrap_or_else(|| provider.default_image_model().to_string());
+    if !provider.supported_image_models().contains(&model.as_str()) {
+        return Err(format!("AI_IMAGE_MODEL_UNSUPPORTED:{model}"));
+    }
+    Ok(model)
 }
 
 /// 厂商请求失败时的分类，用于区分是否值得重试。

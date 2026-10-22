@@ -645,6 +645,7 @@ button { color: inherit; }
 .module-shell .statusbar { grid-row: 2; }
 .saved-dot { color: #9bad56; margin-left: auto; }
 .saved-dot.dirty { color: #e6ae62; }
+.missing-assets { color: #e6ae62; }
 .zoom-controls { display: inline-flex; align-items: center; gap: 2px; }
 .zoom-controls button { min-width: 22px; height: 20px; padding: 0 5px; border: 1px solid #35373d; border-radius: 4px; color: #b9bcc3; background: #1b1c20; font-size: 10px; cursor: pointer; }
 .zoom-controls button:hover { border-color: #4b4e56; color: #fff; }

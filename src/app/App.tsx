@@ -374,9 +374,19 @@ export function App() {
     return () => { active = false; };
   }, [loadDocument]);
 
+  // 读不到的图片要在状态栏里数出来。画布上的缺图块会随缩放、随滚动被忽略，
+  // 状态栏这一处是整个会话都在的地方。
+  const [missingImageCount, setMissingImageCount] = useState(0);
+  useEffect(() => {
+    const read = () => setMissingImageCount(failedImageReferences().length);
+    read();
+    return subscribeImageFailures(read);
+  }, []);
+
   useEffect(() => {
     if (!dirty || !isDesktopRuntime()) return;
     const timer = window.setTimeout(() => {
+      // The snapshot keeps the pictures of the document. They live in the asset
       // directory of the project the document belongs to, so the backend needs
       // that path to carry them into the snapshot.
       void saveRecovery(document, getImageProjectPath()).then((report) => {
@@ -1334,7 +1344,7 @@ export function App() {
 
       {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
 
-      <footer className="statusbar">{activeView === "ai" ? (aiDraft ? <><span>草稿第 {activeDraftSlideIndex + 1} / {aiDraft.slides.length} 页</span><span>{aiDraftMetrics.characters} 字</span><span>{aiDraftMetrics.points} 条要点</span><span className={`saved-dot ${aiSaveState === "saving" ? "dirty" : ""}`}>● {aiSaveState === "saving" ? "保存中…" : "已自动保存"}</span></> : <><span>AI 内容工作台</span><span>填写主题后生成结构化草稿</span><span className="saved-dot">● {aiHistory.length > 0 ? `${aiHistory.length} 个历史草稿` : "尚未生成草稿"}</span></>) : <><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span><span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom-controls"><button type="button" aria-label="缩小画布" onClick={() => setZoom((value) => Math.max(0.3, Math.round((value - 0.1) * 10) / 10))}>−</button><button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 10) / 10))}>＋</button></span></>}</footer>
+      <footer className="statusbar">{activeView === "ai" ? (aiDraft ? <><span>草稿第 {activeDraftSlideIndex + 1} / {aiDraft.slides.length} 页</span><span>{aiDraftMetrics.characters} 字</span><span>{aiDraftMetrics.points} 条要点</span><span className={`saved-dot ${aiSaveState === "saving" ? "dirty" : ""}`}>● {aiSaveState === "saving" ? "保存中…" : "已自动保存"}</span></> : <><span>AI 内容工作台</span><span>填写主题后生成结构化草稿</span><span className="saved-dot">● {aiHistory.length > 0 ? `${aiHistory.length} 个历史草稿` : "尚未生成草稿"}</span></>) : <><span>第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页</span><span>{countLabel}</span><span>{revisionLabel}</span>{missingImageCount > 0 && <span className="missing-assets" title="这些图片读不出来，画布上以斜纹块占位">⚠ {missingImageCount} 张图片资源缺失</span>}<span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span><span className="zoom-controls"><button type="button" aria-label="缩小画布" onClick={() => setZoom((value) => Math.max(0.3, Math.round((value - 0.1) * 10) / 10))}>−</button><button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button><button type="button" aria-label="放大画布" onClick={() => setZoom((value) => Math.min(3, Math.round((value + 0.1) * 10) / 10))}>＋</button></span></>}</footer>
     </div>
   );
 }

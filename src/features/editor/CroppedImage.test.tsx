@@ -25,6 +25,13 @@ describe("图片元素", () => {
     expect(markup).toContain("image-fill");
   });
 
+  it("读不到资源的占位块标成缺图，不会被当成空白页", () => {
+    const markup = renderToStaticMarkup(<CroppedImage element={imageElement("asset://unknown.png")} className="image-fill" />);
+
+    // 一块纯白看起来就像作者本来就没放图，模板版式背景就是这样消失的。
+    expect(markup).toContain("image-missing");
+  });
+
   it("内联的图片直接画出来", () => {
     const markup = renderToStaticMarkup(<CroppedImage element={imageElement("data:image/png;base64,AA==")} className="image-fill" />);
 

@@ -93,7 +93,7 @@ export async function saveProject(document: PresentationDocument, currentPath?: 
   return { path, modifiedAt: await projectModifiedAt(path), report };
 }
 
-let recoveryQueue: Promise<AssetReport | undefined> = Promise.resolve();
+let recoveryQueue: Promise<AssetReport | undefined> = Promise.resolve(undefined);
 
 const enqueueRecovery = <T,>(task: () => Promise<T>): Promise<T> => {
   const result = recoveryQueue.catch(() => undefined).then(task);
@@ -122,7 +122,7 @@ export const recoveryProjectPath = () => invoke<string | null>("recovery_project
 
 export async function clearRecovery(): Promise<void> {
   if (!isTauri()) return;
-  await enqueueRecovery(() => invoke("clear_recovery"));
+  await enqueueRecovery(async () => { await invoke("clear_recovery"); });
 }
 
 function safeFileName(value: string): string {

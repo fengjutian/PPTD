@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocument, emu, type ImageElement } from "../core/document-model";
-import { resolveDocumentImages, resolveImageUrl, setImageProjectPath, subscribeImageProjectPath } from "./image-url-service";
+import { resolveDocumentImages, resolveImageUrl, setImageProjectPath, subscribeImageProjectPath, failedImageReferences, isFailedImageReference, subscribeImageFailures } from "./image-url-service";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => true }));
 
@@ -85,6 +85,50 @@ describe("图片资源的解析", () => {
     document.slides[0]!.elements.push(imageElement("asset://d.png"));
 
     await expect(resolveDocumentImages(document)).rejects.toThrow("IMAGE_ASSET_UNAVAILABLE");
+  });
+
+  it("读不到的图片被记下来并通知订阅者", async () => {
+    invokeMock.mockRejectedValue("ASSET_NOT_FOUND");
+    setImageProjectPath("C:/p.pptd");
+    const changes: number[] = [];
+    const unsubscribe = subscribeImageFailures(() => changes.push(changes.length));
+
+    // 错误照样抛给导出用，但失败必须留下痕迹。
+    await expect(resolveImageUrl("asset://gone.png")).rejects.toBe("ASSET_NOT_FOUND");
+    expect(isFailedImageReference("asset://gone.png")).toBe(true);
+    expect(failedImageReferences()).toEqual(["asset://gone.png"]);
+    expect(changes).toHaveLength(1);
+
+    // 同一张图反复读失败不重复通知。
+    await expect(resolveImageUrl("asset://gone.png")).rejects.toBe("ASSET_NOT_FOUND");
+    expect(changes).toHaveLength(1);
+
+    unsubscribe();
+  });
+
+  it("读回来之后失败记录让位给成功", async () => {
+    invokeMock.mockRejectedValueOnce("ASSET_NOT_FOUND");
+    setImageProjectPath("C:/p.pptd");
+    await expect(resolveImageUrl("asset://back.png")).rejects.toBe("ASSET_NOT_FOUND");
+    expect(isFailedImageReference("asset://back.png")).toBe(true);
+
+    invokeMock.mockResolvedValue("data:image/png;base64,AA==");
+    await expect(resolveImageUrl("asset://back.png")).resolves.toBe("data:image/png;base64,AA==");
+
+    expect(isFailedImageReference("asset://back.png")).toBe(false);
+    expect(failedImageReferences()).toEqual([]);
+  });
+
+  it("换项目时清掉上一个项目的失败", async () => {
+    invokeMock.mockRejectedValue("ASSET_NOT_FOUND");
+    setImageProjectPath("C:/p.pptd");
+    await expect(resolveImageUrl("asset://gone.png")).rejects.toBe("ASSET_NOT_FOUND");
+    expect(failedImageReferences()).toHaveLength(1);
+
+    // 同一个摘要可能存在于另一个项目里，旧项目的缺失不是新项目的缺失。
+    setImageProjectPath("C:/q.pptd");
+
+    expect(failedImageReferences()).toEqual([]);
   });
 
   it("导出时把引用换成内联图片", async () => {
