@@ -665,36 +665,53 @@ fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
 /// the front end calls this lazily for the pictures it actually renders, and
 /// caches the result.
 #[tauri::command]
-pub async fn read_image_asset(project_path: String, reference: String) -> Result<String, String> {
+pub async fn read_image_asset(
+    app: tauri::AppHandle,
+    project_path: String,
+    reference: String,
+) -> Result<String, String> {
+    let layout_cache_root = layout_render_cache_root(&app);
     tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
         let path = validate_path(&project_path, "pptd")?;
-        let root = assets_root(&path)?;
-        let relative = reference
-            .strip_prefix("asset://")
-            .ok_or("ASSET_REF_INVALID")?;
-        let relative_path = Path::new(relative);
-        if relative_path.is_absolute()
-            || relative_path
-                .components()
-                .any(|component| !matches!(component, std::path::Component::Normal(_)))
-        {
-            return Err("ASSET_PATH_INVALID".into());
-        }
-        let asset_path = root.join(relative_path);
-        let bytes = fs::read(&asset_path).map_err(|_| "ASSET_NOT_FOUND".to_string())?;
-        if bytes.len() > MAX_IMAGE_BYTES {
-            return Err("IMAGE_TOO_LARGE".into());
-        }
-        let mime = match relative_path.extension().and_then(|value| value.to_str()) {
-            Some("png") => "image/png",
-            Some("jpg") | Some("jpeg") => "image/jpeg",
-            Some("webp") => "image/webp",
-            _ => return Err("ASSET_MIME_INVALID".into()),
-        };
-        Ok(format!("data:{mime};base64,{}", BASE64.encode(bytes)))
+        read_image_asset_at(&path, &reference, Some(&layout_cache_root))
     })
     .await
     .map_err(|error| format!("IMAGE_READ_TASK_FAILED: {error}"))?
+}
+
+/// 项目资源目录里没有这张图时，按内容摘要在模板版式渲染缓存里找回同一份字节。
+///
+/// 版式背景就是从那个缓存渲染出来再外置成资源文件的，文件丢了不等于图没了。
+/// 命中的是同一份字节（文件名的摘要就是内容的 SHA-256），所以找回的一定是原图。
+fn read_image_asset_at(
+    path: &Path,
+    reference: &str,
+    layout_cache_root: Option<&Path>,
+) -> Result<String, String> {
+    let root = assets_root(path)?;
+    let relative = reference.strip_prefix("asset://").ok_or("ASSET_REF_INVALID")?;
+    if !is_safe_asset_reference(relative) {
+        return Err("ASSET_PATH_INVALID".into());
+    }
+    let bytes = match fs::read(root.join(relative)) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            let origin = layout_cache_root
+                .and_then(|cache_root| find_layout_render_asset(cache_root, relative))
+                .ok_or("ASSET_NOT_FOUND")?;
+            fs::read(&origin).map_err(|_| "ASSET_NOT_FOUND".to_string())?
+        }
+    };
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err("IMAGE_TOO_LARGE".into());
+    }
+    let mime = match Path::new(relative).extension().and_then(|value| value.to_str()) {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        _ => return Err("ASSET_MIME_INVALID".into()),
+    };
+    Ok(format!("data:{mime};base64,{}", BASE64.encode(bytes)))
 }
 
 #[tauri::command]
