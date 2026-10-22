@@ -31,7 +31,7 @@ export const UI_FONT_OPTIONS: readonly UiFontOption[] = [
 
 export function defaultSettings(): AppSettings {
   const provider = findAiProvider(DEFAULT_AI_PROVIDER_ID);
-  return { theme: "blue", uiFont: "sans", aiProviderId: provider.id, aiModel: provider.defaultModel };
+  return { theme: "dark", uiFont: "sans", aiProviderId: provider.id, aiModel: provider.defaultModel };
 }
 
 export async function loadSettings(): Promise<AppSettings> {

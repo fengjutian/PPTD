@@ -491,6 +491,28 @@ function PageProperties({ slideId, background, pageSize, unit, palette, onComman
   );
 }
 
+export interface InspectorTitleBarProps {
+  element: SlideElement | undefined;
+  slide: Slide;
+}
+
+/**
+ * The head of the panel.
+ *
+ * It names the panel, tells the kind of the selected object and shows a small
+ * picture of it, drawn with the code the canvas uses.
+ */
+export function InspectorTitleBar({ element, slide }: InspectorTitleBarProps) {
+  return (
+    <div className="inspector-title">
+      <Layers3 size={18} />
+      <span>属性</span>
+      {element && <span className="type-chip">{elementTypeLabel(element)}</span>}
+      {element && <ElementPreview element={element} slide={slide} label={elementTypeLabel(element)} />}
+    </div>
+  );
+}
+
 export const InspectorPanel = memo(function InspectorPanel() {
   const document = useEditorStore((state) => state.document);
   const activeSlideId = useEditorStore((state) => state.activeSlideId);
@@ -508,11 +530,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
 
   return (
     <aside className="right-panel">
-      <div className="inspector-title">
-        <Layers3 size={18} />
-        <span>属性</span>
-        {selected && <span className="type-chip">{elementTypeLabel(selected)}</span>}
-      </div>
+      <InspectorTitleBar element={selected} slide={slide} />
       {selected
         ? <InspectorPanelView
           element={selected}

@@ -16,7 +16,7 @@ export type AlignCell = {
   label: string;
 };
 
-export const ALIGN_CELLS: readonly AlignCell[] = [
+const ALIGN_CELLS: readonly AlignCell[] = [
   { horizontal: "left", vertical: "top", single: false, label: "左上对齐" },
   { horizontal: "center", vertical: "top", single: true, label: "顶端对齐" },
   { horizontal: "right", vertical: "top", single: false, label: "右上对齐" },

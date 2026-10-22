@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createDocument, emu, type ElementId, type SlideElement } from "../../core/document-model";
+import { useEditorStore } from "../../store/editor-store";
 import { InspectorPanel, InspectorPanelView } from "./InspectorPanel";
 import type { LengthUnit } from "./inspector-geometry";
 
@@ -237,5 +238,27 @@ describe("inspector panel", () => {
     expect(unlocked).toContain('aria-pressed="false"');
     const locked = renderView(textElement(), "#ffffff", { aspectLocked: true });
     expect(locked).toContain('aria-pressed="true"');
+  });
+
+  it("shows a picture of the selected object next to the type chip", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    const element = slide.elements[0]!;
+    const before = useEditorStore.getState();
+    useEditorStore.setState({ document, activeSlideId: slide.id, selectedElementId: element.id });
+    try {
+      const markup = renderToStaticMarkup(<InspectorPanel />);
+      // The picture is drawn with the same code the canvas uses, so the panel
+      // shows the object instead of only naming it.
+      expect(markup).toContain("element-preview");
+      expect(markup).toContain("type-chip");
+      expect(markup).toContain("文本");
+    } finally {
+      useEditorStore.setState({
+        document: before.document,
+        activeSlideId: before.activeSlideId,
+        selectedElementId: before.selectedElementId,
+      });
+    }
   });
 });

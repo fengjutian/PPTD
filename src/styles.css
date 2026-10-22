@@ -551,7 +551,7 @@ button { color: inherit; }
 .align-page { fill: none; stroke: currentColor; stroke-width: 1; opacity: .45; }
 .align-block { fill: currentColor; }
 /* 属性标题栏里的对象预览。 */
-.element-preview { position: relative; display: block; overflow: hidden; border: 1px solid var(--panel-border, #2c2e33); border-radius: 6px; }
+.element-preview { position: relative; display: block; overflow: hidden; margin-left: auto; flex: 0 0 auto; border: 1px solid var(--panel-border, #2c2e33); border-radius: 6px; }
 .element-preview-canvas { position: absolute; }
 .field-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .toggle-button { display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; border: 1px solid #3b3d44; border-radius: 6px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; }
