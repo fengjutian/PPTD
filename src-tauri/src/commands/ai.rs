@@ -9,6 +9,10 @@ use serde::Serialize;
 use std::time::Duration;
 use tauri::Emitter;
 
+mod content_lexicon;
+
+use content_lexicon::TitleLexicon;
+
 /// 流式生成进度的事件名。前端据此把"正在写第几页"显示出来。
 const GENERATION_PROGRESS_EVENT: &str = "ai-generation-progress";
 

@@ -1,6 +1,25 @@
-import { describe, expect, it } from "vitest";
-import { createDocument } from "../core/document-model";
-import { readStoredDocument } from "./project-files";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+import { createDocument, emu, type ImageElement } from "../core/document-model";
+import { readStoredDocument, saveProject, saveRecovery } from "./project-files";
+import { setImageProjectPath } from "./image-url-service";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => true }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: vi.fn() }));
+
+const invokeMock = vi.mocked(invoke);
+
+function withBackground(): ImageElement {
+  return {
+    id: crypto.randomUUID() as ImageElement["id"],
+    type: "image",
+    frame: { x: emu(0), y: emu(0), width: emu(914_400), height: emu(914_400) },
+    rotationMilliDegree: 0,
+    locked: false,
+    source: { kind: "embedded", dataUrl: "asset://background.png", mimeType: "image/png" },
+    altText: "模板版式背景",
+  };
+}
 
 describe("stored documents", () => {
   it("reads a document whose page references resolve", () => {
