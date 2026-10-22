@@ -770,6 +770,49 @@ describe("document commands", () => {
     for (const item of [...leftItems, ...rightItems]) expect(copy).toContain(item);
   });
 
+  it("fills a sparse comparison page instead of stranding the cards in its upper third", () => {
+    const source = createDocument();
+    const content = {
+      title: "由景及人：一悲一喜，两境对照",
+      body: "保留的审核正文",
+      speakerNotes: "",
+      blocks: [{
+        type: "comparison" as const,
+        leftLabel: "览阴而生悲",
+        rightLabel: "览晴而生喜",
+        leftItems: ["登斯楼，去国怀乡，忧谗畏讥", "满目萧然，感极而悲者矣"],
+        rightItems: ["登斯楼，心旷神怡，宠辱偕忘", "把酒临风，其喜洋洋者矣"],
+      }],
+    };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "岳阳楼记", slides: [content], designs: [design] }));
+    const pageHeight = result.pageSize.height;
+    const panels = result.slides[0]!.elements.filter((element) => element.type === "shape"
+      && element.frame.width > result.pageSize.width * 0.4
+      && element.frame.height > pageHeight * 0.2);
+    expect(panels).toHaveLength(2);
+    for (const panel of panels) {
+      const height = panel.frame.height / pageHeight;
+      const top = panel.frame.y / pageHeight;
+      const center = top + height / 2;
+      // A panel carries at least its share of the content area, and the block
+      // sits around the middle of the page instead of under the title.
+      expect(height).toBeGreaterThan(0.3);
+      expect(center).toBeGreaterThan(0.53);
+    }
+  });
+
+  it("keeps the comparison label a step larger than the points it heads", () => {
+    const source = createDocument();
+    const content = { title: "方案对比", body: "", speakerNotes: "", blocks: [{ type: "comparison" as const, leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["稳定"], rightItems: ["快速"] }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "对比", slides: [content], designs: [design] }));
+    const texts = result.slides[0]!.elements.filter((element) => element.type === "text");
+    const label = texts.find((element) => element.text === "方案 A");
+    const point = texts.find((element) => element.text === "• 稳定");
+    expect(label?.style.fontSizePt).toBeGreaterThanOrEqual((point?.style.fontSizePt ?? 0) * 1.2);
+  });
+
   it("keeps every reviewed step of a timeline and of a process", () => {
     const source = createDocument();
     const steps = Array.from({ length: 8 }, (_, index) => ({ label: `阶段${index + 1}`, text: `说明${index + 1}` }));

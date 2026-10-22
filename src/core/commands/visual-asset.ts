@@ -160,35 +160,101 @@ export interface VisualAssetLayout {
  *
  * 图不叠在文字上：它占一块自己的地方，文字区相应缩小。两者共享一条边，
  * 所以页面上有一条明确的分界，而不是一层盖一层。
+ *
+ * 图框的比例由 [`VISUAL_ASSET_ASPECT`] 决定，和前端请求图片时用的比例是同一个数。
+ * 比例一致，填充裁剪就什么都不用切；比例不一致，裁剪会把画面切掉一大半。
+ *
+ * 框在像素里算，不在归一化坐标里算：归一化坐标的宽高比不等于像素宽高比
+ * （页面是 16:9，宽按页宽、高按页高），照归一化算出来的框放进页面就不是
+ * 想要的比例。
  */
-export function planVisualAssetLayout(role: AiVisualAssetRole, content: NormalizedRect): VisualAssetLayout {
+export function planVisualAssetLayout(
+  role: AiVisualAssetRole,
+  content: NormalizedRect,
+  pageWidthEmu: number,
+  pageHeightEmu: number,
+): VisualAssetLayout {
+  const contentPx = { width: content.width * pageWidthEmu, height: content.height * pageHeightEmu };
+  const aspect = VISUAL_ASSET_ASPECT[role];
+  const gapPx = contentPx.width * 0.04;
+
   switch (role) {
     case "hero": {
       // 主视觉占右半页，文字留在左半页，中间留一道缝。
-      const imageWidth = content.width * 0.44;
-      const gap = content.width * 0.04;
+      // 高度优先：图占满内容区的高度，宽度按比例跟着走。
+      let heightPx = contentPx.height;
+      let widthPx = heightPx * aspect;
+      const maxWidthPx = contentPx.width * 0.46;
+      if (widthPx > maxWidthPx) {
+        widthPx = maxWidthPx;
+        heightPx = widthPx / aspect;
+      }
+      const image = {
+        x: content.x + content.width - widthPx / pageWidthEmu,
+        y: content.y + (content.height - heightPx / pageHeightEmu) / 2,
+        width: widthPx / pageWidthEmu,
+        height: heightPx / pageHeightEmu,
+      };
       return {
-        image: { x: content.x + content.width - imageWidth, y: content.y, width: imageWidth, height: content.height },
-        text: { x: content.x, y: content.y, width: content.width - imageWidth - gap, height: content.height },
+        image,
+        text: {
+          x: content.x,
+          y: content.y,
+          width: content.width - image.width - gapPx / pageWidthEmu,
+          height: content.height,
+        },
       };
     }
     case "side": {
       // 侧栏图占右下角，文字区在其上方和左侧。
-      const imageWidth = content.width * 0.34;
-      const imageHeight = content.height * 0.46;
-      const gap = content.width * 0.03;
+      const maxWidthPx = contentPx.width * 0.34;
+      const maxHeightPx = contentPx.height * 0.46;
+      let widthPx = maxWidthPx;
+      let heightPx = widthPx / aspect;
+      if (heightPx > maxHeightPx) {
+        heightPx = maxHeightPx;
+        widthPx = heightPx * aspect;
+      }
+      const image = {
+        x: content.x + content.width - widthPx / pageWidthEmu,
+        y: content.y + content.height - heightPx / pageHeightEmu,
+        width: widthPx / pageWidthEmu,
+        height: heightPx / pageHeightEmu,
+      };
       return {
-        image: { x: content.x + content.width - imageWidth, y: content.y + content.height - imageHeight, width: imageWidth, height: imageHeight },
-        text: { x: content.x, y: content.y, width: content.width - imageWidth - gap, height: content.height },
+        image,
+        text: {
+          x: content.x,
+          y: content.y,
+          width: content.width - image.width - gapPx / pageWidthEmu,
+          height: content.height,
+        },
       };
     }
     case "band": {
       // 通栏图压在文字区上方，文字在其下方。
-      const imageHeight = content.height * 0.42;
-      const gap = content.height * 0.04;
+      // 图最多占内容区高度的六成，剩下的留给文字；宽度按比例跟着走。
+      const maxHeightPx = contentPx.height * 0.6;
+      let heightPx = contentPx.height / aspect;
+      let widthPx = heightPx * aspect;
+      if (heightPx > maxHeightPx) {
+        heightPx = maxHeightPx;
+        widthPx = heightPx * aspect;
+      }
+      const image = {
+        x: content.x + (content.width - widthPx / pageWidthEmu) / 2,
+        y: content.y,
+        width: widthPx / pageWidthEmu,
+        height: heightPx / pageHeightEmu,
+      };
       return {
-        image: { x: content.x, y: content.y, width: content.width, height: imageHeight },
-        text: { x: content.x, y: content.y + imageHeight + gap, width: content.width, height: content.height - imageHeight - gap },
+        image,
+        text: {
+          x: content.x,
+          y: content.y + image.height + gapPx / pageHeightEmu,
+          width: content.width,
+          height: content.height - image.height - gapPx / pageHeightEmu,
+        },
       };
     }
   }

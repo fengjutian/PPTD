@@ -61,13 +61,31 @@ export const CONTENT_REGION = {
   /** The content of a page starts this far below the top of the safe area. */
   contentTopOffset: 0.17,
   /** A comparison column takes this share of the content area. */
-  comparisonColumnWidth: 0.44,
+  comparisonColumnWidth: 0.475,
+  /** The gutter between the two comparison columns, in page width. */
+  comparisonColumnGap: 0.05,
   /** The label of a comparison column. */
-  comparisonLabelFontSizePt: 18,
+  comparisonLabelFontSizePt: 22,
   /** The copy of a comparison column. */
-  comparisonItemFontSizePt: 16,
+  comparisonItemFontSizePt: 18,
   /** The smallest copy a comparison column may shrink to. */
-  comparisonMinimumItemFontSizePt: 12,
+  comparisonMinimumItemFontSizePt: 14,
+  /**
+   * The share of the content area a comparison panel fills even when it carries
+   * only a couple of points.
+   *
+   * A panel sized to its copy alone left the lower half of the page white: two
+   * lines of 18pt copy produced a 1.7in card on a 3.75in content area. Growing
+   * the panel to this share keeps the two cards the visual weight of the page
+   * instead of letting them float in the upper third.
+   */
+  comparisonMinPanelHeightRatio: 0.55,
+  /**
+   * Where a short content block sits inside the content area, as a share of the
+   * leftover space. Centering the block is the rule; anchoring it at 30% of the
+   * gap was what pushed every short page into its upper half.
+   */
+  blockVerticalAnchor: 0.5,
 } as const;
 
 /** The standard 16:9 page, in EMU. */
@@ -173,6 +191,9 @@ export function fitComparisonColumn(points: readonly string[], options: Capacity
   const pageHeightIn = pageHeight / EMU_PER_INCH;
   const widthPt = (DEFAULT_CONTENT_REGION.right - DEFAULT_CONTENT_REGION.left) * CONTENT_REGION.comparisonColumnWidth * pageWidthIn * 72 - 0.07 * pageWidthIn * 72;
   const headerFraction = (CONTENT_REGION.comparisonLabelFontSizePt * 1.2) / 72 / pageHeightIn + 0.018;
+  // The panel grows with its copy up to the content area, so a column is
+  // measured against the whole area. The minimum panel height only decides how
+  // much room a short column starts with.
   const availablePt = (contentHeightFraction() - headerFraction - 0.06) * pageHeightIn * 72;
   const value = points.map((point) => `• ${point}`).join("\n\n");
   const preferred = CONTENT_REGION.comparisonItemFontSizePt;

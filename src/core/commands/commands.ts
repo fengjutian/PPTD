@@ -696,7 +696,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         requestedRole: design.visualAsset?.role,
       });
       const assetLayout = visualAsset && assetPlan.enabled && assetPlan.role
-        ? planVisualAssetLayout(assetPlan.role, contentRegion)
+        ? planVisualAssetLayout(assetPlan.role, contentRegion, pageWidth, pageHeight)
         : undefined;
       // The text area shrinks to whatever the picture left behind.
       const contentBox = assetLayout ? assetLayout.text : contentRegion;
@@ -849,27 +849,43 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       } else if (comparisonBlock) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         const columnWidth = contentBox.width * CONTENT_REGION.comparisonColumnWidth;
+        const columnGap = contentBox.width * CONTENT_REGION.comparisonColumnGap;
         const columns = [
           { x: contentBox.x, label: comparisonBlock.leftLabel, items: comparisonBlock.leftItems },
-          { x: contentBox.x + contentBox.width * 0.52, label: comparisonBlock.rightLabel, items: comparisonBlock.rightItems },
+          { x: contentBox.x + columnWidth + columnGap, label: comparisonBlock.rightLabel, items: comparisonBlock.rightItems },
         ];
-        // The panel is sized to the list it carries. Stretching it to the whole
-        // placeholder left two thirds of both columns empty.
+        // The panel is never shorter than its share of the content area. Sized to
+        // its copy alone, a two-point comparison became a 1.7in card floating in
+        // a 3.75in area, with the lower 40% of the page left white. The floor
+        // makes the two cards carry the page; the copy then centres inside it.
         const labelSize = CONTENT_REGION.comparisonLabelFontSizePt;
         const headerHeight = pointsToFraction(labelSize * 1.2) + 0.018;
         // A comparison column carries every point the writer reviewed. A column
         // that cut its last point would drop reviewed copy from the exported
         // file, so the copy shrinks to fit instead of losing a point.
         const itemText = (items: string[]) => items.map((item) => `• ${cleanPoint(item)}`).join("\n\n");
-        const availableHeight = contentBox.height - headerHeight - 0.06;
+        const minimumPanelHeight = Math.min(contentBox.height, contentBox.height * CONTENT_REGION.comparisonMinPanelHeightRatio);
+        // The panel grows with its copy up to the content area, so the copy is
+        // fitted against the whole area; the floor only applies to short copy.
+        const availableHeight = Math.max(0.05, contentBox.height - headerHeight - 0.06);
         const longestColumn = columns.reduce((longest, column) => (itemText(column.items).length > itemText(longest.items).length ? column : longest), columns[0]!);
         const itemSize = fittedFontSize(itemText(longestColumn.items), frame(contentBox.x, contentBox.y, columnWidth - 0.07, availableHeight), CONTENT_REGION.comparisonItemFontSizePt, CONTENT_REGION.comparisonMinimumItemFontSizePt, 1.25);
-        const panelHeight = Math.min(contentBox.height, headerHeight + 0.03 + Math.max(...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize))) + 0.03);
-        const panelTop = contentBox.y + (contentBox.height - panelHeight) * 0.30;
+        const copyHeight = Math.max(...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize)));
+        const panelHeight = Math.min(contentBox.height, Math.max(minimumPanelHeight, headerHeight + 0.06 + copyHeight));
+        const panelTop = contentBox.y + (contentBox.height - panelHeight) * CONTENT_REGION.blockVerticalAnchor;
         columns.forEach((column) => {
+          const copy = itemText(column.items);
+          const columnHeight = blockHeight(copy, columnWidth - 0.07, itemSize);
+          // The header stays at the top of the panel and the points centre in the
+          // room below it, so a short column does not pin its copy under the
+          // header with a hole underneath.
+          const bodyTop = panelTop + headerHeight;
+          const bodyBottom = panelTop + panelHeight - 0.03;
+          const textTop = bodyTop + Math.max(0.015, (bodyBottom - bodyTop - columnHeight) / 2);
+          const textHeight = Math.min(columnHeight * 1.04 + 0.002, Math.max(0.02, bodyBottom - textTop));
           slide.elements.push(shape(frame(column.x, panelTop, columnWidth, panelHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(column.x, panelTop, columnWidth, headerHeight), accentFill));
           slide.elements.push(text(column.label, centeredBlock(column.label, { x: column.x + 0.025, y: panelTop, width: columnWidth - 0.05, height: headerHeight }, labelSize), labelSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          slide.elements.push(text(itemText(column.items), frame(column.x + 0.035, panelTop + headerHeight + 0.015, columnWidth - 0.07, panelHeight - headerHeight - 0.03), itemSize, bodyInk, false, "left", undefined, cardLuminance));
+          slide.elements.push(text(copy, frame(column.x + 0.035, textTop, columnWidth - 0.07, textHeight), itemSize, bodyInk, false, "left", undefined, cardLuminance));
         });
       } else if (tableBlock) {
         const tableIndex = blocks.indexOf(tableBlock);
@@ -947,7 +963,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // leave the label stranded at the bottom of a mostly empty card.
           const cardHeight = Math.min(0.24, contentBox.height / rows - 0.04);
           const gridHeight = rows * cardHeight + (rows - 1) * cardGap;
-          const gridTop = contentBox.y + (contentBox.height - gridHeight) * 0.30;
+          const gridTop = contentBox.y + (contentBox.height - gridHeight) * CONTENT_REGION.blockVerticalAnchor;
           metrics.forEach((metric, metricIndex) => {
             const column = metricIndex % columns; const row = Math.floor(metricIndex / columns);
             const width = cellWidth - 0.025;
@@ -1161,7 +1177,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // that space instead of leaving the lower half of the page empty.
         const cardHeight = Math.min(rows === 1 ? 0.30 : 0.24, contentHeight / rows - 0.04);
         const gridHeight = rows * cardHeight + (rows - 1) * rowGap;
-        const gridTop = contentBox.y + (contentHeight - gridHeight) * (rows === 1 ? 0.42 : 0.30);
+        const gridTop = contentBox.y + (contentHeight - gridHeight) * CONTENT_REGION.blockVerticalAnchor;
         visible.forEach((item, itemIndex) => {
           const row = Math.floor(itemIndex / columns); const column = itemIndex % columns;
           const rowItemCount = Math.min(columns, visible.length - row * columns);

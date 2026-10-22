@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { buildVisualAssetPrompt, resolveVisualAsset } from "../core/commands/visual-asset";
+import { buildVisualAssetPrompt, resolveVisualAsset, VISUAL_ASSET_REQUEST_SIZE, type AiVisualAssetRole } from "../core/commands/visual-asset";
 import type { AiSlideDesign } from "../core/commands/template-layouts";
 
 /**
@@ -46,14 +46,15 @@ interface ImageResult {
 /**
  * 为一页生成配图。
  *
- * 尺寸跟着页面上的框走：主视觉是竖着的半页，侧栏是竖着的小块，
- * 通栏是横着的一条。图的比例和框不一致，裁剪会切掉不少内容。
+ * 尺寸跟着角色走，和排版引擎留的图框用的是同一份契约
+ * （`VISUAL_ASSET_REQUEST_SIZE`）。两边比例一致，填充裁剪就什么都不用切；
+ * 图的比例和框对不上时，裁剪会把画面切掉一大半——那是"AI 配图一眼假"最常见的来源。
  */
 export async function generateVisualAsset(input: {
   prompt: string;
-  role: "hero" | "side" | "band";
+  role: AiVisualAssetRole;
 }): Promise<GeneratedVisualAsset | undefined> {
-  const size = input.role === "band" ? { width: 1280, height: 720 } : { width: 1024, height: 1024 };
+  const size = VISUAL_ASSET_REQUEST_SIZE[input.role];
   try {
     const result = await invoke<ImageResult>("generate_presentation_image", {
       request: { prompt: input.prompt, width: size.width, height: size.height },
@@ -81,7 +82,7 @@ export interface VisualAssetDecision {
   /** 是否配图。 */
   enabled: boolean;
   /** 配图的角色。 */
-  role?: "hero" | "side" | "band";
+  role?: AiVisualAssetRole;
   /** 为什么不配。 */
   reason?: string;
 }
