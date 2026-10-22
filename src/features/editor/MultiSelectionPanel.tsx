@@ -1,17 +1,16 @@
 import { memo } from "react";
 import { AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Layers3, Trash2 } from "lucide-react";
 import type { DocumentCommand } from "../../core/commands";
-import type { Emu, SlideId } from "../../core/document-model";
-import { unionFrame } from "../../core/commands/arrange";
+import type { ElementId, Emu, RectEmu, SlideId } from "../../core/document-model";
 import { emuToUnit, unitLabel, type LengthUnit } from "./inspector-geometry";
 import { AlignGrid, type AlignCell } from "./AlignGrid";
 
 export interface MultiSelectionPanelProps {
   slideId: SlideId;
   /** 选中的对象。 */
-  elementIds: readonly string[];
+  elementIds: readonly ElementId[];
   /** 选中的对象的外接框。 */
-  bounds: { x: number; y: number; width: number; height: number };
+  bounds: RectEmu;
   unit: LengthUnit;
   onCommand: (command: DocumentCommand) => void;
   onDelete: () => void;

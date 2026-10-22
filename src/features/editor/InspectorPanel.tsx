@@ -9,6 +9,8 @@ import { useEditorStore } from "../../store/editor-store";
 import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
 import { AlignGrid, type AlignCell } from "./AlignGrid";
+import { MultiSelectionPanel } from "./MultiSelectionPanel";
+import { unionFrame } from "../../core/commands/arrange";
 import { ElementPreview } from "./ElementPreview";
 import { paletteSwatches } from "./inspector-palette";
 
@@ -528,10 +530,13 @@ export function InspectorTitleBar({ element, slide }: InspectorTitleBarProps) {
 export const InspectorPanel = memo(function InspectorPanel() {
   const document = useEditorStore((state) => state.document);
   const activeSlideId = useEditorStore((state) => state.activeSlideId);
-  const selectedElementId = useEditorStore((state) => state.selectedElementId);
+  const selectedElementIds = useEditorStore((state) => state.selectedElementIds);
   const execute = useEditorStore((state) => state.execute);
   const slide = document.slides.find((item) => item.id === activeSlideId) ?? document.slides[0]!;
-  const selected = slide.elements.find((element) => element.id === selectedElementId);
+  const selectedElements = slide.elements.filter((element) => selectedElementIds.includes(element.id));
+  // 多选时"当前对象"是最后被选中的那个：属性面板和快捷键都以它为准。
+  const selected = selectedElements.length > 0 ? selectedElements[selectedElements.length - 1] : undefined;
+  const multiBounds = selectedElements.length > 1 ? unionFrame(selectedElements.map((element) => element.frame)) : undefined;
   // Display preferences only. They never reach the document, so they cannot
   // change a revision or the undo stack.
   const [unit, setUnit] = useState<LengthUnit>("inch");
@@ -542,37 +547,51 @@ export const InspectorPanel = memo(function InspectorPanel() {
 
   return (
     <aside className="right-panel">
-      <InspectorTitleBar element={selected} slide={slide} />
-      {selected
-        ? <InspectorPanelView
-          element={selected}
+      {multiBounds
+        ? <MultiSelectionPanel
           slideId={slide.id}
-          elementIndex={slide.elements.findIndex((item) => item.id === selected.id)}
-          elementCount={slide.elements.length}
-          background={slide.background}
-          pageSize={document.pageSize}
-          backgroundImage={slide.elements.some((element) => element.type === "image" && element.placement === "slide-background")}
+          elementIds={selectedElements.map((element) => element.id)}
+          bounds={multiBounds}
           unit={unit}
-          onUnitChange={setUnit}
-          aspectLocked={aspectLocked}
-          onToggleAspectLock={() => setAspectLocked((current) => !current)}
-          palette={palette}
           onCommand={execute}
+          onDelete={() => {
+            // 删除整组是一个意图，所以是一个命令、一个撤销项。
+            execute({ type: "delete-elements", slideId: slide.id, elementIds: selectedElements.map((element) => element.id) });
+          }}
         />
-        : <div className="property-form">
-          <div className="empty-inspector">
-            <span className="empty-inspector-mark"><MousePointer2 /></span>
-            <strong>未选中对象</strong>
-            <p>选择画布中的对象，这里会显示它的全部属性。</p>
-            <div className="empty-inspector-actions">
-              <button type="button" onClick={() => execute({ type: "add-text", slideId: slide.id })}><Type />文本</button>
-              <button type="button" onClick={() => execute({ type: "add-shape", slideId: slide.id, shape: "rectangle" })}><Square />矩形</button>
-            </div>
-          </div>
-          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize}
-            backgroundImage={slide.elements.some((element) => element.type === "image" && element.placement === "slide-background")}
-            unit={unit} palette={palette} onCommand={execute} />
-        </div>}
+        : <>
+          <InspectorTitleBar element={selected} slide={slide} />
+          {selected
+            ? <InspectorPanelView
+              element={selected}
+              slideId={slide.id}
+              elementIndex={slide.elements.findIndex((item) => item.id === selected.id)}
+              elementCount={slide.elements.length}
+              background={slide.background}
+              pageSize={document.pageSize}
+              backgroundImage={slide.elements.some((element) => element.type === "image" && element.placement === "slide-background")}
+              unit={unit}
+              onUnitChange={setUnit}
+              aspectLocked={aspectLocked}
+              onToggleAspectLock={() => setAspectLocked((current) => !current)}
+              palette={palette}
+              onCommand={execute}
+            />
+            : <div className="property-form">
+              <div className="empty-inspector">
+                <span className="empty-inspector-mark"><MousePointer2 /></span>
+                <strong>未选中对象</strong>
+                <p>选择画布中的对象，这里会显示它的全部属性。</p>
+                <div className="empty-inspector-actions">
+                  <button type="button" onClick={() => execute({ type: "add-text", slideId: slide.id })}><Type />文本</button>
+                  <button type="button" onClick={() => execute({ type: "add-shape", slideId: slide.id, shape: "rectangle" })}><Square />矩形</button>
+                </div>
+              </div>
+              <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize}
+                backgroundImage={slide.elements.some((element) => element.type === "image" && element.placement === "slide-background")}
+                unit={unit} palette={palette} onCommand={execute} />
+            </div>}
+        </>}
     </aside>
   );
 });

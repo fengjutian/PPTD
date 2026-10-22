@@ -224,6 +224,7 @@ export type DocumentCommand =
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
+  | { type: "delete-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
   | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: AlignTarget }
@@ -443,6 +444,14 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-table-style":
     case "set-image-alt-text":
     case "set-image-crop": return "design";
+    case "delete-elements": {
+      // 批量删除可能连带清空标题或正文——那属于内容变更，不能算作纯设计操作。
+      if (!document) return "design";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const touchesContent = slide?.elements.some((item) => command.elementIds.includes(item.id) && item.type === "text" && (item.contentRef === "title" || item.contentRef === "body"))
+        ?? false;
+      return touchesContent ? "content" : "design";
+    }
     case "align-elements":
     case "distribute-elements":
     case "move-elements": return "design";
@@ -586,15 +595,27 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (command.pageSize) document.pageSize = command.pageSize;
     const templateTheme = readTemplateTheme(command.templateTheme);
     // A preset is the fallback for a deck generated without a template: it owns
-    // the palette, the font pairing and the type scale. A real template always
-    // wins over it.
+    // the palette, the font pairing and the type scale. An explicitly chosen
+    // preset wins over the template theme while the template keeps its layout.
     const preset = command.themePresetId ? findThemePreset(command.themePresetId) : undefined;
-    const theme = templateTheme ?? preset?.theme;
+    const theme = preset?.theme ?? templateTheme;
     if (theme) document.theme = theme;
     else delete document.theme;
     // The type scale of the template or preset. Every branch reads this instead
     // of repeating point sizes, so the deck keeps one hierarchy.
     const typeScale = resolveTypeScale(document.theme);
+    // Fonts follow the same precedence as the type scale: the template wins,
+    // then the theme/preset, then the renderer default.
+    const majorFont = preset ? (document.theme?.majorFont ?? "Microsoft YaHei") : command.fontFamily || document.theme?.majorFont || "Microsoft YaHei";
+    const minorFont = preset ? (document.theme?.minorFont ?? document.theme?.majorFont ?? "Microsoft YaHei") : command.bodyFontFamily || command.fontFamily || document.theme?.minorFont || document.theme?.majorFont || "Microsoft YaHei";
+    // A chosen preset owns the type scale, so the placeholder sizes of the
+    // template no longer override it. The structure of the template is kept.
+    const effectiveLayouts = preset
+      ? (command.templateLayouts ?? []).map((layout) => ({
+          ...layout,
+          regions: layout.regions.map(({ fontSizePt: _size, textColor: _color, ...region }) => region),
+        }))
+      : command.templateLayouts;
     // The design replaces every page, so the layouts of the previous template
     // must not survive as empty references.
     const layouts: SlideLayoutSpec[] = [];
@@ -614,7 +635,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // The same line estimator the quality gate uses decides whether a size
       // fits, so a page that passes generation cannot be reported as overflow.
       for (let size = preferredPt; size >= minimumPt; size -= 1) {
-        if (estimateTextLines(value, widthPt, size, command.fontFamily || "Microsoft YaHei") * size * lineHeightRatio <= heightPt) return size;
+        if (estimateTextLines(value, widthPt, size, majorFont) * size * lineHeightRatio <= heightPt) return size;
       }
       return minimumPt;
     };
@@ -629,7 +650,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const large = isLargeText(fitted, bold);
       const fallback = bold ? palette.strong : palette.soft;
       const resolved = range ? readableTextColorOnRange(color, range, large, fallback) : readableTextColor(color, 1, large, fallback);
-      return { id: crypto.randomUUID() as ElementId, type: "text" as const, contentRef, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: command.fontFamily || "Microsoft YaHei", fontSizePt: fitted, color: resolved, bold, align } };
+      return { id: crypto.randomUUID() as ElementId, type: "text" as const, contentRef, frame: box, rotationMilliDegree: 0, locked: false, text: value, style: { fontFamily: majorFont, fontSizePt: fitted, color: resolved, bold, align } };
     };
     const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle", stroke = fill, strokeWidthPt = 0) => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke, strokeWidthPt, radiusPt: kind === "ellipse" ? 999 : 8 } });
     const points = (body: string) => body.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((value) => value.trim()).filter(Boolean);
@@ -681,10 +702,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       if (composition === "columns") return "split";
       return "body";
     });
-    const chosenLayouts = planTemplateLayouts({ layouts: command.templateLayouts ?? [], intents: layoutIntents, rhythm: command.backgroundRhythm });
+    const chosenLayouts = planTemplateLayouts({ layouts: effectiveLayouts ?? [], intents: layoutIntents, rhythm: command.backgroundRhythm });
     document.title = command.title.trim();
     document.slides = command.slides.map((content, index) => {
-      const design = command.designs[index]!;
+      const baseDesign = command.designs[index]!;
+      // A chosen preset owns the palette: the model's per-page colours are a
+      // variation inside that design system, not a reason to leave it.
+      const paletteOf = (slot: string) => preset?.theme.colors.find((color) => color.name === slot)?.value;
+      const design = preset
+        ? {
+            ...baseDesign,
+            accent: paletteOf("accent") ?? baseDesign.accent,
+            background: paletteOf("surface") ?? baseDesign.background,
+            titleColor: paletteOf("primary") ?? baseDesign.titleColor,
+            bodyColor: paletteOf("muted") ?? baseDesign.bodyColor,
+          }
+        : baseDesign;
       const slide = createSlide(index + 1);
       slide.background = design.background;
       const contentBlocks = toContentBlocks(content.blocks);
@@ -920,7 +953,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const pointsToFraction = (points: number) => points / 72 / (pageHeight / 914400);
       const blockHeight = (value: string, widthFraction: number, fontSizePt: number) => {
         const widthPt = widthFraction * (pageWidth / 914400) * 72;
-        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt, command.fontFamily || "Microsoft YaHei") * fontSizePt * 1.25);
+        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt, majorFont) * fontSizePt * 1.25);
       };
       const centeredBlock = (value: string, slot: { x: number; y: number; width: number; height: number }, fontSizePt: number) => {
         const height = blockHeight(value, slot.width, fontSizePt) * 1.04;
@@ -1051,7 +1084,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             rotationMilliDegree: 0,
             locked: false,
             style: {
-              fontFamily: command.bodyFontFamily || command.fontFamily || "Microsoft YaHei",
+              fontFamily: command.bodyFontFamily || majorFont,
               fontSizePt: 14,
               headerFill: accentFill,
               headerTextColor: "#FFFFFF",
@@ -1092,7 +1125,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             rotationMilliDegree: 0,
             locked: false,
             style: {
-              fontFamily: command.bodyFontFamily || command.fontFamily || "Microsoft YaHei",
+              fontFamily: command.bodyFontFamily || majorFont,
               fontSizePt: 14,
               textColor: bodyInk,
               seriesColors: [design.accent, accentFill, cardStroke],
@@ -1222,7 +1255,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // apart: the list has to read as one list.
           ...(density.gap < 1 ? { maximumGapPt: 18 * density.gap } : {}),
           lineHeightRatio: density.leading,
-          fontFamily: command.fontFamily || "Microsoft YaHei",
+          fontFamily: majorFont,
         });
         const flowFontPt = listFlow.fontSizePt;
         const rowGapPt = listFlow.gapPt;
@@ -1281,7 +1314,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           let quoteSize = quoteSizes[quoteSizes.length - 1]!;
           let quoteHeightPt = 0;
           for (const size of quoteSizes) {
-            const lines = estimateTextLines(panelQuote, quoteWidthPt, size, command.fontFamily || "Microsoft YaHei");
+            const lines = estimateTextLines(panelQuote, quoteWidthPt, size, majorFont);
             const height = lines * size * 1.25;
             quoteSize = size;
             quoteHeightPt = height;
@@ -1429,7 +1462,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // Link rendered title/body text back to semantic content. Structured
       // layouts (cards, timeline items, metrics) stay decorative because one
       // visual element cannot safely overwrite a multi-field content block.
-      const bodyFontFamily = command.bodyFontFamily || command.fontFamily;
+      const bodyFontFamily = minorFont;
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
         if (element.text === content.title) element.contentRef = "title";
@@ -1821,6 +1854,23 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (targets.length < 3) return;
     const distributed = distributeFrames(targets.map((item) => item.frame), command.axis);
     targets.forEach((item, index) => { item.frame = distributed[index]!; });
+    return;
+  }
+  if (command.type === "delete-elements") {
+    // 删除整组是一个意图，所以是一个命令、一个撤销项。
+    // 逐个删会留下 N 个撤销项，用户得按 N 次撤销才回到原样。
+    for (const elementId of command.elementIds) {
+      const target = slide.elements.find((item) => item.id === elementId);
+      if (!target) continue;
+      if (target.type === "text") {
+        if (target.contentRef === "title") slide.content.title = "";
+        if (target.contentRef === "body") {
+          slide.content.body = "";
+          slide.content.blocks = [];
+        }
+      }
+      slide.elements.splice(slide.elements.findIndex((item) => item.id === elementId), 1);
+    }
     return;
   }
   if (command.type === "move-elements") {

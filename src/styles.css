@@ -483,6 +483,12 @@ button { color: inherit; }
 .canvas-guide.horizontal i { left: 0; right: 0; top: 4px; height: 1px; }
 .canvas-guide:hover i { opacity: 1; }
 /* 吸附命中时的那条线，比参考线更亮，提示对象贴住了哪里。 */
+/* 框选的选框。和参考线一样只是交互反馈，不进文档模型。 */
+.canvas-marquee {
+  position: absolute; pointer-events: none; z-index: 4;
+  border: 1px dashed var(--ppt-accent);
+  background: color-mix(in srgb, var(--ppt-accent) 12%, transparent);
+}
 .canvas-snap-line { position: absolute; pointer-events: none; background: #ff7a45; }
 .canvas-snap-line.vertical { top: 0; bottom: 0; width: 1px; margin-left: -.5px; }
 .canvas-snap-line.horizontal { left: 0; right: 0; height: 1px; margin-top: -.5px; }

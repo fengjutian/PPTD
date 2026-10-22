@@ -8,7 +8,7 @@
  * 所有坐标都是页面坐标（EMU）。
  */
 
-import { emu, type Emu, type RectEmu } from "../document-model";
+import { emu, type ElementId, type Emu, type RectEmu } from "../document-model";
 
 /** 水平方向的对齐方式。 */
 export type ArrangeHorizontal = "left" | "center" | "right";
@@ -107,8 +107,8 @@ export function framesIntersect(a: RectEmu, b: RectEmu): boolean {
  * 与选框相交的对象都被选中。按页面上从后到前的顺序返回，和图层顺序一致。
  */
 export function framesInSelection(
-  elements: readonly { id: string; frame: RectEmu }[],
+  elements: readonly { id: ElementId; frame: RectEmu }[],
   selection: RectEmu,
-): string[] {
+): ElementId[] {
   return elements.filter((element) => framesIntersect(element.frame, selection)).map((element) => element.id);
 }

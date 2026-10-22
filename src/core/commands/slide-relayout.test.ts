@@ -88,7 +88,7 @@ describe("design-only relayout", () => {
   it("is one design-only undo step and leaves the content revision alone", () => {
     const document = designedDocument([{ type: "paragraph", text: "已经审核的正文。" }]);
     const slideId = document.slides[0]!.id;
-    useEditorStore.setState({ document, activeSlideId: slideId, selectedElementId: null, undoStack: [], redoStack: [] });
+    useEditorStore.setState({ document, activeSlideId: slideId, selectedElementIds: [], undoStack: [], redoStack: [] });
     const before = useEditorStore.getState().document;
     useEditorStore.getState().execute({ type: "relayout-slide", slideId });
     const after = useEditorStore.getState().document;

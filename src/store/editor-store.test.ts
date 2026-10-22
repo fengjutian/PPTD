@@ -5,7 +5,7 @@ import { useEditorStore } from "./editor-store";
 describe("editor history", () => {
   beforeEach(() => {
     const document = createDocument();
-    useEditorStore.setState({ document, activeSlideId: document.slides[0]!.id, selectedElementId: null, undoStack: [], redoStack: [] });
+    useEditorStore.setState({ document, activeSlideId: document.slides[0]!.id, selectedElementIds: [], undoStack: [], redoStack: [] });
   });
 
   it("undoes and redoes one user command with its revisions", () => {
@@ -41,7 +41,7 @@ describe("editor history", () => {
     state.execute({ type: "duplicate-element", slideId: state.activeSlideId, elementId });
     expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(2);
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
-    expect(useEditorStore.getState().selectedElementId).not.toBe(elementId);
+    expect(useEditorStore.getState().selectedElementIds).not.toContain(elementId);
 
     useEditorStore.getState().undo();
     expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(1);
@@ -53,7 +53,7 @@ describe("editor history", () => {
     useEditorStore.getState().execute({ type: "add-text", slideId });
     const state = useEditorStore.getState();
     expect(state.document.slides[0]!.elements).toHaveLength(2);
-    expect(state.selectedElementId).toBe(state.document.slides[0]!.elements[1]!.id);
+    expect(state.selectedElementIds).toEqual([state.document.slides[0]!.elements[1]!.id]);
     expect(state.document.revisions).toEqual({ document: 1, content: 0, design: 1 });
     state.undo();
     expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(1);
@@ -91,9 +91,9 @@ describe("editor history", () => {
     const element = state.document.slides[0]!.elements[0]!;
     state.selectElement(element.id);
     state.execute({ type: "move-element", slideId: state.activeSlideId, elementId: element.id, x: inches(2), y: inches(2) });
-    expect(useEditorStore.getState().selectedElementId).toBe(element.id);
+    expect(useEditorStore.getState().selectedElementIds).toEqual([element.id]);
     state.execute({ type: "delete-element", slideId: state.activeSlideId, elementId: element.id });
-    expect(useEditorStore.getState().selectedElementId).toBeNull();
+    expect(useEditorStore.getState().selectedElementIds).toEqual([]);
   });
 
   it("commits a style change as one design transaction and keeps reviewed content frozen", () => {

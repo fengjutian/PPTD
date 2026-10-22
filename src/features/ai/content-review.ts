@@ -398,7 +398,9 @@ export function isSlideEdited(slide: DraftSlide, original: DraftSlide | undefine
     slide.title !== original.title ||
     slide.body !== original.body ||
     slide.speakerNotes !== original.speakerNotes ||
-    JSON.stringify(slide.blocks) !== JSON.stringify(original.blocks)
+    JSON.stringify(slide.blocks) !== JSON.stringify(original.blocks) ||
+    // 配图意图也是这一页的内容：改了画面描述，这一页就不再是原稿了。
+    JSON.stringify(slide.plan?.visualAsset ?? null) !== JSON.stringify(original.plan?.visualAsset ?? null)
   );
 }
 

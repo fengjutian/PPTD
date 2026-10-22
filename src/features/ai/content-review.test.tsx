@@ -288,6 +288,22 @@ describe("table grid editing", () => {
     ]);
   });
 
+  it("shows the picture intent of a page so it can be reviewed", () => {
+    const draft = createDraft();
+    const withImage: AiDraft = {
+      ...draft,
+      slides: [{
+        ...draft.slides[0]!,
+        plan: { ...draft.slides[0]!.plan, visualAsset: { enabled: true, prompt: "一间明亮的现代化数据中心", role: "side" } },
+      }],
+    };
+    const markup = renderReview(withImage);
+    // 审核阶段是唯一还没花钱生成图片的时机：这一页要配什么图必须看得见。
+    expect(markup).toContain("页面配图");
+    expect(markup).toContain("一间明亮的现代化数据中心");
+    expect(markup).toContain("侧栏图");
+  });
+
   it("reports a picture prompt that asks for text in the picture", () => {
     const draft = createDraft();
     const withImage: AiDraft = {

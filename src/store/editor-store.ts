@@ -127,6 +127,7 @@ export const useEditorStore = create<EditorState>((set) => ({
     }
     if (command.type === "set-element-lock") selectedElementIds = [command.elementId];
     if (command.type === "delete-element") selectedElementIds = selectedElementIds.filter((id) => id !== command.elementId);
+    if (command.type === "delete-elements") selectedElementIds = selectedElementIds.filter((id) => !command.elementIds.includes(id));
     if (command.type === "add-slide" || command.type === "duplicate-slide" || command.type === "delete-slide" || command.type === "move-slide" || command.type === "apply-ai-draft" || command.type === "apply-ai-designed-draft") selectedElementIds = [];
     selectedElementIds = pruneSelection(selectedElementIds, document);
     return { ...state, document, activeSlideId, selectedElementIds, undoStack: pushHistory(state.undoStack, { forward, inverse }), redoStack: [] };

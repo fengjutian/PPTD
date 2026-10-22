@@ -985,6 +985,22 @@ describe("document commands", () => {
     expect(body.style.fontSizePt).toBe(16);
   });
 
+  it("paints a chosen preset's palette and fonts", () => {
+    const source = createDocument();
+    const content = { title: "标题", body: "正文内容", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#123456", accent: "#123456", titleColor: "#123456", bodyColor: "#123456" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "预设", slides: [content], designs: [design], themePresetId: "paper-ink" }));
+    const slide = result.slides[0]!;
+    const title = slide.elements.find((element): element is TextElement => element.type === "text" && element.text === content.title)!;
+    const body = slide.elements.find((element): element is TextElement => element.type === "text" && element.text === content.body)!;
+    expect(slide.background).toBe("#FBFAF7");
+    expect(title.style.fontFamily).toBe("华文中宋");
+    expect(body.style.fontFamily).toBe("微软雅黑");
+    expect(title.style.color).toBe("#1E2A32");
+    expect(slide.elements.some((element) => element.type === "shape" && element.style.fill === "#2F6B5F")).toBe(true);
+    expect(contrastRatio(body.style.color, slide.background)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it("paints a local scrim with the page colour instead of the design background", () => {
     const source = createDocument();
     const content = { title: "页", body: "正文", speakerNotes: "" };
