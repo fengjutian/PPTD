@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { BarChart3, Circle, Image as ImageIcon, Lock, Square, Table2, Type } from "lucide-react";
+import { BarChart3, Circle, Image as ImageIcon, Lock, Minus, Square, Table2, Type } from "lucide-react";
 import type { ElementId, Slide, SlideElement } from "../../core/document-model";
 
 function elementLabel(element: SlideElement): string {
@@ -7,6 +7,7 @@ function elementLabel(element: SlideElement): string {
   if (element.type === "image") return element.altText.trim().slice(0, 14) || "图片";
   if (element.type === "chart") return "图表";
   if (element.type === "table") return "表格";
+  if (element.type === "line") return "线条";
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
@@ -15,6 +16,7 @@ function ElementIcon({ element }: { element: SlideElement }) {
   if (element.type === "image") return <ImageIcon />;
   if (element.type === "chart") return <BarChart3 />;
   if (element.type === "table") return <Table2 />;
+  if (element.type === "line") return <Minus />;
   return element.shape === "ellipse" ? <Circle /> : <Square />;
 }
 

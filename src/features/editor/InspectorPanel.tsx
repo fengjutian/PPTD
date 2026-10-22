@@ -27,6 +27,9 @@ import {
   type ChartKind,
   type Emu,
   type ImageCrop,
+  type LineDirection,
+  type LineElementStyle,
+  type LineEnd,
   type ShapeElementStyle,
   type Slide,
   type SlideElement,
@@ -82,6 +85,7 @@ function elementTypeLabel(element: SlideElement): string {
   if (element.type === "image") return "图片";
   if (element.type === "chart") return "图表";
   if (element.type === "table") return "表格";
+  if (element.type === "line") return "线条";
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
@@ -247,6 +251,10 @@ export function InspectorPanelView({
 
   const setShapeStyle = (style: Partial<ShapeElementStyle>) => {
     onCommand({ type: "set-shape-style", slideId, elementId: element.id, style });
+  };
+
+  const setLineStyle = (style: Partial<LineElementStyle>) => {
+    onCommand({ type: "set-line-style", slideId, elementId: element.id, style });
   };
 
   const crop = element.type === "image" ? element.crop : undefined;
@@ -661,6 +669,69 @@ export function InspectorPanelView({
           </InspectorSection>
         )}
 
+        {element.type === "line" && (
+          <InspectorSection title="线条外观">
+            <div className="property-grid">
+              <ColorField
+                label="颜色"
+                value={element.style.stroke}
+                wide
+                swatches={palette}
+                disabled={locked}
+                onCommit={(stroke) => setLineStyle({ stroke })}
+              />
+              <NumberField
+                label="线宽"
+                unit="pt"
+                value={element.style.strokeWidthPt}
+                min={0}
+                max={100}
+                precision={1}
+                disabled={locked}
+                onCommit={(strokeWidthPt) => setLineStyle({ strokeWidthPt })}
+              />
+              <SelectField
+                label="方向"
+                value={element.direction}
+                disabled={locked}
+                options={["horizontal", "vertical", "diagonal"]}
+                optionLabels={{ horizontal: "水平", vertical: "垂直", diagonal: "斜线" }}
+                onCommit={(direction) =>
+                  onCommand({ type: "set-line-direction", slideId, elementId: element.id, direction: direction as LineDirection })
+                }
+              />
+              <SelectField
+                label="起点箭头"
+                value={element.style.startArrow}
+                disabled={locked}
+                options={["none", "arrow"]}
+                optionLabels={{ none: "无", arrow: "箭头" }}
+                onCommit={(startArrow) => setLineStyle({ startArrow: startArrow as LineEnd })}
+              />
+              <SelectField
+                label="终点箭头"
+                value={element.style.endArrow}
+                disabled={locked}
+                options={["none", "arrow"]}
+                optionLabels={{ none: "无", arrow: "箭头" }}
+                onCommit={(endArrow) => setLineStyle({ endArrow: endArrow as LineEnd })}
+              />
+              <div className="field">
+                <span className="field-label">虚线</span>
+                <label className="checkbox-field">
+                  <input
+                    type="checkbox"
+                    checked={element.style.dashed}
+                    disabled={locked}
+                    onChange={(event) => setLineStyle({ dashed: event.target.checked })}
+                  />
+                  <span>使用虚线</span>
+                </label>
+              </div>
+            </div>
+          </InspectorSection>
+        )}
+
         {element.type === "chart" && (
           <InspectorSection title="图表">
             <div className="property-grid">
@@ -669,6 +740,7 @@ export function InspectorPanelView({
                 value={element.kind}
                 disabled={locked}
                 options={["column", "bar", "line", "pie"]}
+                optionLabels={{ column: "柱状图", bar: "条形图", line: "折线图", pie: "饼图" }}
                 onCommit={(kind) =>
                   onCommand({ type: "set-chart-kind", slideId, elementId: element.id, kind: kind as ChartKind })
                 }

@@ -309,11 +309,13 @@ interface SelectFieldProps {
   label: string;
   value: string;
   options: readonly string[];
+  /** 中文名。缺省时直接显示选项本身。 */
+  optionLabels?: Record<string, string>;
   disabled?: boolean;
   onCommit: (value: string) => void;
 }
 
-export function SelectField({ label, value, options, disabled, onCommit }: SelectFieldProps) {
+export function SelectField({ label, value, options, optionLabels, disabled, onCommit }: SelectFieldProps) {
   const known = options.includes(value);
   return (
     <label className="field">
@@ -323,7 +325,7 @@ export function SelectField({ label, value, options, disabled, onCommit }: Selec
           {!known && <option value={value}>{value}</option>}
           {options.map((option) => (
             <option key={option} value={option}>
-              {option}
+              {optionLabels?.[option] ?? option}
             </option>
           ))}
         </select>

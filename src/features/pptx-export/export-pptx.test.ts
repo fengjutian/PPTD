@@ -67,6 +67,30 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("exports a line as a native line object with its arrow heads", async () => {
+    const document = createDocument();
+    const slideId = document.slides[0]!.id;
+    applyCommand(document, { type: "add-line", slideId, direction: "diagonal" });
+    const line = document.slides[0]!.elements.at(-1)!;
+    if (line.type !== "line") throw new Error("expected a line");
+    applyCommand(document, {
+      type: "set-line-style",
+      slideId,
+      elementId: line.id,
+      style: { stroke: "#3366CC", endArrow: "arrow", dashed: true },
+    });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    // A native line stays editable in PowerPoint: it is a connector shape, not
+    // a picture of a line and not a flat rectangle.
+    expect(slideXml).toContain("<a:prstGeom prst=\"line\">");
+    expect(slideXml).toContain("3366CC");
+    // 虚线和箭头都要真的写进 XML，不能只留在画布上。
+    expect(slideXml).toContain('<a:prstDash val="dash"/>');
+    expect(slideXml).toContain('<a:tailEnd type="arrow"/>');
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("writes the crop of a picture into the slide XML as a source rectangle", async () => {
     const document = createDocument();
     const slideId = document.slides[0]!.id;

@@ -2747,6 +2747,15 @@ button {
   height: 100%;
   border-style: solid;
 }
+/* 线条本身很细，按不中。命中区由 SVG 里的一条加宽透明描边负责，
+   这里只保证 SVG 不裁掉箭头。 */
+.slide-element.line {
+  overflow: visible;
+}
+.slide-element.line .line-svg {
+  display: block;
+  overflow: visible;
+}
 .slide-element.image {
   overflow: hidden;
 }

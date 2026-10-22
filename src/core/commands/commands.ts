@@ -7,6 +7,8 @@ import type {
   ElementId,
   Emu,
   ImageCrop,
+  LineDirection,
+  LineElementStyle,
   PresentationDocument,
   RectEmu,
   ShapeElementStyle,
@@ -249,6 +251,39 @@ function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
   });
 }
 
+/**
+ * 复制一个对象，用来做粘贴。
+ *
+ * 副本比原件往后挪一点，让用户一眼看出"这是新的一份"。标题和正文这类
+ * 内容占位符不能被复制成第二份——那会让一页出现两个标题，所以文本副本
+ * 变成装饰性文本。
+ */
+function copyElementForPaste(element: SlideElement, offset: number): SlideElement {
+  const moved = { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu };
+  if (element.type === "text") {
+    return {
+      ...element,
+      id: crypto.randomUUID() as ElementId,
+      contentRef: "decorative",
+      frame: moved,
+      style: { ...element.style },
+      ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
+    };
+  }
+  if (element.type === "shape") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  if (element.type === "line") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  if (element.type === "chart")
+    return {
+      ...element,
+      id: crypto.randomUUID() as ElementId,
+      frame: moved,
+      style: { ...element.style, seriesColors: [...element.style.seriesColors] },
+      contentBlockIds: [...element.contentBlockIds],
+    };
+  if (element.type === "table") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, source: { ...element.source } };
+}
+
 /** Plain deep copy of an element, safe to read from an Immer draft. */
 function cloneElement(element: SlideElement): SlideElement {
   if (element.type === "text")
@@ -259,6 +294,7 @@ function cloneElement(element: SlideElement): SlideElement {
       ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
     };
   if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
+  if (element.type === "line") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
   if (element.type === "chart")
     return {
       ...element,
@@ -358,7 +394,9 @@ export type DocumentCommand =
       role?: AiVisualAssetRole;
     }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
+  | { type: "add-line"; slideId: SlideId; direction: LineDirection }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
+  | { type: "duplicate-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
@@ -386,6 +424,8 @@ export type DocumentCommand =
     }
   | { type: "clear-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number }
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
+  | { type: "set-line-style"; slideId: SlideId; elementId: ElementId; style: Partial<LineElementStyle> }
+  | { type: "set-line-direction"; slideId: SlideId; elementId: ElementId; direction: LineDirection }
   | { type: "set-chart-style"; slideId: SlideId; elementId: ElementId; style: Partial<ChartElementStyle> }
   | { type: "set-chart-kind"; slideId: SlideId; elementId: ElementId; kind: ChartKind }
   | { type: "set-table-style"; slideId: SlideId; elementId: ElementId; style: Partial<TableElementStyle> }
@@ -463,6 +503,21 @@ function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
     throw new Error("INVALID_SHAPE_STYLE");
   if (style.radiusPt !== undefined && (!Number.isFinite(style.radiusPt) || style.radiusPt < 0 || style.radiusPt > 1000))
     throw new Error("INVALID_SHAPE_STYLE");
+}
+
+/** The style of a line is presentation-only, so it is guarded like the others. */
+function assertLineStyle(style: Partial<LineElementStyle>): void {
+  if (style.stroke !== undefined && !HEX_COLOR_PATTERN.test(style.stroke)) throw new Error("INVALID_LINE_STYLE");
+  if (
+    style.strokeWidthPt !== undefined &&
+    (!Number.isFinite(style.strokeWidthPt) || style.strokeWidthPt < 0 || style.strokeWidthPt > 100)
+  )
+    throw new Error("INVALID_LINE_STYLE");
+  if (style.startArrow !== undefined && style.startArrow !== "none" && style.startArrow !== "arrow")
+    throw new Error("INVALID_LINE_STYLE");
+  if (style.endArrow !== undefined && style.endArrow !== "none" && style.endArrow !== "arrow")
+    throw new Error("INVALID_LINE_STYLE");
+  if (style.dashed !== undefined && typeof style.dashed !== "boolean") throw new Error("INVALID_LINE_STYLE");
 }
 
 /** The style of a chart is presentation-only, so it is guarded like the others. */
@@ -645,6 +700,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-text-emphasis":
     case "clear-text-emphasis":
     case "set-shape-style":
+    case "set-line-style":
+    case "set-line-direction":
     case "set-chart-style":
     case "set-chart-kind":
     case "set-table-style":
@@ -680,6 +737,9 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
         : "design";
     }
     case "add-text":
+    case "add-line":
+      return "design";
+    case "duplicate-elements":
       return "design";
     case "add-image":
       return "design";
@@ -2975,7 +3035,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
                   style: { ...element.style, seriesColors: [...element.style.seriesColors] },
                   contentBlockIds: [...element.contentBlockIds],
                 }
-              : element.type === "table"
+              : element.type === "line"
+                ? {
+                    ...element,
+                    id: crypto.randomUUID() as ElementId,
+                    frame: { ...element.frame },
+                    style: { ...element.style },
+                  }
+                : element.type === "table"
                 ? {
                     ...element,
                     id: crypto.randomUUID() as ElementId,
@@ -3133,6 +3200,32 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
 
+  if (command.type === "add-line") {
+    // 线条默认横着放在页面中间偏上，宽度够长、够细。
+    slide.elements.push({
+      id: crypto.randomUUID() as ElementId,
+      type: "line",
+      direction: command.direction,
+      frame: {
+        x: inches(3),
+        y: inches(3),
+        width: command.direction === "vertical" ? inches(0.02) : inches(4),
+        height: command.direction === "horizontal" ? inches(0.02) : inches(2),
+      },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "user",
+      style: {
+        stroke: "#7f2f1d",
+        strokeWidthPt: 2,
+        startArrow: "none",
+        endArrow: command.direction === "diagonal" ? "arrow" : "none",
+        dashed: false,
+      },
+    });
+    return;
+  }
+
   // 多选的三个命令在单元素解析之前处理：它们一次动一组对象，没有
   // 单一的 elementId。
   if (command.type === "align-elements") {
@@ -3195,6 +3288,25 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
 
+  if (command.type === "duplicate-elements") {
+    // 整组复制是一个意图，所以是一个命令、一个撤销项。
+    // 副本插在整组的最后面之后，保持它们原来的相对顺序。
+    const offset = inches(0.2);
+    const sources = command.elementIds
+      .map((id) => slide.elements.find((item) => item.id === id))
+      .filter((item): item is SlideElement => Boolean(item) && !item!.locked);
+    if (sources.length === 0) return;
+    const lastIndex = Math.max(...sources.map((item) => slide.elements.findIndex((other) => other.id === item.id)));
+    const copies = sources.map((item) => {
+      const copy = copyElementForPaste(item, offset);
+      // A copy is user-owned even when its source was generated.
+      copy.origin = "user";
+      return copy;
+    });
+    slide.elements.splice(lastIndex + 1, 0, ...copies);
+    return;
+  }
+
   const element = slide.elements.find((item) => item.id === command.elementId);
   if (!element) throw new Error("ELEMENT_NOT_FOUND");
   if (command.type === "set-element-lock") {
@@ -3205,52 +3317,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "duplicate-element") {
     const sourceIndex = slide.elements.findIndex((item) => item.id === command.elementId);
     const offset = inches(0.2);
-    const duplicate =
-      element.type === "text"
-        ? {
-            ...element,
-            id: crypto.randomUUID() as ElementId,
-            contentRef: "decorative" as const,
-            frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu },
-            style: { ...element.style },
-            ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
-          }
-        : element.type === "shape"
-          ? {
-              ...element,
-              id: crypto.randomUUID() as ElementId,
-              frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu },
-              style: { ...element.style },
-            }
-          : element.type === "chart"
-            ? {
-                ...element,
-                id: crypto.randomUUID() as ElementId,
-                frame: { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu },
-                style: { ...element.style, seriesColors: [...element.style.seriesColors] },
-                contentBlockIds: [...element.contentBlockIds],
-              }
-            : element.type === "table"
-              ? {
-                  ...element,
-                  id: crypto.randomUUID() as ElementId,
-                  frame: {
-                    ...element.frame,
-                    x: (element.frame.x + offset) as Emu,
-                    y: (element.frame.y + offset) as Emu,
-                  },
-                  style: { ...element.style },
-                }
-              : {
-                  ...element,
-                  id: crypto.randomUUID() as ElementId,
-                  frame: {
-                    ...element.frame,
-                    x: (element.frame.x + offset) as Emu,
-                    y: (element.frame.y + offset) as Emu,
-                  },
-                  source: { ...element.source },
-                };
+    const duplicate = copyElementForPaste(element, offset);
     // A copy is user-owned even when its source was generated.
     duplicate.origin = "user";
     slide.elements.splice(sourceIndex + 1, 0, duplicate);
@@ -3314,6 +3381,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "shape") throw new Error("ELEMENT_NOT_SHAPE");
     assertShapeStyle(command.style);
     element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-line-style") {
+    if (element.type !== "line") throw new Error("ELEMENT_NOT_LINE");
+    assertLineStyle(command.style);
+    element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-line-direction") {
+    if (element.type !== "line") throw new Error("ELEMENT_NOT_LINE");
+    if (command.direction !== "horizontal" && command.direction !== "vertical" && command.direction !== "diagonal")
+      throw new Error("INVALID_LINE_DIRECTION");
+    element.direction = command.direction;
     return;
   }
   if (command.type === "set-chart-style") {

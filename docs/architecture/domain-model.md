@@ -38,7 +38,7 @@ interface PresentationDocument {
 
 ```ts
 type SlideElement =
-  TextElement | ShapeElement | ImageElement | TableElement | ChartElement | GroupElement | Scene3DElement;
+  TextElement | ShapeElement | LineElement | ImageElement | TableElement | ChartElement | GroupElement | Scene3DElement;
 
 interface ElementBase {
   id: ElementId;
@@ -53,6 +53,8 @@ interface ElementBase {
 ```
 
 每个联合成员拥有自己的 `style` 和数据结构，不使用无约束的 `Record<string, unknown>`。颜色、线型、字体、裁剪、对齐等均定义为可校验值对象。
+
+线条是独立成员而不是"很扁的矩形"：它没有填充，只有描边色、线宽、两端箭头和虚线标志。导出时写成原生线条对象，箭头与虚线必须真的进入 OOXML，不能只留在画布上。详见 [0038 线条是独立元素类型](decisions/0038-line-element-and-fit-to-window.md)。
 
 `origin` 只用于设计层重排，不参与内容哈希。缺少该字段的旧文档按保守规则推断来源；无法证明属于生成构图的对象必须保留。设计层重排复用已审核的 `slide.content`，不改变内容 revision，也不能覆盖用户添加的图片或文本。详见 [0007 内容感知的版式选择](decisions/0007-content-aware-layout-selection.md)。
 

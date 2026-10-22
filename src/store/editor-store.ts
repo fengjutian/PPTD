@@ -93,7 +93,7 @@ export const useEditorStore = create<EditorState>((set) => ({
       // Design edits on the selected element must not drop the selection, otherwise
       // handles disappear after a drag and repeated keyboard nudges stop working.
       let selectedElementIds = state.selectedElementIds;
-      if (command.type === "add-text" || command.type === "add-shape" || command.type === "add-image") {
+      if (command.type === "add-text" || command.type === "add-shape" || command.type === "add-image" || command.type === "add-line") {
         selectedElementIds = [document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id];
       }
       if (command.type === "duplicate-element") {
@@ -102,6 +102,16 @@ export const useEditorStore = create<EditorState>((set) => ({
           .find((item) => item.id === command.slideId)!
           .elements.findIndex((item) => item.id === command.elementId);
         selectedElementIds = [slide.elements[sourceIndex + 1]!.id];
+      }
+      if (command.type === "duplicate-elements") {
+        // 复制整组后选中这一组副本：用户能立刻看出复制出了什么。
+        const slide = document.slides.find((item) => item.id === command.slideId)!;
+        const lastIndex = Math.max(
+          ...command.elementIds.map((id) => slide.elements.findIndex((item) => item.id === id)),
+        );
+        selectedElementIds = slide.elements
+          .slice(lastIndex + 1, lastIndex + 1 + command.elementIds.length)
+          .map((item) => item.id);
       }
       if (command.type === "set-element-lock") selectedElementIds = [command.elementId];
       if (command.type === "delete-element")

@@ -18,6 +18,7 @@ import {
   Info,
   LayoutDashboard,
   Magnet,
+  Minus,
   MoveHorizontal,
   MoveVertical,
   MousePointer2,
@@ -35,7 +36,7 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EMU_PER_INCH,
   emu,
@@ -59,6 +60,7 @@ import { useCanvasGuidesStore } from "../store/canvas-guides-store";
 import { useGroupDragStore } from "../store/group-drag-store";
 import { unionFrame } from "../core/commands/arrange";
 import { useMarqueeSelection } from "../features/editor/use-marquee-selection";
+import { fitZoom } from "../core/rendering/viewport";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
@@ -661,7 +663,7 @@ export function App() {
   const [aiImageBusy, setAiImageBusy] = useState(false);
   /** AI 配图失败的原因，对话框里如实显示。 */
   const [aiImageError, setAiImageError] = useState<string>();
-  const clipboardElementId = useRef<ElementId | null>(null);
+  const clipboardElementIds = useRef<ElementId[]>([]);
   const gridEnabled = useCanvasGuidesStore((s) => s.gridEnabled);
   const gridSnapEnabled = useCanvasGuidesStore((s) => s.gridSnapEnabled);
   const snapEnabled = useCanvasGuidesStore((s) => s.snapEnabled);
@@ -690,6 +692,48 @@ export function App() {
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
+
+  // "适应窗口"要按容器实际大小算，不能写死 100%。
+  const workspaceRef = useRef<HTMLElement>(null);
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const node = workspaceRef.current;
+    if (!node) return;
+    const measure = () => {
+      // clientWidth 已经扣掉了滚动条，但 padding 还在里面，要再减一次。
+      const style = window.getComputedStyle(node);
+      const paddingX = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight);
+      const paddingY = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+      const width = Math.max(node.clientWidth - paddingX, 0);
+      const height = Math.max(node.clientHeight - paddingY, 0);
+      setViewport((current) =>
+        Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1
+          ? current
+          : { width, height },
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const fitToWindow = useCallback(() => {
+    const node = workspaceRef.current;
+    const style = node ? window.getComputedStyle(node) : null;
+    const paddingX = style ? Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight) : 0;
+    const paddingY = style ? Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom) : 0;
+    const width = node ? Math.max(node.clientWidth - paddingX, 0) : viewport.width;
+    const height = node ? Math.max(node.clientHeight - paddingY, 0) : viewport.height;
+    setZoom(
+      fitZoom({
+        availableWidth: width,
+        availableHeight: height,
+        pageWidth: document.pageSize.width,
+        pageHeight: document.pageSize.height,
+        baseWidth: CANVAS_WIDTH,
+      }),
+    );
+  }, [document.pageSize.width, document.pageSize.height, viewport.width, viewport.height]);
   useEffect(() => {
     void loadSettings()
       .then((settings) => {
@@ -1924,24 +1968,30 @@ export function App() {
         return;
       }
       if (shortcut === "copy-element") {
-        if (!selected) return;
+        if (selectedElementIds.length === 0) return;
         event.preventDefault();
-        clipboardElementId.current = selected.id;
-        setTaskStatus("已复制对象，可用 Ctrl+V 粘贴");
+        // 剪贴板记的是这一组对象的 id，粘贴时按当时的位置重新复制。
+        clipboardElementIds.current = [...selectedElementIds];
+        setTaskStatus(
+          selectedElementIds.length > 1
+            ? `已复制 ${selectedElementIds.length} 个对象，可用 Ctrl+V 粘贴`
+            : "已复制对象，可用 Ctrl+V 粘贴",
+        );
         return;
       }
       if (shortcut === "paste-element") {
-        const sourceId = clipboardElementId.current;
-        if (!sourceId) {
+        const sourceIds = clipboardElementIds.current;
+        if (!sourceIds || sourceIds.length === 0) {
           setTaskStatus("没有可粘贴的对象");
           return;
         }
-        if (!activeSlide.elements.some((element) => element.id === sourceId)) {
+        const available = sourceIds.filter((id) => activeSlide.elements.some((element) => element.id === id));
+        if (available.length === 0) {
           setTaskStatus("剪贴板中的对象不在当前页面");
           return;
         }
         event.preventDefault();
-        execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: sourceId });
+        execute({ type: "duplicate-elements", slideId: activeSlide.id, elementIds: available });
         return;
       }
       if (!selected || selected.locked) return;
@@ -1979,6 +2029,7 @@ export function App() {
     redo,
     redoStack.length,
     selected,
+    selectedElementIds,
     undo,
     undoStack.length,
   ]);
@@ -2061,6 +2112,18 @@ export function App() {
               onClick={() => execute({ type: "add-shape", slideId: activeSlide.id, shape: "ellipse" })}
             >
               <Circle />
+            </ToolButton>
+            <ToolButton
+              label="直线"
+              onClick={() => execute({ type: "add-line", slideId: activeSlide.id, direction: "horizontal" })}
+            >
+              <Minus />
+            </ToolButton>
+            <ToolButton
+              label="箭头"
+              onClick={() => execute({ type: "add-line", slideId: activeSlide.id, direction: "diagonal" })}
+            >
+              <ArrowRight />
             </ToolButton>
             <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}>
               <ImagePlus />
@@ -2256,7 +2319,7 @@ export function App() {
             )}
           </aside>
 
-          <main className="workspace">
+          <main className="workspace" ref={workspaceRef}>
             <div className="canvas-ruler">13.33 × 7.5 in</div>
             <div
               className="slide-canvas"
@@ -3115,7 +3178,7 @@ export function App() {
               >
                 −
               </button>
-              <button type="button" className="zoom" title="适应窗口" onClick={() => setZoom(1)}>
+              <button type="button" className="zoom" title="适应窗口" onClick={fitToWindow}>
                 {Math.round(zoom * 100)}%
               </button>
               <button

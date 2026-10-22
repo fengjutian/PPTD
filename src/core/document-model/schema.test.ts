@@ -7,6 +7,7 @@ import versionFiveFixture from "./__fixtures__/v5-document.json";
 import versionSixFixture from "./__fixtures__/v6-document.json";
 import versionSevenFixture from "./__fixtures__/v7-document.json";
 import versionNineFixture from "./__fixtures__/v9-document.json";
+import versionTenFixture from "./__fixtures__/v10-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -85,6 +86,46 @@ describe("presentation document schema", () => {
     const picture = migrated.slides[0]!.elements[0]!;
     expect(picture.type === "image" ? picture.placement : undefined).toBeUndefined();
     expect(versionNineFixture.schemaVersion).toBe(9);
+  });
+
+  it("migrates the fixed version 10 fixture and invents no line", () => {
+    const migrated = parsePresentationDocument(versionTenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.elements).toHaveLength(1);
+    // A version 10 document predates the line, so the migration keeps every
+    // page and every object and simply draws nothing extra.
+    expect(migrated.slides[0]!.elements.some((element) => element.type === "line")).toBe(false);
+    expect(versionTenFixture.schemaVersion).toBe(10);
+  });
+
+  it("accepts a native line with arrow heads and a dash pattern", () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "line",
+      direction: "diagonal",
+      frame: { x: 0 as never, y: 0 as never, width: 1_000_000 as never, height: 500_000 as never },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "user",
+      style: { stroke: "#7f2f1d", strokeWidthPt: 2, startArrow: "none", endArrow: "arrow", dashed: true },
+    });
+    expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
+  });
+
+  it("rejects a line whose style does not round-trip", () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "line",
+      direction: "horizontal",
+      frame: { x: 0 as never, y: 0 as never, width: 1_000_000 as never, height: 1_000 as never },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "user",
+      style: { stroke: "#7f2f1d", strokeWidthPt: 2, startArrow: "triangle" as never, endArrow: "arrow", dashed: false },
+    });
+    expect(() => presentationDocumentSchema.parse(document)).toThrow();
   });
 
   it("accepts a native table that points at a reviewed table block", () => {

@@ -112,7 +112,7 @@ describe("设计质检阶段", () => {
       vision: {
         available: true,
         review: async (_render, _goal, indexes) => {
-          if (indexes.includes(6)) throw new Error("AI_REQUEST_TIMEOUT");
+          if (indexes?.includes(6)) throw new Error("AI_REQUEST_TIMEOUT");
           return passingReview;
         },
         planRepairs: async () => ({ repairs: [] }),

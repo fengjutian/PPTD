@@ -2,6 +2,7 @@ import { type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } fro
 import { type Slide, type SlideElement } from "../../core/document-model";
 import { ChartView } from "./ChartView";
 import { CroppedImage } from "./CroppedImage";
+import { LineView } from "./LineView";
 import { RichText } from "./RichText";
 import { TableView } from "./TableView";
 import { ptToPx, type SceneScale } from "./scene-metrics";
@@ -37,8 +38,8 @@ export function SlideElementContent({ element, slide, scale, imageAlt }: SlideEl
       />
     );
   }
-  if (element.type === "image") return <CroppedImage element={element} className="image-fill" alt={imageAlt} />;
-  if (element.type === "chart") return <ChartView element={element} slide={slide} scale={scale} />;
+  if (element.type === "line") return <LineView element={element} scale={scale} />;
+  if (element.type === "image") return <CroppedImage element={element} className="image-fill" alt={imageAlt} />;  if (element.type === "chart") return <ChartView element={element} slide={slide} scale={scale} />;
   return <TableView element={element} slide={slide} scale={scale} />;
 }
 

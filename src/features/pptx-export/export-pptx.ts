@@ -271,6 +271,20 @@ export async function buildPptx(
             ? { rectRadius: Math.min(element.style.radiusPt / 72, position.w / 2, position.h / 2) }
             : {}),
         });
+      } else if (element.type === "line") {
+        // A native line, not a thin rectangle: the arrow heads and the dash
+        // pattern have to stay editable in PowerPoint.
+        slide.addShape(pptx.ShapeType.line, {
+          ...position,
+          fill: { type: "none" },
+          line: {
+            color: color(element.style.stroke),
+            width: element.style.strokeWidthPt,
+            ...(element.style.dashed ? { dashType: "dash" as const } : {}),
+            ...(element.style.startArrow === "arrow" ? { beginArrowType: "arrow" as const } : {}),
+            ...(element.style.endArrow === "arrow" ? { endArrowType: "arrow" as const } : {}),
+          },
+        });
       } else if (element.type === "chart") {
         // A native chart, not a picture of a chart: the numbers stay editable
         // in PowerPoint and the file keeps the data of the page.

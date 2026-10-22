@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 
-export const CURRENT_SCHEMA_VERSION = 10 as const;
+export const CURRENT_SCHEMA_VERSION = 11 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -216,7 +216,7 @@ const slideSchema = z.object({
       .optional(),
   }),
   elements: z.array(
-    z.discriminatedUnion("type", [textElement, shapeElement, imageElement, chartElement, tableElement]),
+    z.discriminatedUnion("type", [textElement, shapeElement, lineElement, imageElement, chartElement, tableElement]),
   ),
   layoutId: z.string().uuid().optional(),
 });
@@ -278,6 +278,11 @@ function validateLayoutReferences(document: DocumentShape, context: z.Refinement
 
 export const presentationDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(CURRENT_SCHEMA_VERSION) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionTenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(10) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
@@ -350,6 +355,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 10 adds an explicit page-background picture placement. Existing
   // pictures keep their previous placement and no visual object is invented.
   9: (document) => ({ ...versionNineDocumentSchema.parse(document), schemaVersion: 10 }),
+  // Version 11 adds the line element. A version 10 document has no line, so it
+  // keeps every page and every object and simply draws nothing extra.
+  10: (document) => ({ ...versionTenDocumentSchema.parse(document), schemaVersion: 11 }),
 };
 
 export function parsePresentationDocument(input: unknown) {
