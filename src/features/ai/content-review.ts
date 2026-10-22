@@ -1,5 +1,5 @@
 import { TABLE_MAX_COLUMNS } from "../../core/document-model/table-data";
-import { assessLayoutCapacity, type LayoutCapacityNote } from "../../core/commands/layout-capacity";
+import { assessLayoutCapacity, type CapacityBlockFacts, type LayoutCapacityNote } from "../../core/commands/layout-capacity";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
 import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
 
@@ -111,10 +111,7 @@ export function slideMetrics(slide: DraftSlide): SlideMetrics {
  * block. The review screen hangs every note on the part it talks about, so
  * the writer reads the advice next to the text it is about.
  */
-export type SlideCapacityNote = LayoutCapacityNote & {
-  /** The block the note belongs to. A page level note has none. */
-  blockIndex?: number;
-};
+export type SlideCapacityNote = LayoutCapacityNote;
 
 /**
  * What the reviewed copy does to the page it will be laid out on.
@@ -125,33 +122,43 @@ export type SlideCapacityNote = LayoutCapacityNote & {
  * writer discover the overflow in the exported file.
  */
 export function slideCapacityNotes(slide: DraftSlide, index: number): SlideCapacityNote[] {
-  const bulletIndexes: number[] = [];
   const bulletItems: string[] = [];
-  let comparisonIndex: number | undefined;
-  let comparison: { leftItems: string[]; rightItems: string[] } | undefined;
-  // The blocks are walked as they are stored, so the index of a note is the
-  // index of the block the review screen renders.
-  slide.blocks.forEach((block, blockIndex) => {
-    if (block.type === "bullet-list") {
-      bulletIndexes.push(blockIndex);
-      bulletItems.push(...block.items.filter((item) => item.trim()));
-    }
-    if (block.type === "comparison" && !comparison) {
-      comparisonIndex = blockIndex;
-      comparison = { leftItems: block.leftItems.filter((item) => item.trim()), rightItems: block.rightItems.filter((item) => item.trim()) };
+  let itemBlockIndex: number | undefined;
+  // The blocks are described as they are stored, so the index of a note is
+  // the index of the block the review screen renders.
+  const blocks: CapacityBlockFacts[] = slide.blocks.map((block, blockIndex) => {
+    switch (block.type) {
+      case "bullet-list": {
+        const items = block.items.filter((item) => item.trim());
+        if (itemBlockIndex === undefined && items.length > 0) {
+          itemBlockIndex = blockIndex;
+          bulletItems.push(...items);
+        }
+        return { index: blockIndex, type: block.type, itemCount: items.length };
+      }
+      case "comparison": {
+        const leftItems = block.leftItems.filter((item) => item.trim());
+        const rightItems = block.rightItems.filter((item) => item.trim());
+        return { index: blockIndex, type: block.type, itemCount: leftItems.length + rightItems.length, leftItems, rightItems };
+      }
+      case "timeline":
+      case "process":
+        return { index: blockIndex, type: block.type, itemCount: block.items.filter((item) => item.label.trim() || item.text.trim()).length };
+      default:
+        return { index: blockIndex, type: block.type, itemCount: 1 };
     }
   });
-  const notes = assessLayoutCapacity({
+  // The points of a page come from its bullet list, and from the body copy on
+  // the legacy drafts that never produced a structured block.
+  const items = bulletItems.length > 0 ? bulletItems : splitBodyItems(slide.body);
+  return assessLayoutCapacity({
     index,
     title: slide.title,
-    items: bulletItems.length > 0 ? bulletItems : splitBodyItems(slide.body),
+    items,
+    itemBlockIndex,
     bodyLength: slide.body.length,
-    comparison,
+    blocks,
   });
-  return notes.map((note) => ({
-    ...note,
-    blockIndex: note.scope === "items" ? bulletIndexes[0] : note.scope === "comparison" ? comparisonIndex : undefined,
-  }));
 }
 
 export function draftMetrics(draft: AiDraft): { characters: number; points: number } {

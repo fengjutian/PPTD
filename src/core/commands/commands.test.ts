@@ -607,6 +607,61 @@ describe("document commands", () => {
     expect(texts).toEqual(["方案对比", "方案 A", "• 稳定", "方案 B", "• 快速"]);
   });
 
+  it("keeps every reviewed point of a comparison column instead of cutting the last ones", () => {
+    const source = createDocument();
+    const leftItems = Array.from({ length: 8 }, (_, index) => `左${index + 1}`);
+    const rightItems = Array.from({ length: 8 }, (_, index) => `右${index + 1}`);
+    const content = { title: "方案对比", body: "保留的审核正文", speakerNotes: "", blocks: [{ type: "comparison" as const, leftLabel: "方案 A", rightLabel: "方案 B", leftItems, rightItems }] };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "对比", slides: [content], designs: [design] }));
+    const copy = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text).join("\n");
+    for (const item of [...leftItems, ...rightItems]) expect(copy).toContain(item);
+  });
+
+  it("keeps every reviewed step of a timeline and of a process", () => {
+    const source = createDocument();
+    const steps = Array.from({ length: 8 }, (_, index) => ({ label: `阶段${index + 1}`, text: `说明${index + 1}` }));
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const timeline = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "时间线", slides: [{ title: "里程碑", body: "", speakerNotes: "", blocks: [{ type: "timeline" as const, items: steps }] }], designs: [design] }));
+    const timelineCopy = timeline.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text).join("\n");
+    for (const step of steps) {
+      expect(timelineCopy).toContain(step.label);
+      expect(timelineCopy).toContain(step.text);
+    }
+
+    const process = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "流程", slides: [{ title: "实施流程", body: "", speakerNotes: "", blocks: [{ type: "process" as const, items: steps }] }], designs: [design] }));
+    const processCopy = process.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text).join("\n");
+    for (const step of steps) {
+      expect(processCopy).toContain(step.label);
+      expect(processCopy).toContain(step.text);
+    }
+  });
+
+  it("keeps every reviewed metric of a page", () => {
+    const source = createDocument();
+    const units = ["%", "万", "人", "单", "天", "次", "项"];
+    const metrics = Array.from({ length: 7 }, (_, index) => ({ type: "metric" as const, label: `指标${index + 1}`, value: `${index + 1}${units[index]}` }));
+    const content = { title: "核心指标", body: "指标说明", speakerNotes: "", blocks: metrics };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "指标", slides: [content], designs: [design] }));
+    const copy = result.slides[0]!.elements.filter((element) => element.type === "text").map((element) => element.text).join("\n");
+    for (const metric of metrics) {
+      expect(copy).toContain(metric.label);
+      expect(copy).toContain(metric.value);
+    }
+  });
+
+  it("keeps every reviewed metric of a page that is drawn as a chart", () => {
+    const source = createDocument();
+    const metrics = Array.from({ length: 7 }, (_, index) => ({ type: "metric" as const, label: `指标${index + 1}`, value: `${index + 1}%` }));
+    const content = { title: "核心指标", body: "", speakerNotes: "", blocks: metrics };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "指标", slides: [content], designs: [design] }));
+    const chart = result.slides[0]!.elements.find((element) => element.type === "chart");
+    const blocks = result.slides[0]!.content.blocks ?? [];
+    expect(chart?.type === "chart" && chart.contentBlockIds).toEqual(blocks.filter((block) => block.type === "metric").map((block) => block.id));
+  });
+
   it("renders metric blocks as value-first cards", () => {
     const source = createDocument();
     const content = { title: "核心指标", body: "指标说明", speakerNotes: "", blocks: [{ type: "metric" as const, label: "增长率", value: "42%" }, { type: "metric" as const, label: "客户数", value: "120" }] };

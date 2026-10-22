@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { bodyFromBlocks, sanitizeBlocks, sanitizeDraftForSave } from "../../services/ai-draft-content";
-import { aiDraftSchema, type AiDraft } from "../../services/ai-service";
+import { aiDraftSchema, chooseSlideLayout, type AiDraft } from "../../services/ai-service";
 import { ContentReview } from "./ContentReview";
 import {
   countCharacters,
@@ -14,6 +14,7 @@ import {
   outlineNavTarget,
   reviewIssues,
   slideCardScrollTop,
+  slideCapacityNotes,
   slideHasContent,
   slideMetrics,
   TABLE_REVIEW_MAX_COLUMNS,
@@ -109,6 +110,16 @@ describe("content review metrics", () => {
     const issues = reviewIssues(duplicated);
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({ kind: "duplicate-title", blocking: false, indexes: [0, 1] });
+  });
+
+  it("names every group of repeated titles instead of only the first one", () => {
+    const draft = createDraft();
+    const titles = ["甲", "甲", "乙", "乙"];
+    const repeated: AiDraft = { ...draft, slides: titles.map((title) => ({ ...draft.slides[0]!, title })) };
+    const issues = reviewIssues(repeated);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: "duplicate-title", blocking: false, indexes: [0, 1, 2, 3] });
+    expect(issues[0]!.message).toBe("2 组标题重复（第 1 页、第 2 页：甲；第 3 页、第 4 页：乙）");
   });
 
   it("moves the outline selection with arrow, Home and End keys", () => {
@@ -365,5 +376,80 @@ describe("content review layout", () => {
     expect(wideMarkup).toContain("还有 1 页表格超过上限");
     // The extra column can still be removed, so no column is read-only.
     expect(wideMarkup.match(/删除第 1 页表格第 \d+ 列/g)).toHaveLength(TABLE_REVIEW_MAX_COLUMNS + 1);
+  });
+});
+
+describe("layout pre-check", () => {
+  it("warns about a page that carries more copy than the layout can show", () => {
+    const draft = withSlideIds(createDraft());
+    const heavy: AiDraft = {
+      ...draft,
+      slides: [
+        draft.slides[0]!,
+        {
+          ...draft.slides[1]!,
+          title: "很长的标题会把标题框撑破所以必须改短一点才放得下并把正文挤到页面下面去",
+          body: "",
+          blocks: [{ type: "bullet-list", items: Array.from({ length: 7 }, (_, index) => `第 ${index + 1} 条要点`) }],
+        },
+      ],
+    };
+    const markup = renderReview(heavy);
+    expect(markup).toContain("排版预检");
+    expect(markup).toContain("超过卡片网格的 6 条上限");
+    expect(markup).toContain("标题框只放得下 1 行");
+    // The pre-check is advice, not a blocker: the page can still be confirmed.
+    expect(markup).not.toContain("还有 1 页缺少标题");
+  });
+
+  it("hangs the note of a point list on the list it talks about", () => {
+    const notes = slideCapacityNotes({ title: "标题", body: "", speakerNotes: "", plan, blocks: [{ type: "bullet-list", items: ["一", "二", "三"] }] }, 1);
+    expect(notes.map((note) => note.scope)).toContain("items");
+    expect(notes.every((note) => note.blockIndex === 0)).toBe(true);
+  });
+
+  it("describes the copy the same way the layout chooser reads it", () => {
+    // The advice and the layout have to come from the same thresholds, or the
+    // review screen describes a page the generator does not build.
+    const items = ["一条要点", "第二条要点", "第三条要点", "第四条要点", "第五条要点"];
+    const notes = slideCapacityNotes({ title: "标题", body: "", speakerNotes: "", plan, blocks: [{ type: "bullet-list", items }] }, 1);
+    expect(notes.find((note) => note.message.includes("卡片网格"))!.message).toContain("3 列");
+    expect(chooseSlideLayout({ index: 1, requested: "title-body", visualIntent: "structured-text", density: "medium", body: items.join("\n"), blocks: [{ type: "bullet-list", items }] })).toBe("cards");
+  });
+
+  it("shows the two sides of a comparison next to each other", () => {
+    const draft = withSlideIds(createDraft());
+    const comparison: AiDraft = {
+      ...draft,
+      slides: [
+        {
+          ...draft.slides[0]!,
+          title: "方案对比",
+          blocks: [{ type: "comparison", leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["稳定"], rightItems: ["快速"] }],
+        },
+        draft.slides[1]!,
+      ],
+    };
+    const markup = renderReview(comparison);
+    expect(markup).toContain("comparison-columns");
+    expect(markup.match(/comparison-column"/g)).toHaveLength(2);
+    expect(markup).toContain("第 1 页左侧标题");
+    expect(markup).toContain("第 1 页右侧标题");
+    // The left side comes before the right side, so the markup reads like the page.
+    expect(markup.indexOf("第 1 页左侧标题")).toBeLessThan(markup.indexOf("第 1 页右侧标题"));
+  });
+
+  it("warns about a comparison whose columns do not balance", () => {
+    const notes = slideCapacityNotes(
+      {
+        title: "方案对比",
+        body: "",
+        speakerNotes: "",
+        plan,
+        blocks: [{ type: "comparison", leftLabel: "方案 A", rightLabel: "方案 B", leftItems: ["一", "二", "三", "四"], rightItems: ["一"] }],
+      },
+      1,
+    );
+    expect(notes.find((note) => note.scope === "comparison")!.message).toContain("两栏相差 3 条");
   });
 });

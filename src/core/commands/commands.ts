@@ -686,19 +686,27 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(text(content.title, sectionTitle, templateTitleSize ?? 36, titleInk, true, "left", undefined, titleLuminance));
         if (content.body.trim()) slide.elements.push(text(content.body, sectionBody, templateBodySize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (timelineBlock) {
-        const timelineItems = timelineBlock.items.slice(0, 6);
+        // Every reviewed step is drawn. A timeline that cut its last steps
+        // would drop reviewed copy from the exported file, so the row narrows
+        // and the type shrinks instead.
+        const timelineItems = timelineBlock.items;
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         const startX = contentBox.x + contentBox.width * 0.05; const endX = contentBox.x + contentBox.width * 0.95;
         const lineY = contentBox.y + contentBox.height * 0.45;
-        const itemWidth = Math.min(0.22, contentBox.width * 0.18);
+        const stepGap = timelineItems.length > 1 ? (endX - startX) / (timelineItems.length - 1) : endX - startX;
+        const itemWidth = Math.min(0.22, contentBox.width * 0.18, stepGap * 0.92);
         slide.elements.push(shape(frame(startX, lineY, endX - startX, 0.008), design.accent));
         timelineItems.forEach((item, itemIndex) => {
-          const x = timelineItems.length === 1 ? (startX + endX) / 2 : startX + itemIndex * ((endX - startX) / (timelineItems.length - 1));
+          const x = timelineItems.length === 1 ? (startX + endX) / 2 : startX + itemIndex * stepGap;
           const above = itemIndex % 2 === 0;
           slide.elements.push(shape(circleFrame(x, lineY - 0.15 / pageHeightIn, 0.3), design.accent, "ellipse"));
-          slide.elements.push(text(item.label, frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.30 : lineY + contentBox.height * 0.11, itemWidth, contentBox.height * 0.11), 15, design.accent, true, "center", undefined, contentTextLuminance));
-          slide.elements.push(text(item.text, frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.18 : lineY + contentBox.height * 0.23, itemWidth, contentBox.height * 0.22), 13, bodyInk, false, "center", undefined, contentTextLuminance));
+          const labelFrame = frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.30 : lineY + contentBox.height * 0.11, itemWidth, contentBox.height * 0.11);
+          const labelSize = fittedFontSize(item.label, labelFrame, 15, 10);
+          slide.elements.push(text(item.label, labelFrame, labelSize, design.accent, true, "center", undefined, contentTextLuminance));
+          const stepTextFrame = frame(x - itemWidth / 2, above ? lineY - contentBox.height * 0.18 : lineY + contentBox.height * 0.23, itemWidth, contentBox.height * 0.22);
+          const stepTextSize = fittedFontSize(item.text, stepTextFrame, 13, 9);
+          slide.elements.push(text(item.text, stepTextFrame, stepTextSize, bodyInk, false, "center", undefined, contentTextLuminance));
         });
       } else if (comparisonBlock) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
@@ -752,7 +760,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           });
         }
       } else if (metricBlocks.length > 0) {
-        const metrics = metricBlocks.slice(0, 6);
+        // Every reviewed metric is drawn. A page that cut its last metrics
+        // would drop reviewed numbers from the exported file, so the grid
+        // grows a row and the type shrinks instead.
+        const metrics = metricBlocks;
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         // The metrics of a page are the reviewed numbers of the page. When they
@@ -804,12 +815,21 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             const width = cellWidth - 0.025;
             const x = contentBox.x + column * cellWidth; const y = gridTop + row * (cardHeight + cardGap);
             slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
-            slide.elements.push(text(metric.value, centeredBlock(metric.value, { x: x + 0.02, y: y + cardHeight * 0.10, width: width - 0.04, height: cardHeight * 0.46 }, valueSize), valueSize, design.accent, true, "center", undefined, cardLuminance));
-            slide.elements.push(text(metric.label, centeredBlock(metric.label, { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 }, labelSize), labelSize, bodyInk, false, "center", undefined, cardLuminance));
+            // The number and its label share a card that grows shorter with
+            // every extra row, so both are fitted to the card they sit in.
+            const valueFrame = centeredBlock(metric.value, { x: x + 0.02, y: y + cardHeight * 0.10, width: width - 0.04, height: cardHeight * 0.46 }, valueSize);
+            const fittedValueSize = fittedFontSize(metric.value, frame(valueFrame.x, valueFrame.y, valueFrame.width, valueFrame.height), valueSize, 12);
+            slide.elements.push(text(metric.value, valueFrame, fittedValueSize, design.accent, true, "center", undefined, cardLuminance));
+            const labelFrame = centeredBlock(metric.label, { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 }, labelSize);
+            const fittedLabelSize = fittedFontSize(metric.label, frame(labelFrame.x, labelFrame.y, labelFrame.width, labelFrame.height), labelSize, 9);
+            slide.elements.push(text(metric.label, labelFrame, fittedLabelSize, bodyInk, false, "center", undefined, cardLuminance));
           });
         }
       } else if (processBlock) {
-        const processItems = processBlock.items.slice(0, 6);
+        // Every reviewed step is drawn. A process that cut its last steps
+        // would drop reviewed copy from the exported file, so the row narrows
+        // and the type shrinks instead.
+        const processItems = processBlock.items;
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
         const stepGap = 0.03;
@@ -826,8 +846,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const badgeY = stepTop - 0.01 - badgeHeight / 2;
           slide.elements.push(shape(frame(x, stepTop, stepWidth, stepHeight), cardFill, "rectangle", cardStroke, 0.75), shape(circleFrame(x + 0.02, badgeY, badgeDiameter), accentFill, "ellipse"));
           slide.elements.push(text(String(itemIndex + 1), centeredBlock(String(itemIndex + 1), { x: x + 0.02, y: badgeY, width: badgeDiameter / pageWidthIn, height: badgeHeight }, badgeSize), badgeSize, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          slide.elements.push(text(item.label, centeredBlock(item.label, { x: x + 0.025, y: stepTop + stepHeight * 0.12, width: stepWidth - 0.05, height: stepHeight * 0.28 }, labelSize), labelSize, titleInk, true, "center", undefined, cardLuminance));
-          slide.elements.push(text(item.text, centeredBlock(item.text, { x: x + 0.025, y: stepTop + stepHeight * 0.44, width: stepWidth - 0.05, height: stepHeight * 0.46 }, textSize), textSize, bodyInk, false, "center", undefined, cardLuminance));
+          // The step card narrows with every extra step, so its label and its
+          // sentence are fitted to the card instead of spilling out of it.
+          const stepLabelFrame = centeredBlock(item.label, { x: x + 0.025, y: stepTop + stepHeight * 0.12, width: stepWidth - 0.05, height: stepHeight * 0.28 }, labelSize);
+          const fittedLabelSize = fittedFontSize(item.label, frame(stepLabelFrame.x, stepLabelFrame.y, stepLabelFrame.width, stepLabelFrame.height), labelSize, 9);
+          slide.elements.push(text(item.label, stepLabelFrame, fittedLabelSize, titleInk, true, "center", undefined, cardLuminance));
+          const stepCopyFrame = centeredBlock(item.text, { x: x + 0.025, y: stepTop + stepHeight * 0.44, width: stepWidth - 0.05, height: stepHeight * 0.46 }, textSize);
+          const fittedTextSize = fittedFontSize(item.text, frame(stepCopyFrame.x, stepCopyFrame.y, stepCopyFrame.width, stepCopyFrame.height), textSize, 9);
+          slide.elements.push(text(item.text, stepCopyFrame, fittedTextSize, bodyInk, false, "center", undefined, cardLuminance));
           if (itemIndex < processItems.length - 1) {
             const arrowHeight = pointsToFraction(22 * 1.2);
             slide.elements.push(text("→", frame(x + stepWidth, stepTop + stepHeight / 2 - arrowHeight / 2, stepGap, arrowHeight), 22, design.accent, true, "center", undefined, contentTextLuminance));

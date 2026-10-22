@@ -37,6 +37,12 @@ export const LAYOUT_CAPACITY = {
   /** A page that carries a pull quote beside its points holds three to five. */
   panelMinItems: 3,
   panelMaxItems: 5,
+  /**
+   * The most steps a timeline, a process or a metric row carries at a size a
+   * reader can still take in. More of them are still drawn, but every step
+   * gets a narrower box and a smaller type.
+   */
+  rowBlockMaxItems: 6,
 } as const;
 
 /**
@@ -93,12 +99,34 @@ export function contentHeightFraction(): number {
 }
 
 export type LayoutCapacitySeverity = "info" | "warning";
-export type LayoutCapacityScope = "title" | "items" | "comparison";
+export type LayoutCapacityScope = "title" | "items" | "comparison" | "block";
 
 export interface LayoutCapacityNote {
   severity: LayoutCapacitySeverity;
   scope: LayoutCapacityScope;
+  /** The block the note belongs to. A page level note has none. */
+  blockIndex?: number;
   message: string;
+}
+
+/** The kinds of blocks a page can carry. */
+export type CapacityBlockType = "paragraph" | "bullet-list" | "quote" | "metric" | "timeline" | "process" | "comparison" | "table-data";
+
+/**
+ * A block of a page, described the way the layout rules see it.
+ *
+ * The review screen passes the blocks it renders, with the position they
+ * occupy, so that a note can be shown next to the block it talks about.
+ */
+export interface CapacityBlockFacts {
+  /** The position of the block on the page, as the review screen renders it. */
+  index: number;
+  type: CapacityBlockType;
+  /** The visible units the block carries. */
+  itemCount: number;
+  /** The two sides of a comparison block. */
+  leftItems?: readonly string[];
+  rightItems?: readonly string[];
 }
 
 export interface LayoutCapacityInput {
@@ -107,10 +135,12 @@ export interface LayoutCapacityInput {
   title: string;
   /** The points the page will lay out, in the order they will be laid out. */
   items: readonly string[];
+  /** The block the points belong to. */
+  itemBlockIndex?: number;
   /** The body copy the page carries. */
   bodyLength: number;
-  /** The two sides of a comparison block, when the page carries one. */
-  comparison?: { leftItems: readonly string[]; rightItems: readonly string[] };
+  /** The blocks the page carries. */
+  blocks?: readonly CapacityBlockFacts[];
 }
 
 export interface CapacityOptions {
@@ -163,70 +193,104 @@ export function fitComparisonColumn(points: readonly string[], options: Capacity
  *
  * The notes are advisory: the writer decides how much a page is allowed to
  * say. What they must not do is learn about a limit only after the page has
- * been built, so every note names the limit it comes from.
+ * been built, so every note names the limit it comes from. A note also never
+ * claims a layout the copy does not force: the template is chosen later, and
+ * the advice here is about the copy itself.
  */
 export function assessLayoutCapacity(input: LayoutCapacityInput, options: CapacityOptions = {}): LayoutCapacityNote[] {
   const notes: LayoutCapacityNote[] = [];
   const points = input.items.map(stripListPrefix);
   const count = points.length;
+  const blocks = input.blocks ?? [];
+  const comparison = blocks.find((block) => block.type === "comparison");
+  const rowBlocks = blocks.filter((block) => block.type === "timeline" || block.type === "process");
+  const metricBlocks = blocks.filter((block) => block.type === "metric");
 
+  // A title that does not fit its box does not wrap, it pushes into the copy
+  // below it, so the writer has to know before the page is built.
   const titleWidthPt = ((DEFAULT_CONTENT_REGION.right - DEFAULT_CONTENT_REGION.left) * STANDARD_PAGE_WIDTH_EMU) / EMU_PER_POINT;
   const titleLines = estimateTextLines(input.title, titleWidthPt, TITLE_FONT_SIZE_PT, options.fontFamily);
-  if (titleLines > 1) {
-    notes.push({ severity: "warning", scope: "title", message: `标题 ${[...input.title].length} 字，在 ${TITLE_FONT_SIZE_PT}pt 标题框里会折成 ${titleLines} 行` });
+  if (input.title.trim() && titleLines > 1) {
+    notes.push({
+      severity: "warning",
+      scope: "title",
+      message: `标题 ${[...input.title.trim()].length} 字，标准版式下会折成 ${titleLines} 行，而标题框只放得下 1 行`,
+    });
   }
 
-  if (count === 1) {
-    notes.push({ severity: "info", scope: "items", message: "本页只有 1 条要点，会排成一整页正文，建议补到 2 条以上" });
-  } else if (count === LAYOUT_CAPACITY.splitMinItems) {
-    notes.push({ severity: "info", scope: "items", message: "本页 2 条要点会排成双栏，每栏只有 1 条" });
-  } else if (count > LAYOUT_CAPACITY.cardsMaxItems) {
-    notes.push({ severity: "warning", scope: "items", message: `本页 ${count} 条要点，超过卡片版式的 ${LAYOUT_CAPACITY.cardsMaxItems} 条上限，会排成双栏或整页正文` });
-  } else if (count >= LAYOUT_CAPACITY.cardsGridMinItems) {
-    const columns = count === 3 || count >= 5 ? 3 : 2;
-    notes.push({ severity: "info", scope: "items", message: `本页 ${count} 条要点，可排成 ${columns} 列卡片网格` });
-  }
+  // A page that carries a comparison or a row of steps is drawn by its own
+  // branch of the renderer, and the point count does not describe that page.
+  if (!comparison && rowBlocks.length === 0) {
+    if (input.index === 0) {
+      if (count >= LAYOUT_CAPACITY.cardsGridMinItems) {
+        notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `首页有 ${count} 条要点，会排成内容页而不是封面` });
+      } else if (input.bodyLength > LAYOUT_CAPACITY.coverBodyLength) {
+        notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `首页正文 ${input.bodyLength} 字，超过封面 ${LAYOUT_CAPACITY.coverBodyLength} 字上限` });
+      }
+    } else if (count === 1) {
+      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: "本页只有 1 条要点，会排成一整栏正文，建议补到 2 条以上" });
+    } else if (count === LAYOUT_CAPACITY.splitMinItems) {
+      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: "本页 2 条要点，排成双栏时每栏只有 1 条" });
+    } else if (count > LAYOUT_CAPACITY.cardsMaxItems) {
+      notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `本页 ${count} 条要点，超过卡片网格的 ${LAYOUT_CAPACITY.cardsMaxItems} 条上限，会挤成双栏或整栏正文，建议拆页` });
+    } else if (count >= LAYOUT_CAPACITY.cardsGridMinItems) {
+      const columns = count === 3 || count >= 5 ? 3 : 2;
+      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: `本页 ${count} 条要点，可排成 ${columns} 列卡片网格` });
+    }
 
-  let longest = { index: -1, length: 0 };
-  points.forEach((point, pointIndex) => {
-    const length = [...point].length;
-    if (length > longest.length) longest = { index: pointIndex, length };
-  });
-  const cardLimit = longest.length > LAYOUT_CAPACITY.cardItemLengthLimit ? LAYOUT_CAPACITY.cardItemLengthLimit : LAYOUT_CAPACITY.cardItemLength;
-  if (longest.length > cardLimit) {
-    notes.push({ severity: "warning", scope: "items", message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过卡片版式 ${cardLimit} 字上限，本页会排成双栏或整页正文` });
-  } else if (longest.length > LAYOUT_CAPACITY.shortItemLength) {
-    notes.push({ severity: "warning", scope: "items", message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过单行 ${LAYOUT_CAPACITY.shortItemLength} 字，本页会排成双栏而不是卡片` });
-  }
+    let longest = { index: -1, length: 0 };
+    points.forEach((point, pointIndex) => {
+      const length = [...point].length;
+      if (length > longest.length) longest = { index: pointIndex, length };
+    });
+    if (longest.length > LAYOUT_CAPACITY.cardItemLengthLimit) {
+      notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过卡片版式 ${LAYOUT_CAPACITY.cardItemLengthLimit} 字上限，这页排不成卡片` });
+    } else if (longest.length > LAYOUT_CAPACITY.shortItemLength) {
+      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: `第 ${longest.index + 1} 条 ${longest.length} 字，超过单行 ${LAYOUT_CAPACITY.shortItemLength} 字，卡片里会折行` });
+    }
 
-  if (input.bodyLength > LAYOUT_CAPACITY.cardBodyLengthLimit) {
-    notes.push({ severity: "warning", scope: "items", message: `正文 ${input.bodyLength} 字，超过卡片版式 ${LAYOUT_CAPACITY.cardBodyLengthLimit} 字上限，本页会排成双栏或整页正文` });
-  } else if (input.bodyLength > LAYOUT_CAPACITY.cardBodyLength) {
-    notes.push({ severity: "info", scope: "items", message: `正文 ${input.bodyLength} 字，卡片网格最多排 ${LAYOUT_CAPACITY.cardBodyLength} 字` });
-  }
-
-  if (input.index === 0) {
-    if (count >= LAYOUT_CAPACITY.cardsGridMinItems) {
-      notes.push({ severity: "warning", scope: "items", message: `首页有 ${count} 条要点，会排成卡片页而不是封面` });
-    } else if (count <= LAYOUT_CAPACITY.coverMaxItems && input.bodyLength > LAYOUT_CAPACITY.coverBodyLength) {
-      notes.push({ severity: "warning", scope: "items", message: `首页正文 ${input.bodyLength} 字，超过封面 ${LAYOUT_CAPACITY.coverBodyLength} 字上限` });
+    if (input.bodyLength > LAYOUT_CAPACITY.cardBodyLengthLimit) {
+      notes.push({ severity: "warning", scope: "items", blockIndex: input.itemBlockIndex, message: `正文 ${input.bodyLength} 字，超过卡片版式 ${LAYOUT_CAPACITY.cardBodyLengthLimit} 字上限，这页排不成卡片网格` });
+    } else if (input.bodyLength > LAYOUT_CAPACITY.cardBodyLength) {
+      notes.push({ severity: "info", scope: "items", blockIndex: input.itemBlockIndex, message: `正文 ${input.bodyLength} 字，卡片网格最多排 ${LAYOUT_CAPACITY.cardBodyLength} 字` });
     }
   }
 
-  if (input.comparison) {
-    const left = input.comparison.leftItems.map(stripListPrefix);
-    const right = input.comparison.rightItems.map(stripListPrefix);
+  // A row of steps is drawn at a fixed width per step, so every step beyond
+  // the comfortable count takes its width from its neighbours.
+  for (const block of rowBlocks) {
+    if (block.itemCount <= LAYOUT_CAPACITY.rowBlockMaxItems) continue;
+    const label = block.type === "timeline" ? "时间线" : "流程";
+    notes.push({
+      severity: "warning",
+      scope: "block",
+      blockIndex: block.index,
+      message: `${label}有 ${block.itemCount} 项，会全部排上，但每项都被压窄、文字明显变小，建议拆页`,
+    });
+  }
+  if (metricBlocks.length > LAYOUT_CAPACITY.rowBlockMaxItems) {
+    notes.push({
+      severity: "warning",
+      scope: "block",
+      blockIndex: metricBlocks[0]!.index,
+      message: `本页有 ${metricBlocks.length} 个指标，会排成 ${Math.ceil(metricBlocks.length / 3)} 行卡片，卡片高度被压小，建议拆页`,
+    });
+  }
+
+  if (comparison) {
+    const left = (comparison.leftItems ?? []).map(stripListPrefix);
+    const right = (comparison.rightItems ?? []).map(stripListPrefix);
     const difference = Math.abs(left.length - right.length);
     if (difference >= 2) {
-      notes.push({ severity: "warning", scope: "comparison", message: `左栏 ${left.length} 条、右栏 ${right.length} 条，两栏相差 ${difference} 条，版面会失衡` });
+      notes.push({ severity: "warning", scope: "comparison", blockIndex: comparison.index, message: `左栏 ${left.length} 条、右栏 ${right.length} 条，两栏相差 ${difference} 条，版面会失衡` });
     }
     const side = left.length >= right.length ? "左栏" : "右栏";
     const longer = left.length >= right.length ? left : right;
     const fit = fitComparisonColumn(longer, options);
     if (!fit.fits) {
-      notes.push({ severity: "warning", scope: "comparison", message: `${side} ${longer.length} 条排不下 ${CONTENT_REGION.comparisonMinimumItemFontSizePt}pt 的可读下限，导出时会溢出` });
+      notes.push({ severity: "warning", scope: "comparison", blockIndex: comparison.index, message: `${side} ${longer.length} 条排不下 ${CONTENT_REGION.comparisonMinimumItemFontSizePt}pt 的可读下限，导出时会溢出` });
     } else if (fit.fittedFontSizePt < fit.preferredFontSizePt) {
-      notes.push({ severity: "info", scope: "comparison", message: `${side} ${longer.length} 条要排到 ${fit.fittedFontSizePt}pt 才排得下` });
+      notes.push({ severity: "info", scope: "comparison", blockIndex: comparison.index, message: `${side} ${longer.length} 条要排到 ${fit.fittedFontSizePt}pt 才排得下` });
     }
   }
 
