@@ -1,4 +1,5 @@
 import { TABLE_MAX_COLUMNS } from "../../core/document-model/table-data";
+import { assessLayoutCapacity, type LayoutCapacityNote } from "../../core/commands/layout-capacity";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
 import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
 
@@ -102,6 +103,57 @@ export function slideMetrics(slide: DraftSlide): SlideMetrics {
   };
 }
 
+/**
+ * A capacity note with the block it belongs to.
+ *
+ * A note about the title belongs to the page, a note about the points belongs
+ * to the point list and a note about the columns belongs to the comparison
+ * block. The review screen hangs every note on the part it talks about, so
+ * the writer reads the advice next to the text it is about.
+ */
+export type SlideCapacityNote = LayoutCapacityNote & {
+  /** The block the note belongs to. A page level note has none. */
+  blockIndex?: number;
+};
+
+/**
+ * What the reviewed copy does to the page it will be laid out on.
+ *
+ * The rules live in the core, next to the renderer that applies them, so the
+ * advice cannot drift away from the page it describes. The review screen
+ * shows the result as a warning next to the text instead of letting the
+ * writer discover the overflow in the exported file.
+ */
+export function slideCapacityNotes(slide: DraftSlide, index: number): SlideCapacityNote[] {
+  const bulletIndexes: number[] = [];
+  const bulletItems: string[] = [];
+  let comparisonIndex: number | undefined;
+  let comparison: { leftItems: string[]; rightItems: string[] } | undefined;
+  // The blocks are walked as they are stored, so the index of a note is the
+  // index of the block the review screen renders.
+  slide.blocks.forEach((block, blockIndex) => {
+    if (block.type === "bullet-list") {
+      bulletIndexes.push(blockIndex);
+      bulletItems.push(...block.items.filter((item) => item.trim()));
+    }
+    if (block.type === "comparison" && !comparison) {
+      comparisonIndex = blockIndex;
+      comparison = { leftItems: block.leftItems.filter((item) => item.trim()), rightItems: block.rightItems.filter((item) => item.trim()) };
+    }
+  });
+  const notes = assessLayoutCapacity({
+    index,
+    title: slide.title,
+    items: bulletItems.length > 0 ? bulletItems : splitBodyItems(slide.body),
+    bodyLength: slide.body.length,
+    comparison,
+  });
+  return notes.map((note) => ({
+    ...note,
+    blockIndex: note.scope === "items" ? bulletIndexes[0] : note.scope === "comparison" ? comparisonIndex : undefined,
+  }));
+}
+
 export function draftMetrics(draft: AiDraft): { characters: number; points: number } {
   return draft.slides.reduce(
     (total, slide) => {
@@ -149,12 +201,15 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
   }
   const duplicates = [...byTitle.entries()].filter(([, indexes]) => indexes.length > 1);
   if (duplicates.length > 0) {
-    const [title, indexes] = duplicates[0]!;
-    const pageList = indexes.map((index) => `第 ${index + 1} 页`).join("、");
+    // Every group of repeated titles is reported: a draft of twenty pages
+    // rarely repeats only once, and naming one group left the writer guessing
+    // about the others.
+    const groups = duplicates.map(([title, indexes]) => `${indexes.map((index) => `第 ${index + 1} 页`).join("、")}：${title}`);
+    const indexes = duplicates.flatMap(([, group]) => group);
     issues.push({
       kind: "duplicate-title",
       indexes,
-      message: `${indexes.length} 页标题重复（${pageList}：${title}）`,
+      message: `${duplicates.length} 组标题重复（${groups.join("；")}）`,
       blocking: false,
     });
   }

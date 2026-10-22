@@ -16,6 +16,7 @@ import {
   type TemplateLayoutIntent,
 } from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
+import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, stripListPrefix } from "./layout-capacity";
 
 export type {
   AiElementRepair,
@@ -459,13 +460,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // A slide is wider than it is tall, so a circle has to be sized in inches on
     // both axes. A square in normalized coordinates is an ellipse on screen.
     const circleFrame = (x: number, y: number, diameterInches: number): RectEmu => frame(x, y, diameterInches / pageWidthIn, diameterInches / pageHeightIn);
-    const fittedFontSize = (value: string, box: RectEmu, preferredPt: number, minimumPt = 12): number => {
+    const fittedFontSize = (value: string, box: RectEmu, preferredPt: number, minimumPt = 12, lineHeightRatio = 1.2): number => {
       const widthPt = box.width / 12_700;
       const heightPt = box.height / 12_700;
       // The same line estimator the quality gate uses decides whether a size
       // fits, so a page that passes generation cannot be reported as overflow.
       for (let size = preferredPt; size >= minimumPt; size -= 1) {
-        if (estimateTextLines(value, widthPt, size, command.fontFamily || "Microsoft YaHei") * size * 1.2 <= heightPt) return size;
+        if (estimateTextLines(value, widthPt, size, command.fontFamily || "Microsoft YaHei") * size * lineHeightRatio <= heightPt) return size;
       }
       return minimumPt;
     };
@@ -484,7 +485,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     };
     const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle", stroke = fill, strokeWidthPt = 0) => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke, strokeWidthPt, radiusPt: kind === "ellipse" ? 999 : 8 } });
     const points = (body: string) => body.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((value) => value.trim()).filter(Boolean);
-    const cleanPoint = (value: string) => value.replace(/^(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*/, "");
+    const cleanPoint = stripListPrefix;
     // The layout of every page is decided as a sequence: the deck should rotate
     // through a small set of template layouts instead of repeating one artwork.
     const layoutIntents: TemplateLayoutIntent[] = command.slides.map((content, index) => {
@@ -495,14 +496,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         .filter((block): block is Extract<AiContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
         .flatMap((block) => block.items);
       const items = blockItems.length > 0 ? blockItems : points(content.body);
-      const shortItems = items.every((item) => cleanPoint(item).length <= 48);
+      const shortItems = items.every((item) => cleanPoint(item).length <= LAYOUT_CAPACITY.shortItemLength);
       // The template intent must match the composition the renderer will actually
       // produce. A short split page becomes an editorial count/quote page, and a
       // six-point split page becomes a card grid; selecting split artwork for
       // those pages leaves the new composition on top of two-column geometry.
       if (design.layout === "split" && !hasBlock("comparison") && shortItems) {
-        if (items.length >= 3 && items.length <= 5) return hasBlock("quote") ? "quote" : "body";
-        if (items.length === 6) return "cards";
+        if (items.length >= LAYOUT_CAPACITY.panelMinItems && items.length <= LAYOUT_CAPACITY.panelMaxItems) return hasBlock("quote") ? "quote" : "body";
+        if (items.length === LAYOUT_CAPACITY.cardsMaxItems) return "cards";
       }
       if (design.layout === "cover") return "cover";
       if (design.layout === "section") return "section";
@@ -547,14 +548,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // A short summary or split page without a quotation still needs a visual
       // anchor. A count panel uses the real number of points, so it fills the
       // right side without inventing a headline or duplicating a bullet.
-      const shortItems = items.every((item) => cleanPoint(item).length <= 48);
+      const shortItems = items.every((item) => cleanPoint(item).length <= LAYOUT_CAPACITY.shortItemLength);
       const countPanel = !pullQuote
         && (design.layout === "summary" || design.layout === "split")
-        && items.length >= 3
-        && items.length <= 5
+        && items.length >= LAYOUT_CAPACITY.panelMinItems
+        && items.length <= LAYOUT_CAPACITY.panelMaxItems
         && shortItems;
       const editorialSplit = design.layout === "split" && shortItems;
-      const shortSplitAsCards = design.layout === "split" && items.length === 6 && shortItems;
+      const shortSplitAsCards = design.layout === "split" && items.length === LAYOUT_CAPACITY.cardsMaxItems && shortItems;
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock);
       // The rendered artwork and the placeholder geometry describe the same
       // layout, so editable text has to land on the geometry of the layout that
@@ -627,8 +628,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       };
       const requestedSafe = design.safeRegion && isSafeRegion(design.safeRegion, 0.30, 0.25) ? design.safeRegion : { x: 0.07, y: 0.12, width: 0.86, height: 0.75 };
       const visualSafe = largestFreeRegion(requestedSafe);
-      const safeLeft = visualSafe?.x ?? 0.07; const safeRight = visualSafe ? visualSafe.x + visualSafe.width : 0.93; const safeTop = visualSafe?.y ?? 0.20; const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : 0.87;
-      const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(0.17, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
+      const safeLeft = visualSafe?.x ?? DEFAULT_CONTENT_REGION.left; const safeRight = visualSafe ? visualSafe.x + visualSafe.width : DEFAULT_CONTENT_REGION.right; const safeTop = visualSafe?.y ?? DEFAULT_CONTENT_REGION.top; const safeBottom = visualSafe ? visualSafe.y + visualSafe.height : DEFAULT_CONTENT_REGION.bottom;
+      const alignmentGrid = { left: safeLeft, right: safeRight, titleY: safeTop, titleHeight: Math.min(0.10, (safeBottom - safeTop) * 0.18), ruleY: safeTop + Math.min(0.12, (safeBottom - safeTop) * 0.22), contentY: safeTop + Math.min(CONTENT_REGION.contentTopOffset, (safeBottom - safeTop) * 0.30), contentBottom: safeBottom } as const;
       slide.elements = [];
       if (keepsArtwork) slide.elements.push({ id: crypto.randomUUID() as ElementId, type: "image", placement: "layout-background", frame: frame(0, 0, 1, 1), rotationMilliDegree: 0, locked: true, source: { kind: "embedded", dataUrl: recipe!.backgroundImageDataUrl!, mimeType: "image/png" }, altText: `模板版式背景：${recipe!.name ?? recipe!.index}` });
       const decorations = keepsArtwork ? [] : [...(command.templateDecorations ?? []), ...(recipe?.decorations ?? [])];
@@ -701,16 +702,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         });
       } else if (comparisonBlock) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
-        const columnWidth = contentBox.width * 0.44;
+        const columnWidth = contentBox.width * CONTENT_REGION.comparisonColumnWidth;
         const columns = [
           { x: contentBox.x, label: comparisonBlock.leftLabel, items: comparisonBlock.leftItems },
           { x: contentBox.x + contentBox.width * 0.52, label: comparisonBlock.rightLabel, items: comparisonBlock.rightItems },
         ];
         // The panel is sized to the list it carries. Stretching it to the whole
         // placeholder left two thirds of both columns empty.
-        const labelSize = 18; const itemSize = 16;
+        const labelSize = CONTENT_REGION.comparisonLabelFontSizePt;
         const headerHeight = pointsToFraction(labelSize * 1.2) + 0.018;
-        const itemText = (items: string[]) => items.slice(0, 7).map((item) => `• ${item}`).join("\n\n");
+        // A comparison column carries every point the writer reviewed. A column
+        // that cut its last point would drop reviewed copy from the exported
+        // file, so the copy shrinks to fit instead of losing a point.
+        const itemText = (items: string[]) => items.map((item) => `• ${cleanPoint(item)}`).join("\n\n");
+        const availableHeight = contentBox.height - headerHeight - 0.06;
+        const longestColumn = columns.reduce((longest, column) => (itemText(column.items).length > itemText(longest.items).length ? column : longest), columns[0]!);
+        const itemSize = fittedFontSize(itemText(longestColumn.items), frame(contentBox.x, contentBox.y, columnWidth - 0.07, availableHeight), CONTENT_REGION.comparisonItemFontSizePt, CONTENT_REGION.comparisonMinimumItemFontSizePt, 1.25);
         const panelHeight = Math.min(contentBox.height, headerHeight + 0.03 + Math.max(...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize))) + 0.03);
         const panelTop = contentBox.y + (contentBox.height - panelHeight) * 0.30;
         columns.forEach((column) => {
@@ -1037,7 +1044,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const leftCopy = columnCopy(items.slice(0, middle));
         const rightCopy = columnCopy(items.slice(middle));
         slide.elements.push(text(leftCopy, columnFrame(leftCopy, leftSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance), text(rightCopy, columnFrame(rightCopy, rightSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance));
-      } else if ((design.layout === "title-body" || design.layout === "summary") && items.length >= 3 && items.length <= 6) {
+      } else if ((design.layout === "title-body" || design.layout === "summary") && items.length >= LAYOUT_CAPACITY.cardsGridMinItems && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
         // A short list is a sequence of visual units, not one paragraph. Keeping
         // it as a single text box was the reason a five-point page looked like a
         // small block stranded in a large empty canvas.

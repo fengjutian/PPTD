@@ -13,6 +13,7 @@ import {
   outlineNavTarget,
   reviewIssues,
   slideCardScrollTop,
+  slideCapacityNotes,
   slideHasContent,
   slideMetrics,
   TABLE_REVIEW_MAX_COLUMNS,
@@ -21,9 +22,32 @@ import {
   tableCellKeyAction,
   visualIntentLabels,
   type AiDraftSaveState,
+  type SlideCapacityNote,
 } from "./content-review";
 
 export type SlideField = "title" | "body" | "speakerNotes";
+
+/**
+ * What the reviewed copy does to the page it will be laid out on.
+ *
+ * The notes are advisory: the page is not blocked by them, because whether a
+ * page is full enough is a judgement the writer makes, not a defect the tool
+ * can decide. They hang on the part of the page they talk about, so the
+ * advice is read next to the text it belongs to.
+ */
+function CapacityNotes({ notes, label }: { notes: readonly SlideCapacityNote[]; label: string }) {
+  if (notes.length === 0) return null;
+  return (
+    <ul className="capacity-notes" aria-label={label}>
+      {notes.map((note, noteIndex) => (
+        <li key={noteIndex} className={note.severity === "warning" ? "warning" : "info"}>
+          <CircleAlert />
+          {note.message}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export type ContentReviewProps = {
   draft: AiDraft;
@@ -356,7 +380,7 @@ function TableEditor({
  * the renderer draws. Editing only the body string here used to flatten a
  * metric, comparison or timeline page into a bullet list.
  */
-function BlockEditor({ slideIndex, blocks, onChange }: { slideIndex: number; blocks: ContentBlock[]; onChange: (blocks: ContentBlock[]) => void }) {
+function BlockEditor({ slideIndex, blocks, notes, onChange }: { slideIndex: number; blocks: ContentBlock[]; notes: readonly SlideCapacityNote[]; onChange: (blocks: ContentBlock[]) => void }) {
   const replace = (index: number, block: ContentBlock) => onChange(blocks.map((current, currentIndex) => (currentIndex === index ? block : current)));
   const remove = (index: number) => onChange(blocks.filter((_, currentIndex) => currentIndex !== index));
   const pageLabel = `第 ${slideIndex + 1} 页`;
@@ -372,6 +396,7 @@ function BlockEditor({ slideIndex, blocks, onChange }: { slideIndex: number; blo
                 <X />
               </button>
             </header>
+            <CapacityNotes notes={notes.filter((note) => note.blockIndex === index)} label={`${pageLabel}的排版预检`} />
             {block.type === "paragraph" && (
               <textarea
                 aria-label={`${pageLabel}段落`}
@@ -426,24 +451,30 @@ function BlockEditor({ slideIndex, blocks, onChange }: { slideIndex: number; blo
               <PairListEditor ariaLabel={`${pageLabel}${typeLabel}`} items={block.items} max={10} onChange={(items) => replace(index, { ...block, items })} />
             )}
             {block.type === "comparison" && (
-              <>
-                <div className="block-pair-row">
+              <div className="comparison-columns">
+                <div className="comparison-column">
                   <input
                     aria-label={`${pageLabel}左侧标题`}
+                    className="comparison-label"
                     maxLength={100}
+                    placeholder="左侧标题"
                     value={block.leftLabel}
                     onChange={(event) => replace(index, { ...block, leftLabel: event.target.value })}
                   />
+                  <ItemListEditor ariaLabel={`${pageLabel}左侧要点`} items={block.leftItems} max={8} onChange={(leftItems) => replace(index, { ...block, leftItems })} />
+                </div>
+                <div className="comparison-column">
                   <input
                     aria-label={`${pageLabel}右侧标题`}
+                    className="comparison-label"
                     maxLength={100}
+                    placeholder="右侧标题"
                     value={block.rightLabel}
                     onChange={(event) => replace(index, { ...block, rightLabel: event.target.value })}
                   />
+                  <ItemListEditor ariaLabel={`${pageLabel}右侧要点`} items={block.rightItems} max={8} onChange={(rightItems) => replace(index, { ...block, rightItems })} />
                 </div>
-                <ItemListEditor ariaLabel={`${pageLabel}左侧要点`} items={block.leftItems} max={8} onChange={(leftItems) => replace(index, { ...block, leftItems })} />
-                <ItemListEditor ariaLabel={`${pageLabel}右侧要点`} items={block.rightItems} max={8} onChange={(rightItems) => replace(index, { ...block, rightItems })} />
-              </>
+              </div>
             )}
             {block.type === "table-data" && (
               <TableEditor pageLabel={pageLabel} block={block} onChange={(next) => replace(index, next)} />
@@ -490,6 +521,9 @@ export function ContentReview({
   // Both the outline and the cards show the same numbers; computing them once
   // per draft keeps a ten page review from re-splitting every body on each keypress.
   const slideStats = useMemo(() => draft.slides.map((slide) => slideMetrics(slide)), [draft]);
+  // The capacity notes are measured from the same copy the renderer lays out,
+  // so they are computed once per draft as well.
+  const slideNotes = useMemo(() => draft.slides.map((slide, index) => slideCapacityNotes(slide, index)), [draft]);
 
   useEffect(() => () => {
     window.clearTimeout(scrollLockTimer.current);
@@ -565,6 +599,7 @@ export function ContentReview({
             const slideStat = slideStats[index]!;
             const missing = !slide.title.trim();
             const empty = !slideHasContent(slide);
+            const warned = slideNotes[index]?.some((note) => note.severity === "warning") ?? false;
             return (
               <button
                 type="button"
@@ -583,6 +618,12 @@ export function ContentReview({
                     {missing ? "缺少标题" : empty ? "还没有内容" : `${slideStat.points} 条要点 · ${slideStat.characters} 字`}
                   </small>
                   {!missing && !empty && slideStat.preview && <p>{slideStat.preview}</p>}
+                  {warned && (
+                    <span className="draft-outline-warning">
+                      <CircleAlert />
+                      排版预检
+                    </span>
+                  )}
                 </div>
               </button>
             );
@@ -640,6 +681,7 @@ export function ContentReview({
         <div className="draft-slide-list" ref={listRef} onScroll={handleScroll}>
           {draft.slides.map((slide, index) => {
             const slideStat = slideStats[index]!;
+            const notes = slideNotes[index] ?? [];
             const missing = !slide.title.trim();
             const empty = !slideHasContent(slide);
             const edited = isSlideEdited(slide, originalDraft?.slides[index]);
@@ -675,6 +717,7 @@ export function ContentReview({
                         标题不能为空
                       </small>
                     )}
+                    <CapacityNotes notes={notes.filter((note) => note.scope === "title")} label={`第 ${index + 1} 页标题的排版预检`} />
                   </div>
                   <div className="draft-slide-tools">
                     <span>
@@ -707,6 +750,8 @@ export function ContentReview({
                   </small>
                 )}
 
+                <CapacityNotes notes={notes.filter((note) => note.blockIndex === undefined && note.scope !== "title")} label={`第 ${index + 1} 页的排版预检`} />
+
                 <details className="slide-plan">
                   <summary>
                     <span>AI 规划依据</span>
@@ -727,7 +772,7 @@ export function ContentReview({
                 </details>
 
                 {slide.blocks.length > 0 ? (
-                  <BlockEditor slideIndex={index} blocks={slide.blocks} onChange={(blocks) => onSlideBlocksChange(index, blocks)} />
+                  <BlockEditor slideIndex={index} blocks={slide.blocks} notes={notes} onChange={(blocks) => onSlideBlocksChange(index, blocks)} />
                 ) : (
                   <label className="draft-body-field">
                     正文

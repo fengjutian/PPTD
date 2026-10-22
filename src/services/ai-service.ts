@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { z } from "zod";
+import { LAYOUT_CAPACITY } from "../core/commands/layout-capacity";
 import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 
@@ -113,10 +114,10 @@ export function chooseSlideLayout(input: {
   // here also prevents the hero intent from being converted to a section page,
   // which used to dump the whole list into one small text box.
   if (input.index === 0) {
-    if (items.length < 2 && input.body.trim().length <= 80 && !hasBlock("quote")) return "cover";
-    if (hasBlock("quote") && items.length < 3) return "quote";
-    if (items.length >= 3) return "cards";
-    if (items.length === 2) return "split";
+    if (items.length <= LAYOUT_CAPACITY.coverMaxItems && input.body.trim().length <= LAYOUT_CAPACITY.coverBodyLength && !hasBlock("quote")) return "cover";
+    if (hasBlock("quote") && items.length < LAYOUT_CAPACITY.cardsGridMinItems) return "quote";
+    if (items.length >= LAYOUT_CAPACITY.cardsGridMinItems) return "cards";
+    if (items.length === LAYOUT_CAPACITY.splitMinItems) return "split";
     return "title-body";
   }
   const longestItem = items.reduce((longest, item) => Math.max(longest, [...item].length), 0);
@@ -134,12 +135,12 @@ export function chooseSlideLayout(input: {
   else if (hasBlock("comparison")) layout = "split";
   else if (hasCardBlock) layout = "cards";
   if (layout === "quote" && input.density === "high" && !hasBlock("quote")) layout = "title-body";
-  if (layout === "split" && items.length < 2 && !hasBlock("comparison")) layout = "title-body";
-  if (layout === "cards" && !hasCardBlock && (items.length < 2 || items.length > 6 || longestItem > 72 || input.body.length > 420)) {
-    layout = items.length >= 2 && items.length <= 8 && input.body.length <= 560 ? "split" : "title-body";
+  if (layout === "split" && items.length < LAYOUT_CAPACITY.splitMinItems && !hasBlock("comparison")) layout = "title-body";
+  if (layout === "cards" && !hasCardBlock && (items.length < LAYOUT_CAPACITY.cardsMinItems || items.length > LAYOUT_CAPACITY.cardsMaxItems || longestItem > LAYOUT_CAPACITY.cardItemLengthLimit || input.body.length > LAYOUT_CAPACITY.cardBodyLengthLimit)) {
+    layout = items.length >= LAYOUT_CAPACITY.splitMinItems && items.length <= LAYOUT_CAPACITY.splitMaxItems && input.body.length <= LAYOUT_CAPACITY.splitBodyLength ? "split" : "title-body";
   }
-  if (layout === "title-body" && items.length >= 2) {
-    const cardEligible = items.length >= 3 && items.length <= 6 && longestItem <= 56 && input.body.length <= 360;
+  if (layout === "title-body" && items.length >= LAYOUT_CAPACITY.splitMinItems) {
+    const cardEligible = items.length >= LAYOUT_CAPACITY.cardsGridMinItems && items.length <= LAYOUT_CAPACITY.cardsMaxItems && longestItem <= LAYOUT_CAPACITY.cardItemLength && input.body.length <= LAYOUT_CAPACITY.cardBodyLength;
     layout = cardEligible ? "cards" : "split";
   }
   return layout;

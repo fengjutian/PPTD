@@ -148,6 +148,8 @@ button { color: inherit; }
 .draft-outline-list > button small { display: block; margin-top: 4px; color: #858a93; font-size: 9px; }
 .draft-outline-list > button small.missing { color: #e6ae62; }
 .draft-outline-list > button p { overflow: hidden; margin: 4px 0 0; color: #777c85; font-size: 9px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
+.draft-outline-warning { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border-radius: 4px; color: #e6ae62; background: rgb(230 174 98 / 12%); font-size: 9px; font-weight: 700; }
+.draft-outline-warning svg { width: 10px; height: 10px; }
 .draft-review-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 36%); gap: 24px; align-items: end; margin-bottom: 14px; }
 .draft-review-heading label { margin: 0; }
 .draft-review-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -186,7 +188,7 @@ button { color: inherit; }
 .draft-notes summary::before { content: "▸"; color: #6f747d; font-size: 9px; }
 .draft-notes[open] summary::before { transform: rotate(90deg); }
 .draft-notes summary span { color: #6f747d; font-size: 9px; }
-.draft-notes textarea { margin-top: 8px; min-height: 54px; }
+.draft-notes textarea { margin-top: 8px; min-height: 54px; font-size: 12px; line-height: 1.6; }
 .slide-plan { margin-top: 10px; overflow: hidden; border: 1px solid #2f3137; border-radius: 8px; background: #191a1e; }
 .slide-plan summary { display: flex; align-items: center; gap: 8px; padding: 8px 10px; color: #8f949d; font-size: 10px; cursor: pointer; list-style: none; }
 .slide-plan summary::-webkit-details-marker { display: none; }
@@ -204,10 +206,24 @@ button { color: inherit; }
 .block-row .icon-action:hover { border-color: var(--ppt-accent); color: #f2f2f3; }
 .block-row .icon-action svg { width: 12px; height: 12px; }
 .block-row textarea { min-height: 62px; }
+/* The copy inside a page sits one level below the page title, so the block
+   editors set their own size instead of the 16px the form controls inherit. */
+.block-row input, .block-row textarea { font-size: 13px; line-height: 1.6; }
 .block-item-list { display: grid; gap: 6px; }
 .block-item-row { display: grid; grid-template-columns: minmax(0, 1fr) 22px; gap: 6px; align-items: center; }
 .block-pair-row { display: flex; gap: 6px; align-items: center; }
 .block-pair-row input { flex: 1 1 0; min-width: 0; }
+/* A comparison reads as two columns: the points of the left side belong to the
+   left title, and the points of the right side belong to the right one. */
+.block-row.comparison .comparison-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.block-row.comparison .comparison-column { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.block-row.comparison .comparison-column + .comparison-column { padding-left: 12px; border-left: 1px solid #2f3137; }
+.block-row.comparison .comparison-label { font-weight: 700; text-align: center; }
+.capacity-notes { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.capacity-notes li { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 6px; align-items: start; font-size: 10px; line-height: 1.55; }
+.capacity-notes li svg { width: 11px; height: 11px; margin-top: 2px; }
+.capacity-notes li.warning { color: #e6ae62; }
+.capacity-notes li.info { color: #8f949d; }
 .block-add-row { display: flex; flex-wrap: wrap; gap: 14px; padding: 2px; }
 .block-row .link-action, .block-add { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; }
 .block-row .link-action svg, .block-add svg { width: 11px; height: 11px; }
@@ -237,7 +253,11 @@ button { color: inherit; }
 :root[data-theme="light"] .block-table th, :root[data-theme="light"] .block-table td, :root[data-theme="green"] .block-table th, :root[data-theme="green"] .block-table td, :root[data-theme="blue"] .block-table th, :root[data-theme="blue"] .block-table td { border-color: #e1e4e9; color: #24272c; }
 :root[data-theme="light"] .block-table th, :root[data-theme="green"] .block-table th, :root[data-theme="blue"] .block-table th { color: #5f646d; background: #eef0f3; }
 :root[data-theme="light"] .block-table small, :root[data-theme="green"] .block-table small, :root[data-theme="blue"] .block-table small { color: #6d727b; }
+:root[data-theme="light"] .block-row.comparison .comparison-column + .comparison-column, :root[data-theme="green"] .block-row.comparison .comparison-column + .comparison-column, :root[data-theme="blue"] .block-row.comparison .comparison-column + .comparison-column { border-left-color: #e1e4e9; }
+:root[data-theme="light"] .capacity-notes li.info, :root[data-theme="green"] .capacity-notes li.info, :root[data-theme="blue"] .capacity-notes li.info { color: #5f646d; }
 :root[data-theme="amber"] .block-row { border-color: #e3d6c0; background: #f9f2e6; }
+:root[data-theme="amber"] .block-row.comparison .comparison-column + .comparison-column { border-left-color: #e3d6c0; }
+:root[data-theme="amber"] .capacity-notes li.info { color: #6f6557; }
 :root[data-theme="amber"] .block-row .icon-action { border-color: #ded1bb; color: #6f6557; }
 :root[data-theme="amber"] .block-type { color: #8a4f0e; }
 :root[data-theme="amber"] .block-table th, :root[data-theme="amber"] .block-table td { border-color: #e3d6c0; color: #3d342a; }
@@ -1105,3 +1125,4 @@ button { color: inherit; }
 :root[data-theme="amber"] .block-table input:hover { border-color: #d8c9b0; }
 :root[data-theme="light"] .block-table .table-cell .icon-action, :root[data-theme="amber"] .block-table .table-cell .icon-action,
 :root[data-theme="green"] .block-table .table-cell .icon-action, :root[data-theme="blue"] .block-table .table-cell .icon-action { color: #5f646d; }
+ble .table-cell .icon-action { color: #5f646d; }
