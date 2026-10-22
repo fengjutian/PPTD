@@ -74,6 +74,29 @@ export interface ShapeElementStyle {
   radiusPt: number;
 }
 
+/**
+ * 线条的方向。
+ *
+ * 线条是独立的元素类型，不是"很扁的矩形"：它的填充没有意义，箭头端点是
+ * 样式的一部分，导出时也必须写成原生线条而不是矩形。
+ */
+export type LineDirection = "horizontal" | "vertical" | "diagonal";
+
+/** 线条某一端是否有箭头。 */
+export type LineEnd = "none" | "arrow";
+
+/** Presentation-only styling of a line. Never part of the content hash. */
+export interface LineElementStyle {
+  stroke: string;
+  strokeWidthPt: number;
+  /** 起点箭头。 */
+  startArrow: LineEnd;
+  /** 终点箭头。 */
+  endArrow: LineEnd;
+  /** 是否是虚线。 */
+  dashed: boolean;
+}
+
 /** The kind of a native chart. The choice is design, the numbers are content. */
 export type ChartKind = "column" | "bar" | "line" | "pie";
 
@@ -142,6 +165,20 @@ export interface ShapeElement extends ElementBase {
   type: "shape";
   shape: "rectangle" | "ellipse";
   style: ShapeElementStyle;
+}
+
+/**
+ * A straight line.
+ *
+ * A line is its own element kind rather than a very flat rectangle: it has no
+ * fill, its arrow heads are part of its style, and the exporter has to write a
+ * native line object so the result stays editable in PowerPoint.
+ */
+export interface LineElement extends ElementBase {
+  type: "line";
+  /** Which way the line runs inside its frame. */
+  direction: LineDirection;
+  style: LineElementStyle;
 }
 
 /**
@@ -246,7 +283,7 @@ export interface TableElement extends ElementBase {
   style: TableElementStyle;
 }
 
-export type SlideElement = TextElement | ShapeElement | ImageElement | ChartElement | TableElement;
+export type SlideElement = TextElement | ShapeElement | LineElement | ImageElement | ChartElement | TableElement;
 
 export interface Slide {
   id: SlideId;

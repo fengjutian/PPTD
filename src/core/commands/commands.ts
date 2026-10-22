@@ -857,6 +857,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // The type scale of the template or preset. Every branch reads this instead
     // of repeating point sizes, so the deck keeps one hierarchy.
     const typeScale = resolveTypeScale(document.theme);
+    // The leading a theme declares for running copy. Frames that hold body text
+    // reserve the same height, so the text and its box cannot disagree.
+    const bodyLeading = document.theme?.textStyles?.body?.lineHeight ?? 1.25;
     // Fonts follow the same precedence as the type scale: the template wins,
     // then the theme/preset, then the renderer default.
     const majorFont = preset
@@ -1419,9 +1422,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // the slot. The height comes from the same line estimator the quality
       // gate uses, so a centred block is never cut off.
       const pointsToFraction = (points: number) => points / 72 / (pageHeight / 914400);
-      const blockHeight = (value: string, widthFraction: number, fontSizePt: number) => {
+      const blockHeight = (value: string, widthFraction: number, fontSizePt: number, lineHeight = 1.25) => {
         const widthPt = widthFraction * (pageWidth / 914400) * 72;
-        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt, majorFont) * fontSizePt * 1.25);
+        return pointsToFraction(estimateTextLines(value, widthPt, fontSizePt, majorFont) * fontSizePt * lineHeight);
       };
       const centeredBlock = (
         value: string,
@@ -1639,13 +1642,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           1.25,
         );
         const copyHeight = Math.max(
-          ...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize)),
+          ...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize, bodyLeading)),
         );
         const panelHeight = Math.min(contentBox.height, Math.max(minimumPanelHeight, headerHeight + 0.06 + copyHeight));
         const panelTop = contentBox.y + (contentBox.height - panelHeight) * CONTENT_REGION.blockVerticalAnchor;
         columns.forEach((column) => {
           const copy = itemText(column.items);
-          const columnHeight = blockHeight(copy, columnWidth - 0.07, itemSize);
+          const columnHeight = blockHeight(copy, columnWidth - 0.07, itemSize, bodyLeading);
           // The header stays at the top of the panel and the points centre in the
           // room below it, so a short column does not pin its copy under the
           // header with a hole underneath.
@@ -1890,7 +1893,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // under every label and pushed the whole row into the upper third.
         const labelHeight = pointsToFraction(labelSize * 1.3);
         const bodyHeight = Math.max(
-          ...processItems.map((item) => blockHeight(item.text, stepWidth - padding * 2, textSize)),
+          ...processItems.map((item) => blockHeight(item.text, stepWidth - padding * 2, textSize, bodyLeading)),
         );
         const stepHeight = Math.min(
           0.28,
@@ -2326,7 +2329,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const badgeDiameter = 0.36;
         const badgeHeight = badgeDiameter / pageHeightIn;
         const cardTextTop = 0.035 + badgeHeight + 0.03;
-        const cardTextHeight = Math.max(...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, 16)));
+        const cardTextHeight = Math.max(...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, 16, bodyLeading)));
         // A card is as tall as the badge and the copy it carries. Stretching a
         // one-line card to the row's full height left the copy stranded in the
         // middle of an empty box.
@@ -2380,7 +2383,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             16,
             12,
           );
-          const fittedHeight = blockHeight(cleanItem, cardWidth - 0.06, fittedCardSize);
+          const fittedHeight = blockHeight(cleanItem, cardWidth - 0.06, fittedCardSize, bodyLeading);
           slide.elements.push(
             text(
               cleanItem,
@@ -2431,8 +2434,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const padding = 0.035;
         const leftTextWidth = leftSlot.width - padding * 2;
         const rightTextWidth = rightSlot.width - padding * 2;
-        const leftHeight = blockHeight(leftCopy, leftTextWidth, columnFont);
-        const rightHeight = blockHeight(rightCopy, rightTextWidth, columnFont);
+        const leftHeight = blockHeight(leftCopy, leftTextWidth, columnFont, bodyLeading);
+        const rightHeight = blockHeight(rightCopy, rightTextWidth, columnFont, bodyLeading);
         // Both cards share one height: two panels of different heights read as
         // two unrelated blocks instead of one comparison.
         const panelHeight = Math.min(

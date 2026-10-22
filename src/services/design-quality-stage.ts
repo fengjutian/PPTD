@@ -1,6 +1,6 @@
 import { colorLuminance, contrastRatioAgainstLuminance } from "../core/rendering/contrast";
 import type { AiSlideDesign } from "../core/commands/commands";
-import type { PresentationDocument } from "../core/document-model";
+import { hashSlideContent, type PresentationDocument } from "../core/document-model";
 import { validatePresentationVisualQuality, type PresentationQualityIssue } from "./presentation-quality-gate";
 import {
   inspectRenderedTextContrast,
@@ -8,8 +8,13 @@ import {
   type RenderedContrastIssue,
   type RenderedContrastReport,
 } from "./presentation-renderer";
-import { runVisualAlignmentLoop, type PresentationVisualGoal, type VisualReview } from "./visual-alignment";
-import type { VisionReviewPort } from "./vision-review-port";
+import {
+  affectedSlideIndexes,
+  runVisualAlignmentLoop,
+  type PresentationVisualGoal,
+  type VisualReview,
+} from "./visual-alignment";
+import { MAX_REVIEWED_SLIDES, type VisionReviewPort } from "./vision-review-port";
 
 /** 一次请求最多评审的页数。 */
 const REVIEW_BATCH_SIZE = 6;
@@ -75,6 +80,14 @@ function mergeReviews(reviews: VisualReview[]): VisualReview {
   };
 }
 
+/** 把视觉评审失败的错误码翻译成用户能读懂的一句话。 */
+export function describeVisualReviewFailure(reason: string): string {
+  if (reason.includes("AI_VISION_SLIDE_COUNT_INVALID"))
+    return `文稿页数超过视觉评审上限（${MAX_REVIEWED_SLIDES} 页）`;
+  if (reason.includes("VISUAL_ALIGNMENT_CONTENT_MUTATION")) return "视觉修复试图修改已审核内容，已拒绝该轮修复";
+  return reason;
+}
+
 /** 把真实渲染失败的错误码翻译成用户能读懂的一句话。 */
 export function describeRealRenderFailure(reason: string): string {
   if (reason.includes("REVIEW_RASTERER_UNAVAILABLE")) return "本机没有可用的 PowerPoint 渲染";
@@ -103,6 +116,16 @@ const issueLabels: Record<PresentationQualityIssue["issue"], string> = {
   "underfilled-columns": "双栏正文只占页面上半部",
 };
 
+/**
+ * 已审核内容的指纹：标题、正文、结构化块、备注和页序。
+ *
+ * 视觉修复的守卫必须从真实文档快照计算，而不是从闭包里某个生成时的草稿
+ * 常量计算。否则比较两边的都是同一个常量，守卫永远不会触发。
+ */
+export function documentContentFingerprint(document: PresentationDocument): string {
+  return JSON.stringify(document.slides.map((slide) => hashSlideContent(slide.content)));
+}
+
 /** 把质量问题汇总成一句用户能读懂的话：哪些页、什么问题、多少处。 */
 export function summarizeQualityIssues(issues: PresentationQualityIssue[]): string {
   if (issues.length === 0) return "";
@@ -130,22 +153,27 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let reviewSource: "真实 PPTX" | "画布预览" | undefined;
   /** 真实渲染走不通的原因。 */
   let realRenderFailure: string | undefined;
+  /** 最近一轮评审实际覆盖的页数和总页数。 */
+  let reviewedSlideCount = 0;
+  let reviewSlideCount = 0;
+  /** 部分批次失败的原因，评审不能因为一批失败就整体作废。 */
+  let partialReviewReason: string | undefined;
 
   try {
     const aligned = await runVisualAlignmentLoop<AiSlideDesign[]>({
       initial: designs,
       goal: options.goal,
       contentFingerprint: options.contentFingerprint,
+      stateFingerprint: (value) => JSON.stringify(value),
       review: async (current, goal, iteration) => {
         if (options.isCancelled()) throw new Error("AI_GENERATION_CANCELLED");
-        options.onProgress?.(`视觉模型正在检查第 ${iteration} 轮`, 95 + iteration);
+        options.onProgress?.(`第 ${iteration} 轮视觉评审：导出并渲染真实 PPTX`, 94);
         const document = options.buildDocument(current);
         // 优先评审真实导出的 PPTX。画布渲染是近似值：PowerPoint 自行断行，
         // 字体度量与估算略有出入，图表和表格更是由 PowerPoint 自己画的。
         // 只有真实渲染走不通时才退回画布预览。
         let real: { slides: string[]; contactSheet: string } | undefined;
         if (options.renderRealPptxForReview) {
-          options.onProgress?.("正在导出并渲染真实 PPTX", 95 + iteration);
           try {
             real = await options.renderRealPptxForReview(document);
           } catch (error) {
@@ -161,12 +189,30 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         for (let start = 0; start < render.slides.length; start += REVIEW_BATCH_SIZE) {
           batches.push(render.slides.slice(start, start + REVIEW_BATCH_SIZE).map((_, offset) => start + offset));
         }
-        const reviews = await Promise.all(
+        options.onProgress?.(`第 ${iteration} 轮视觉评审：检查 ${render.slides.length} 页`, 95);
+        // 一批超时或返回不合法，不应该把其他批次的结论一起扔掉：保留已经
+        // 评审完的页，并把覆盖范围如实报告出来。
+        reviewedSlideCount = 0;
+        reviewSlideCount = render.slides.length;
+        partialReviewReason = undefined;
+        const outcomes = await Promise.allSettled(
           batches.map((indexes) => options.vision.review(render, goal, indexes, options.taskId)),
         );
+        const reviews: VisualReview[] = [];
+        outcomes.forEach((outcome, index) => {
+          if (outcome.status === "fulfilled") {
+            reviews.push(outcome.value);
+            reviewedSlideCount += batches[index]!.length;
+            return;
+          }
+          if (isGenerationCancelled(outcome.reason)) throw outcome.reason;
+          partialReviewReason ??= outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+        });
+        if (reviews.length === 0) throw outcomes.find((outcome) => outcome.status === "rejected")?.reason;
         return mergeReviews(reviews);
       },
       repair: async (current, review, goal) => {
+        options.onProgress?.("视觉评审已收到问题，正在生成修复计划", 97);
         // 修复计划由模型出，模型需要知道每页的标题和当前版式才能决定改什么。
         const document = options.buildDocument(current);
         const deck = current.map((design, index) => ({
@@ -175,7 +221,13 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           layout: design.layout,
         }));
         const plan = await options.vision.planRepairs(review, goal, { deck, taskId: options.taskId });
-        const repairs = new Map(plan.repairs.map((repair) => [repair.slideIndex, repair]));
+        // A repair plan may name any page, and a fallback plan may be broader
+        // than the findings. Only pages the review actually flagged are allowed
+        // to change; the rest keep the design the user already saw.
+        const affected = new Set(affectedSlideIndexes(review, goal.minimumScores.overall));
+        const repairs = new Map(
+          plan.repairs.filter((repair) => affected.has(repair.slideIndex)).map((repair) => [repair.slideIndex, repair]),
+        );
         return current.map((slide, slideIndex) => {
           const repair = repairs.get(slideIndex);
           if (!repair) return slide;
@@ -199,6 +251,13 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     });
     designs = aligned.value;
     notes.push(`视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`);
+    if (aligned.reverted) notes.push("最后一轮修复降低了评分，已回退到评分更高的设计");
+    if (reviewSlideCount > 0 && reviewedSlideCount < reviewSlideCount) {
+      degraded = true;
+      notes.push(
+        `视觉评审只覆盖 ${reviewedSlideCount}/${reviewSlideCount} 页${partialReviewReason ? `（${partialReviewReason.slice(0, 200)}）` : ""}`,
+      );
+    }
     if (reviewSource === "真实 PPTX") {
       notes.push("视觉评审基于导出的 PPTX 真实渲染");
     } else if (realRenderFailure) {
@@ -211,7 +270,14 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   } catch (error) {
     if (isGenerationCancelled(error)) throw error;
     degraded = true;
-    notes.push(`视觉评审降级：${error instanceof Error ? error.message : String(error)}`);
+    const reason = describeVisualReviewFailure(error instanceof Error ? error.message : String(error));
+    notes.push(`视觉评审降级：${reason}`);
+    // 降级后最容易被误解成"检查过了没问题"：必须明确说出这次到底评审了多少。
+    notes.push(
+      reviewedSlideCount === 0
+        ? "本次未做视觉评审"
+        : `视觉评审未完成，只覆盖了 ${reviewedSlideCount}/${reviewSlideCount} 页`,
+    );
     options.onProgress?.("视觉评审不可用，继续用确定性校验", 96);
   }
 

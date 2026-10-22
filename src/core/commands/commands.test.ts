@@ -2119,6 +2119,20 @@ describe("document commands", () => {
     expect(contrastRatio(body.style.color, slide.background)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it("keeps body copy inside its frame with the preset leading", () => {
+    const source = createDocument();
+    const body = "登斯楼也，则有去国怀乡，忧谗畏讥，满目萧然，感极而悲者矣。".repeat(4);
+    const content = { title: "览物之情", body, speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "字距", slides: [content], designs: [design], themePresetId: "paper-ink" }));
+    const slide = result.slides[0]!;
+    for (const element of slide.elements) {
+      if (element.type === "text") expect(textLikelyOverflows(element)).toBe(false);
+    }
+    const bodyElement = slide.elements.find((element): element is TextElement => element.type === "text" && element.text === body)!;
+    expect(bodyElement.style.lineHeight).toBe(1.3);
+  });
+
   it("lets an explicitly chosen preset restyle a template deck", () => {
     const source = createDocument();
     const content = { title: "标题", body: "正文内容", speakerNotes: "" };

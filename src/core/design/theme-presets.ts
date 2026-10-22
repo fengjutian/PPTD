@@ -28,7 +28,7 @@ function scale(
     display: { fontSizePt: display, bold: true },
     title: { fontSizePt: title, bold: true, letterSpacingPt: titleTracking },
     subtitle: { fontSizePt: subtitle },
-    body: { fontSizePt: body },
+    body: { fontSizePt: body, lineHeight: 1.3 },
     caption: { fontSizePt: caption },
   };
 }

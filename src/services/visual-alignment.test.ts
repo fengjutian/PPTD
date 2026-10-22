@@ -58,6 +58,38 @@ describe("visual alignment loop", () => {
     });
     expect(result).toMatchObject({ iterations: 3, stopReason: "iteration-limit" });
   });
+  it("rolls back a repair that lowers the score", async () => {
+    let score = 60;
+    const result = await runVisualAlignmentLoop({
+      initial: { content: "frozen", design: 0 },
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: (value) => value.content,
+      review: async () => {
+        const current = score;
+        score -= 10;
+        return review(current, 1);
+      },
+      repair: async (value) => ({ ...value, design: value.design + 1 }),
+    });
+    // 第一轮 60，修复后第二轮 50：变差的修复不能成为最终设计。
+    expect(result).toMatchObject({ value: { design: 0 }, stopReason: "regressed", reverted: true });
+  });
+  it("stops without another review when a repair changes nothing", async () => {
+    let reviews = 0;
+    const result = await runVisualAlignmentLoop({
+      initial: { content: "frozen", design: 0 },
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: (value) => value.content,
+      stateFingerprint: (value) => JSON.stringify(value),
+      review: async () => {
+        reviews += 1;
+        return review(60, 1);
+      },
+      repair: async (value) => ({ ...value }),
+    });
+    expect(result).toMatchObject({ stopReason: "no-change", iterations: 1 });
+    expect(reviews).toBe(1);
+  });
   it("limits repair work to reported low-quality slides", () => {
     const result = affectedSlideIndexes({
       ...review(70),
@@ -172,7 +204,7 @@ describe("修复计划的规范化", () => {
 });
 
 describe("visual review normalization", () => {
-  it("fills missing guidance and replaces an illegal layout", () => {
+  it("keeps only the guidance the model actually produced", () => {
     const result = normalizeVisualReview(
       {
         ...review(84),
@@ -189,8 +221,9 @@ describe("visual review normalization", () => {
       },
       [1, 2],
     );
-    expect(result.slideGuidance.map((item) => item.slideIndex)).toEqual([1, 2]);
-    expect(result.slideGuidance.every((item) => item.recommendedLayout === "title-body")).toBe(true);
+    // 第 2 页模型没给指导，不能替它编一个 safeRegion 和版式。
+    expect(result.slideGuidance.map((item) => item.slideIndex)).toEqual([1]);
+    expect(result.slideGuidance[0]!.recommendedLayout).toBe("title-body");
   });
 
   it("clamps scores, points, and rectangles into the normalized page", () => {

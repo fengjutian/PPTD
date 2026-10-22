@@ -21,7 +21,7 @@ const buildDocument = (designs: AiSlideDesign[]): PresentationDocument => {
   applyCommand(document, {
     type: "apply-ai-designed-draft",
     title: "质检",
-    slides: [{ title: "标题", body: "正文", speakerNotes: "" }],
+    slides: designs.map((_, index) => ({ title: `标题${index + 1}`, body: "正文", speakerNotes: "" })),
     designs,
   });
   return document;
@@ -77,8 +77,89 @@ describe("设计质检阶段", () => {
     // 关键点：评审失败不能让整次生成失败，PPT 仍然产出。
     expect(result.degraded).toBe(true);
     expect(result.notes.join("；")).toContain("视觉评审降级");
+    // 也必须明确说出这一次根本没有做视觉评审，避免被理解成"检查过了没问题"。
+    expect(result.notes.join("；")).toContain("本次未做视觉评审");
     expect(result.document.slides).toHaveLength(1);
     expect(result.passed).toBe(true);
+  });
+
+  it("文稿超过评审上限时说明未做视觉评审，而不是笼统降级", async () => {
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: visionPort(async () => {
+        throw new Error("AI_VISION_SLIDE_COUNT_INVALID");
+      }),
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+    });
+
+    expect(result.notes.join("；")).toContain("本次未做视觉评审");
+    expect(result.notes.join("；")).toContain("超过视觉评审上限");
+  });
+
+  it("单批评审失败时保留其他批次的结果，并报告覆盖范围", async () => {
+    const slides = Array.from({ length: 7 }, () => "data:image/jpeg;base64,AA==");
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 7 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes) => {
+          if (indexes.includes(6)) throw new Error("AI_REQUEST_TIMEOUT");
+          return passingReview;
+        },
+        planRepairs: async () => ({ repairs: [] }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides,
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    expect(result.degraded).toBe(true);
+    expect(result.notes.join("；")).toContain("视觉评审只覆盖 6/7 页");
+    expect(result.document.slides).toHaveLength(7);
+  });
+
+  it("修复计划不能改动评审没有提到问题的页面", async () => {
+    const review = {
+      ...passingReview,
+      overallScore: 70,
+      issues: [{ slideIndex: 0, severity: "warning" as const, issue: "misalignment" as const, elementIds: [], suggestion: "对齐" }],
+    };
+    const result = await runDesignQualityStage({
+      initialDesigns: [design(), design({ layout: "title-body" })],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async () => review,
+        planRepairs: async () => ({
+          repairs: [{ slideIndex: 1, layout: "cards", backgroundAction: "keep", hierarchyAction: "keep", obstacleRegions: [], elementActions: [], reason: "顺手改一页" }],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: ["data:image/jpeg;base64,AA==", "data:image/jpeg;base64,AA=="],
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    // 第 2 页没有问题，模型想改也不能改。
+    expect(result.designs[1]!.layout).toBe("title-body");
   });
 
   it("质量门未过时列出问题，并保留生成好的文档", async () => {

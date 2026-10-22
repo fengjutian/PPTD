@@ -55,6 +55,18 @@ const shapeElement = base.extend({
   }),
 });
 
+const lineElement = base.extend({
+  type: z.literal("line"),
+  direction: z.enum(["horizontal", "vertical", "diagonal"]),
+  style: z.object({
+    stroke: z.string(),
+    strokeWidthPt: z.number().nonnegative(),
+    startArrow: z.enum(["none", "arrow"]),
+    endArrow: z.enum(["none", "arrow"]),
+    dashed: z.boolean(),
+  }),
+});
+
 /** A crop cuts a fraction off each side of the source image, so the visible region never vanishes. */
 const imageCropSchema = z
   .object({

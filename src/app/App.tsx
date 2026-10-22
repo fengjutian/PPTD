@@ -115,7 +115,11 @@ import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS } from "../core/design/theme-presets";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
 import { defaultPresentationVisualGoal } from "../services/visual-alignment";
-import { runDesignQualityStage, summarizeQualityIssues } from "../services/design-quality-stage";
+import {
+  documentContentFingerprint,
+  runDesignQualityStage,
+  summarizeQualityIssues,
+} from "../services/design-quality-stage";
 import type { PresentationQualityIssue } from "../services/presentation-quality-gate";
 import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
@@ -1788,15 +1792,9 @@ export function App() {
         initialDesigns: design.slides,
         buildDocument: buildFinalDocument,
         goal: defaultPresentationVisualGoal(),
-        contentFingerprint: () =>
-          JSON.stringify(
-            aiDraft.slides.map((slide) => ({
-              title: slide.title,
-              body: slide.body,
-              speakerNotes: slide.speakerNotes,
-              blocks: slide.blocks,
-            })),
-          ),
+        // 指纹必须来自修复后的真实文档快照。此前这里忽略了 designs，比较的
+        // 始终是同一份生成时草稿，内容隔离守卫在生产里从未生效。
+        contentFingerprint: (designs) => documentContentFingerprint(buildFinalDocument(designs)),
         vision: new TauriVisionReviewPort(),
         taskId,
         isCancelled: () => designCancelRef.current,

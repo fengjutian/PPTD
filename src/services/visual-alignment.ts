@@ -205,17 +205,11 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     });
   }
 
-  const slideGuidance = expected.map(
-    (slideIndex) =>
-      guidanceBySlide.get(slideIndex) ?? {
-        slideIndex,
-        safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 },
-        logoRegions: [],
-        busyRegions: [],
-        focalPoint: { x: 0.5, y: 0.5 },
-        recommendedLayout: slideIndex === 0 ? ("cover" as const) : ("title-body" as const),
-      },
-  );
+  // Only the guidance the model actually produced is kept. Synthesizing entries
+  // for pages the model said nothing about used to fabricate a safe region and a
+  // `title-body` layout, which the rule-based repair then applied as if the
+  // model had asked for it. Missing guidance must stay missing.
+  const slideGuidance = [...guidanceBySlide.values()].sort((left, right) => left.slideIndex - right.slideIndex);
   return visualReviewSchema.parse({ ...scores, issues, slideGuidance });
 }
 export const visualRepairPlanSchema = z.object({
@@ -458,13 +452,21 @@ export interface VisualAlignmentResult<T> {
   value: T;
   review: VisualReview;
   iterations: number;
-  stopReason: "target-reached" | "stagnated" | "iteration-limit";
+  stopReason: "target-reached" | "stagnated" | "regressed" | "no-change" | "iteration-limit";
+  /** True when the returned value is an earlier, better design rather than the last repair. */
+  reverted: boolean;
 }
 
 export async function runVisualAlignmentLoop<T>(options: {
   initial: T;
   goal: PresentationVisualGoal;
   contentFingerprint: (value: T) => string;
+  /**
+   * Design fingerprint, used to stop when a repair plan does not actually
+   * change anything. Without it the loop would export, render, and review the
+   * same deck again for no reason.
+   */
+  stateFingerprint?: (value: T) => string;
   review: (value: T, goal: PresentationVisualGoal, iteration: number) => Promise<VisualReview>;
   repair: (value: T, review: VisualReview, goal: PresentationVisualGoal) => Promise<T>;
   maxIterations?: number;
@@ -474,9 +476,25 @@ export async function runVisualAlignmentLoop<T>(options: {
   let value = options.initial;
   let previousScore = -1;
   let lastReview: VisualReview | undefined;
+  // A repair that lowers the score must not become the deck the user gets.
+  // Remember the best design seen so far and return that when the loop cannot
+  // improve any further.
+  let bestValue = options.initial;
+  let bestReview: VisualReview | undefined;
+  let bestScore = -1;
+  const settled = (iterations: number, stopReason: VisualAlignmentResult<T>["stopReason"]) => {
+    const finalReview = bestReview ?? lastReview;
+    if (!finalReview) throw new Error("VISUAL_ALIGNMENT_REVIEW_MISSING");
+    return { value: bestValue, review: finalReview, iterations, stopReason, reverted: bestValue !== value };
+  };
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
     const review = visualReviewSchema.parse(await options.review(value, options.goal, iteration));
     lastReview = review;
+    if (review.overallScore > bestScore) {
+      bestScore = review.overallScore;
+      bestValue = value;
+      bestReview = review;
+    }
     const reached =
       review.overallScore >= options.goal.minimumScores.overall &&
       review.hierarchyScore >= options.goal.minimumScores.hierarchy &&
@@ -484,13 +502,15 @@ export async function runVisualAlignmentLoop<T>(options: {
       review.readabilityScore >= options.goal.minimumScores.readability &&
       review.consistencyScore >= options.goal.minimumScores.consistency &&
       !review.issues.some((issue) => issue.severity === "error");
-    if (reached) return { value, review, iterations: iteration, stopReason: "target-reached" };
+    if (reached) return { value, review, iterations: iteration, stopReason: "target-reached", reverted: false };
     if (previousScore >= 0 && review.overallScore - previousScore < 3)
-      return { value, review, iterations: iteration, stopReason: "stagnated" };
-    if (iteration === maxIterations) return { value, review, iterations: iteration, stopReason: "iteration-limit" };
+      return settled(iteration, review.overallScore < previousScore ? "regressed" : "stagnated");
+    if (iteration === maxIterations) return settled(iteration, "iteration-limit");
     previousScore = review.overallScore;
     const repaired = await options.repair(value, review, options.goal);
     if (options.contentFingerprint(repaired) !== approvedContent) throw new Error("VISUAL_ALIGNMENT_CONTENT_MUTATION");
+    if (options.stateFingerprint && options.stateFingerprint(repaired) === options.stateFingerprint(value))
+      return settled(iteration, "no-change");
     value = repaired;
   }
   throw new Error(lastReview ? "VISUAL_ALIGNMENT_ITERATION_INVALID" : "VISUAL_ALIGNMENT_REVIEW_MISSING");
@@ -505,11 +525,18 @@ export const defaultPresentationVisualGoal = (): PresentationVisualGoal => ({
   minimumScores: { overall: 85, hierarchy: 82, alignment: 90, readability: 88, consistency: 85 },
 });
 
-export function affectedSlideIndexes(review: VisualReview): number[] {
+/**
+ * The pages a repair round may touch.
+ *
+ * Errors always count. Warnings only count when the deck as a whole is below
+ * the goal, because a warning on an otherwise passing deck is not a reason to
+ * move that page's content around.
+ */
+export function affectedSlideIndexes(review: VisualReview, minimumOverall = 85): number[] {
   return [
     ...new Set(
       review.issues
-        .filter((issue) => issue.severity === "error" || review.overallScore < 85)
+        .filter((issue) => issue.severity === "error" || review.overallScore < minimumOverall)
         .map((issue) => issue.slideIndex),
     ),
   ].sort((left, right) => left - right);

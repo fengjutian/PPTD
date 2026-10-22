@@ -1,11 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PresentationVisualGoal, VisualRepairPlan, VisualReview } from "./visual-alignment";
-import { normalizeVisualRepairPlan, normalizeVisualReview, visualRepairPlanSchema } from "./visual-alignment";
+import {
+  affectedSlideIndexes,
+  normalizeVisualRepairPlan,
+  normalizeVisualReview,
+  visualRepairPlanSchema,
+} from "./visual-alignment";
 import type { PresentationRender } from "./presentation-renderer";
 import { loadSettings } from "./settings";
 
 const MAX_VISUAL_IMAGE_BYTES = 6 * 1024 * 1024;
-const MAX_VISUAL_SLIDES = 20;
+/**
+ * How many rendered pages a review may cover.
+ *
+ * This used to be 20 while the rasterizer already produced up to 40 pages, so
+ * a 21-page deck silently lost its visual review entirely. The limit now
+ * matches what the rasterizer can deliver; larger decks are reported as
+ * unreviewed instead of failing inside a batch.
+ */
+export const MAX_REVIEWED_SLIDES = 40;
 
 /** What the repair planner needs to know about the deck. */
 export interface RepairPlanContext {
@@ -16,7 +29,7 @@ export interface RepairPlanContext {
 }
 
 export function validateVisualRenderPayload(render: PresentationRender): void {
-  if (render.slides.length < 1 || render.slides.length > MAX_VISUAL_SLIDES)
+  if (render.slides.length < 1 || render.slides.length > MAX_REVIEWED_SLIDES)
     throw new Error("AI_VISION_SLIDE_COUNT_INVALID");
   for (const image of [...render.slides, render.contactSheet]) {
     if (!image.startsWith("data:image/jpeg;base64,") || image.length > MAX_VISUAL_IMAGE_BYTES * 1.4)
@@ -57,70 +70,88 @@ export class UnavailableVisionReviewPort implements VisionReviewPort {
  * something unusable. It maps the review's issue kinds onto a fixed set of
  * actions, which is why it can only ever say a handful of things.
  */
-export function planRepairsByRule(review: VisualReview): VisualRepairPlan {
+export function planRepairsByRule(review: VisualReview, minimumOverall = 85): VisualRepairPlan {
   const bySlide = new Map<number, VisualReview["issues"]>();
   review.issues.forEach((issue) => bySlide.set(issue.slideIndex, [...(bySlide.get(issue.slideIndex) ?? []), issue]));
   const guidance = new Map(review.slideGuidance.map((item) => [item.slideIndex, item]));
-  const slideIndexes = new Set([...bySlide.keys(), ...guidance.keys()]);
-  return visualRepairPlanSchema.parse({
-    repairs: [...slideIndexes].map((slideIndex) => {
-      const issues = bySlide.get(slideIndex) ?? [];
-      const guide = guidance.get(slideIndex);
-      return {
+  // The rule table may only answer the pages the review actually flagged. It
+  // used to walk every guidance entry, and normalization used to invent one
+  // for every page, so a failed model call ended up re-laying out the whole
+  // deck — moving titles and shrinking body text on pages nobody complained
+  // about. A page without a finding has nothing to repair here.
+  const repairs = affectedSlideIndexes(review, minimumOverall).flatMap((slideIndex) => {
+    const issues = bySlide.get(slideIndex) ?? [];
+    if (issues.length === 0) return [];
+    const guide = guidance.get(slideIndex);
+    const hierarchyAction = issues.some((issue) => issue.issue === "weak-hierarchy")
+      ? ("strengthen-title" as const)
+      : issues.some((issue) => issue.issue === "excessive-empty-space")
+        ? ("increase-whitespace" as const)
+        : ("keep" as const);
+    const backgroundAction = issues.some(
+      (issue) => issue.issue === "background-conflict" || issue.issue === "poor-contrast",
+    )
+      ? ("replace-compatible" as const)
+      : ("keep" as const);
+    const layout =
+      guide?.recommendedLayout ??
+      (issues.some((issue) => issue.issue === "repetitive-layout") ? ("title-body" as const) : undefined);
+    const elementActions = [
+      ...(guide
+        ? [
+            {
+              action: "move" as const,
+              target: "title" as const,
+              frame: {
+                x: guide.safeRegion.x,
+                y: guide.safeRegion.y,
+                width: guide.safeRegion.width,
+                height: Math.min(0.14, guide.safeRegion.height * 0.22),
+              },
+            },
+            {
+              action: "resize" as const,
+              target: "body" as const,
+              frame: {
+                x: guide.safeRegion.x,
+                y: guide.safeRegion.y + Math.min(0.18, guide.safeRegion.height * 0.28),
+                width: guide.safeRegion.width,
+                height: Math.max(0.08, guide.safeRegion.height - Math.min(0.18, guide.safeRegion.height * 0.28)),
+              },
+            },
+          ]
+        : []),
+      ...(issues.some((issue) => issue.issue === "weak-hierarchy")
+        ? [{ action: "restyle" as const, target: "title" as const, fontScale: 1.15 }]
+        : []),
+      ...(guide ? [{ action: "changeLayout" as const, layout: guide.recommendedLayout }] : []),
+    ];
+    // A finding the rule table has no coordinate for is still a finding, but it
+    // is not permission to invent geometry. If nothing can be acted on, the
+    // page is left alone.
+    if (
+      layout === undefined &&
+      backgroundAction === "keep" &&
+      hierarchyAction === "keep" &&
+      elementActions.length === 0
+    )
+      return [];
+    return [
+      {
         slideIndex,
-        layout:
-          guide?.recommendedLayout ??
-          (issues.some((issue) => issue.issue === "repetitive-layout") ? "title-body" : undefined),
-        backgroundAction: issues.some(
-          (issue) => issue.issue === "background-conflict" || issue.issue === "poor-contrast",
-        )
-          ? "replace-compatible"
-          : "keep",
-        hierarchyAction: issues.some((issue) => issue.issue === "weak-hierarchy")
-          ? "strengthen-title"
-          : issues.some((issue) => issue.issue === "excessive-empty-space")
-            ? "increase-whitespace"
-            : "keep",
-        safeRegion: guide?.safeRegion,
-        obstacleRegions: [...(guide?.logoRegions ?? []), ...(guide?.busyRegions ?? [])],
-        elementActions: [
-          ...(guide
-            ? [
-                {
-                  action: "move" as const,
-                  target: "title" as const,
-                  frame: {
-                    x: guide.safeRegion.x,
-                    y: guide.safeRegion.y,
-                    width: guide.safeRegion.width,
-                    height: Math.min(0.14, guide.safeRegion.height * 0.22),
-                  },
-                },
-              ]
-            : []),
-          ...(guide
-            ? [
-                {
-                  action: "resize" as const,
-                  target: "body" as const,
-                  frame: {
-                    x: guide.safeRegion.x,
-                    y: guide.safeRegion.y + Math.min(0.18, guide.safeRegion.height * 0.28),
-                    width: guide.safeRegion.width,
-                    height: Math.max(0.08, guide.safeRegion.height - Math.min(0.18, guide.safeRegion.height * 0.28)),
-                  },
-                },
-              ]
-            : []),
-          ...(issues.some((issue) => issue.issue === "weak-hierarchy")
-            ? [{ action: "restyle" as const, target: "title" as const, fontScale: 1.15 }]
-            : []),
-          ...(guide ? [{ action: "changeLayout" as const, layout: guide.recommendedLayout }] : []),
-        ],
-        reason: issues.map((issue) => issue.suggestion).join("；"),
-      };
-    }),
+        ...(layout === undefined ? {} : { layout }),
+        backgroundAction,
+        hierarchyAction,
+        ...(guide === undefined ? {} : { safeRegion: guide.safeRegion, obstacleRegions: [...guide.logoRegions, ...guide.busyRegions] }),
+        elementActions,
+        reason: issues
+          .map((issue) => issue.suggestion)
+          .join("；")
+          .slice(0, 500),
+      },
+    ];
   });
+  return visualRepairPlanSchema.parse({ repairs });
 }
 
 export class TauriVisionReviewPort implements VisionReviewPort {
@@ -217,6 +248,6 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     context?: RepairPlanContext,
   ): Promise<VisualRepairPlan> {
     const planned = await this.planRepairsWithModel(review, goal, context);
-    return planned ?? planRepairsByRule(review);
+    return planned ?? planRepairsByRule(review, goal.minimumScores.overall);
   }
 }

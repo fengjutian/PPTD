@@ -45,6 +45,11 @@ describe("vision review payload", () => {
       }),
     ).not.toThrow();
   });
+  it("accepts a deck longer than 20 pages, up to the rasterizer limit", () => {
+    // 21–40 页的文稿以前会整份失去视觉评审，只留下一条语焉不详的降级说明。
+    expect(() => validateVisualRenderPayload(render(21))).not.toThrow();
+    expect(() => validateVisualRenderPayload(render(40))).not.toThrow();
+  });
   it("rejects unsupported image payloads and empty decks", () => {
     expect(() => validateVisualRenderPayload({ slides: [], contactSheet: "data:image/jpeg;base64,AA==" })).toThrow(
       "AI_VISION_SLIDE_COUNT_INVALID",
@@ -146,5 +151,39 @@ describe("视觉评审端口", () => {
 
     // 降级后的计划仍然能用：规则表至少能改标题和正文。
     expect(plan.repairs.length).toBeGreaterThan(0);
+  });
+
+  it("模型不可用时，规则表只修评审提到问题的页面", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "load_app_settings") return null;
+      if (command === "plan_presentation_repairs") throw new Error("AI_PROVIDER_HTTP_ERROR:500");
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const port = new TauriVisionReviewPort();
+    const reviewWithGuidance = {
+      ...review,
+      // 第 1 页没有任何问题，但模型顺手给了 guidance。
+      slideGuidance: [
+        ...review.slideGuidance,
+        {
+          slideIndex: 1,
+          safeRegion: { x: 0.08, y: 0.18, width: 0.84, height: 0.7 },
+          logoRegions: [],
+          busyRegions: [],
+          focalPoint: { x: 0.5, y: 0.5 },
+          recommendedLayout: "cards",
+        },
+      ],
+    } as VisualReview;
+
+    const plan = await port.planRepairs(reviewWithGuidance, goal, {
+      deck: [
+        { index: 0, title: "第一页", layout: "title-body" },
+        { index: 1, title: "第二页", layout: "cards" },
+      ],
+    });
+
+    expect(plan.repairs.map((repair) => repair.slideIndex)).toEqual([0]);
   });
 });
