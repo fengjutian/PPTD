@@ -31,6 +31,14 @@ export function setImageProjectPath(path: string | undefined): void {
   }
 }
 
+/**
+ * The project the current pictures are read from. The backend needs it to
+ * carry the pictures over when a document is written somewhere else.
+ */
+export function getImageProjectPath(): string | undefined {
+  return currentProjectPath;
+}
+
 /** Synchronous cache lookup for the first render; undefined means "still loading". */
 export function peekImageUrl(reference: string): string | undefined {
   return cache.get(reference);

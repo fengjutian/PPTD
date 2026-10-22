@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { parsePresentationDocument, repairDanglingLayoutReferences, type PresentationDocument } from "../core/document-model";
+import { resolveDocumentImages } from "./image-url-service";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
@@ -67,7 +68,12 @@ export async function saveProject(document: PresentationDocument, currentPath?: 
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const path = currentPath ?? await save({ filters: projectFilter, defaultPath: `${safeFileName(document.title)}.pptd` });
   if (!path) return null;
-  await invoke("save_project", { path, document });
+  // A document keeps its pictures as references into the asset directory of the
+  // project they were saved to. Writing it to another path has to carry the
+  // pictures over, otherwise the new project keeps the references and loses the
+  // files behind them.
+  const payload = currentPath === path ? document : await resolveDocumentImages(document);
+  await invoke("save_project", { path, document: payload });
   return { path, modifiedAt: await projectModifiedAt(path) };
 }
 
@@ -78,9 +84,9 @@ const enqueueRecovery = (task: () => Promise<void>): Promise<void> => {
   return recoveryQueue;
 };
 
-export function saveRecovery(document: PresentationDocument): Promise<void> {
+export function saveRecovery(document: PresentationDocument, sourcePath?: string): Promise<void> {
   if (!isTauri()) return Promise.resolve();
-  return enqueueRecovery(() => invoke("save_recovery", { document }));
+  return enqueueRecovery(() => invoke("save_recovery", { document, sourcePath: sourcePath ?? null }));
 }
 
 export async function loadRecovery(): Promise<StoredDocument | null> {

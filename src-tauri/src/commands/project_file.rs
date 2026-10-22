@@ -625,19 +625,87 @@ fn recovery_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub async fn save_recovery(app: tauri::AppHandle, document: Value) -> Result<(), String> {
+pub async fn save_recovery(
+    app: tauri::AppHandle,
+    source_path: Option<String>,
+    document: Value,
+) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let path = recovery_path(&app)?;
-        save_recovery_at(&path, document)
+        let source = source_path.map(PathBuf::from);
+        save_recovery_at(&path, document, source.as_deref())
     })
     .await
     .map_err(|error| format!("RECOVERY_SAVE_TASK_FAILED: {error}"))?
 }
 
 /// 写入恢复副本。落盘用临时文件加原子替换，中断时保留上一个有效版本。
-fn save_recovery_at(path: &Path, mut document: Value) -> Result<(), String> {
+fn save_recovery_at(
+    path: &Path,
+    mut document: Value,
+    source_path: Option<&Path>,
+) -> Result<(), String> {
     externalize_images(path, &mut document)?;
+    copy_referenced_assets(path, &document, source_path)?;
     atomic_write_json(path, &document)?;
+    Ok(())
+}
+
+/// 把文档引用的图片复制到这份副本自己的资源目录。
+///
+/// A document keeps its pictures as references into the asset directory of the
+/// project they belong to. A recovery copy written next to that project would
+/// keep the references but not the files behind them, so the restored document
+/// would come back without its pictures.
+fn copy_referenced_assets(
+    path: &Path,
+    document: &Value,
+    source_path: Option<&Path>,
+) -> Result<(), String> {
+    let Some(source_path) = source_path else {
+        return Ok(());
+    };
+    let source_root = assets_root(source_path)?;
+    let target_root = assets_root(path)?;
+    let Some(slides) = document.pointer("/slides").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for slide in slides {
+        let Some(elements) = slide.get("elements").and_then(Value::as_array) else {
+            continue;
+        };
+        for element in elements {
+            if element.get("type").and_then(Value::as_str) != Some("image") {
+                continue;
+            }
+            let Some(reference) = element
+                .pointer("/source/dataUrl")
+                .and_then(Value::as_str)
+                .and_then(|value| value.strip_prefix("asset://"))
+            else {
+                continue;
+            };
+            let relative = Path::new(reference);
+            if relative.is_absolute()
+                || relative
+                    .components()
+                    .any(|component| !matches!(component, std::path::Component::Normal(_)))
+            {
+                continue;
+            }
+            let target = target_root.join(relative);
+            if target.is_file() {
+                continue;
+            }
+            let origin = source_root.join(relative);
+            if !origin.is_file() {
+                continue;
+            }
+            fs::create_dir_all(&target_root)
+                .map_err(|error| format!("ASSET_DIRECTORY_CREATE_FAILED: {error}"))?;
+            fs::copy(&origin, &target).map_err(|error| format!("ASSET_COPY_FAILED: {error}"))?;
+        }
+    }
     Ok(())
 }
 
@@ -1877,7 +1945,7 @@ mod tests {
         let path = directory.path().join("latest.pptd");
         let value = json!({ "schemaVersion": 2, "title": "恢复测试" });
 
-        save_recovery_at(&path, value.clone()).unwrap();
+        save_recovery_at(&path, value.clone(), None).unwrap();
 
         assert_eq!(load_recovery_at(&path).unwrap(), Some(value));
     }
@@ -1887,7 +1955,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("latest.pptd");
 
-        save_recovery_at(&path, recovery_document()).unwrap();
+        save_recovery_at(&path, recovery_document(), None).unwrap();
 
         // 落盘时图片变成资源引用，读回时必须还原成内嵌数据。
         let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
@@ -1906,6 +1974,37 @@ mod tests {
                 .and_then(Value::as_str),
             Some(stored_url)
         );
+    }
+
+    #[test]
+    fn carries_the_pictures_of_a_project_into_the_recovery_copy() {
+        // 文档里的图片是指向项目资源目录的引用。恢复副本写在别处时必须把图片
+        // 一起带走，否则恢复出来的文档只剩引用，图片全丢。
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project.pptd");
+        let recovery = directory.path().join("latest.pptd");
+        let reference = format!("{}.png", "a".repeat(64));
+        fs::create_dir_all(assets_root(&project).unwrap()).unwrap();
+        fs::write(
+            assets_root(&project).unwrap().join(&reference),
+            b"picture bytes",
+        )
+        .unwrap();
+        let document = json!({
+            "schemaVersion": 2,
+            "title": "带图恢复",
+            "slides": [{
+                "elements": [{
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "type": "image",
+                    "source": { "kind": "embedded", "dataUrl": format!("asset://{reference}"), "mimeType": "image/png" }
+                }]
+            }]
+        });
+
+        save_recovery_at(&recovery, document, Some(&project)).unwrap();
+
+        assert!(assets_root(&recovery).unwrap().join(&reference).is_file());
     }
 
     #[test]
@@ -1931,7 +2030,7 @@ mod tests {
     fn clears_the_recovery_copy_and_its_assets() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("latest.pptd");
-        save_recovery_at(&path, recovery_document()).unwrap();
+        save_recovery_at(&path, recovery_document(), None).unwrap();
         assert!(assets_root(&path).unwrap().exists());
 
         clear_recovery_at(&path).unwrap();

@@ -26,7 +26,7 @@ import type { PresentationQualityIssue } from "../services/presentation-quality-
 import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
-import { resolveDocumentImages, setImageProjectPath } from "../services/image-url-service";
+import { resolveDocumentImages, setImageProjectPath, getImageProjectPath } from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
 type AppView = "editor" | "ai" | "theme" | "settings";
@@ -327,14 +327,23 @@ export function App() {
       setTaskStatus(recovery.removedLayoutReferences > 0
         ? `已恢复自动保存快照，但 ${recovery.removedLayoutReferences} 个页面的模板引用缺失，请另存项目`
         : "已恢复自动保存快照，请另存项目");
-    }).catch((error: unknown) => setTaskStatus(`恢复检查失败：${error instanceof Error ? error.message : String(error)}`));
+    }).catch((error: unknown) => {
+      // A snapshot that cannot be read is still the user's work. The file is
+      // kept and its path is reported, so nothing is lost silently.
+      void recoveryProjectPath().then((path) => {
+        setTaskStatus(`恢复检查失败：${error instanceof Error ? error.message : String(error)}${path ? `。快照保留在 ${path}` : ""}`);
+      });
+    });
     return () => { active = false; };
   }, [loadDocument]);
 
   useEffect(() => {
     if (!dirty || !isDesktopRuntime()) return;
     const timer = window.setTimeout(() => {
-      void saveRecovery(document).catch((error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
+      // The snapshot keeps the pictures of the document. They live in the asset
+      // directory of the project the document belongs to, so the backend needs
+      // that path to carry them into the snapshot.
+      void saveRecovery(document, getImageProjectPath()).catch((error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [dirty, document]);
