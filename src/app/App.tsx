@@ -524,9 +524,9 @@ export function App() {
       }
     };
     const onExit = () => { void flush(); };
-    const onVisibilityChange = () => { if (document.visibilityState === "hidden") onExit(); };
+    const onVisibilityChange = () => { if (window.document.visibilityState === "hidden") onExit(); };
     window.addEventListener("pagehide", onExit);
-    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.document.addEventListener("visibilitychange", onVisibilityChange);
     let unlisten: (() => void) | undefined;
     let disposed = false;
     if (isDesktopRuntime()) {
@@ -546,7 +546,7 @@ export function App() {
     return () => {
       disposed = true;
       window.removeEventListener("pagehide", onExit);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.document.removeEventListener("visibilitychange", onVisibilityChange);
       unlisten?.();
     };
   }, []);
@@ -560,7 +560,18 @@ export function App() {
     setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(draft); setActiveDraftSlideIndex(0); setAiSaveState("saved");
   };
 
+  /**
+   * Once a page is edited again, "undo restore" no longer describes what the
+   * writer sees, so the pre-restore snapshot is dropped instead of silently
+   * reverting the newer edits later.
+   */
+  const forgetRestoreBackup = (index: number) => {
+    if (!aiRestoreBackups.current.delete(index)) return;
+    setAiRestoreUndoIndexes([...aiRestoreBackups.current.keys()]);
+  };
+
   const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
+    forgetRestoreBackup(index);
     setAiDraft((draft) => draft ? { ...draft, slides: draft.slides.map((slide, slideIndex) => {
       if (slideIndex !== index) return slide;
       if (field !== "body") return { ...slide, [field]: value };
@@ -574,6 +585,7 @@ export function App() {
   };
 
   const updateAiBlocks = (index: number, blocks: AiDraft["slides"][number]["blocks"]) => {
+    forgetRestoreBackup(index);
     setAiDraft((draft) => draft ? {
       ...draft,
       slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...slide, blocks, body: bodyFromBlocks(blocks) } : slide)),
@@ -639,6 +651,7 @@ export function App() {
   const generateFromDraft = async () => {
     if (!aiDraft || !selectedTemplate || !templateAnalysis) return;
     designCancelRef.current = false;
+    setDesignQualityReport(undefined);
     designTaskId.current += 1;
     const taskId = designTaskId.current;
     setDesignBusy(true);
@@ -746,7 +759,9 @@ export function App() {
           issues: [...new Map(stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue])).values()],
           notes: stage.notes,
         });
-        setTaskStatus(`PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`);
+        setTaskStatus(stage.issues.length > 0
+          ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
+          : `PPT 已生成，但质检未完成：${stage.notes.join("；")}`);
       }
     } catch (error) {
       window.clearInterval(progressTimer);

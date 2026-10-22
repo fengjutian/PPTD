@@ -6,6 +6,86 @@ use crate::ai::{self, CancelRegistry, ChatMessage, ChatRequest, VisionRequest};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use std::time::Duration;
+use tauri::Emitter;
+
+/// 流式生成进度的事件名。前端据此把"正在写第几页"显示出来。
+const GENERATION_PROGRESS_EVENT: &str = "ai-generation-progress";
+
+/// 汇报一次生成进度。
+///
+/// `key` 区分同一次任务里的不同请求：正文分批并行，各批的进度要由前端汇总。
+fn emit_generation_progress(
+    app: &tauri::AppHandle,
+    task_id: Option<u64>,
+    key: &str,
+    phase: &str,
+    received: usize,
+    content: &str,
+) {
+    let Some(task_id) = task_id else {
+        return;
+    };
+    let _ = app.emit(
+        GENERATION_PROGRESS_EVENT,
+        serde_json::json!({
+            "taskId": task_id,
+            "key": key,
+            "phase": phase,
+            "received": received,
+            "pages": ai::stream::estimate_completed_pages(content),
+        }),
+    );
+}
+
+/// 按需流式地完成一次对话请求。
+///
+/// 启用流式时逐段汇报"已经写到第几页"。流式协议出问题时退回一次性请求：
+/// 流式只是进度反馈的增强，不该让生成失败。
+async fn complete_chat(
+    provider: &dyn ai::ChatProvider,
+    api_key: &str,
+    body: &ChatRequest,
+    timeout: Duration,
+    transport_error: &str,
+    cancel: &ai::CancelToken,
+    app: &tauri::AppHandle,
+    task_id: Option<u64>,
+    key: &str,
+    phase: &str,
+    stream_progress: bool,
+) -> Result<String, String> {
+    if !stream_progress {
+        return ai::chat(provider, api_key, body, timeout, transport_error, cancel).await;
+    }
+    let mut accumulated = String::new();
+    let mut received = 0usize;
+    let mut last_emitted = 0usize;
+    let mut on_delta = |delta: &str| {
+        accumulated.push_str(delta);
+        received += delta.chars().count();
+        if received >= last_emitted + 200 {
+            last_emitted = received;
+            emit_generation_progress(app, task_id, key, phase, received, &accumulated);
+        }
+    };
+    match ai::chat_stream(
+        provider,
+        api_key,
+        body,
+        timeout,
+        transport_error,
+        cancel,
+        &mut on_delta,
+    )
+    .await
+    {
+        Ok(content) => Ok(content),
+        Err(error) if error.starts_with("AI_STREAM_FAILED") => {
+            ai::chat(provider, api_key, body, timeout, transport_error, cancel).await
+        }
+        Err(error) => Err(error),
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +96,8 @@ pub struct GenerateRequest {
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
     task_id: Option<u64>,
+    /// 是否流式接收并汇报进度。
+    stream_progress: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -50,6 +132,8 @@ pub struct GenerateOutlineRequest {
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
     task_id: Option<u64>,
+    /// 是否流式接收并汇报进度。
+    stream_progress: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -63,6 +147,8 @@ pub struct GenerateSlideBatchRequest {
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
     task_id: Option<u64>,
+    /// 是否流式接收并汇报进度。
+    stream_progress: Option<bool>,
 }
 
 /// 生成阶段的请求超时。
@@ -224,6 +310,7 @@ fn parse_json<T: DeserializeOwned>(content: &str, invalid_code: &str) -> Result<
 #[tauri::command]
 pub async fn generate_presentation(
     request: GenerateRequest,
+    app: tauri::AppHandle,
     cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
     let cancel = cancels.token_for(request.task_id);
@@ -275,13 +362,17 @@ pub async fn generate_presentation(
         }],
         temperature: 0.4,
     };
-    let content = ai::chat(
+    let content = complete_chat(
         provider,
         &api_key,
         &body,
         FULL_DRAFT_TIMEOUT,
         "AI_DRAFT_REQUEST_FAILED",
         &cancel,
+        &app,
+        request.task_id,
+        "draft",
+        request.stream_progress.unwrap_or(false),
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_JSON_INVALID")
@@ -294,6 +385,7 @@ pub async fn generate_presentation(
 #[tauri::command]
 pub async fn generate_presentation_outline(
     request: GenerateOutlineRequest,
+    app: tauri::AppHandle,
     cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
     let cancel = cancels.token_for(request.task_id);
@@ -334,13 +426,17 @@ pub async fn generate_presentation_outline(
         }],
         temperature: 0.4,
     };
-    let content = ai::chat(
+    let content = complete_chat(
         provider,
         &api_key,
         &body,
         OUTLINE_TIMEOUT,
         "AI_OUTLINE_REQUEST_FAILED",
         &cancel,
+        &app,
+        request.task_id,
+        "outline",
+        request.stream_progress.unwrap_or(false),
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_OUTLINE_JSON_INVALID")
@@ -353,6 +449,7 @@ pub async fn generate_presentation_outline(
 #[tauri::command]
 pub async fn generate_presentation_slides_batch(
     request: GenerateSlideBatchRequest,
+    app: tauri::AppHandle,
     cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
     let cancel = cancels.token_for(request.task_id);
@@ -435,13 +532,17 @@ pub async fn generate_presentation_slides_batch(
         }],
         temperature: 0.4,
     };
-    let content = ai::chat(
+    let content = complete_chat(
         provider,
         &api_key,
         &body,
         SLIDE_BATCH_TIMEOUT,
         "AI_BATCH_REQUEST_FAILED",
         &cancel,
+        &app,
+        request.task_id,
+        "content",
+        request.stream_progress.unwrap_or(false),
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_BATCH_JSON_INVALID")

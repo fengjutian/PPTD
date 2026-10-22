@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { bodyFromBlocks, sanitizeBlocks, sanitizeDraftForSave } from "../../services/ai-draft-content";
 import { aiDraftSchema, type AiDraft } from "../../services/ai-service";
 import { ContentReview } from "./ContentReview";
 import {
@@ -84,6 +85,9 @@ describe("content review metrics", () => {
     const draft = createDraft();
     expect(isSlideEdited(draft.slides[0]!, draft.slides[0])).toBe(false);
     expect(isSlideEdited({ ...draft.slides[0]!, body: "改过的正文" }, draft.slides[0])).toBe(true);
+    // A block-only edit (for example a corrected metric value) must still count,
+    // because the block is what the deck renders.
+    expect(isSlideEdited({ ...draft.slides[0]!, blocks: [{ type: "bullet-list", items: ["字希文"] }] }, draft.slides[0])).toBe(true);
     expect(isSlideEdited(draft.slides[0]!, undefined)).toBe(false);
   });
 
@@ -95,6 +99,47 @@ describe("content review metrics", () => {
   });
 });
 
+describe("structured content editing", () => {
+  it("projects structured blocks into the plain-text body the layout heuristics read", () => {
+    expect(
+      bodyFromBlocks([
+        { type: "metric", label: "增长率", value: "38%" },
+        { type: "comparison", leftLabel: "现状", rightLabel: "目标", leftItems: ["人工"], rightItems: ["自动"] },
+      ]),
+    ).toBe("增长率：38%\n现状\n人工\n目标\n自动");
+  });
+
+  it("drops emptied items and blocks without touching a table", () => {
+    const table = { type: "table-data" as const, header: ["项目", "数值"], rows: [["营收", "38万"]] };
+    expect(
+      sanitizeBlocks([
+        { type: "bullet-list", items: ["保留", "  "] },
+        { type: "paragraph", text: " " },
+        { type: "metric", label: "指标", value: "" },
+        table,
+      ]),
+    ).toEqual([{ type: "bullet-list", items: ["保留"] }, table]);
+  });
+
+  it("keeps a half-written draft loadable instead of dropping it from history", () => {
+    const draft = createDraft();
+    const messy: AiDraft = {
+      ...draft,
+      title: "",
+      slides: [
+        { ...draft.slides[0]!, title: "", blocks: [{ type: "bullet-list", items: ["字希文", ""] }] },
+        draft.slides[1]!,
+      ],
+    };
+    const cleaned = sanitizeDraftForSave(messy);
+    expect(() => aiDraftSchema.parse(cleaned)).not.toThrow();
+    expect(cleaned.slides[0]!.blocks).toEqual([{ type: "bullet-list", items: ["字希文"] }]);
+    // The review UI trims the stored placeholder, so the page still reads as missing a title.
+    expect(cleaned.slides[0]!.title.trim()).toBe("");
+    expect(cleaned.title.trim()).toBe("");
+  });
+});
+
 describe("content review layout", () => {
   it("shows every page in one continuous list with localized plan labels", () => {
     const draft = withSlideIds(createDraft());
@@ -103,10 +148,13 @@ describe("content review layout", () => {
         draft={draft}
         activeIndex={0}
         saveState="saved"
+        restoreUndoIndexes={[]}
         onActiveIndexChange={() => undefined}
         onDraftTitleChange={() => undefined}
         onSlideFieldChange={() => undefined}
+        onSlideBlocksChange={() => undefined}
         onRestoreSlide={() => undefined}
+        onUndoRestore={() => undefined}
         onNewDraft={() => undefined}
       />,
     );
@@ -116,5 +164,52 @@ describe("content review layout", () => {
     expect(markup).toContain("标题不能为空");
     expect(markup.match(/data-slide-index=/g)).toHaveLength(2);
     expect(markup).toContain("已自动保存");
+  });
+
+  it("edits structured pages through their blocks instead of flattening them into body text", () => {
+    const draft = withSlideIds(createDraft());
+    const markup = renderToStaticMarkup(
+      <ContentReview
+        draft={draft}
+        activeIndex={0}
+        saveState="saved"
+        restoreUndoIndexes={[]}
+        onActiveIndexChange={() => undefined}
+        onDraftTitleChange={() => undefined}
+        onSlideFieldChange={() => undefined}
+        onSlideBlocksChange={() => undefined}
+        onRestoreSlide={() => undefined}
+        onUndoRestore={() => undefined}
+        onNewDraft={() => undefined}
+      />,
+    );
+    expect(markup).toContain("要点列表");
+    expect(markup).toContain("第 1 页要点第 1 条");
+    expect(markup).not.toContain("第 1 页正文");
+  });
+
+  it("falls back to a plain body field for legacy drafts without blocks", () => {
+    const draft = withSlideIds(createDraft());
+    const legacy: AiDraft = {
+      ...draft,
+      slides: draft.slides.map((slide) => ({ ...slide, blocks: [] })),
+    };
+    const markup = renderToStaticMarkup(
+      <ContentReview
+        draft={legacy}
+        activeIndex={0}
+        saveState="saved"
+        restoreUndoIndexes={[]}
+        onActiveIndexChange={() => undefined}
+        onDraftTitleChange={() => undefined}
+        onSlideFieldChange={() => undefined}
+        onSlideBlocksChange={() => undefined}
+        onRestoreSlide={() => undefined}
+        onUndoRestore={() => undefined}
+        onNewDraft={() => undefined}
+      />,
+    );
+    expect(markup).toContain("第 1 页正文");
+    expect(markup).not.toContain("要点列表");
   });
 });

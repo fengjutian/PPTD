@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { produce } from "immer";
 import { applyCommand, type AiContentBlock } from "./commands";
 import { classifyRelayoutElements } from "./slide-relayout";
-import { createDocument } from "../document-model";
+import { createDocument, inches } from "../document-model";
 import { useEditorStore } from "../../store/editor-store";
 
 const design = {
@@ -26,10 +26,10 @@ function designedDocument(blocks: AiContentBlock[]) {
 describe("design-only relayout", () => {
   it("recognises legacy list copy as generated and keeps unrelated hand-written text", () => {
     const document = designedDocument([{ type: "paragraph", text: "第一点\n第二点\n第三点" }]);
-    const slide = document.slides[0]!;
+    const slide = structuredClone(document).slides[0]!;
     slide.elements.push(
-      { id: crypto.randomUUID() as never, type: "text", contentRef: "decorative", text: "第一点", frame: { x: 100, y: 100, width: 1000, height: 100 }, rotationMilliDegree: 0, locked: false, style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" } },
-      { id: crypto.randomUUID() as never, type: "text", contentRef: "decorative", text: "手工备注", frame: { x: 200, y: 300, width: 1000, height: 100 }, rotationMilliDegree: 0, locked: false, style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" } },
+      { id: crypto.randomUUID() as never, type: "text", contentRef: "decorative", text: "第一点", frame: { x: inches(0.1), y: inches(0.1), width: inches(1), height: inches(0.1) }, rotationMilliDegree: 0, locked: false, style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" } },
+      { id: crypto.randomUUID() as never, type: "text", contentRef: "decorative", text: "手工备注", frame: { x: inches(0.2), y: inches(0.3), width: inches(1), height: inches(0.1) }, rotationMilliDegree: 0, locked: false, style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#333333", bold: false, align: "left" } },
     );
     // Strip provenance to mimic a document written before the marker existed.
     for (const element of slide.elements) delete element.origin;

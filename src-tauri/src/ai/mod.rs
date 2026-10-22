@@ -302,7 +302,7 @@ pub async fn chat_stream(
     timeout: Duration,
     transport_error: &str,
     cancel: &CancelToken,
-    on_delta: &mut dyn FnMut(&str),
+    on_delta: &mut (dyn FnMut(&str) + Send),
 ) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(timeout)
@@ -322,7 +322,7 @@ pub async fn chat_stream(
             if timed_out {
                 return Err(REQUEST_TIMEOUT_ERROR.into());
             }
-            return Err(format!("{STREAM_FAILED_ERROR}: {detail}"));
+            return Err(format!("{STREAM_FAILED_ERROR}: {transport_error}: {detail}"));
         }
         Err(ProviderFailure::Payload(error)) => {
             return Err(format!("{STREAM_FAILED_ERROR}: {error:?}"));
