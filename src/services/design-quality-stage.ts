@@ -24,6 +24,12 @@ export interface DesignQualityStageOptions {
   onProgress?: (label: string, percent: number) => void;
   /** 渲染评审图。测试可替换，真实运行走画布渲染。 */
   renderForReview?: (document: PresentationDocument) => Promise<{ slides: string[]; contactSheet: string }>;
+  /**
+   * 渲染导出后的真实 PPTX。评审模型看的应该是用户最终会看到的画面，而不是
+   * 画布上的一次近似重绘。本机没有 PowerPoint 时命令失败，评审降级到画布
+   * 渲染继续进行。
+   */
+  renderRealPptxForReview?: (document: PresentationDocument) => Promise<{ slides: string[]; contactSheet: string }>;
   /** 采样文字下方真实像素。测试可替换。 */
   inspectContrast?: (document: PresentationDocument) => Promise<RenderedContrastReport>;
   /** 确定性质量门。测试可替换。 */
@@ -59,6 +65,16 @@ function mergeReviews(reviews: VisualReview[]): VisualReview {
     issues: reviews.flatMap((item) => item.issues),
     slideGuidance: reviews.flatMap((item) => item.slideGuidance),
   };
+}
+
+/** 把真实渲染失败的错误码翻译成用户能读懂的一句话。 */
+export function describeRealRenderFailure(reason: string): string {
+  if (reason.includes("REVIEW_RASTERER_UNAVAILABLE")) return "本机没有可用的 PowerPoint 渲染";
+  if (reason.includes("REVIEW_RASTER_TIMEOUT")) return "PowerPoint 渲染超时";
+  if (reason.includes("REVIEW_RASTER_FAILED")) return "PowerPoint 渲染失败";
+  if (reason.includes("REVIEW_RASTER_TASK_FAILED")) return "PowerPoint 渲染任务未完成";
+  if (reason.includes("EXPORT_VALIDATION_FAILED")) return "导出的文稿未通过校验";
+  return reason;
 }
 
 function contrastIssues(issues: RenderedContrastIssue[]): PresentationQualityIssue[] {
@@ -102,6 +118,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let degraded = false;
   const renderForReview = options.renderForReview ?? renderPresentationForVisualReview;
   const inspect = options.inspectContrast ?? inspectRenderedTextContrast;
+  /** 评审实际看到的画面来自哪里。 */
+  let reviewSource: "真实 PPTX" | "画布预览" | undefined;
+  /** 真实渲染走不通的原因。 */
+  let realRenderFailure: string | undefined;
 
   try {
     const aligned = await runVisualAlignmentLoop<AiSlideDesign[]>({
@@ -111,7 +131,22 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
       review: async (current, goal, iteration) => {
         if (options.isCancelled()) throw new Error("AI_GENERATION_CANCELLED");
         options.onProgress?.(`视觉模型正在检查第 ${iteration} 轮`, 95 + iteration);
-        const render = await renderForReview(options.buildDocument(current));
+        const document = options.buildDocument(current);
+        // 优先评审真实导出的 PPTX。画布渲染是近似值：PowerPoint 自行断行，
+        // 字体度量与估算略有出入，图表和表格更是由 PowerPoint 自己画的。
+        // 只有真实渲染走不通时才退回画布预览。
+        let real: { slides: string[]; contactSheet: string } | undefined;
+        if (options.renderRealPptxForReview) {
+          options.onProgress?.("正在导出并渲染真实 PPTX", 95 + iteration);
+          try {
+            real = await options.renderRealPptxForReview(document);
+          } catch (error) {
+            if (isGenerationCancelled(error)) throw error;
+            realRenderFailure = error instanceof Error ? error.message : String(error);
+          }
+        }
+        const render = real ?? await renderForReview(document);
+        reviewSource = real ? "真实 PPTX" : "画布预览";
         // 逐页评审按每批 6 页切分。串行会让 20 页文稿排四队带图请求，
         // 每一队都要等上一队跑完；并行后墙钟时间接近单批耗时。
         const batches: number[][] = [];
@@ -122,7 +157,14 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         return mergeReviews(reviews);
       },
       repair: async (current, review, goal) => {
-        const plan = await options.vision.planRepairs(review, goal);
+        // 修复计划由模型出，模型需要知道每页的标题和当前版式才能决定改什么。
+        const document = options.buildDocument(current);
+        const deck = current.map((design, index) => ({
+          index,
+          title: document.slides[index]?.content.title ?? "",
+          layout: design.layout,
+        }));
+        const plan = await options.vision.planRepairs(review, goal, { deck, taskId: options.taskId });
         const repairs = new Map(plan.repairs.map((repair) => [repair.slideIndex, repair]));
         return current.map((slide, slideIndex) => {
           const repair = repairs.get(slideIndex);
@@ -142,6 +184,15 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     });
     designs = aligned.value;
     notes.push(`视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`);
+    if (reviewSource === "真实 PPTX") {
+      notes.push("视觉评审基于导出的 PPTX 真实渲染");
+    } else if (realRenderFailure) {
+      // 评审看到的不是用户最终会看到的画面，这是一次真实的降级，必须记下来。
+      degraded = true;
+      notes.push(`视觉评审改用画布预览渲染（${describeRealRenderFailure(realRenderFailure)}）`);
+    } else if (reviewSource === "画布预览") {
+      notes.push("视觉评审基于画布预览渲染");
+    }
   } catch (error) {
     if (isGenerationCancelled(error)) throw error;
     degraded = true;

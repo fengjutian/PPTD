@@ -290,7 +290,7 @@ fn validate_history_entry(entry: &StoredAiHistoryEntry) -> Result<(), String> {
     if entry.topic.chars().count() > MAX_TOPIC_CHARS {
         return Err("AI_HISTORY_TOPIC_TOO_LONG".into());
     }
-    if !(1..=HISTORY_LIMIT as u32).contains(&entry.slide_count) {
+    if entry.slide_count == 0 {
         return Err("AI_HISTORY_SLIDE_COUNT_INVALID".into());
     }
     if entry.updated_at.trim().is_empty() || entry.updated_at.chars().count() > 64 {

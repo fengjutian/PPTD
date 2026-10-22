@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 
-export const CURRENT_SCHEMA_VERSION = 9 as const;
+export const CURRENT_SCHEMA_VERSION = 10 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -60,7 +60,7 @@ const imageElement = base.extend({
   }),
   altText: z.string().max(500),
   crop: imageCropSchema.optional(),
-  placement: z.enum(["content", "layout-background"]).optional(),
+  placement: z.enum(["content", "layout-background", "slide-background"]).optional(),
 });
 
 const tableElement = base.extend({
@@ -159,6 +159,11 @@ export const presentationDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionNineDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(9) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionEightDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(8) })
   .superRefine(validateUniqueIds);
@@ -220,6 +225,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // asset reference instead of an inline data URL. A version 8 document has
   // only inline data, which the new schema still accepts, so nothing changes.
   8: (document) => ({ ...versionEightDocumentSchema.parse(document), schemaVersion: 9 }),
+  // Version 10 adds an explicit page-background picture placement. Existing
+  // pictures keep their previous placement and no visual object is invented.
+  9: (document) => ({ ...versionNineDocumentSchema.parse(document), schemaVersion: 10 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

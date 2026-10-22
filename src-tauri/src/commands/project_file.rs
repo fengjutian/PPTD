@@ -24,6 +24,12 @@ const MAX_TEMPLATE_PREVIEW_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRIES: usize = 2_048;
 const MAX_ARCHIVE_UNCOMPRESSED_BYTES: u64 = 1024 * 1024 * 1024;
 const TEMPLATE_RENDER_TIMEOUT: Duration = Duration::from_secs(120);
+/// 评审用真实文稿的栅格化超时。拉起 PowerPoint 加逐页导出的代价在秒级以上。
+const REVIEW_RASTER_TIMEOUT: Duration = Duration::from_secs(180);
+/// 送进评审的真实文稿最大字节数。
+const REVIEW_RASTER_MAX_BYTES: usize = 64 * 1024 * 1024;
+/// 评审图最多多少页。
+const REVIEW_RASTER_MAX_SLIDES: usize = 40;
 /// 缓存格式版本。渲染脚本、导出分辨率或缓存结构变化时递增，旧缓存自然失效。
 const LAYOUT_RENDER_CACHE_VERSION: &str = "v1";
 /// 缓存目录名，位于应用数据目录下，与模板库同级。
@@ -217,6 +223,35 @@ fn validate_pptx_archive(path: &Path) -> Result<(), String> {
 }
 
 fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> Result<(), String> {
+    run_powershell_script(
+        script,
+        source,
+        output,
+        TEMPLATE_RENDER_TIMEOUT,
+        PowerShellErrorCodes {
+            unavailable: "TEMPLATE_RENDERER_UNAVAILABLE",
+            wait_failed: "TEMPLATE_RENDERER_WAIT_FAILED",
+            failed: "TEMPLATE_LAYOUT_RENDER_FAILED",
+            timed_out: "TEMPLATE_LAYOUT_RENDER_TIMEOUT",
+        },
+    )
+}
+
+/// 外部渲染器的错误码。不同的调用场景用不同的码，用户看到的提示才说得清是哪一步坏了。
+struct PowerShellErrorCodes {
+    unavailable: &'static str,
+    wait_failed: &'static str,
+    failed: &'static str,
+    timed_out: &'static str,
+}
+
+fn run_powershell_script(
+    script: &Path,
+    source: &Path,
+    output: &Path,
+    timeout: Duration,
+    codes: PowerShellErrorCodes,
+) -> Result<(), String> {
     let mut child = Command::new("powershell.exe")
         .args([
             "-NoProfile",
@@ -231,20 +266,17 @@ fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> R
         .arg("-Output")
         .arg(output)
         .spawn()
-        .map_err(|error| format!("TEMPLATE_RENDERER_UNAVAILABLE: {error}"))?;
-    let deadline = Instant::now() + TEMPLATE_RENDER_TIMEOUT;
+        .map_err(|error| format!("{}: {error}", codes.unavailable))?;
+    let deadline = Instant::now() + timeout;
     loop {
         if let Some(status) = child
             .try_wait()
-            .map_err(|error| format!("TEMPLATE_RENDERER_WAIT_FAILED: {error}"))?
+            .map_err(|error| format!("{}: {error}", codes.wait_failed))?
         {
             return if status.success() {
                 Ok(())
             } else {
-                Err(format!(
-                    "TEMPLATE_LAYOUT_RENDER_FAILED:{}",
-                    status.code().unwrap_or(-1)
-                ))
+                Err(format!("{}:{}", codes.failed, status.code().unwrap_or(-1)))
             };
         }
         if Instant::now() >= deadline {
@@ -252,7 +284,7 @@ fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> R
                 .args(["/PID", &child.id().to_string(), "/T", "/F"])
                 .status();
             let _ = child.kill();
-            return Err("TEMPLATE_LAYOUT_RENDER_TIMEOUT".into());
+            return Err(codes.timed_out.into());
         }
         thread::sleep(Duration::from_millis(150));
     }
@@ -797,6 +829,97 @@ pub fn write_pptx_raw(request: Request<'_>) -> Result<(), String> {
         return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
     }
     atomic_write(&path, bytes)
+}
+
+/// 逐页栅格化脚本。PowerPoint 是这份文稿的目标应用，评审模型看的应该是它
+/// 渲染出来的画面，而不是画布上的一次近似重绘。
+///
+/// 宏被显式禁用：文稿是机器生成的中间产物，不需要也不能执行其中的任何脚本。
+const REVIEW_RASTER_SCRIPT: &str = r#"param([string]$Source, [string]$Output)
+$ErrorActionPreference = 'Stop'
+if (-not (Test-Path $Output)) { New-Item -ItemType Directory -Path $Output | Out-Null }
+$powerPoint = $null
+$presentation = $null
+try {
+  $powerPoint = New-Object -ComObject PowerPoint.Application
+  $powerPoint.AutomationSecurity = 3
+  $presentation = $powerPoint.Presentations.Open($Source, -1, 0, 0)
+  for ($index = 1; $index -le $presentation.Slides.Count; $index += 1) {
+    $target = Join-Path $Output ("slide{0}.png" -f $index)
+    $presentation.Slides.Item($index).Export($target, 'PNG', 1280, 720)
+  }
+} finally {
+  if ($presentation -ne $null) { $presentation.Close() }
+  if ($powerPoint -ne $null) { $powerPoint.Quit() }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+}
+"#;
+
+/// Renders an exported deck into one image per slide for the visual review.
+///
+/// The bytes arrive as the raw IPC body: a deck is far too large to be sent as
+/// a JSON array of numbers. PowerPoint may be missing, disabled by policy or
+/// simply not installed; the command then fails and the caller falls back to
+/// the canvas preview. Failing here is not a failure of the generation.
+#[tauri::command]
+pub async fn rasterize_pptx_for_review(request: Request<'_>) -> Result<Vec<String>, String> {
+    let InvokeBody::Raw(raw) = request.body() else {
+        return Err("REVIEW_RASTER_BODY_NOT_RAW".into());
+    };
+    // The body is borrowed from the request, but the render runs on a blocking
+    // task: the bytes have to be owned before they leave this scope.
+    let bytes = raw.to_vec();
+    if bytes.is_empty() || bytes.len() > REVIEW_RASTER_MAX_BYTES {
+        return Err("REVIEW_RASTER_SIZE_INVALID".into());
+    }
+    if !bytes.starts_with(b"PK") {
+        return Err("REVIEW_RASTER_ZIP_SIGNATURE_INVALID".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let working =
+            tempfile::tempdir().map_err(|error| format!("REVIEW_RASTER_TEMP_FAILED: {error}"))?;
+        let source = working.path().join("review.pptx");
+        fs::write(&source, bytes)
+            .map_err(|error| format!("REVIEW_RASTER_WRITE_FAILED: {error}"))?;
+        let output = working.path().join("slides");
+        fs::create_dir_all(&output)
+            .map_err(|error| format!("REVIEW_RASTER_DIRECTORY_FAILED: {error}"))?;
+        let script = working.path().join("rasterize.ps1");
+        fs::write(&script, REVIEW_RASTER_SCRIPT)
+            .map_err(|error| format!("REVIEW_RASTER_SCRIPT_FAILED: {error}"))?;
+        run_powershell_script(
+            &script,
+            &source,
+            &output,
+            REVIEW_RASTER_TIMEOUT,
+            PowerShellErrorCodes {
+                unavailable: "REVIEW_RASTERER_UNAVAILABLE",
+                wait_failed: "REVIEW_RASTERER_WAIT_FAILED",
+                failed: "REVIEW_RASTER_FAILED",
+                timed_out: "REVIEW_RASTER_TIMEOUT",
+            },
+        )?;
+        let mut renders = Vec::new();
+        for index in 1..=REVIEW_RASTER_MAX_SLIDES {
+            let path = output.join(format!("slide{index}.png"));
+            if !path.is_file() {
+                continue;
+            }
+            let data =
+                fs::read(&path).map_err(|error| format!("REVIEW_RASTER_READ_FAILED: {error}"))?;
+            if data.is_empty() || data.len() > MAX_TEMPLATE_PREVIEW_BYTES as usize {
+                return Err("REVIEW_RASTER_IMAGE_INVALID".into());
+            }
+            renders.push(format!("data:image/png;base64,{}", BASE64.encode(data)));
+        }
+        if renders.is_empty() {
+            return Err("REVIEW_RASTER_EMPTY".into());
+        }
+        Ok(renders)
+    })
+    .await
+    .map_err(|error| format!("REVIEW_RASTER_TASK_FAILED: {error}"))?
 }
 
 fn template_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {

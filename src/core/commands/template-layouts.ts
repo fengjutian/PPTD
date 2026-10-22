@@ -13,9 +13,37 @@ import type { AiComposition, AiDensityTarget, AiEmphasis, AiPalette } from "./de
 
 export interface AiNormalizedRect { x: number; y: number; width: number; height: number }
 export type AiLayoutKind = "cover" | "title-body" | "split" | "cards" | "quote" | "section" | "summary";
+/**
+ * What a repair acts on.
+ *
+ * "title" and "body" name a role. "region" names a rectangle on the page: the
+ * review model looks at a picture, so the only thing it can honestly point at
+ * is a place. A region repair applies to every generated element that falls
+ * inside that rectangle.
+ */
+export type AiElementRepairTarget = "title" | "body" | "region";
 export type AiElementRepair =
-  | { action: "move" | "resize"; target: "title" | "body"; frame: AiNormalizedRect }
-  | { action: "restyle"; target: "title" | "body"; fontScale?: number; color?: string }
+  | {
+    action: "move" | "resize";
+    target: AiElementRepairTarget;
+    /** For a region: the place the block is now. For a role: the new place. */
+    frame: AiNormalizedRect;
+    /**
+     * For a region: where the block should go. Without it a move has no
+     * destination, so the action is skipped rather than guessed.
+     */
+    to?: AiNormalizedRect;
+  }
+  | {
+    action: "restyle";
+    target: AiElementRepairTarget;
+    /** For a region: the rectangle whose text is restyled. */
+    frame?: AiNormalizedRect;
+    fontScale?: number;
+    color?: string;
+  }
+  /** Aligns the target to an edge of the given frame. */
+  | { action: "align"; target: AiElementRepairTarget; frame: AiNormalizedRect; axis?: "left" | "top" }
   | { action: "changeLayout"; layout: AiLayoutKind };
 export interface AiSlideDesign {
   layout: AiLayoutKind;

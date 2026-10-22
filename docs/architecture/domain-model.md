@@ -124,7 +124,7 @@ interface Slide {
 
 两者都是设计态：修改主题或版式绑定只增加 design revision，不触碰内容哈希。`Slide.layoutId` 必须能在 `layouts` 中解析，否则 Schema 拒绝该文档。
 
-版式的整页画面是图片元素，带 `placement: "layout-background"`。画布把它画在页面底层，导出把它放进母版背景，页面上不再重复绘制这张图片。详见 [0008 模板主题与版式落地到导出的 PPTX](decisions/0008-template-master-and-theme-export.md)。
+版式的整页画面是图片元素，带 `placement: "layout-background"`。画布把它画在页面底层，导出把它放进母版背景，页面上不再重复绘制这张图片。用户为单页设置的背景图片使用 `placement: "slide-background"`，作为锁定的页级图片保留在内容对象下方并原生导出；它可以覆盖母版画面，但不会修改母版。详见 [0008 模板主题与版式落地到导出的 PPTX](decisions/0008-template-master-and-theme-export.md)。
 
 ## 9. 图表元素（V0.1 已实现）
 

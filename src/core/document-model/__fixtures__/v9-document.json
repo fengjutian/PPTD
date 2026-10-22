@@ -1,0 +1,26 @@
+{
+  "id": "aaaaaaaa-aaaa-9aaa-8aaa-aaaaaaaaaaaa",
+  "schemaVersion": 9,
+  "title": "V9 fixture",
+  "pageSize": { "width": 12191695, "height": 6858000 },
+  "revisions": { "document": 3, "content": 1, "design": 2 },
+  "slides": [
+    {
+      "id": "cccccccc-cccc-9ccc-8ccc-cccccccccccc",
+      "background": "#ffffff",
+      "content": { "title": "Fixture", "body": "Body", "speakerNotes": "", "status": "approved" },
+      "elements": [
+        {
+          "id": "dddddddd-dddd-9ddd-8ddd-dddddddddddd",
+          "type": "image",
+          "frame": { "x": 0, "y": 0, "width": 12191695, "height": 6858000 },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "source": { "kind": "embedded", "dataUrl": "data:image/png;base64,iVBORw0KGgo=", "mimeType": "image/png" },
+          "altText": "ordinary image"
+        }
+      ]
+    }
+  ]
+}

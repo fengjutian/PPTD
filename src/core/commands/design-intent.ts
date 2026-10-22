@@ -28,7 +28,7 @@ import { LAYOUT_CAPACITY, stripListPrefix } from "./layout-capacity";
  *   real count of the points of the page).
  * - "showcase": a large title with very little supporting copy.
  */
-export type AiComposition = "auto" | "stacked" | "columns" | "grid" | "editorial" | "showcase";
+export type AiComposition = "auto" | "stacked" | "columns" | "grid" | "editorial";
 
 /** Which level of the hierarchy carries the weight of the page. */
 export type AiEmphasis = "balanced" | "title-dominant" | "body-dominant";
@@ -156,8 +156,6 @@ export function isCompositionLegal(composition: AiComposition, facts: Compositio
       return facts.itemCount >= LAYOUT_CAPACITY.panelMinItems
         && facts.itemCount <= LAYOUT_CAPACITY.panelMaxItems
         && facts.shortItems;
-    case "showcase":
-      return facts.itemCount <= 3;
     default:
       return false;
   }
@@ -171,17 +169,28 @@ export function isCompositionLegal(composition: AiComposition, facts: Compositio
  * did. A model that does choose gets its choice, as long as the content can
  * carry it.
  */
-export function autoComposition(facts: CompositionFacts): AiComposition {
+export function autoComposition(facts: CompositionFacts, options: { allowEditorial?: boolean } = {}): AiComposition {
   if (facts.hasRowBlock || facts.hasComparison) return "auto";
+  const count = facts.itemCount;
+  const editorialRange = count >= LAYOUT_CAPACITY.panelMinItems && count <= LAYOUT_CAPACITY.panelMaxItems && facts.shortItems;
   // A page with a quote beside its points is an editorial page: the quote is
-  // the anchor of the column.
-  if (facts.hasQuote && facts.itemCount >= LAYOUT_CAPACITY.panelMinItems && facts.itemCount <= LAYOUT_CAPACITY.panelMaxItems && facts.shortItems) {
+  // the anchor of the column. A split page and a summary page are editorial
+  // pages as well, because they are the pages that carry an anchor instead of
+  // a second column of copy.
+  if (options.allowEditorial !== false && editorialRange && (facts.hasQuote || facts.layout === "split" || facts.layout === "summary")) {
     return "editorial";
   }
-  if (facts.itemCount >= LAYOUT_CAPACITY.cardsMinItems && facts.itemCount <= LAYOUT_CAPACITY.cardsMaxItems && facts.shortItems) {
-    return "grid";
+  // A card page always becomes a grid. A title page becomes one only when its
+  // points are short enough, and a split page becomes one only when it holds
+  // the full six points of a grid.
+  if (count >= LAYOUT_CAPACITY.cardsMinItems && count <= LAYOUT_CAPACITY.cardsMaxItems) {
+    if (facts.layout === "cards") return "grid";
+    if (facts.shortItems && (facts.layout === "title-body" || facts.layout === "summary") && count >= LAYOUT_CAPACITY.cardsGridMinItems) return "grid";
+    if (facts.shortItems && facts.layout === "split" && count === LAYOUT_CAPACITY.cardsMaxItems) return "grid";
   }
-  if (facts.layout === "split" || facts.itemCount > LAYOUT_CAPACITY.cardsMaxItems) return "columns";
+  // A split page, and a card page that holds more points than a grid can
+  // carry, are drawn as two columns.
+  if (count > 1 && (facts.layout === "split" || (facts.layout === "cards" && count > LAYOUT_CAPACITY.cardsMaxItems))) return "columns";
   return "stacked";
 }
 
@@ -235,8 +244,6 @@ export function describeCompositionConflict(composition: AiComposition, facts: C
       return facts.itemCount < LAYOUT_CAPACITY.panelMinItems || facts.itemCount > LAYOUT_CAPACITY.panelMaxItems
         ? `该页有 ${facts.itemCount} 条要点，不在 ${LAYOUT_CAPACITY.panelMinItems}–${LAYOUT_CAPACITY.panelMaxItems} 条的编辑式区间内`
         : "该页的要点过长，编号栏放不下";
-    case "showcase":
-      return `该页有 ${facts.itemCount} 条要点，聚焦版式放不下`;
     default:
       return "该构图与已审核内容不符";
   }

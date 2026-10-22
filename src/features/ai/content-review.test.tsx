@@ -13,6 +13,7 @@ import {
   nearestSlideIndex,
   outlineNavTarget,
   reviewIssues,
+  resolveActiveSlideIndex,
   slideCardScrollTop,
   slideCapacityNotes,
   slideHasContent,
@@ -275,33 +276,60 @@ describe("table grid editing", () => {
   });
 });
 
-function renderReview(draft: AiDraft, activeIndex = 0) {
+function renderReview(draft: AiDraft, activeIndex = 0, originalDraft?: AiDraft) {
   return renderToStaticMarkup(
     <ContentReview
       draft={draft}
+      originalDraft={originalDraft}
       activeIndex={activeIndex}
       saveState="saved"
-      restoreUndoIndexes={[]}
+      restoreUndoSlideIds={[]}
+      canUndo={false}
+      canRedo={false}
       onActiveIndexChange={() => undefined}
       onDraftTitleChange={() => undefined}
       onSlideFieldChange={() => undefined}
       onSlideBlocksChange={() => undefined}
+      onSlideReviewedChange={() => undefined}
+      onReviewAllSlides={() => undefined}
+      onAddSlide={() => undefined}
+      onDuplicateSlide={() => undefined}
+      onDeleteSlide={() => undefined}
+      onMoveSlide={() => undefined}
       onRestoreSlide={() => undefined}
       onUndoRestore={() => undefined}
-      onNewDraft={() => undefined}
+      onUndo={() => undefined}
+      onRedo={() => undefined}
     />,
   );
 }
 
 describe("content review layout", () => {
-  it("shows every page in one continuous list with localized plan labels", () => {
+  it("shows only the active page editor with localized plan labels", () => {
     const markup = renderReview(withSlideIds(createDraft()));
     expect(markup).toContain("结构化文本 · 中等信息密度");
     expect(markup).not.toContain("medium density");
     expect(markup).toContain("还有 1 页缺少标题");
-    expect(markup).toContain("标题不能为空");
-    expect(markup.match(/data-slide-index=/g)).toHaveLength(2);
+    expect(markup.match(/data-slide-index=/g)).toHaveLength(1);
     expect(markup).toContain("已自动保存");
+    expect(markup).toContain("内容编辑历史");
+    expect(markup).toContain("下一处问题");
+    expect(markup).toContain("新增页面");
+    expect(markup).toContain("复制第 1 页");
+    expect(markup).toContain("上移第 1 页");
+    expect(markup).toContain("删除第 1 页");
+    expect(markup.match(/draft-slide-card active/g)).toHaveLength(1);
+    expect(markup).not.toContain("draft-slide-card collapsed");
+  });
+
+  it("renders the page selected from the outline and omits the other editor cards", () => {
+    const draft = withSlideIds(createDraft());
+    const markup = renderReview(draft, 1);
+    expect(markup).toContain('data-slide-index="1"');
+    expect(markup).not.toContain('data-slide-index="0"');
+    expect(markup).toContain(`value="${draft.slides[1]!.title}`);
+    expect(markup).not.toContain(`value="${draft.slides[0]!.title}`);
+    expect(markup).toContain("标题不能为空");
   });
 
   it("keeps the outline as a single tab stop with arrow-key movement", () => {
@@ -309,6 +337,37 @@ describe("content review layout", () => {
     expect(markup).toContain('data-outline-index="0"');
     expect(markup).toContain('tabindex="0"');
     expect(markup).toContain('tabindex="-1"');
+  });
+
+  it("marks changed pages and names the destructive reset explicitly", () => {
+    const original = withSlideIds(createDraft());
+    const edited = { ...original, slides: original.slides.map((slide, index) => index === 0 ? { ...slide, body: "修改后的正文" } : slide) };
+    const markup = renderReview(edited, 0, original);
+    expect(markup).toContain("已修改");
+    expect(markup).toContain("1 页已修改");
+    expect(markup).toContain("恢复 AI 原稿");
+    expect(markup).toContain("撤销");
+    expect(markup).toContain("重做");
+  });
+
+  it("shows persisted review progress and the unified content block entry", () => {
+    const draft = withSlideIds(createDraft());
+    const reviewed = { ...draft, slides: draft.slides.map((slide, index) => index === 0 ? { ...slide, reviewed: true } : slide) };
+    const markup = renderReview(reviewed, 0, draft);
+    expect(markup).toContain("1/2 页已审核");
+    expect(markup).toContain("下一未审核页");
+    expect(markup).toContain("标记已审核");
+    expect(markup).toContain("新增内容块类型");
+    expect(markup).toContain("添加内容块");
+    expect(markup).toContain("全部标记已审核");
+    expect(markup).toContain("上移第 1 页的");
+    expect(markup).toContain("下移第 1 页的");
+  });
+
+  it("keeps the per-page review flag when a draft is sanitized for history", () => {
+    const draft = createDraft();
+    const saved = sanitizeDraftForSave({ ...draft, slides: draft.slides.map((slide, index) => ({ ...slide, reviewed: index === 0 })) });
+    expect(aiDraftSchema.parse(saved).slides.map((slide) => slide.reviewed)).toEqual([true, false]);
   });
 
   it("scrolls the card list itself when a page is selected", () => {
@@ -379,6 +438,22 @@ describe("content review layout", () => {
   });
 });
 
+describe("page selection history", () => {
+  it("keeps the active logical page selected after reorder", () => {
+    const draft = withSlideIds(createDraft());
+    const activeId = draft.slides[1]!.id;
+    const reordered = { ...draft, slides: [draft.slides[1]!, draft.slides[0]!] };
+    expect(resolveActiveSlideIndex(reordered, activeId, 1)).toBe(0);
+  });
+
+  it("uses a bounded fallback after the active page is deleted", () => {
+    const draft = withSlideIds(createDraft());
+    const remaining = { ...draft, slides: [draft.slides[0]!] };
+    expect(resolveActiveSlideIndex(remaining, draft.slides[1]!.id, 1)).toBe(0);
+    expect(resolveActiveSlideIndex(remaining, undefined, 99)).toBe(0);
+  });
+});
+
 describe("layout pre-check", () => {
   it("warns about a page that carries more copy than the layout can show", () => {
     const draft = withSlideIds(createDraft());
@@ -394,7 +469,7 @@ describe("layout pre-check", () => {
         },
       ],
     };
-    const markup = renderReview(heavy);
+    const markup = renderReview(heavy, 1);
     expect(markup).toContain("排版预检");
     expect(markup).toContain("超过卡片网格的 6 条上限");
     expect(markup).toContain("标题框只放得下 1 行");

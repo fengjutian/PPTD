@@ -19,6 +19,15 @@ let currentProjectPath: string | undefined;
 const cache = new Map<string, string>();
 const inFlight = new Map<string, Promise<string>>();
 const pathListeners = new Set<() => void>();
+/**
+ * The references the backend could not read.
+ *
+ * A picture that is gone has to be visible as such. A page that quietly drops
+ * the picture looks like a page the author designed that way, and nobody
+ * notices that the template artwork is missing until the deck is exported.
+ */
+const failures = new Set<string>();
+const failureListeners = new Set<() => void>();
 
 export function isAssetReference(source: string): boolean {
   return source.startsWith("asset://");
@@ -40,7 +49,38 @@ export function setImageProjectPath(path: string | undefined): void {
   currentProjectPath = path;
   cache.clear();
   inFlight.clear();
+  // Another project may hold the very same picture, so a failure of the old
+  // one is not a failure of the new one.
+  if (failures.size > 0) {
+    failures.clear();
+    for (const listener of [...failureListeners]) listener();
+  }
   for (const listener of [...pathListeners]) listener();
+}
+
+/**
+ * The references that could not be read from the current project.
+ */
+export function failedImageReferences(): readonly string[] {
+  return [...failures];
+}
+
+/**
+ * Is this reference known to be unreadable? A reference that was never tried
+ * is not a failure, it is simply unknown.
+ */
+export function isFailedImageReference(reference: string): boolean {
+  return failures.has(reference);
+}
+
+/**
+ * Watches the load failures. The returned function stops the watch.
+ */
+export function subscribeImageFailures(listener: () => void): () => void {
+  failureListeners.add(listener);
+  return () => {
+    failureListeners.delete(listener);
+  };
 }
 
 /**

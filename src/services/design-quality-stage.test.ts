@@ -136,4 +136,50 @@ describe("设计质检阶段", () => {
     expect(result.notes.join("；")).toContain("确定性质量门不可用");
     expect(result.document.slides).toHaveLength(1);
   });
+
+  it("评审看的是导出的真实 PPTX，而不是画布预览", async () => {
+    const reviewed: string[][] = [];
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (render) => { reviewed.push(render.slides); return passingReview; },
+        planRepairs: async () => ({ repairs: [] }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => { throw new Error("画布渲染不应被调用"); },
+      renderRealPptxForReview: async () => ({ slides: ["data:image/jpeg;base64,UkVBTA=="], contactSheet: "data:image/jpeg;base64,U0hFRVQ=" }),
+      inspectContrast: contrastStub,
+    });
+
+    expect(reviewed).toEqual([["data:image/jpeg;base64,UkVBTA=="]]);
+    expect(result.notes.join("；")).toContain("视觉评审基于导出的 PPTX 真实渲染");
+    expect(result.degraded).toBe(false);
+  });
+
+  it("真实渲染不可用时降级到画布预览，并说清楚原因", async () => {
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: visionPort(async () => passingReview),
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      renderRealPptxForReview: async () => { throw new Error("REVIEW_RASTERER_UNAVAILABLE:program not found"); },
+      inspectContrast: contrastStub,
+    });
+
+    // 评审没看到真实产物，这是一次真实的降级，报告里必须写明。
+    expect(result.degraded).toBe(true);
+    expect(result.notes.join("；")).toContain("视觉评审改用画布预览渲染");
+    expect(result.notes.join("；")).toContain("本机没有可用的 PowerPoint 渲染");
+    // 降级不影响文稿产出。
+    expect(result.document.slides).toHaveLength(1);
+  });
 });

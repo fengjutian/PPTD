@@ -1,11 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PresentationVisualGoal, VisualRepairPlan, VisualReview } from "./visual-alignment";
-import { normalizeVisualReview, visualRepairPlanSchema } from "./visual-alignment";
+import { normalizeVisualRepairPlan, normalizeVisualReview, visualRepairPlanSchema } from "./visual-alignment";
 import type { PresentationRender } from "./presentation-renderer";
 import { loadSettings } from "./settings";
 
 const MAX_VISUAL_IMAGE_BYTES = 6 * 1024 * 1024;
 const MAX_VISUAL_SLIDES = 20;
+
+/** What the repair planner needs to know about the deck. */
+export interface RepairPlanContext {
+  /** 逐页现状：索引、标题和当前版式。 */
+  deck: Array<{ index: number; title: string; layout: string }>;
+  /** 生成任务号：取消时后端会中断该任务下所有在途请求。 */
+  taskId?: number;
+}
 
 export function validateVisualRenderPayload(render: PresentationRender): void {
   if (render.slides.length < 1 || render.slides.length > MAX_VISUAL_SLIDES) throw new Error("AI_VISION_SLIDE_COUNT_INVALID");
@@ -18,7 +26,7 @@ export function validateVisualRenderPayload(render: PresentationRender): void {
 export interface VisionReviewPort {
   readonly available: boolean;
   review(render: PresentationRender, goal: PresentationVisualGoal, slideIndexes?: number[], taskId?: number): Promise<VisualReview>;
-  planRepairs(review: VisualReview, goal: PresentationVisualGoal): Promise<VisualRepairPlan>;
+  planRepairs(review: VisualReview, goal: PresentationVisualGoal, context?: RepairPlanContext): Promise<VisualRepairPlan>;
 }
 
 export class UnavailableVisionReviewPort implements VisionReviewPort {
@@ -29,6 +37,38 @@ export class UnavailableVisionReviewPort implements VisionReviewPort {
   async planRepairs(): Promise<VisualRepairPlan> {
     throw new Error("AI_VISION_UNSUPPORTED");
   }
+}
+
+/**
+ * The deterministic repair plan.
+ *
+ * This is the fallback for when the model cannot be asked, or answers with
+ * something unusable. It maps the review's issue kinds onto a fixed set of
+ * actions, which is why it can only ever say a handful of things.
+ */
+export function planRepairsByRule(review: VisualReview): VisualRepairPlan {
+  const bySlide = new Map<number, VisualReview["issues"]>();
+  review.issues.forEach((issue) => bySlide.set(issue.slideIndex, [...(bySlide.get(issue.slideIndex) ?? []), issue]));
+  const guidance = new Map(review.slideGuidance.map((item) => [item.slideIndex, item]));
+  const slideIndexes = new Set([...bySlide.keys(), ...guidance.keys()]);
+  return visualRepairPlanSchema.parse({ repairs: [...slideIndexes].map((slideIndex) => {
+    const issues = bySlide.get(slideIndex) ?? [];
+    const guide = guidance.get(slideIndex);
+    return {
+    slideIndex,
+    layout: guide?.recommendedLayout ?? (issues.some((issue) => issue.issue === "repetitive-layout") ? "title-body" : undefined),
+    backgroundAction: issues.some((issue) => issue.issue === "background-conflict" || issue.issue === "poor-contrast") ? "replace-compatible" : "keep",
+    hierarchyAction: issues.some((issue) => issue.issue === "weak-hierarchy") ? "strengthen-title" : issues.some((issue) => issue.issue === "excessive-empty-space") ? "increase-whitespace" : "keep",
+    safeRegion: guide?.safeRegion,
+    obstacleRegions: [...(guide?.logoRegions ?? []), ...(guide?.busyRegions ?? [])],
+    elementActions: [
+      ...(guide ? [{ action: "move" as const, target: "title" as const, frame: { x: guide.safeRegion.x, y: guide.safeRegion.y, width: guide.safeRegion.width, height: Math.min(0.14, guide.safeRegion.height * 0.22) } }] : []),
+      ...(guide ? [{ action: "resize" as const, target: "body" as const, frame: { x: guide.safeRegion.x, y: guide.safeRegion.y + Math.min(0.18, guide.safeRegion.height * 0.28), width: guide.safeRegion.width, height: Math.max(0.08, guide.safeRegion.height - Math.min(0.18, guide.safeRegion.height * 0.28)) } }] : []),
+      ...(issues.some((issue) => issue.issue === "weak-hierarchy") ? [{ action: "restyle" as const, target: "title" as const, fontScale: 1.15 }] : []),
+      ...(guide ? [{ action: "changeLayout" as const, layout: guide.recommendedLayout }] : []),
+    ],
+    reason: issues.map((issue) => issue.suggestion).join("；"),
+  }; }) });
 }
 
 export class TauriVisionReviewPort implements VisionReviewPort {
@@ -58,28 +98,33 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     throw new Error(`AI_VISION_REVIEW_FAILED:${lastError instanceof Error ? lastError.message : String(lastError)}`);
   }
 
-  async planRepairs(review: VisualReview, _goal: PresentationVisualGoal): Promise<VisualRepairPlan> {
-    const bySlide = new Map<number, VisualReview["issues"]>();
-    review.issues.forEach((issue) => bySlide.set(issue.slideIndex, [...(bySlide.get(issue.slideIndex) ?? []), issue]));
-    const guidance = new Map(review.slideGuidance.map((item) => [item.slideIndex, item]));
-    const slideIndexes = new Set([...bySlide.keys(), ...guidance.keys()]);
-    return visualRepairPlanSchema.parse({ repairs: [...slideIndexes].map((slideIndex) => {
-      const issues = bySlide.get(slideIndex) ?? [];
-      const guide = guidance.get(slideIndex);
-      return {
-      slideIndex,
-      layout: guide?.recommendedLayout ?? (issues.some((issue) => issue.issue === "repetitive-layout") ? "title-body" : undefined),
-      backgroundAction: issues.some((issue) => issue.issue === "background-conflict" || issue.issue === "poor-contrast") ? "replace-compatible" : "keep",
-      hierarchyAction: issues.some((issue) => issue.issue === "weak-hierarchy") ? "strengthen-title" : issues.some((issue) => issue.issue === "excessive-empty-space") ? "increase-whitespace" : "keep",
-      safeRegion: guide?.safeRegion,
-      obstacleRegions: [...(guide?.logoRegions ?? []), ...(guide?.busyRegions ?? [])],
-      elementActions: [
-        ...(guide ? [{ action: "move" as const, target: "title" as const, frame: { x: guide.safeRegion.x, y: guide.safeRegion.y, width: guide.safeRegion.width, height: Math.min(0.14, guide.safeRegion.height * 0.22) } }] : []),
-        ...(guide ? [{ action: "resize" as const, target: "body" as const, frame: { x: guide.safeRegion.x, y: guide.safeRegion.y + Math.min(0.18, guide.safeRegion.height * 0.28), width: guide.safeRegion.width, height: Math.max(0.08, guide.safeRegion.height - Math.min(0.18, guide.safeRegion.height * 0.28)) } }] : []),
-        ...(issues.some((issue) => issue.issue === "weak-hierarchy") ? [{ action: "restyle" as const, target: "title" as const, fontScale: 1.15 }] : []),
-        ...(guide ? [{ action: "changeLayout" as const, layout: guide.recommendedLayout }] : []),
-      ],
-      reason: issues.map((issue) => issue.suggestion).join("；"),
-    }; }) });
+  /**
+   * Asks the model for the repair plan.
+   *
+   * The model looked at the rendered pages, so it is the only party that can
+   * say what is actually wrong with them. The rule table can only translate
+   * an issue kind into one of a few fixed actions; the model can point at a
+   * region of the page and say what should happen to it.
+   *
+   * Returns undefined when the model cannot be asked or answers with
+   * something unusable. The caller then falls back to the rule table.
+   */
+  private async planRepairsWithModel(review: VisualReview, goal: PresentationVisualGoal, context?: RepairPlanContext): Promise<VisualRepairPlan | undefined> {
+    if (!context || context.deck.length === 0) return undefined;
+    try {
+      const settings = await loadSettings();
+      const result = await invoke<unknown>("plan_presentation_repairs", { request: { review, goal, slides: context.deck, model: settings.aiModel, provider: settings.aiProviderId, taskId: context.taskId } });
+      return normalizeVisualRepairPlan(result, context.deck.map((slide) => slide.index));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // 取消不是失败：取消必须一路向上抛出，不能被降级逻辑吞掉。
+      if (message.includes("AI_REQUEST_CANCELLED") || message.includes("AI_GENERATION_CANCELLED")) throw error;
+      return undefined;
+    }
+  }
+
+  async planRepairs(review: VisualReview, goal: PresentationVisualGoal, context?: RepairPlanContext): Promise<VisualRepairPlan> {
+    const planned = await this.planRepairsWithModel(review, goal, context);
+    return planned ?? planRepairsByRule(review);
   }
 }

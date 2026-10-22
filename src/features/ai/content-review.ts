@@ -370,3 +370,10 @@ export function withSlideIds(draft: AiDraft): AiDraft {
     slides: draft.slides.map((slide) => (slide.id ? slide : { ...slide, id: crypto.randomUUID() })),
   };
 }
+
+/** Keeps selection attached to the same logical page across history changes. */
+export function resolveActiveSlideIndex(draft: AiDraft, slideId: string | undefined, fallbackIndex: number): number {
+  const matched = slideId ? draft.slides.findIndex((slide) => slide.id === slideId) : -1;
+  if (matched >= 0) return matched;
+  return Math.max(0, Math.min(fallbackIndex, draft.slides.length - 1));
+}

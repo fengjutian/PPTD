@@ -20,7 +20,7 @@ export const visualReviewSchema = z.object({
     busyRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(8).default([]),
     focalPoint: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
     recommendedLayout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
-  })).max(20).default([]),
+  })).default([]),
 });
 export type VisualReview = z.infer<typeof visualReviewSchema>;
 
@@ -91,16 +91,122 @@ export const visualRepairPlanSchema = z.object({
     safeRegion: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional(),
     obstacleRegions: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) })).max(16).default([]),
     elementActions: z.array(z.discriminatedUnion("action", [
-      z.object({ action: z.literal("move"), target: z.enum(["title", "body"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }) }),
-      z.object({ action: z.literal("resize"), target: z.enum(["title", "body"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }) }),
-      z.object({ action: z.literal("restyle"), target: z.enum(["title", "body"]), fontScale: z.number().min(0.75).max(1.5).optional(), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional() }),
+      z.object({ action: z.literal("move"), target: z.enum(["title", "body", "region"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }), to: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional() }),
+      z.object({ action: z.literal("resize"), target: z.enum(["title", "body", "region"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }), to: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }).optional() }),
+      z.object({ action: z.literal("restyle"), target: z.enum(["title", "body", "region"]), fontScale: z.number().min(0.75).max(1.5).optional(), color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional() }),
+      z.object({ action: z.literal("align"), target: z.enum(["title", "body", "region"]), frame: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), width: z.number().positive().max(1), height: z.number().positive().max(1) }), axis: z.enum(["left", "top"]).optional() }),
       z.object({ action: z.literal("changeLayout"), layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]) }),
     ])).max(12).default([]),
     reason: z.string().min(1).max(500),
-  })).max(20),
+  })),
 });
 export type VisualRepairPlan = z.infer<typeof visualRepairPlanSchema>;
+type RepairAction = VisualRepairPlan["repairs"][number]["elementActions"][number];
+
+const repairLayouts = ["cover", "title-body", "split", "cards", "quote", "section", "summary"] as const;
+const repairBackgroundActions = ["keep", "replace-compatible", "simplify"] as const;
+const repairHierarchyActions = ["keep", "strengthen-title", "reduce-density", "increase-whitespace"] as const;
+const repairTargets = ["title", "body", "region"] as const;
+
+/**
+ * Repairs bounded model-output mistakes in a repair plan.
+ *
+ * The plan comes from a model that looked at pictures, so its coordinates are
+ * checked before they reach the renderer: a rectangle that leaves the page, a
+ * slide that does not exist, or an action the renderer does not know is
+ * dropped instead of applied. A plan that says nothing useful is rejected
+ * outright, so the caller can fall back to the deterministic rule table.
+ */
+/**
+ * A rectangle a repair may act on.
+ *
+ * A repair is an action, not a suggestion: a rectangle that leaves the page is
+ * rejected instead of being pulled back into it, because a clamped rectangle
+ * means something different from the one the model asked for.
+ */
+function repairRegion(value: unknown): NormalizedRegion | undefined {
+  if (!isRecord(value)) return undefined;
+  const raw = [value.x, value.y, value.width, value.height];
+  if (raw.some((part) => typeof part !== "number" || !Number.isFinite(part))) return undefined;
+  const x = value.x as number;
+  const y = value.y as number;
+  const width = value.width as number;
+  const height = value.height as number;
+  if (x < 0 || y < 0 || width <= 0 || height <= 0) return undefined;
+  if (x + width > 1 || y + height > 1) return undefined;
+  return { x, y, width, height };
+}
+
+export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: number[]): VisualRepairPlan {
+  if (!isRecord(input) || !Array.isArray(input.repairs)) throw new Error("AI_REPAIR_RESPONSE_UNREPAIRABLE");
+  const expected = new Set(expectedSlideIndexes.filter((index) => Number.isInteger(index) && index >= 0));
+  const repairs = input.repairs.flatMap((candidate): VisualRepairPlan["repairs"] => {
+    if (!isRecord(candidate) || typeof candidate.slideIndex !== "number" || !expected.has(candidate.slideIndex)) return [];
+    const layout = typeof candidate.layout === "string" && repairLayouts.includes(candidate.layout as (typeof repairLayouts)[number])
+      ? candidate.layout as (typeof repairLayouts)[number]
+      : undefined;
+    const backgroundAction = typeof candidate.backgroundAction === "string" && repairBackgroundActions.includes(candidate.backgroundAction as (typeof repairBackgroundActions)[number])
+      ? candidate.backgroundAction as (typeof repairBackgroundActions)[number]
+      : "keep";
+    const hierarchyAction = typeof candidate.hierarchyAction === "string" && repairHierarchyActions.includes(candidate.hierarchyAction as (typeof repairHierarchyActions)[number])
+      ? candidate.hierarchyAction as (typeof repairHierarchyActions)[number]
+      : "keep";
+    const safeRegion = candidate.safeRegion === undefined ? undefined : normalizeRegion(candidate.safeRegion);
+    const obstacleRegions = (Array.isArray(candidate.obstacleRegions) ? candidate.obstacleRegions : [])
+      .map(normalizeRegion)
+      .filter((region): region is NormalizedRegion => region !== undefined)
+      .slice(0, 16);
+    const elementActions = (Array.isArray(candidate.elementActions) ? candidate.elementActions : []).flatMap((action): RepairAction[] => {
+      if (!isRecord(action) || typeof action.action !== "string" || typeof action.target !== "string") return [];
+      if (!repairTargets.includes(action.target as (typeof repairTargets)[number])) return [];
+      const target = action.target as (typeof repairTargets)[number];
+      if (action.action === "changeLayout") {
+        if (typeof action.layout !== "string" || !repairLayouts.includes(action.layout as (typeof repairLayouts)[number])) return [];
+        return [{ action: "changeLayout", layout: action.layout as (typeof repairLayouts)[number] }];
+      }
+      if (action.action === "restyle") {
+        const fontScale = typeof action.fontScale === "number" && Number.isFinite(action.fontScale) ? clamp(action.fontScale, 0.75, 1.5) : undefined;
+        const color = typeof action.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(action.color) ? action.color : undefined;
+        if (fontScale === undefined && color === undefined) return [];
+        return [{ action: "restyle", target, ...(fontScale === undefined ? {} : { fontScale }), ...(color === undefined ? {} : { color }) }];
+      }
+      if (action.action !== "move" && action.action !== "resize" && action.action !== "align") return [];
+      const region = repairRegion(action.frame);
+      // A region repair without a usable rectangle has no meaning: the model
+      // wanted to point at a place and did not say where.
+      if (!region) return [];
+      if (action.action === "align") {
+        const axis = action.axis === "top" ? "top" : "left";
+        return [{ action: "align", target, frame: region, axis }];
+      }
+      // A move of a region needs a destination. Without one the action is
+      // dropped instead of being applied to a guessed place.
+      const to = action.to === undefined ? undefined : repairRegion(action.to);
+      if (target === "region" && !to) return [];
+      return [{ action: action.action, target, frame: region, ...(to === undefined ? {} : { to }) }];
+    }).slice(0, 12);
+    const reason = typeof candidate.reason === "string" ? candidate.reason.trim().slice(0, 500) : "";
+    if (!reason) return [];
+    // A repair that ends up doing nothing is not a repair. Keeping it would
+    // make the plan look busier than it is and hide the fact that the model
+    // did not actually say what to change.
+    if (elementActions.length === 0 && layout === undefined && backgroundAction === "keep" && hierarchyAction === "keep") return [];
+    return [{
+      slideIndex: candidate.slideIndex,
+      ...(layout === undefined ? {} : { layout }),
+      backgroundAction,
+      hierarchyAction,
+      ...(safeRegion === undefined ? {} : { safeRegion }),
+      obstacleRegions,
+      elementActions,
+      reason,
+    }];
+  }).slice(0, 20);
+  if (repairs.length === 0) throw new Error("AI_REPAIR_RESPONSE_UNREPAIRABLE");
+  return visualRepairPlanSchema.parse({ repairs });
+}
 export interface VisualAlignmentResult<T> { value: T; review: VisualReview; iterations: number; stopReason: "target-reached" | "stagnated" | "iteration-limit" }
+
 
 export async function runVisualAlignmentLoop<T>(options: { initial: T; goal: PresentationVisualGoal; contentFingerprint: (value: T) => string; review: (value: T, goal: PresentationVisualGoal, iteration: number) => Promise<VisualReview>; repair: (value: T, review: VisualReview, goal: PresentationVisualGoal) => Promise<T>; maxIterations?: number }): Promise<VisualAlignmentResult<T>> {
   const maxIterations = Math.min(3, Math.max(1, options.maxIterations ?? 3));

@@ -5,6 +5,7 @@
 use crate::ai::{self, CancelRegistry, ChatMessage, ChatRequest, VisionRequest};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use serde::Serialize;
 use std::time::Duration;
 use tauri::Emitter;
 
@@ -107,7 +108,7 @@ fn progress_reporter<'a>(
 #[serde(rename_all = "camelCase")]
 pub struct GenerateRequest {
     topic: String,
-    slide_count: u8,
+    slide_count: usize,
     model: Option<String>,
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
@@ -143,7 +144,7 @@ pub struct GenerateBriefsRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GenerateOutlineRequest {
     topic: String,
-    slide_count: u8,
+    slide_count: usize,
     model: Option<String>,
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
@@ -167,6 +168,14 @@ pub struct GenerateSlideBatchRequest {
     stream_progress: Option<bool>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PolishTopicRequest {
+    topic: String,
+    model: Option<String>,
+    provider: Option<String>,
+}
+
 /// 生成阶段的请求超时。
 ///
 /// 大批量草稿的输出量很大：20 页正文加备注约有两万 token。超时设得太短会让整份
@@ -179,6 +188,9 @@ const DESIGN_TIMEOUT: Duration = Duration::from_secs(180);
 /// 视觉评审带着整页渲染图和一份长提示，模型还要先思考再输出评分与修复建议。
 /// 预算和设计阶段对齐，否则一次正常的评审会被误判成超时。
 const VISION_TIMEOUT: Duration = Duration::from_secs(180);
+/// 修复计划是一次纯文本请求，不带图，模型只需要几秒。
+const REPAIR_PLAN_TIMEOUT: Duration = Duration::from_secs(120);
+const TOPIC_POLISH_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// 单批最多生成的页数。批越小，单次输出越短，也越不容易触发超时。
 const MAX_BATCH_PAGES: usize = 5;
@@ -213,7 +225,6 @@ pub async fn review_presentation_visuals(
     if request.slide_images.is_empty()
         || request.slide_images.len() > 6
         || request.slide_images.len() != request.slide_indexes.len()
-        || request.slide_indexes.iter().any(|index| *index >= 20)
     {
         return Err("AI_VISION_REQUEST_INVALID".into());
     }
@@ -307,6 +318,125 @@ pub async fn review_presentation_visuals(
     parse_json(strip_code_fence(&content), "AI_VISION_JSON_INVALID")
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanRepairsRequest {
+    /// 上一轮评审的结果：问题、建议和逐页指导。
+    review: serde_json::Value,
+    /// 整套演示的视觉目标。
+    goal: serde_json::Value,
+    /// 逐页现状，让模型知道页面顺序和当前版式。
+    slides: Vec<PlanRepairSlide>,
+    model: Option<String>,
+    provider: Option<String>,
+    /// 生成任务号：取消时后端会中断该任务下所有在途请求。
+    task_id: Option<u64>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanRepairSlide {
+    index: usize,
+    title: String,
+    layout: String,
+}
+
+/// 让视觉模型给出可执行的修复计划。
+///
+/// 修复计划以前是前端一张固定的规则表：模型说"层级弱"，代码就翻译成
+/// "标题放大 1.15 倍"。模型能看出的问题比这多得多——它知道是右栏挤、是
+/// 引文面板太空、是整页的轴线没对齐，但规则表没有词来表达这些。
+///
+/// 这个命令把修复计划的决定权交回给模型。前端保留规则表作为降级路径。
+#[tauri::command]
+pub async fn plan_presentation_repairs(
+    request: PlanRepairsRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
+) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
+    if request.slides.is_empty() {
+        return Err("AI_REPAIR_REQUEST_INVALID".into());
+    }
+    let review = serde_json::to_string(&request.review).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?;
+    let goal = serde_json::to_string(&request.goal).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?;
+    let slides = serde_json::to_string(&request.slides).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?;
+    if review.len() > 120_000 || goal.len() > 20_000 || slides.len() > 40_000 {
+        return Err("AI_REPAIR_REQUEST_TOO_LARGE".into());
+    }
+    let provider = ai::resolve(request.provider.as_deref())?;
+    let api_key = ai::read_api_key(provider)?;
+    let model = ai::resolve_model(provider, request.model)?;
+    let system_prompt = r##"你是 PPTD 的演示文稿视觉修复工程师。上一轮视觉评审已经指出了问题，你要为每一页给出可执行的修复计划。
+
+一、不可违反的边界
+1. 标题、正文、数字、引用、备注和页面顺序均已审核，视为只读事实。修复计划只能改视觉，不能改内容。
+2. 不得输出新正文、新标题、新数字或新引用。
+3. 不得要求缩小字号来掩盖内容过载；内容装不下时改版式或改构图。
+
+二、修复动作的词汇
+每一页的 repairs 里，elementActions 只能用下面这些动作：
+- move：移动。target 为 title/body 时 frame 就是目标的新位置；target 为 region 时 frame 圈出要动的那一块，to 给出它要去的位置和大小，块内元素按比例整体搬过去。
+- resize：缩放。target 为 title/body 时 frame 就是新的位置和大小；target 为 region 时 frame 圈出要缩放的那一块，to 给出新的尺寸，块在原地缩放。
+- restyle：改字号和颜色。fontScale 在 0.75–1.5 之间，color 是六位十六进制。target 为 region 时只作用于落在 frame 里的文字。
+- align：对齐。frame 圈出要对齐的那一块，axis 为 left 表示把它们的左轴对齐到 frame.x，为 top 表示顶边对齐到 frame.y。
+- changeLayout：换这一页的版式。
+
+target 只有三种：
+- title：这一页的标题。
+- body：这一页的正文。
+- region：frame 指定的页面矩形，落在该矩形里的生成对象都是目标。评审模型看的是图片，它能指出的就是一块地方，所以这是最常用的一种。
+
+region 的 move 和 resize 必须给出 to；没有 to 的区域移动会被丢弃。
+
+三、每一页的字段
+- slideIndex：真实页码索引，必须来自输入的 pages。
+- layout：可选，换成 cover、title-body、split、cards、quote、section、summary 之一。
+- backgroundAction：keep、replace-compatible 或 simplify。
+- hierarchyAction：keep、strengthen-title、reduce-density 或 increase-whitespace。
+- safeRegion、obstacleRegions：可选，只在确实需要移动内容时给出。
+- elementActions：最多 12 条。
+- reason：一句话说明这一页为什么这么改。
+
+四、修复纪律
+1. 只修评审指出过的问题。没有问题的页面不要出现在 repairs 里。
+2. 一次只改一件事：不要同时换版式又移动每一块。
+3. 坐标系是相对页面左上角的 0–1 归一化值，矩形必须完全位于页面内。
+4. 相邻页面的修复不要互相矛盾：不要在相邻两页上给出互相冲突的轴线。
+5. 全部演示只能使用 3–5 种版式形成节奏，不要把每一页都改成不同的版式。
+
+五、输出协议
+只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
+输出结构：
+{"repairs":[{"slideIndex":2,"layout":"title-body","backgroundAction":"keep","hierarchyAction":"keep","elementActions":[{"action":"align","target":"region","frame":{"x":0.28,"y":0.18,"width":0.62,"height":0.30},"axis":"left"}],"reason":"右栏与标题没有共用左轴"}]}"##;
+    let user_prompt = format!(
+        "上一轮视觉评审结果：\n{review}\n\n整套视觉目标：\n{goal}\n\n逐页现状（索引、标题、当前版式）：\n{slides}\n\n请为评审指出问题的页面给出修复计划。"
+    );
+    let body = ChatRequest {
+        model,
+        messages: vec![
+            ChatMessage {
+                role: "system".into(),
+                content: system_prompt.into(),
+            },
+            ChatMessage {
+                role: "user".into(),
+                content: user_prompt,
+            },
+        ],
+        temperature: 0.15,
+    };
+    let content = ai::chat(
+        provider,
+        &api_key,
+        &body,
+        REPAIR_PLAN_TIMEOUT,
+        "AI_REPAIR_REQUEST_FAILED",
+        &cancel,
+    )
+    .await?;
+    parse_json(strip_code_fence(&content), "AI_REPAIR_JSON_INVALID")
+}
+
 /// 去掉模型可能附加的 Markdown 代码围栏。
 fn strip_code_fence(content: &str) -> &str {
     let trimmed = content.trim();
@@ -332,7 +462,7 @@ pub async fn generate_presentation(
     let cancel = cancels.token_for(request.task_id);
     if request.topic.trim().is_empty()
         || request.topic.chars().count() > 4_000
-        || !(1..=20).contains(&request.slide_count)
+        || request.slide_count == 0
     {
         return Err("AI_REQUEST_INVALID".into());
     }
@@ -410,7 +540,7 @@ pub async fn generate_presentation_outline(
     let cancel = cancels.token_for(request.task_id);
     if request.topic.trim().is_empty()
         || request.topic.chars().count() > 4_000
-        || !(1..=20).contains(&request.slide_count)
+        || request.slide_count == 0
     {
         return Err("AI_REQUEST_INVALID".into());
     }
@@ -479,8 +609,7 @@ pub async fn generate_presentation_slides_batch(
         || request.topic.chars().count() > 4_000
         || request.count == 0
         || request.count > MAX_BATCH_PAGES
-        || request.start_index >= 20
-        || request.start_index + request.count > 20
+        || request.start_index.checked_add(request.count).is_none()
     {
         return Err("AI_REQUEST_INVALID".into());
     }
@@ -694,18 +823,54 @@ pub async fn generate_presentation_design(
 7. 页面背景、强调色和文字颜色必须形成一套稳定配色。优先从模板主题色取值，并确保明显对比。
 8. 输入 blocks 是结构事实，必须优先于猜测：存在 quote 选 quote；存在 comparison 选 split；存在 timeline、process 或 metric 选 cards；bullet-list 的 3–6 个短条目选 cards，较长条目选 split。
 
-四、输出合同
+四、构图与层级意图
+版式决定“这页属于哪一类”，构图决定“这页长成什么样”。两者必须同时给出：
+- composition：页面骨架，只能是以下之一：
+  - auto：交给排版引擎按内容决定（不确定时用这个）。
+  - stacked：单栏，一块连续正文。
+  - columns：双栏并置。
+  - grid：等分卡片网格。
+  - editorial：编号要点栏 + 右侧一个视觉锚点（引文或要点计数）。
+- emphasis：层级强调，只能是以下之一：
+  - balanced：标题与正文同重。
+  - title-dominant：标题是页面的主角，正文退后一步。
+  - body-dominant：正文是页面的主角，标题退后一步。
+- densityTarget：密度目标，只能是以下之一：
+  - airy：留白充足，行距松。
+  - balanced：常规密度。
+  - compact：信息密集，间距紧。
+
+构图意图规则：
+1. layout 决定内容容器，composition 决定容器内部的骨架，两者不冲突时才可组合。
+2. 有 quote、comparison、timeline、process 或 metric 内容块的页面由内容块决定骨架，composition 用 auto。
+3. 3–5 个短要点时，editorial 比 grid 更有编辑感；6 个要点用 grid。
+4. 连续长段落用 stacked；两组并列信息用 columns。
+5. 不得用构图掩盖内容不足，也不得用构图承载装不下的内容。
+
+五、配色角色
+颜色不能自由发挥，必须从模板色板里选角色。角色取值：
+- surface：模板最浅的表面色。
+- surface-alt：模板的第二层浅表面色。
+- accent-1、accent-2、accent-3：模板的第 1、2、3 个强调色。
+- primary：模板的主文字色。
+- secondary：比 primary 弱一档的文字色。
+- inverse：与本页背景反差最大的颜色。
+- template-default：交给模板决定。
+
+palette 对象按 background、accent、title、body 四个位置各选一个角色。四个角色可以不同，例如封面用 surface 背景配 accent-2 强调，章节页用 primary 背景配 inverse 文字。
+
+六、输出合同
 1. 仅输出一个合法 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
 2. slides 数量必须与输入内容页数完全一致，顺序必须一致。
 3. 所有颜色必须为六位十六进制格式，例如 #1A2B3C。
 4. layout 只能是 cover、title-body、split、cards、quote、section、summary 之一。
-5. 每页必须提供 layout、background、accent、titleColor 和 bodyColor。
+5. 每页必须提供 layout、composition、emphasis、densityTarget、palette、background、accent、titleColor 和 bodyColor。
 6. 不得输出坐标、字号、正文或装饰元素；这些由确定性排版引擎生成。
 
 严格输出结构：
-{"slides":[{"layout":"cover","background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333"}]}"##;
+{"slides":[{"layout":"cover","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333"}]}"##;
     let user_prompt = format!(
-        "请依据 SlideBrief 为以下演示文稿选择逐页版式和配色。SlideBrief 是页面目的、结论、视觉意图和密度的事实来源；不要跳过或改写它。\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、版式匹配 visualIntent 和 density、相邻页面不过度重复、配色跨页一致且文字对比清晰。"
+        "请依据 SlideBrief 为以下演示文稿选择逐页版式、构图、层级、密度和配色角色。SlideBrief 是页面目的、结论、视觉意图和密度的事实来源；不要跳过或改写它。\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、版式匹配 visualIntent 和 density、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
     );
     let body = ChatRequest {
         model,
@@ -733,6 +898,42 @@ pub async fn generate_presentation_design(
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_DESIGN_JSON_INVALID")
+}
+
+#[tauri::command]
+pub async fn polish_presentation_topic(request: PolishTopicRequest) -> Result<String, String> {
+    let topic = request.topic.trim();
+    if topic.is_empty() || topic.chars().count() > 4_000 {
+        return Err("AI_REQUEST_INVALID".into());
+    }
+    let provider = ai::resolve(request.provider.as_deref())?;
+    let api_key = ai::read_api_key(provider)?;
+    let model = ai::resolve_model(provider, request.model)?;
+    let cancel = ai::CancelToken::new();
+    let body = ChatRequest {
+        model,
+        messages: vec![ChatMessage {
+            role: "user".into(),
+            content: format!(
+                "请把下面的演示文稿主题与要求润色成一段清晰、具体、可直接用于生成 PPT 的中文需求。保留用户事实和意图，不虚构数字、来源或背景；补全目标受众、使用场景、内容重点和期望风格时，只能以建议性措辞表达不确定信息。只返回润色后的需求正文，不要标题、解释、Markdown 或引号。\n\n原始输入：\n{topic}"
+            ),
+        }],
+        temperature: 0.3,
+    };
+    let polished = ai::chat(
+        provider,
+        &api_key,
+        &body,
+        TOPIC_POLISH_TIMEOUT,
+        "AI_TOPIC_POLISH_FAILED",
+        &cancel,
+    )
+    .await?;
+    let polished = polished.trim();
+    if polished.is_empty() || polished.chars().count() > 4_000 {
+        return Err("AI_TOPIC_POLISH_INVALID".into());
+    }
+    Ok(polished.to_owned())
 }
 
 #[tauri::command]

@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, LayoutDashboard, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, LayoutDashboard, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type Slide, type SlideElement } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
@@ -11,11 +11,11 @@ import { SlideElementContent, SlideElementFrame } from "../features/editor/Slide
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
-import { draftMetrics, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
+import { draftMetrics, resolveActiveSlideIndex, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, mergeStreamProgress, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
+import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, mergeStreamProgress, polishPresentationTopic, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, recoveryProjectPath, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -25,6 +25,7 @@ import type { PresentationQualityIssue } from "../services/presentation-quality-
 import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
+import { renderRealPptxForReview } from "../features/pptx-export/render-real-pptx";
 import { resolveDocumentImages, setImageProjectPath, getImageProjectPath } from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
@@ -267,17 +268,23 @@ export function App() {
   const [aiHistory, setAiHistory] = useState<AiHistoryEntry[]>([]);
   const [activeHistoryId, setActiveHistoryId] = useState<string>();
   const [aiSaveState, setAiSaveState] = useState<AiDraftSaveState>("saved");
-  const [newDraftConfirmOpen, setNewDraftConfirmOpen] = useState(false);
+  type AiContentSnapshot = { draft: AiDraft; activeSlideId?: string; fallbackIndex: number };
+  const aiContentUndo = useRef<AiContentSnapshot[]>([]);
+  const aiContentRedo = useRef<AiContentSnapshot[]>([]);
+  const aiContentCoalesce = useRef<{ key: string; at: number } | undefined>(undefined);
+  const [, setAiContentHistoryRevision] = useState(0);
   const aiOriginalDraft = useRef<AiDraft | undefined>(undefined);
   /** 恢复原文前的页面快照，让整页覆盖也能撤回。 */
-  const aiRestoreBackups = useRef(new Map<number, AiDraft["slides"][number]>());
-  const [aiRestoreUndoIndexes, setAiRestoreUndoIndexes] = useState<number[]>([]);
+  const aiRestoreBackups = useRef(new Map<string, AiDraft["slides"][number]>());
+  const [aiRestoreUndoSlideIds, setAiRestoreUndoSlideIds] = useState<string[]>([]);
   /** 关闭窗口时把最后一次编辑写盘，避免 500ms 防抖窗口内的内容丢失。 */
   const aiDraftRef = useRef<AiDraft | undefined>(undefined);
+  const activeDraftSlideIndexRef = useRef(0);
   const aiTopicRef = useRef("");
   const activeHistoryIdRef = useRef<string | undefined>(undefined);
   const aiUnsavedRef = useRef(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiPolishing, setAiPolishing] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
   /** 流式汇报的实时进度：正文分批并行，这里是各批汇总后的结果。 */
   const [aiStreamProgress, setAiStreamProgress] = useState<{ pages: number; received: number }>();
@@ -517,6 +524,10 @@ export function App() {
     aiTaskId.current += 1;
     const taskId = aiTaskId.current;
     setAiBusy(true); setAiDraft(undefined);
+    aiContentUndo.current = [];
+    aiContentRedo.current = [];
+    aiContentCoalesce.current = undefined;
+    setAiContentHistoryRevision((value) => value + 1);
     setAiProgress({ stage: "outline", completed: 0, total: 1, label: "正在准备生成…" });
     setAiStreamProgress(undefined);
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
@@ -538,7 +549,11 @@ export function App() {
       if (requestId !== aiRequestId.current) return;
       const id = crypto.randomUUID();
       aiOriginalDraft.current = structuredClone(draft);
-      setAiDraft(draft); setActiveHistoryId(id); setActiveDraftSlideIndex(0); setAiSaveState("saved");
+      aiContentUndo.current = [];
+      aiContentRedo.current = [];
+      aiContentCoalesce.current = undefined;
+      setAiContentHistoryRevision((value) => value + 1);
+      setAiDraft(draft); setActiveHistoryId(id); selectAiDraftSlide(0); setAiSaveState("saved");
       try {
         setAiHistory(await saveAiHistory({ id, topic: aiTopic, slideCount: aiSlideCount, draft }));
         setTaskStatus("AI 已完成 PPT 草稿生成");
@@ -557,6 +572,21 @@ export function App() {
       unlisten?.();
       void endAiGeneration(taskId).catch(() => undefined);
       if (requestId === aiRequestId.current) { setAiBusy(false); setAiProgress(undefined); setAiStreamProgress(undefined); }
+    }
+  };
+
+  const handlePolishAiTopic = async () => {
+    if (!aiTopic.trim() || aiPolishing || aiBusy) return;
+    setAiPolishing(true);
+    setTaskStatus("AI 正在润色主题与要求…");
+    try {
+      const polished = await polishPresentationTopic(aiTopic);
+      setAiTopic(polished);
+      setTaskStatus("主题与要求已润色");
+    } catch (error) {
+      setTaskStatus(`AI 润色失败：${describeAiError(error)}`);
+    } finally {
+      setAiPolishing(false);
     }
   };
 
@@ -589,6 +619,11 @@ export function App() {
     void saveAiHistory({ id, topic: aiTopic, slideCount: draft.slides.length, draft })
       .then((history) => { setAiHistory(history); aiUnsavedRef.current = false; })
       .catch((error: unknown) => setTaskStatus(`草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`));
+  };
+
+  const changeActiveView = (view: AppView) => {
+    if (activeView === "ai" && view !== "ai" && aiUnsavedRef.current) persistAiDraft();
+    setActiveView(view);
   };
 
   // Closing the window can land inside the 500ms debounce window. Flush the
@@ -640,8 +675,71 @@ export function App() {
     const draft = withSlideIds(entry.draft);
     aiOriginalDraft.current = structuredClone(draft);
     aiRestoreBackups.current.clear();
-    setAiRestoreUndoIndexes([]);
-    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(draft); setActiveDraftSlideIndex(0); setAiSaveState("saved");
+    setAiRestoreUndoSlideIds([]);
+    aiContentUndo.current = [];
+    aiContentRedo.current = [];
+    aiContentCoalesce.current = undefined;
+    setAiContentHistoryRevision((value) => value + 1);
+    setActiveHistoryId(entry.id); setAiTopic(entry.topic); setAiSlideCount(entry.slideCount); setAiDraft(draft); selectAiDraftSlide(0); setAiSaveState("saved");
+  };
+
+  const selectAiDraftSlide = (index: number) => {
+    activeDraftSlideIndexRef.current = index;
+    setActiveDraftSlideIndex(index);
+  };
+
+  const snapshotAiContent = (draft: AiDraft): AiContentSnapshot => {
+    const fallbackIndex = activeDraftSlideIndexRef.current;
+    return { draft: structuredClone(draft), activeSlideId: draft.slides[fallbackIndex]?.id, fallbackIndex };
+  };
+
+  const restoreAiContentSnapshot = (snapshot: AiContentSnapshot) => {
+    aiDraftRef.current = snapshot.draft;
+    setAiDraft(snapshot.draft);
+    selectAiDraftSlide(resolveActiveSlideIndex(snapshot.draft, snapshot.activeSlideId, snapshot.fallbackIndex));
+  };
+
+  const updateAiDraftWithHistory = (key: string, update: (draft: AiDraft) => AiDraft, coalesce = true) => {
+    setAiDraft((current) => {
+      if (!current) return current;
+      const next = update(current);
+      if (next === current) return current;
+      const now = Date.now();
+      const previous = aiContentCoalesce.current;
+      if (!coalesce || !previous || previous.key !== key || now - previous.at > 750) {
+        aiContentUndo.current.push(snapshotAiContent(current));
+        if (aiContentUndo.current.length > 100) aiContentUndo.current.shift();
+      }
+      aiContentCoalesce.current = coalesce ? { key, at: now } : undefined;
+      aiContentRedo.current = [];
+      aiDraftRef.current = next;
+      setAiContentHistoryRevision((value) => value + 1);
+      return next;
+    });
+  };
+
+  const undoAiContent = () => {
+    const previous = aiContentUndo.current.pop();
+    const current = aiDraftRef.current;
+    if (!previous || !current) return;
+    aiContentRedo.current.push(snapshotAiContent(current));
+    aiRestoreBackups.current.clear();
+    setAiRestoreUndoSlideIds([]);
+    aiContentCoalesce.current = undefined;
+    restoreAiContentSnapshot(previous);
+    setAiContentHistoryRevision((value) => value + 1);
+  };
+
+  const redoAiContent = () => {
+    const next = aiContentRedo.current.pop();
+    const current = aiDraftRef.current;
+    if (!next || !current) return;
+    aiContentUndo.current.push(snapshotAiContent(current));
+    aiRestoreBackups.current.clear();
+    setAiRestoreUndoSlideIds([]);
+    aiContentCoalesce.current = undefined;
+    restoreAiContentSnapshot(next);
+    setAiContentHistoryRevision((value) => value + 1);
   };
 
   /**
@@ -650,70 +748,145 @@ export function App() {
    * reverting the newer edits later.
    */
   const forgetRestoreBackup = (index: number) => {
-    if (!aiRestoreBackups.current.delete(index)) return;
-    setAiRestoreUndoIndexes([...aiRestoreBackups.current.keys()]);
+    const slideId = aiDraftRef.current?.slides[index]?.id;
+    if (!slideId || !aiRestoreBackups.current.delete(slideId)) return;
+    setAiRestoreUndoSlideIds([...aiRestoreBackups.current.keys()]);
   };
 
   const updateAiSlide = (index: number, field: "title" | "body" | "speakerNotes", value: string) => {
     forgetRestoreBackup(index);
-    setAiDraft((draft) => draft ? { ...draft, slides: draft.slides.map((slide, slideIndex) => {
+    updateAiDraftWithHistory(`slide:${index}:${field}`, (draft) => ({ ...draft, slides: draft.slides.map((slide, slideIndex) => {
       if (slideIndex !== index) return slide;
-      if (field !== "body") return { ...slide, [field]: value };
+      if (field !== "body") return { ...slide, [field]: value, reviewed: false };
       // Body copy is only editable on legacy drafts that carry no structured
       // blocks. Deriving blocks here used to swap the textarea for the block
       // editor on the first keystroke, which dropped focus mid-sentence.
-      return { ...slide, body: value };
-    }) } : draft);
+      return { ...slide, body: value, reviewed: false };
+    }) }));
   };
 
-  const updateAiBlocks = (index: number, blocks: AiDraft["slides"][number]["blocks"]) => {
+  const updateAiBlocks = (index: number, blocks: AiDraft["slides"][number]["blocks"], separateHistory = false) => {
     forgetRestoreBackup(index);
-    setAiDraft((draft) => draft ? {
+    updateAiDraftWithHistory(`slide:${index}:blocks`, (draft) => ({
       ...draft,
-      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...slide, blocks, body: bodyFromBlocks(blocks) } : slide)),
-    } : draft);
+      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...slide, blocks, body: bodyFromBlocks(blocks), reviewed: false } : slide)),
+    }), !separateHistory);
   };
 
-  const updateAiDraftTitle = (title: string) => setAiDraft((draft) => (draft ? { ...draft, title } : draft));
+  const updateAiSlideReviewed = (index: number, reviewed: boolean) => {
+    updateAiDraftWithHistory(`slide:${index}:reviewed`, (draft) => ({
+      ...draft,
+      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...slide, reviewed } : slide)),
+    }), false);
+  };
+
+  const reviewAllAiSlides = () => {
+    updateAiDraftWithHistory("slides:review-all", (draft) => ({
+      ...draft,
+      slides: draft.slides.map((slide) => ({ ...slide, reviewed: Boolean(slide.title.trim() && (slide.body.trim() || slide.blocks.length > 0)) })),
+    }), false);
+  };
+
+  const updateAiDraftTitle = (title: string) => updateAiDraftWithHistory("draft:title", (draft) => ({ ...draft, title }));
+
+  const addAiSlide = (afterIndex: number) => {
+    const insertIndex = Math.min(afterIndex + 1, aiDraftRef.current?.slides.length ?? 0);
+    const slide: AiDraft["slides"][number] = {
+      id: crypto.randomUUID(),
+      title: "新页面",
+      body: "",
+      speakerNotes: "",
+      reviewed: false,
+      plan: { purpose: "补充演示内容", conclusion: "请填写本页核心结论", visualIntent: "structured-text", density: "medium" },
+      blocks: [],
+    };
+    updateAiDraftWithHistory("slides:add", (draft) => ({
+      ...draft,
+      slides: [...draft.slides.slice(0, insertIndex), slide, ...draft.slides.slice(insertIndex)],
+    }), false);
+    selectAiDraftSlide(insertIndex);
+    setTaskStatus(`已新增第 ${insertIndex + 1} 页`);
+  };
+
+  const duplicateAiSlide = (index: number) => {
+    const source = aiDraftRef.current?.slides[index];
+    if (!source) return;
+    const duplicate = { ...structuredClone(source), id: crypto.randomUUID(), title: `${source.title}（副本）`, reviewed: false };
+    updateAiDraftWithHistory("slides:duplicate", (draft) => ({
+      ...draft,
+      slides: [...draft.slides.slice(0, index + 1), duplicate, ...draft.slides.slice(index + 1)],
+    }), false);
+    selectAiDraftSlide(index + 1);
+    setTaskStatus(`已复制第 ${index + 1} 页`);
+  };
+
+  const deleteAiSlide = (index: number) => {
+    const current = aiDraftRef.current;
+    if (!current || current.slides.length <= 1) return;
+    const slideId = current.slides[index]?.id;
+    if (slideId) aiRestoreBackups.current.delete(slideId);
+    setAiRestoreUndoSlideIds([...aiRestoreBackups.current.keys()]);
+    updateAiDraftWithHistory("slides:delete", (draft) => ({ ...draft, slides: draft.slides.filter((_, slideIndex) => slideIndex !== index) }), false);
+    selectAiDraftSlide(Math.min(index, current.slides.length - 2));
+    setTaskStatus(`已删除第 ${index + 1} 页`);
+  };
+
+  const moveAiSlide = (index: number, destination: number) => {
+    const current = aiDraftRef.current;
+    if (!current || destination < 0 || destination >= current.slides.length || destination === index) return;
+    updateAiDraftWithHistory("slides:move", (draft) => {
+      const slides = [...draft.slides];
+      const [slide] = slides.splice(index, 1);
+      if (!slide) return draft;
+      slides.splice(destination, 0, slide);
+      return { ...draft, slides };
+    }, false);
+    selectAiDraftSlide(destination);
+    setTaskStatus(`已将页面移动到第 ${destination + 1} 页`);
+  };
 
   const restoreAiSlide = (index: number) => {
-    const original = aiOriginalDraft.current?.slides[index];
-    if (!original) return;
-    const current = aiDraft?.slides[index];
-    if (current) {
-      aiRestoreBackups.current.set(index, structuredClone(current));
-      setAiRestoreUndoIndexes([...aiRestoreBackups.current.keys()]);
-    }
-    setAiDraft((draft) => draft ? {
+    const current = aiDraftRef.current?.slides[index];
+    const slideId = current?.id;
+    const original = slideId ? aiOriginalDraft.current?.slides.find((slide) => slide.id === slideId) : undefined;
+    if (!current || !slideId || !original) return;
+    aiRestoreBackups.current.set(slideId, structuredClone(current));
+    setAiRestoreUndoSlideIds([...aiRestoreBackups.current.keys()]);
+    updateAiDraftWithHistory(`slide:${index}:restore`, (draft) => ({
       ...draft,
-      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...original, id: slide.id } : slide)),
-    } : draft);
+      slides: draft.slides.map((slide) => (slide.id === slideId ? { ...original, id: slideId } : slide)),
+    }), false);
     setTaskStatus(`已恢复第 ${index + 1} 页的 AI 原始内容`);
   };
 
   const undoRestoreAiSlide = (index: number) => {
-    const backup = aiRestoreBackups.current.get(index);
-    if (!backup) return;
-    aiRestoreBackups.current.delete(index);
-    setAiRestoreUndoIndexes([...aiRestoreBackups.current.keys()]);
-    setAiDraft((draft) => draft ? {
+    const slideId = aiDraftRef.current?.slides[index]?.id;
+    const backup = slideId ? aiRestoreBackups.current.get(slideId) : undefined;
+    if (!backup || !slideId) return;
+    aiRestoreBackups.current.delete(slideId);
+    setAiRestoreUndoSlideIds([...aiRestoreBackups.current.keys()]);
+    updateAiDraftWithHistory(`slide:${index}:undo-restore`, (draft) => ({
       ...draft,
-      slides: draft.slides.map((slide, slideIndex) => (slideIndex === index ? { ...backup, id: slide.id } : slide)),
-    } : draft);
+      slides: draft.slides.map((slide) => (slide.id === slideId ? { ...backup, id: slideId } : slide)),
+    }), false);
     setTaskStatus(`已撤销第 ${index + 1} 页的恢复操作`);
   };
 
-  const confirmNewDraft = () => {
+  const returnToAiStart = () => {
     persistAiDraft();
     aiOriginalDraft.current = undefined;
     aiRestoreBackups.current.clear();
-    setAiRestoreUndoIndexes([]);
+    setAiRestoreUndoSlideIds([]);
+    aiContentUndo.current = [];
+    aiContentRedo.current = [];
+    aiContentCoalesce.current = undefined;
+    setAiContentHistoryRevision((value) => value + 1);
     setAiDraft(undefined);
     setActiveHistoryId(undefined);
-    setActiveDraftSlideIndex(0);
+    setAiTopic("");
+    selectAiDraftSlide(0);
     setAiSaveState("saved");
-    setNewDraftConfirmOpen(false);
-    setTaskStatus("已新建空白草稿");
+    setTaskStatus("当前草稿已保存到制作历史");
   };
 
   const aiDraftIssues = useMemo(() => (aiDraft ? reviewIssues(aiDraft) : []), [aiDraft]);
@@ -839,6 +1012,9 @@ export function App() {
         taskId,
         isCancelled: () => designCancelRef.current,
         onProgress: (label, percent) => setDesignProgress({ percent, label }),
+        // 评审优先看导出后的真实 PPTX。本机没有 PowerPoint 时这一项会失败，
+        // 质检阶段自己降级到画布预览渲染并在报告里说明。
+        renderRealPptxForReview,
       });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       const finalDocument = stage.document;
@@ -1033,11 +1209,11 @@ export function App() {
       </header>}
 
       <nav className="nav-rail" aria-label="主功能">
-        <button className={activeView === "editor" ? "active" : ""} aria-current={activeView === "editor" ? "page" : undefined} title="编辑器" onClick={() => setActiveView("editor")}><LayoutDashboard /><span>编辑</span></button>
-        <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="AI 生成" onClick={() => setActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
-        <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="PPT 模板" onClick={() => setActiveView("theme")}><Palette /><span>模板</span></button>
+        <button className={activeView === "editor" ? "active" : ""} aria-current={activeView === "editor" ? "page" : undefined} title="编辑器" onClick={() => changeActiveView("editor")}><LayoutDashboard /><span>编辑</span></button>
+        <button className={activeView === "ai" ? "active" : ""} aria-current={activeView === "ai" ? "page" : undefined} title="AI 生成" onClick={() => changeActiveView("ai")} disabled={!isDesktopRuntime()}><Sparkles /><span>AI</span></button>
+        <button className={activeView === "theme" ? "active" : ""} aria-current={activeView === "theme" ? "page" : undefined} title="PPT 模板" onClick={() => changeActiveView("theme")}><Palette /><span>模板</span></button>
         <div className="nav-spacer" />
-        <button className={activeView === "settings" ? "active" : ""} aria-current={activeView === "settings" ? "page" : undefined} title="设置" onClick={() => setActiveView("settings")}><Settings /><span>设置</span></button>
+        <button className={activeView === "settings" ? "active" : ""} aria-current={activeView === "settings" ? "page" : undefined} title="设置" onClick={() => changeActiveView("settings")}><Settings /><span>设置</span></button>
       </nav>
 
       {activeView === "editor" && <><aside className="left-panel">
@@ -1080,15 +1256,15 @@ export function App() {
     </>}
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
-        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>生成并审核内容，确认后再套用 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps" aria-label="制作流程"><span className={!aiDraft ? "active" : "done"} aria-current={!aiDraft ? "step" : undefined}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""} aria-current={aiDraft ? "step" : undefined}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions">{aiDraftBlockingIssues.length > 0 && <span className="draft-blocked-hint"><CircleAlert />{aiDraftBlockHint}</span>}<button className="primary-action" title={aiDraftBlockReason} disabled={Boolean(aiDraftBlockReason)} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
+        <header className="feature-header"><div>{aiDraft && <button type="button" className="header-back-button" aria-label="返回初始页面" title="返回初始页面" onClick={returnToAiStart}><ArrowLeft /></button>}<Sparkles /><div><h1>AI 内容工作台</h1><p>生成并审核内容，确认后再套用 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps" aria-label="制作流程"><span className={!aiDraft ? "active" : "done"} aria-current={!aiDraft ? "step" : undefined}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""} aria-current={aiDraft ? "step" : undefined}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions">{aiDraftBlockingIssues.length > 0 && <span className="draft-blocked-hint"><CircleAlert />{aiDraftBlockHint}</span>}<button className="primary-action" title={aiDraftBlockReason} disabled={Boolean(aiDraftBlockReason)} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
         {!aiDraft ? <div className="ai-split">
           <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.length === 0 ? <p className="ai-history-empty">还没有草稿</p> : aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>
           <div className="feature-scroll ai-plan-pane">
           <div className="ai-compose-card">
           <div className="section-kicker">AI 内容规划</div><h2>你想制作什么演示文稿？</h2><p>描述主题、受众、场景和重点，AI 将生成演示简报、逐页计划和可编辑的结构化内容。</p>
-          <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
-          <label className="slide-count-field">页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
-          <button className="primary-action" disabled={!aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
+          <label><span className="topic-field-heading"><span>主题与要求</span><button type="button" className="link-action topic-polish-action" disabled={!aiTopic.trim() || aiPolishing || aiBusy} onClick={() => void handlePolishAiTopic()}><Wand2 />{aiPolishing ? "润色中…" : "AI 润色"}</button></span><textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
+          <label className="slide-count-field">页数<input type="number" min="1" step="1" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.trunc(Number(event.target.value)) || 1))} /></label>
+          <button className="primary-action" disabled={!aiTopic.trim() || aiPolishing} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
           {aiBusy && aiProgress && <div className="ai-generation-progress" role="status" aria-live="polite"><strong>{aiGenerationLabel}</strong><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={aiGenerationPercent} role="progressbar"><i style={{ width: `${aiGenerationPercent}%` }} /></div><span>生成中可随时点击“取消生成”停止本次任务</span></div>}
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
@@ -1098,14 +1274,23 @@ export function App() {
           originalDraft={aiOriginalDraft.current}
           activeIndex={activeDraftSlideIndex}
           saveState={aiSaveState}
-          restoreUndoIndexes={aiRestoreUndoIndexes}
-          onActiveIndexChange={setActiveDraftSlideIndex}
+          restoreUndoSlideIds={aiRestoreUndoSlideIds}
+          canUndo={aiContentUndo.current.length > 0}
+          canRedo={aiContentRedo.current.length > 0}
+          onActiveIndexChange={selectAiDraftSlide}
           onDraftTitleChange={updateAiDraftTitle}
           onSlideFieldChange={updateAiSlide}
           onSlideBlocksChange={updateAiBlocks}
+          onSlideReviewedChange={updateAiSlideReviewed}
+          onReviewAllSlides={reviewAllAiSlides}
+          onAddSlide={addAiSlide}
+          onDuplicateSlide={duplicateAiSlide}
+          onDeleteSlide={deleteAiSlide}
+          onMoveSlide={moveAiSlide}
           onRestoreSlide={restoreAiSlide}
           onUndoRestore={undoRestoreAiSlide}
-          onNewDraft={() => setNewDraftConfirmOpen(true)}
+          onUndo={undoAiContent}
+          onRedo={redoAiContent}
         /></div>}
       </main>}
 
@@ -1134,7 +1319,6 @@ export function App() {
 
       {exportReport && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExportReport(undefined); }}><section className="upload-dialog export-report-dialog" role="dialog" aria-modal="true" aria-labelledby="export-report-title"><div className="upload-dialog-heading"><div><CircleCheck /><div><h2 id="export-report-title">导出报告</h2><p>{exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象{exportReport.nativeChartCount > 0 ? ` · ${exportReport.nativeChartCount} 个原生图表` : ""}{exportReport.nativeTableCount > 0 ? ` · ${exportReport.nativeTableCount} 个原生表格` : ""} · ZIP {exportReport.package.entryCount} 个条目{exportReport.masters.length > 0 ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）` : ""}{exportReport.themeColors.length > 0 ? ` · 主题色 ${exportReport.themeColors.join("、")}` : ""}</p></div></div><button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}><X /></button></div>{exportReport.issues.length === 0 ? <div className="template-empty">未发现导出问题</div> : <ul className="export-report-list">{exportReport.issues.map((issue, index) => <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}><CircleAlert /><div><strong>{issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页</strong><p>{issue.message}</p></div></li>)}</ul>}<div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>关闭</button></div></section></div>}
 
-      {newDraftConfirmOpen && <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewDraftConfirmOpen(false); }}><section className="upload-dialog new-draft-dialog" role="dialog" aria-modal="true" aria-labelledby="new-draft-title"><div className="upload-dialog-heading"><div><FilePlus2 /><div><h2 id="new-draft-title">新建草稿？</h2><p>当前草稿会先保存到制作历史，新草稿从空白主题开始。</p></div></div><button type="button" aria-label="关闭新建草稿窗口" onClick={() => setNewDraftConfirmOpen(false)}><X /></button></div><div className="upload-dialog-actions"><button type="button" className="secondary-action" onClick={() => setNewDraftConfirmOpen(false)}>取消</button><button type="button" className="primary-action" onClick={confirmNewDraft}><FilePlus2 />新建空白草稿</button></div></section></div>}
 
       {message && <div className={`page-message ${message.kind}`} role="status" aria-live="polite">{message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}<span>{message.text}</span><button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}><X /></button></div>}
 

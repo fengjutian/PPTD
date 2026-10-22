@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { affectedSlideIndexes, defaultPresentationVisualGoal, normalizeVisualReview, runVisualAlignmentLoop, visualRepairPlanSchema, type VisualReview } from "./visual-alignment";
+import { affectedSlideIndexes, defaultPresentationVisualGoal, normalizeVisualRepairPlan, normalizeVisualReview, runVisualAlignmentLoop, visualRepairPlanSchema, type VisualReview } from "./visual-alignment";
 
 const review = (score: number, errors = 0): VisualReview => ({ overallScore: score, hierarchyScore: score, alignmentScore: score, readabilityScore: score, consistencyScore: score, issues: Array.from({ length: errors }, () => ({ slideIndex: 0, severity: "error", issue: "misalignment", elementIds: [], suggestion: "对齐到共享网格" })), slideGuidance: [] });
 
@@ -20,6 +20,52 @@ describe("visual alignment loop", () => {
     const result = affectedSlideIndexes({ ...review(70), issues: [{ slideIndex: 4, severity: "warning", issue: "repetitive-layout", elementIds: [], suggestion: "更换结构" }, { slideIndex: 2, severity: "error", issue: "misalignment", elementIds: [], suggestion: "对齐" }, { slideIndex: 4, severity: "error", issue: "poor-contrast", elementIds: [], suggestion: "提高对比度" }] });
     expect(result).toEqual([2, 4]);
     expect(visualRepairPlanSchema.parse({ repairs: [{ slideIndex: 2, layout: "quote", reason: "强化原文" }] }).repairs).toHaveLength(1);
+  });
+});
+
+describe("修复计划的规范化", () => {
+  it("保留模型指出的区域修复", () => {
+    const plan = normalizeVisualRepairPlan({
+      repairs: [{ slideIndex: 1, elementActions: [{ action: "move", target: "region", frame: { x: 0.1, y: 0.2, width: 0.4, height: 0.3 }, to: { x: 0.5, y: 0.2, width: 0.4, height: 0.3 } }], reason: "把左栏挪到右边" }],
+    }, [0, 1]);
+    expect(plan.repairs[0]!.elementActions[0]).toMatchObject({ action: "move", target: "region" });
+  });
+
+  it("丢掉页面不存在的修复", () => {
+    expect(() => normalizeVisualRepairPlan({ repairs: [{ slideIndex: 9, reason: "不存在的页" }] }, [0, 1])).toThrow("AI_REPAIR_RESPONSE_UNREPAIRABLE");
+  });
+
+  it("丢掉没有目标位置的区域移动", () => {
+    expect(() => normalizeVisualRepairPlan({
+      repairs: [{ slideIndex: 0, elementActions: [{ action: "move", target: "region", frame: { x: 0.1, y: 0.2, width: 0.4, height: 0.3 } }], reason: "没有目的地" }],
+    }, [0])).toThrow("AI_REPAIR_RESPONSE_UNREPAIRABLE");
+  });
+
+  it("丢掉越出页面的坐标", () => {
+    expect(() => normalizeVisualRepairPlan({
+      repairs: [{ slideIndex: 0, elementActions: [{ action: "align", target: "region", frame: { x: 1.4, y: 0.2, width: 0.4, height: 0.3 } }], reason: "越界" }],
+    }, [0])).toThrow("AI_REPAIR_RESPONSE_UNREPAIRABLE");
+  });
+
+  it("把不合法的动作换成保守的默认值", () => {
+    const plan = normalizeVisualRepairPlan({
+      repairs: [{
+        slideIndex: 0,
+        layout: "not-a-layout",
+        backgroundAction: "burn-it",
+        hierarchyAction: "nope",
+        elementActions: [{ action: "restyle", target: "title", fontScale: 9 }],
+        reason: "测试",
+      }],
+    }, [0]);
+    expect(plan.repairs[0]).toMatchObject({ backgroundAction: "keep", hierarchyAction: "keep" });
+    expect(plan.repairs[0]!.layout).toBeUndefined();
+    // 超出范围的字号比例被拉回合法区间。
+    expect(plan.repairs[0]!.elementActions[0]).toMatchObject({ fontScale: 1.5 });
+  });
+
+  it("什么都不做的修复被丢掉", () => {
+    expect(() => normalizeVisualRepairPlan({ repairs: [{ slideIndex: 0, reason: "没什么可改的" }] }, [0])).toThrow("AI_REPAIR_RESPONSE_UNREPAIRABLE");
   });
 });
 

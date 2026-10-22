@@ -8,6 +8,7 @@ import {
   templateColumnRegions,
   templateContentRegion,
   templateTitleRegion,
+  type AiElementRepair,
   type AiNormalizedRect,
   type AiSlideDesign,
   type AiTemplateDecoration,
@@ -17,6 +18,8 @@ import {
 } from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
 import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, stripListPrefix } from "./layout-capacity";
+import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, resolvePageDesign, type CompositionFacts } from "./design-intent";
+import { planDeckCompositions } from "./deck-composition";
 
 export type {
   AiElementRepair,
@@ -154,6 +157,8 @@ export type DocumentCommand =
   | { type: "move-slide"; slideId: SlideId; toIndex: number }
   | { type: "set-slide"; slideId: SlideId }
   | { type: "set-slide-background"; slideId: SlideId; background: string }
+  | { type: "set-slide-background-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType }
+  | { type: "remove-slide-background-image"; slideId: SlideId }
   | { type: "add-text"; slideId: SlideId }
   | { type: "add-image"; slideId: SlideId; dataUrl: string; mimeType: SupportedImageMimeType; altText: string; naturalWidth?: number; naturalHeight?: number }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
@@ -295,7 +300,9 @@ function imageFrame(naturalWidth?: number, naturalHeight?: number): RectEmu {
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
     case "set-slide": return null;
-    case "set-slide-background": return "design";
+    case "set-slide-background":
+    case "set-slide-background-image":
+    case "remove-slide-background-image": return "design";
     case "set-text-style":
     case "fit-text":
     case "set-text-emphasis":
@@ -486,30 +493,51 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const shape = (box: RectEmu, fill: string, kind: "rectangle" | "ellipse" = "rectangle", stroke = fill, strokeWidthPt = 0) => ({ id: crypto.randomUUID() as ElementId, type: "shape" as const, frame: box, rotationMilliDegree: 0, locked: false, shape: kind, style: { fill, stroke, strokeWidthPt, radiusPt: kind === "ellipse" ? 999 : 8 } });
     const points = (body: string) => body.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((value) => value.trim()).filter(Boolean);
     const cleanPoint = stripListPrefix;
+    // 整册的构图在画之前就要定下来：模板版式的选择依赖构图，而构图要看着
+    // 整册的节奏来定。逐页独立决定构图会让相邻页长成一个样。
+    const pageFacts = command.slides.map((content, index) => {
+      const design = command.designs[index]!;
+      const blocks = content.blocks ?? [];
+      const quoteBlock = blocks.find((block): block is Extract<AiContentBlock, { type: "quote" }> => block.type === "quote");
+      const blockItems = blocks
+        .filter((block): block is Extract<AiContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
+        .flatMap((block) => block.items);
+      const items = blockItems.length > 0 ? blockItems : points(content.body);
+      const cleanItems = items.map(cleanPoint);
+      const facts: CompositionFacts = {
+        itemCount: items.length,
+        shortItems: cleanItems.every((item) => item.length <= LAYOUT_CAPACITY.shortItemLength),
+        longestItemLength: cleanItems.reduce((longest, item) => Math.max(longest, item.length), 0),
+        bodyLength: content.body.length,
+        hasQuote: Boolean(detectPullQuote({ quoteText: quoteBlock?.text, items })),
+        hasComparison: blocks.some((block) => block.type === "comparison"),
+        hasRowBlock: blocks.some((block) => block.type === "timeline" || block.type === "process" || block.type === "metric"),
+        layout: design.layout,
+      };
+      return { facts, requested: design.composition };
+    });
+    const deckPlan = planDeckCompositions(pageFacts);
     // The layout of every page is decided as a sequence: the deck should rotate
     // through a small set of template layouts instead of repeating one artwork.
     const layoutIntents: TemplateLayoutIntent[] = command.slides.map((content, index) => {
       const design = command.designs[index]!;
       const blocks = content.blocks ?? [];
       const hasBlock = (type: AiContentBlock["type"]) => blocks.some((block) => block.type === type);
-      const blockItems = blocks
-        .filter((block): block is Extract<AiContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
-        .flatMap((block) => block.items);
-      const items = blockItems.length > 0 ? blockItems : points(content.body);
-      const shortItems = items.every((item) => cleanPoint(item).length <= LAYOUT_CAPACITY.shortItemLength);
       // The template intent must match the composition the renderer will actually
-      // produce. A short split page becomes an editorial count/quote page, and a
-      // six-point split page becomes a card grid; selecting split artwork for
-      // those pages leaves the new composition on top of two-column geometry.
-      if (design.layout === "split" && !hasBlock("comparison") && shortItems) {
-        if (items.length >= LAYOUT_CAPACITY.panelMinItems && items.length <= LAYOUT_CAPACITY.panelMaxItems) return hasBlock("quote") ? "quote" : "body";
-        if (items.length === LAYOUT_CAPACITY.cardsMaxItems) return "cards";
-      }
+      // produce. An editorial page is drawn on a body-like template, a card grid
+      // on a card template, and two columns on a two-column template; choosing
+      // artwork that contradicts the composition leaves the new composition on
+      // top of the wrong geometry.
+      const composition = deckPlan.compositions[index]!;
       if (design.layout === "cover") return "cover";
       if (design.layout === "section") return "section";
-      if (design.layout === "quote" || hasBlock("quote")) return "quote";
-      if (design.layout === "split" || hasBlock("comparison")) return "split";
-      if (design.layout === "cards" || hasBlock("timeline") || hasBlock("process") || hasBlock("metric")) return "cards";
+      if (hasBlock("comparison")) return "split";
+      if (hasBlock("timeline") || hasBlock("process") || hasBlock("metric")) return "cards";
+      if (design.layout === "quote") return "quote";
+      if (hasBlock("quote") && composition !== "editorial") return "quote";
+      if (composition === "editorial") return "body";
+      if (composition === "grid") return "cards";
+      if (composition === "columns") return "split";
       return "body";
     });
     const chosenLayouts = planTemplateLayouts({ layouts: command.templateLayouts ?? [], intents: layoutIntents, rhythm: command.backgroundRhythm });
@@ -538,24 +566,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // A quoted line already present in the reviewed copy can carry the page
       // as a pull quote. It is a visual emphasis of existing content, never a
       // new claim, and gives dense list pages an editorial anchor.
-      const quotedBlock = quoteBlock?.text.trim();
-      const pullQuote = quotedBlock && quotedBlock.length >= 6 && quotedBlock.length <= 96
-        ? quotedBlock
-        : items
-          .map(cleanPoint)
-          .filter((item) => item.length >= 6 && item.length <= 48 && /[“”"'‘’「」『』]/.test(item))
-          .sort((left, right) => right.length - left.length)[0];
+      const pullQuote = detectPullQuote({ quoteText: quoteBlock?.text, items });
       // A short summary or split page without a quotation still needs a visual
       // anchor. A count panel uses the real number of points, so it fills the
       // right side without inventing a headline or duplicating a bullet.
       const shortItems = items.every((item) => cleanPoint(item).length <= LAYOUT_CAPACITY.shortItemLength);
-      const countPanel = !pullQuote
-        && (design.layout === "summary" || design.layout === "split")
-        && items.length >= LAYOUT_CAPACITY.panelMinItems
-        && items.length <= LAYOUT_CAPACITY.panelMaxItems
-        && shortItems;
-      const editorialSplit = design.layout === "split" && shortItems;
-      const shortSplitAsCards = design.layout === "split" && items.length === LAYOUT_CAPACITY.cardsMaxItems && shortItems;
+      const longestItemLength = items.reduce((longest, item) => Math.max(longest, cleanPoint(item).length), 0);
       const hasDeterministicBlock = Boolean(timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock);
       // The rendered artwork and the placeholder geometry describe the same
       // layout, so editable text has to land on the geometry of the layout that
@@ -643,6 +659,43 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const scrimLuminance = colorLuminance(scrimFill) ?? 1;
       const contentBox = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
       const titleBox = recipeTitle ?? { x: alignmentGrid.left, y: alignmentGrid.titleY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.titleHeight };
+      // The intent of the page: which composition it is drawn in, which level of
+      // the hierarchy carries the weight and how much white space it spends.
+      // The composition is checked against the reviewed content, so an intent
+      // that the content cannot carry is refused instead of producing a page
+      // that does not hold its own copy.
+      const compositionFacts: CompositionFacts = {
+        itemCount: items.length,
+        shortItems,
+        longestItemLength,
+        bodyLength: content.body.length,
+        hasQuote: Boolean(pullQuote),
+        hasComparison: Boolean(comparisonBlock),
+        hasRowBlock: Boolean(timelineBlock || processBlock || metricBlocks.length > 0),
+        layout: design.layout,
+      };
+      const intent = resolvePageDesign({
+        composition: deckPlan.compositions[index],
+        emphasis: design.emphasis,
+        densityTarget: design.densityTarget,
+        facts: compositionFacts,
+      });
+      const emphasis = EMPHASIS_FACTORS[intent.emphasis];
+      const density = DENSITY_FACTORS[intent.density];
+      // An editorial page needs room for a numbered column and an anchor panel
+      // beside it. A page that does not have that room falls back to the
+      // composition its own layout would have produced.
+      const composition = intent.composition === "editorial" && (contentBox.width < 0.55 || contentBox.height < 0.35)
+        ? autoComposition(compositionFacts, { allowEditorial: false })
+        : intent.composition;
+      // A short summary or split page without a quotation still needs a visual
+      // anchor. A count panel uses the real number of points, so it fills the
+      // right side without inventing a headline or duplicating a bullet.
+      const countPanel = !pullQuote
+        && (design.layout === "summary" || design.layout === "split" || composition === "editorial")
+        && items.length >= LAYOUT_CAPACITY.panelMinItems
+        && items.length <= LAYOUT_CAPACITY.panelMaxItems
+        && shortItems;
       if (artworkTreatment === "local-scrim") {
         slide.elements.push(shape(frame(Math.max(0, contentBox.x - 0.02), Math.max(0, contentBox.y - 0.02), Math.min(1 - Math.max(0, contentBox.x - 0.02), contentBox.width + 0.04), Math.min(1 - Math.max(0, contentBox.y - 0.02), contentBox.height + 0.04)), scrimFill));
       }
@@ -832,7 +885,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const processItems = processBlock.items;
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.20), 0.012), design.accent));
-        const stepGap = 0.03;
+        const stepGap = 0.03 * density.gap;
         const stepWidth = (contentBox.width - stepGap * Math.max(processItems.length - 1, 0)) / Math.max(processItems.length, 1);
         const labelSize = 17; const textSize = 14; const badgeSize = 15;
         const badgeDiameter = 0.5;
@@ -885,12 +938,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           }
         }
       } else if (
-        (pullQuote || countPanel)
-        && items.length >= 3
-        && items.length <= 5
+        composition === "editorial"
+        && (pullQuote || countPanel)
+        && items.length >= LAYOUT_CAPACITY.panelMinItems
+        && items.length <= LAYOUT_CAPACITY.panelMaxItems
         && contentBox.width >= 0.55
         && contentBox.height >= 0.35
-        && (design.layout === "cards" || design.layout === "title-body" || design.layout === "summary" || design.layout === "quote" || editorialSplit)
       ) {
         // A narrow numbered column plus one visual anchor: an oversized pull
         // quote copied from the reviewed body, or the real count of summary
@@ -912,7 +965,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           availableHeightPt: contentBox.height * pageHeightIn * 72,
           preferredFontSizePt: itemSize,
           minimumFontSizePt: 14,
-          minimumGapPt: 6 * 72 * 0.0139,
+          minimumGapPt: 6 * 72 * 0.0139 * density.gap,
+          // A compact page does not let the leftover space drift the points
+          // apart: the list has to read as one list.
+          ...(density.gap < 1 ? { maximumGapPt: 18 * density.gap } : {}),
+          lineHeightRatio: density.leading,
           fontFamily: command.fontFamily || "Microsoft YaHei",
         });
         const flowFontPt = listFlow.fontSizePt;
@@ -1006,14 +1063,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(text("项要点", frame(panelX + 0.05, labelY, panelWidth - 0.10, labelHeight), labelSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(text("本页要点", frame(panelX + 0.05, footerY, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
         }
-      } else if (items.length > 1 && items.length <= 6 && (design.layout === "cards" || shortSplitAsCards || (items.length >= 3 && (design.layout === "title-body" || design.layout === "summary") && shortItems))) {
+      } else if (composition === "grid" && items.length > 1 && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
         const visible = items.slice(0, 6);
         const columns = visible.length === 3 || visible.length >= 5 ? 3 : 2;
         const rows = Math.ceil(visible.length / columns);
         const contentWidth = contentBox.width; const contentHeight = contentBox.height;
-        const columnGap = 0.022; const rowGap = 0.040;
+        const columnGap = 0.022 * density.gap; const rowGap = 0.040 * density.gap;
         const cardWidth = (contentWidth - columnGap * (columns - 1)) / columns;
         // A single row of cards can carry more height than a two-row grid; use
         // that space instead of leaving the lower half of the page empty.
@@ -1044,7 +1101,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const fittedCardSize = fittedFontSize(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height), 16, 12);
           slide.elements.push(text(cleanItem, centeredBlock(cleanItem, cardTextBox, fittedCardSize), fittedCardSize, "#293241", false, "left", undefined, cardLuminance));
         });
-      } else if ((design.layout === "split" || (design.layout === "cards" && items.length > 6)) && items.length > 1) {
+      } else if (composition === "columns" && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(0.50, 0.25, 0.012, 0.60), design.accent));
         const middle = Math.ceil(items.length / 2);
@@ -1070,14 +1127,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const leftCopy = columnCopy(items.slice(0, middle));
         const rightCopy = columnCopy(items.slice(middle));
         slide.elements.push(text(leftCopy, columnFrame(leftCopy, leftSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance), text(rightCopy, columnFrame(rightCopy, rightSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance));
-      } else if ((design.layout === "title-body" || design.layout === "summary") && items.length >= LAYOUT_CAPACITY.cardsGridMinItems && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
+      } else if (composition === "stacked" && (design.layout === "title-body" || design.layout === "summary") && items.length >= LAYOUT_CAPACITY.cardsGridMinItems && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
         // A short list is a sequence of visual units, not one paragraph. Keeping
         // it as a single text box was the reason a five-point page looked like a
         // small block stranded in a large empty canvas.
         const listItems = items.slice(0, 6);
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [alignmentGrid.left, alignmentGrid.titleY, alignmentGrid.right - alignmentGrid.left, alignmentGrid.titleHeight], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
         if (!keepsArtwork) slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.012), design.accent));
-        const rowGap = Math.min(0.012, contentBox.height * 0.02);
+        const rowGap = Math.min(0.012 * density.gap, contentBox.height * 0.02);
         const rowHeight = (contentBox.height - rowGap * (listItems.length - 1)) / listItems.length;
         const numberWidth = Math.min(0.085, contentBox.width * 0.12);
         const itemWidth = contentBox.width - numberWidth - 0.02;
@@ -1115,19 +1172,82 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       if (quoteMark?.type === "text") quoteMark.style.fontFamily = "Georgia";
       const titleRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "title");
       const bodyRepair = design.elementRepairs?.find((repair) => repair.action !== "changeLayout" && repair.target === "body");
+      // A region repair points at a place on the page instead of at a role.
+      // The review model looked at a picture, so a rectangle is the only thing
+      // it can honestly name.
+      const regionRepairs = (design.elementRepairs ?? []).filter(
+        (repair): repair is Exclude<AiElementRepair, { action: "changeLayout" }> =>
+          repair.action !== "changeLayout" && repair.target === "region",
+      );
+      const elementBox = (element: { frame: RectEmu }) => ({
+        x: element.frame.x / pageWidth,
+        y: element.frame.y / pageHeight,
+        width: element.frame.width / pageWidth,
+        height: element.frame.height / pageHeight,
+      });
+      /** How much of the element lies inside the region. */
+      const overlapRatio = (element: { frame: RectEmu }, region: AiNormalizedRect): number => {
+        const box = elementBox(element);
+        const left = Math.max(box.x, region.x);
+        const top = Math.max(box.y, region.y);
+        const right = Math.min(box.x + box.width, region.x + region.width);
+        const bottom = Math.min(box.y + box.height, region.y + region.height);
+        if (right <= left || bottom <= top) return 0;
+        // The boxes are normalized, so their area is far below one. Guarding
+        // against a zero denominator must not raise it to one, or every
+        // overlap ratio collapses and no region repair ever applies.
+        const area = Math.max(1e-6, box.width * box.height);
+        return ((right - left) * (bottom - top)) / area;
+      };
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
         const repair = element.text === content.title ? titleRepair : element.text === content.body ? bodyRepair : undefined;
-        if (!repair) continue;
-        if (repair.action === "move" || repair.action === "resize") {
-          const collisionFreeFrame = obstacles.some((obstacle) => intersects(repair.frame, obstacle))
-            ? repair.target === "title"
-              ? { x: visualSafe.x, y: visualSafe.y, width: visualSafe.width, height: Math.min(0.14, visualSafe.height * 0.22) }
-              : { x: visualSafe.x, y: visualSafe.y + Math.min(0.18, visualSafe.height * 0.28), width: visualSafe.width, height: Math.max(0.08, visualSafe.height - Math.min(0.18, visualSafe.height * 0.28)) }
-            : repair.frame;
-          element.frame = frame(collisionFreeFrame.x, collisionFreeFrame.y, collisionFreeFrame.width, collisionFreeFrame.height);
+        if (repair) {
+          if (repair.action === "move" || repair.action === "resize") {
+            const collisionFreeFrame = obstacles.some((obstacle) => intersects(repair.frame, obstacle))
+              ? repair.target === "title"
+                ? { x: visualSafe.x, y: visualSafe.y, width: visualSafe.width, height: Math.min(0.14, visualSafe.height * 0.22) }
+                : { x: visualSafe.x, y: visualSafe.y + Math.min(0.18, visualSafe.height * 0.28), width: visualSafe.width, height: Math.max(0.08, visualSafe.height - Math.min(0.18, visualSafe.height * 0.28)) }
+              : repair.frame;
+            element.frame = frame(collisionFreeFrame.x, collisionFreeFrame.y, collisionFreeFrame.width, collisionFreeFrame.height);
+          }
+          if (repair.action === "restyle") element.style = { ...element.style, fontSizePt: Math.max(12, element.style.fontSizePt * (repair.fontScale ?? 1)), color: repair.color ?? element.style.color };
         }
-        if (repair.action === "restyle") element.style = { ...element.style, fontSizePt: Math.max(12, element.style.fontSizePt * (repair.fontScale ?? 1)), color: repair.color ?? element.style.color };
+        // A region repair applies to everything that lies inside the region.
+        for (const regionRepair of regionRepairs) {
+          const regionFrame = "frame" in regionRepair ? regionRepair.frame : undefined;
+          if (!regionFrame) continue;
+          if (overlapRatio(element, regionFrame) < 0.5) continue;
+          if (regionRepair.action === "move" || regionRepair.action === "resize") {
+            // A region move needs a destination. Without one there is nothing
+            // to move towards, so the element keeps its place.
+            const destination = regionRepair.to;
+            if (!destination) continue;
+            // The block inside the region is moved and scaled as one piece, so
+            // the relative layout of the block survives the repair.
+            const box = elementBox(element);
+            const source = regionFrame;
+            const scaleX = destination.width / Math.max(0.01, source.width);
+            const scaleY = destination.height / Math.max(0.01, source.height);
+            const origin = regionRepair.action === "move" ? destination : source;
+            const moved = {
+              x: origin.x + (box.x - source.x) * scaleX,
+              y: origin.y + (box.y - source.y) * scaleY,
+              width: box.width * scaleX,
+              height: box.height * scaleY,
+            };
+            if (obstacles.some((obstacle) => intersects(moved, obstacle))) continue;
+            element.frame = frame(moved.x, moved.y, moved.width, moved.height);
+          }
+          if (regionRepair.action === "restyle") element.style = { ...element.style, fontSizePt: Math.max(12, element.style.fontSizePt * (regionRepair.fontScale ?? 1)), color: regionRepair.color ?? element.style.color };
+          if (regionRepair.action === "align") {
+            const box = elementBox(element);
+            const aligned = regionRepair.axis === "top"
+              ? { x: box.x, y: regionFrame.y, width: box.width, height: box.height }
+              : { x: regionFrame.x, y: box.y, width: box.width, height: box.height };
+            element.frame = frame(aligned.x, aligned.y, aligned.width, aligned.height);
+          }
+        }
       }
       if (design.hierarchyAction === "strengthen-title") {
         const title = slide.elements.find((element) => element.type === "text" && element.text === content.title);
@@ -1140,6 +1260,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       if (design.hierarchyAction === "increase-whitespace") {
         const body = slide.elements.find((element) => element.type === "text" && element.text === content.body);
         if (body?.type === "text") body.frame = { ...body.frame, x: (body.frame.x + Math.round(pageWidth * 0.025)) as Emu, width: Math.max(Math.round(pageWidth * 0.30), body.frame.width - Math.round(pageWidth * 0.05)) as Emu };
+      }
+      // The emphasis of the page decides which level of the hierarchy carries
+      // the weight. A title that is pushed up has to stay inside its own frame,
+      // so the size is capped by the height of the box it lives in: a bigger
+      // title that no longer fits is a title that overlaps the copy below it.
+      if (intent.emphasis !== "balanced") {
+        const emphasisTarget = (element: SlideElement, factor: number) => {
+          if (element.type !== "text") return;
+          const scaled = element.style.fontSizePt * factor;
+          const readableInBox = Math.floor((element.frame.height / 12_700) / 1.25);
+          element.style = { ...element.style, fontSizePt: Math.max(12, Math.min(Math.round(scaled), readableInBox, 44)) };
+        };
+        const title = slide.elements.find((element) => element.type === "text" && element.text === content.title);
+        if (title) emphasisTarget(title, emphasis.title);
+        for (const element of slide.elements) {
+          if (element.type !== "text" || element.text === content.title) continue;
+          if (content.body.trim() && element.text === content.body) emphasisTarget(element, emphasis.body);
+        }
       }
       // Provenance is what lets a later design-only relayout replace the
       // generated composition without deleting anything the user added.
@@ -1197,6 +1335,36 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "set-slide-background") {
     if (!HEX_COLOR_PATTERN.test(command.background)) throw new Error("INVALID_BACKGROUND_COLOR");
     slide.background = command.background;
+    return;
+  }
+  if (command.type === "remove-slide-background-image") {
+    slide.elements = slide.elements.filter((element) => element.type !== "image" || element.placement !== "slide-background");
+    return;
+  }
+  if (command.type === "set-slide-background-image") {
+    const expectedPrefix = `data:${command.mimeType};base64,`;
+    const payload = command.dataUrl.slice(expectedPrefix.length);
+    if (!command.dataUrl.startsWith(expectedPrefix) || command.dataUrl.length > 360_000_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) {
+      throw new Error("INVALID_IMAGE_SOURCE");
+    }
+    slide.elements = slide.elements.filter((element) => element.type !== "image" || element.placement !== "slide-background");
+    let afterLayoutArtwork = 0;
+    while (afterLayoutArtwork < slide.elements.length) {
+      const element = slide.elements[afterLayoutArtwork]!;
+      if (element.type !== "image" || element.placement !== "layout-background") break;
+      afterLayoutArtwork += 1;
+    }
+    slide.elements.splice(afterLayoutArtwork, 0, {
+      id: crypto.randomUUID() as ElementId,
+      type: "image",
+      placement: "slide-background",
+      frame: { x: 0 as Emu, y: 0 as Emu, width: document.pageSize.width, height: document.pageSize.height },
+      rotationMilliDegree: 0,
+      locked: true,
+      origin: "user",
+      source: { kind: "embedded", dataUrl: command.dataUrl, mimeType: command.mimeType },
+      altText: "页面背景图",
+    });
     return;
   }
   if (command.type === "add-text") {

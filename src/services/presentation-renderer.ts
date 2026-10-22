@@ -261,12 +261,32 @@ function drawText(context: CanvasRenderingContext2D, element: TextElement, width
   });
 }
 
+/**
+ * 把逐页评审图拼成一张缩略图墙。
+ *
+ * 评审模型需要一张能看完整册节奏的图：只给单页，它看不出相邻两页是不是
+ * 长得一模一样。画布渲染和真实 PPTX 渲染共用这一段拼图逻辑，两条路给出的
+ * 缩略图墙才是可比的。
+ */
+export function composeContactSheet(sources: Array<HTMLImageElement | HTMLCanvasElement>, pageSize: { width: number; height: number }): string | undefined {
+  if (sources.length === 0) return undefined;
+  const thumbWidth = 320;
+  const thumbHeight = Math.round(thumbWidth * pageSize.height / pageSize.width);
+  const columns = Math.min(4, Math.max(1, sources.length));
+  const rows = Math.ceil(sources.length / columns);
+  const sheet = window.document.createElement("canvas");
+  sheet.width = columns * thumbWidth;
+  sheet.height = rows * thumbHeight;
+  const context = sheet.getContext("2d");
+  if (!context) return undefined;
+  sources.forEach((source, index) => context.drawImage(source, index % columns * thumbWidth, Math.floor(index / columns) * thumbHeight, thumbWidth, thumbHeight));
+  return sheet.toDataURL("image/jpeg", 0.84);
+}
+
 export async function renderPresentationForVisualReview(document: PresentationDocument, width = 1280): Promise<PresentationRender> {
   const canvases = await Promise.all(document.slides.map((slide) => renderSlide(document, slide, width, true, true)));
   const slides = canvases.map((canvas) => canvas.toDataURL("image/jpeg", 0.88));
-  const thumbWidth = 320; const thumbHeight = Math.round(thumbWidth * document.pageSize.height / document.pageSize.width); const columns = Math.min(4, canvases.length); const rows = Math.ceil(canvases.length / columns);
-  const sheet = window.document.createElement("canvas"); sheet.width = columns * thumbWidth; sheet.height = rows * thumbHeight;
-  const context = sheet.getContext("2d"); if (!context) throw new Error("VISUAL_RENDER_CONTEXT_UNAVAILABLE");
-  canvases.forEach((canvas, index) => context.drawImage(canvas, index % columns * thumbWidth, Math.floor(index / columns) * thumbHeight, thumbWidth, thumbHeight));
-  return { slides, contactSheet: sheet.toDataURL("image/jpeg", 0.84) };
+  const contactSheet = composeContactSheet(canvases, document.pageSize);
+  if (!contactSheet) throw new Error("VISUAL_RENDER_CONTEXT_UNAVAILABLE");
+  return { slides, contactSheet };
 }

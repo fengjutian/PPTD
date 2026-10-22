@@ -36,6 +36,18 @@ export default tseslint.config(
     },
   },
   {
+    // CommonJS helper scripts at the repository root are Node programs, not
+    // browser code. Without the Node globals they report every `require` and
+    // `console` as an undefined name.
+    files: ["**/*.cjs"],
+    languageOptions: { globals: globals.node, sourceType: "commonjs" },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      // A CommonJS script may shadow a Node global with its own binding.
+      "no-redeclare": ["error", { builtinGlobals: false }],
+    },
+  },
+  {
     files: ["src-tauri/**"],
     languageOptions: { globals: globals.node },
   },

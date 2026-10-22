@@ -28,7 +28,7 @@ const legacySlidePlan = { purpose: "传达本页已审核内容", conclusion: "�
 export const aiDraftSchema = z.object({
   title: z.string().min(1).max(200),
   presentationBrief: z.object({ objective: z.string().min(1).max(500), audience: z.string().min(1).max(300), scenario: z.string().min(1).max(300), expectedAction: z.string().min(1).max(500), coreConclusion: z.string().min(1).max(500), narrativeStrategy: narrativeStrategySchema, assumptions: z.array(z.string().max(500)).max(10) }).default({ objective: "清晰传达演示主题", audience: "未指定受众", scenario: "通用演示", expectedAction: "理解演示内容", coreConclusion: "以演示文稿标题和逐页内容为准", narrativeStrategy: "general", assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"] }),
-  slides: z.array(z.object({ id: z.string().min(1).optional(), title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1).max(20),
+  slides: z.array(z.object({ id: z.string().min(1).optional(), title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), reviewed: z.boolean().optional(), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1),
 });
 export type AiDraft = z.infer<typeof aiDraftSchema>;
 export type ContentBlock = z.infer<typeof contentBlockSchema>;
@@ -37,22 +37,22 @@ export type ContentBlock = z.infer<typeof contentBlockSchema>;
 export const aiOutlineSchema = z.object({
   title: z.string().min(1).max(200),
   presentationBrief: z.object({ objective: z.string().min(1).max(500), audience: z.string().min(1).max(300), scenario: z.string().min(1).max(300), expectedAction: z.string().min(1).max(500), coreConclusion: z.string().min(1).max(500), narrativeStrategy: narrativeStrategySchema, assumptions: z.array(z.string().max(500)).max(10) }).default({ objective: "清晰传达演示主题", audience: "未指定受众", scenario: "通用演示", expectedAction: "理解演示内容", coreConclusion: "以演示文稿标题和逐页内容为准", narrativeStrategy: "general", assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"] }),
-  pages: z.array(z.object({ index: z.number().int().min(0).max(19), title: z.string().min(1).max(200), purpose: z.string().min(1).max(300) })).min(1).max(20),
+  pages: z.array(z.object({ index: z.number().int().min(0), title: z.string().min(1).max(200), purpose: z.string().min(1).max(300) })).min(1),
 });
 export type AiOutline = z.infer<typeof aiOutlineSchema>;
 
 export const aiSlideBatchSchema = z.object({
-  slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1).max(20),
+  slides: z.array(z.object({ title: z.string().min(1).max(200), body: z.string().max(4000), speakerNotes: z.string().max(4000), plan: slidePlanSchema.default(legacySlidePlan), blocks: z.array(contentBlockSchema).max(20).default([]) })).min(1),
 });
 export type AiSlideBatch = z.infer<typeof aiSlideBatchSchema>;
 export const slideBriefSchema = z.object({
-  slideIndex: z.number().int().min(0).max(19),
+  slideIndex: z.number().int().min(0),
   purpose: z.string().min(1).max(300),
   conclusion: z.string().min(1).max(300),
   visualIntent: z.enum(["hero", "quote", "timeline", "comparison", "process", "data-chart", "image-story", "summary", "structured-text"]),
   density: z.enum(["low", "medium", "high"]),
 });
-export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).min(1).max(20) });
+export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).min(1) });
 export type SlideBrief = z.infer<typeof slideBriefSchema>;
 
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
@@ -71,7 +71,7 @@ export const aiPresentationDesignSchema = z.object({
      * against the reviewed content, so an impossible request is refused
      * instead of producing a page that cannot carry its own content.
      */
-    composition: z.enum(["auto", "stacked", "columns", "grid", "editorial", "showcase"]).optional(),
+    composition: z.enum(["auto", "stacked", "columns", "grid", "editorial"]).optional(),
     /** Which level of the hierarchy carries the weight of the page. */
     emphasis: z.enum(["balanced", "title-dominant", "body-dominant"]).optional(),
     /** How much white space the page is willing to spend. */
@@ -87,7 +87,7 @@ export const aiPresentationDesignSchema = z.object({
       title: aiPaletteRoleSchema.optional(),
       body: aiPaletteRoleSchema.optional(),
     }).optional(),
-  })).min(1).max(20),
+  })).min(1),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
 type AiLayoutKind = z.infer<typeof aiPresentationDesignSchema>["slides"][number]["layout"];
@@ -418,14 +418,23 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   options.onProgress?.({ stage: "content", completed: 0, total: batches.length, label: "正在分批生成正文…" });
 
   let completed = 0;
-  const batchResults = await Promise.all(batches.map(async (batch) => {
-    const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider, taskId: options.taskId, streamProgress: true } });
-    const parsed = aiSlideBatchSchema.parse(raw);
-    if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
-    completed += 1;
-    options.onProgress?.({ stage: "content", completed, total: batches.length, label: `正在生成正文（${completed}/${batches.length} 批）` });
-    return parsed.slides;
-  }));
+  const batchResults: AiDraft["slides"][] = [];
+  // 页数不设产品上限，但同时发出无限请求会耗尽连接和供应商配额。
+  // 固定并发窗口只限制并发量，不限制最终页数。
+  const concurrency = 3;
+  for (let offset = 0; offset < batches.length; offset += concurrency) {
+    assertNotCancelled(options);
+    const group = batches.slice(offset, offset + concurrency);
+    const results = await Promise.all(group.map(async (batch) => {
+      const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider, taskId: options.taskId, streamProgress: true } });
+      const parsed = aiSlideBatchSchema.parse(raw);
+      if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
+      completed += 1;
+      options.onProgress?.({ stage: "content", completed, total: batches.length, label: `正在生成正文（${completed}/${batches.length} 批）` });
+      return parsed.slides;
+    }));
+    batchResults.push(...results);
+  }
 
   // 大纲是全局事实来源：页面标题以大纲为准，各批只补正文、备注、页面计划和内容块。
   const generated = batchResults.flat();
@@ -443,6 +452,12 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
   options.onProgress?.({ stage: "content", completed: batches.length, total: batches.length, label: "草稿已生成" });
   return draft;
+}
+
+export async function polishPresentationTopic(topic: string): Promise<string> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("polish_presentation_topic", { request: { topic, model, provider } });
+  return z.string().trim().min(1).max(4000).parse(raw);
 }
 
 export async function generateSlideBriefs(draft: AiDraft, taskId?: number): Promise<SlideBrief[]> {

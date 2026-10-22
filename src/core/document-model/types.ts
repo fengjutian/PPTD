@@ -189,7 +189,7 @@ export interface ImageElement extends ElementBase {
    * canvas still paints it, but the exporter moves it into the slide master so
    * the page background is part of the layout and not a loose picture.
    */
-  placement?: "content" | "layout-background";
+  placement?: "content" | "layout-background" | "slide-background";
 }
 
 /** Presentation-only styling of a native table. Never part of the content hash. */

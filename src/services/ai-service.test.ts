@@ -1,12 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
-import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, cancelAiGeneration, chooseSlideLayout, constrainDesignToTemplate, describeAiError, generatePresentationDraft, mergeStreamProgress, slideBriefsSchema, splitBodyItems, type AiGenerationProgress } from "./ai-service";
+import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, cancelAiGeneration, chooseSlideLayout, constrainDesignToTemplate, describeAiError, generatePresentationDraft, mergeStreamProgress, polishPresentationTopic, slideBriefsSchema, splitBodyItems, type AiGenerationProgress } from "./ai-service";
 import { contrastRatio } from "../core/rendering/contrast";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => false }));
 
 describe("AI structured outputs", () => {
+  it("accepts drafts with more than twenty pages", () => {
+    const draft = aiDraftSchema.parse({
+      title: "长篇演示",
+      slides: Array.from({ length: 25 }, (_, index) => ({ title: `第 ${index + 1} 页`, body: "正文", speakerNotes: "" })),
+    });
+    expect(draft.slides).toHaveLength(25);
+  });
   it("accepts a typed slide brief without presentation content", () => {
     const result = slideBriefsSchema.parse({ briefs: [{ slideIndex: 0, purpose: "建立背景", conclusion: "理解作品背景有助于理解主题", visualIntent: "hero", density: "low" }] });
     expect(result.briefs[0]!.visualIntent).toBe("hero");
@@ -61,6 +68,35 @@ describe("AI structured outputs", () => {
     expect(constrained.slides[0]!.bodyColor).not.toBe("#654321");
     expect(constrained.slides[0]!.bodyColor).not.toBe(constrained.slides[0]!.titleColor);
     expect(contrastRatio(constrained.slides[0]!.bodyColor, "#F5F1E8")).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("lets the model pick a slot of the template palette instead of inventing a colour", () => {
+    const template = { slideWidthEmu: null, slideHeightEmu: null, majorFont: null, minorFont: null, defaultBackgroundColor: "bg1", themeColors: [{ name: "bg1", value: "#F5F1E8" }, { name: "dk1", value: "#202020" }, { name: "accent1", value: "#C04A32" }, { name: "accent2", value: "#2F6F8F" }], slides: [], layouts: [] };
+    const design = aiPresentationDesignSchema.parse({ slides: [{ layout: "title-body", background: "#FF00FF", accent: "#00FF00", titleColor: "#123456", bodyColor: "#654321", palette: { accent: "accent-2" } }] });
+    const constrained = constrainDesignToTemplate(design, template);
+    // The slot the model chose decides the accent, and the slots it did not
+    // choose still come from the template.
+    expect(constrained.slides[0]!.accent).toBe("#2F6F8F");
+    expect(constrained.slides[0]!.background).toBe("#F5F1E8");
+    expect(constrained.slides[0]!.titleColor).toBe("#202020");
+  });
+
+  it("lets the model paint a page with a slot of the template palette", () => {
+    const template = { slideWidthEmu: null, slideHeightEmu: null, majorFont: null, minorFont: null, defaultBackgroundColor: "bg1", themeColors: [{ name: "bg1", value: "#F5F1E8" }, { name: "dk1", value: "#202020" }, { name: "lt1", value: "#FFFFFF" }, { name: "accent1", value: "#C04A32" }], slides: [], layouts: [] };
+    const design = aiPresentationDesignSchema.parse({ slides: [{ layout: "section", background: "#FF00FF", accent: "#00FF00", titleColor: "#123456", bodyColor: "#654321", palette: { background: "primary", title: "inverse" } }] });
+    const constrained = constrainDesignToTemplate(design, template);
+    expect(constrained.slides[0]!.background).toBe("#202020");
+    // A dark page needs light ink, so the ink follows the background the page
+    // ended up with instead of the ink of the template.
+    expect(constrained.slides[0]!.titleColor).toBe("#FFFFFF");
+    expect(contrastRatio(constrained.slides[0]!.titleColor, constrained.slides[0]!.background)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("refuses a palette slot that the template does not have without losing the template palette", () => {
+    const template = { slideWidthEmu: null, slideHeightEmu: null, majorFont: null, minorFont: null, defaultBackgroundColor: "bg1", themeColors: [{ name: "bg1", value: "#F5F1E8" }, { name: "dk1", value: "#202020" }, { name: "accent1", value: "#C04A32" }], slides: [], layouts: [] };
+    const design = aiPresentationDesignSchema.parse({ slides: [{ layout: "title-body", background: "#FF00FF", accent: "#00FF00", titleColor: "#123456", bodyColor: "#654321", palette: { accent: "accent-3" } }] });
+    const constrained = constrainDesignToTemplate(design, template);
+    expect(constrained.slides[0]!.accent).toBe("#C04A32");
   });
 });
 
@@ -270,6 +306,16 @@ describe("多页草稿的分批编排", () => {
 
     const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "generate_presentation");
     expect(call?.[1]).toMatchObject({ request: { taskId: 9, streamProgress: true } });
+  });
+
+  it("润色主题时只替换输入文字，不启动草稿生成", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "polish_presentation_topic") return "为产品团队制作季度复盘，面向管理层说明成果、问题与下一步行动。";
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    await expect(polishPresentationTopic("做个季度复盘")).resolves.toContain("季度复盘");
+    expect(vi.mocked(invoke).mock.calls.map((call) => call[0])).toEqual(["polish_presentation_topic"]);
   });
 });
 

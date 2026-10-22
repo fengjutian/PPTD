@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { AlignCenterHorizontal, AlignLeft, AlignRight, ArrowDown, ArrowUp, Bold, BringToFront, ChevronDown, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Square, Trash2, Type, Unlink } from "lucide-react";
-import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type Slide, type SlideElement, type SlideId, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
+import { AlignCenterHorizontal, AlignLeft, AlignRight, ArrowDown, ArrowUp, Bold, BringToFront, ChevronDown, CircleAlert, Copy, ImagePlus, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Square, Trash2, Type, Unlink } from "lucide-react";
+import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type Slide, type SlideElement, type SlideId, type SupportedImageMimeType, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
 import { isFontAvailable } from "../../core/validation/export-validation";
@@ -39,6 +39,7 @@ export interface InspectorPanelViewProps {
   /** Page background, used to judge text readability and to offer a readable ink. */
   background: string;
   pageSize: { width: Emu; height: Emu };
+  backgroundImage?: boolean;
   /** Unit the position and size fields are shown in. */
   unit: LengthUnit;
   onUnitChange: (unit: LengthUnit) => void;
@@ -77,7 +78,7 @@ function InspectorSection({ title, tools, children }: { title: string; tools?: R
  * Presentation of the inspector for one element. It only emits commands, so the
  * same markup can be rendered without a store and asserted in tests.
  */
-export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, unit, onUnitChange, aspectLocked, onToggleAspectLock, palette, onCommand }: InspectorPanelViewProps) {
+export function InspectorPanelView({ element, slideId, elementIndex, elementCount, background, pageSize, backgroundImage = false, unit, onUnitChange, aspectLocked, onToggleAspectLock, palette, onCommand }: InspectorPanelViewProps) {
   const [textDraft, setTextDraft] = useState<string>();
   const [fontAvailable, setFontAvailable] = useState(true);
   const [selection, setSelection] = useState<{ start: number; end: number }>();
@@ -187,7 +188,7 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
   return (
     <>
     <div className="property-form">
-      <PageProperties slideId={slideId} background={background} pageSize={pageSize} unit={unit} palette={palette} onCommand={onCommand} />
+      <PageProperties slideId={slideId} background={background} pageSize={pageSize} backgroundImage={backgroundImage} unit={unit} palette={palette} onCommand={onCommand} />
 
       {element.type === "text" && <InspectorSection title="内容">
         <label className="field">
@@ -466,9 +467,19 @@ interface PagePropertiesProps {
   unit: LengthUnit;
   palette?: readonly string[];
   onCommand: (command: DocumentCommand) => void;
+  backgroundImage: boolean;
 }
 
-function PageProperties({ slideId, background, pageSize, unit, palette, onCommand }: PagePropertiesProps) {
+function PageProperties({ slideId, background, pageSize, backgroundImage, unit, palette, onCommand }: PagePropertiesProps) {
+  const imageInput = useRef<HTMLInputElement>(null);
+  const chooseBackground = (file: File | undefined) => {
+    if (!file || !(["image/png", "image/jpeg", "image/webp"] as string[]).includes(file.type)) return;
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") onCommand({ type: "set-slide-background-image", slideId, dataUrl: reader.result, mimeType: file.type as SupportedImageMimeType });
+    });
+    reader.readAsDataURL(file);
+  };
   return (
     <InspectorSection title="页面">
       <div className="field">
@@ -479,6 +490,15 @@ function PageProperties({ slideId, background, pageSize, unit, palette, onComman
       </div>
       <ColorField label="背景色" value={background} wide swatches={palette}
         onCommit={(next) => onCommand({ type: "set-slide-background", slideId, background: next })} />
+      <div className="field">
+        <span className="field-label">背景图片</span>
+        <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp" hidden
+          onChange={(event) => { chooseBackground(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} />
+        <div className="field-row">
+          <button type="button" className="toggle-button" onClick={() => imageInput.current?.click()}><ImagePlus />{backgroundImage ? "替换背景图" : "选择背景图"}</button>
+          {backgroundImage && <button type="button" className="toggle-button" onClick={() => onCommand({ type: "remove-slide-background-image", slideId })}><Trash2 />移除</button>}
+        </div>
+      </div>
     </InspectorSection>
   );
 }
@@ -531,6 +551,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
           elementCount={slide.elements.length}
           background={slide.background}
           pageSize={document.pageSize}
+          backgroundImage={slide.elements.some((element) => element.type === "image" && element.placement === "slide-background")}
           unit={unit}
           onUnitChange={setUnit}
           aspectLocked={aspectLocked}
@@ -548,7 +569,9 @@ export const InspectorPanel = memo(function InspectorPanel() {
               <button type="button" onClick={() => execute({ type: "add-shape", slideId: slide.id, shape: "rectangle" })}><Square />矩形</button>
             </div>
           </div>
-          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize} unit={unit} palette={palette} onCommand={execute} />
+          <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize}
+            backgroundImage={slide.elements.some((element) => element.type === "image" && element.placement === "slide-background")}
+            unit={unit} palette={palette} onCommand={execute} />
         </div>}
     </aside>
   );

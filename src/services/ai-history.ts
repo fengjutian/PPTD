@@ -6,7 +6,7 @@ import { loadStoredAiHistory, saveStoredAiHistory } from "./app-database";
 const historyEntrySchema = z.object({
   id: z.string().uuid(),
   topic: z.string().max(4000),
-  slideCount: z.number().int().min(1).max(20),
+  slideCount: z.number().int().min(1),
   updatedAt: z.string().datetime(),
   draft: aiDraftSchema,
 });

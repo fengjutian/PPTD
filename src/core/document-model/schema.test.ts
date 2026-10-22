@@ -6,6 +6,7 @@ import versionFourFixture from "./__fixtures__/v4-document.json";
 import versionFiveFixture from "./__fixtures__/v5-document.json";
 import versionSixFixture from "./__fixtures__/v6-document.json";
 import versionSevenFixture from "./__fixtures__/v7-document.json";
+import versionNineFixture from "./__fixtures__/v9-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -76,6 +77,14 @@ describe("presentation document schema", () => {
     const element = migrated.slides[0]!.elements[0]!;
     expect(element.type === "text" && element.runs).toBeUndefined();
     expect(versionSevenFixture.schemaVersion).toBe(7);
+  });
+
+  it("migrates the fixed version 9 fixture without turning a normal picture into a background", () => {
+    const migrated = parsePresentationDocument(versionNineFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const picture = migrated.slides[0]!.elements[0]!;
+    expect(picture.type === "image" ? picture.placement : undefined).toBeUndefined();
+    expect(versionNineFixture.schemaVersion).toBe(9);
   });
 
   it("accepts a native table that points at a reviewed table block", () => {
@@ -166,6 +175,21 @@ describe("presentation document schema", () => {
       altText: "sample",
     });
     expect(presentationDocumentSchema.parse(document).slides[0]!.elements[1]!.type).toBe("image");
+  });
+
+  it("accepts an explicit slide background picture placement", () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "image",
+      placement: "slide-background",
+      frame: { x: 0 as never, y: 0 as never, width: document.pageSize.width, height: document.pageSize.height },
+      rotationMilliDegree: 0,
+      locked: true,
+      source: { kind: "embedded", dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" },
+      altText: "页面背景图",
+    });
+    expect(presentationDocumentSchema.parse(document).slides[0]!.elements.at(-1)).toMatchObject({ placement: "slide-background" });
   });
 
   it("accepts a cropped picture and refuses a crop that hides the whole image", () => {
