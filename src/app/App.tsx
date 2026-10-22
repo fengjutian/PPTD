@@ -2,6 +2,8 @@ import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type Slide, type SlideElement } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
+import { setTextMeasurer } from "../core/rendering/text-metrics";
+import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { CroppedImage } from "../features/editor/CroppedImage";
 import { ChartView } from "../features/editor/ChartView";
@@ -294,6 +296,14 @@ export function App() {
   }, []);
   useEffect(() => { if (!message) return; const timer = window.setTimeout(() => setMessage(undefined), 4200); return () => window.clearTimeout(timer); }, [message]);
   useEffect(() => { if (isDesktopRuntime()) void listPptxTemplates().then(setTemplateLibrary).catch(() => setTaskStatus("模板库读取失败")); }, []);
+  // The document core measures text with the real font once the application
+  // tells it how wide a piece of text is. Without it the core falls back to a
+  // rough estimate, which is why the measurer is registered here.
+  useEffect(() => {
+    const measurer = createCanvasTextMeasurer();
+    setTextMeasurer(measurer);
+    return () => setTextMeasurer(undefined);
+  }, []);
 
   useEffect(() => {
     let active = true;

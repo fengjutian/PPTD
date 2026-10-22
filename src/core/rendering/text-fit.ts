@@ -1,4 +1,5 @@
 import type { TextElement } from "../document-model";
+import { getTextMeasurer } from "./text-metrics";
 
 /**
  * Advance width of a character relative to the font size.
@@ -17,20 +18,46 @@ export function measureTextUnits(text: string): number {
   );
 }
 
-/** Approximate line count for a text frame. Uses the same heuristic as the visual gate. */
-export function estimateTextLines(text: string, widthPt: number, fontSizePt: number): number {
+/**
+ * The width of the text in em units.
+ *
+ * When the application registered a measurer, the real font decides. Without
+ * one the estimate above is used, which is the reason the core never depends
+ * on a renderer.
+ */
+export function measureTextWidthEm(text: string, fontFamily?: string): number {
+  const measurer = getTextMeasurer();
+  if (measurer && fontFamily) {
+    const width = measurer.widthEm(text, fontFamily);
+    if (Number.isFinite(width) && width >= 0) return width;
+  }
+  return measureTextUnits(text);
+}
+
+/**
+ * Approximate line count for a text frame. Uses the same estimator as the visual
+ * gate, and the real font when the application registered a measurer.
+ */
+export function estimateTextLines(text: string, widthPt: number, fontSizePt: number, fontFamily?: string): number {
   const unitsPerLine = Math.max(1, widthPt / fontSizePt);
   return text.split("\n").reduce((total, paragraph) => {
-    const units = measureTextUnits(paragraph);
+    const units = measureTextWidthEm(paragraph, fontFamily);
     return total + Math.max(1, Math.ceil(units / unitsPerLine));
   }, 0);
 }
 
+/**
+ * Whether the text is taller than the frame it sits in.
+ *
+ * The thresholds match the ones the quality gate uses, so a page that reports
+ * an overflow here can be repaired by the fitting command and the report
+ * disappears.
+ */
 export function textLikelyOverflows(element: TextElement): boolean {
   const widthPt = element.frame.width / 12_700;
   const heightPt = element.frame.height / 12_700;
   return (
-    estimateTextLines(element.text, widthPt, element.style.fontSizePt) * element.style.fontSizePt * 1.2 >
+    estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) * element.style.fontSizePt * 1.2 >
     heightPt * 1.08
   );
 }

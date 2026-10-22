@@ -255,8 +255,7 @@ export function ContentReview({
   const scrollLockTimer = useRef<number | undefined>(undefined);
 
   const metrics = draftMetrics(draft);
-  const missingIndexes = missingTitleIndexes(draft);
-  const firstMissing = missingIndexes[0];
+  const issues = reviewIssues(draft);
 
   useEffect(() => () => {
     window.clearTimeout(scrollLockTimer.current);

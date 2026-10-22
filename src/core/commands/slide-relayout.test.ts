@@ -38,6 +38,19 @@ describe("design-only relayout", () => {
     expect(classified.preserved.some((element) => element.type === "text" && element.text === "手工备注")).toBe(true);
   });
 
+  it("keeps the existing dark ink when the page background is light", () => {
+    const document = designedDocument([{ type: "paragraph", text: "已经审核的正文。" }]);
+    const slide = document.slides[0]!;
+    const before = slide.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(before?.type).toBe("text");
+    const result = produce(document, (draft) => applyCommand(draft, { type: "relayout-slide", slideId: slide.id }));
+    const title = result.slides[0]!.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(title?.type).toBe("text");
+    if (title?.type !== "text" || before?.type !== "text") return;
+    expect(title.style.color).toBe(before.style.color);
+    expect(title.style.color.toUpperCase()).not.toBe("#FFFFFF");
+  });
+
   it("keeps a native chart pointing at the reviewed metric blocks", () => {
     const document = designedDocument([
       { type: "metric", label: "样本量", value: "38%" },

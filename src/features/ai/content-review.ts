@@ -107,6 +107,56 @@ export function missingTitleIndexes(draft: AiDraft): number[] {
   return draft.slides.flatMap((slide, index) => (slide.title.trim() ? [] : [index]));
 }
 
+export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title";
+export type ReviewIssue = {
+  kind: ReviewIssueKind;
+  /** Pages the issue applies to, in page order. The first one is the jump target. */
+  indexes: number[];
+  message: string;
+  /** Blocking issues keep the draft from being confirmed into a template. */
+  blocking: boolean;
+};
+
+/**
+ * Review problems are collected for the whole draft instead of only the first
+ * one, so the warning bar can explain every reason the confirm button is
+ * unavailable and jump to the page that needs work.
+ */
+export function reviewIssues(draft: AiDraft): ReviewIssue[] {
+  const issues: ReviewIssue[] = [];
+  const missing = missingTitleIndexes(draft);
+  if (missing.length > 0) {
+    issues.push({ kind: "missing-title", indexes: missing, message: `还有 ${missing.length} 页缺少标题`, blocking: true });
+  }
+  const empty = draft.slides.flatMap((slide, index) => (slideHasContent(slide) ? [] : [index]));
+  if (empty.length > 0) {
+    issues.push({ kind: "empty-content", indexes: empty, message: `还有 ${empty.length} 页没有内容`, blocking: true });
+  }
+  const byTitle = new Map<string, number[]>();
+  for (const [index, slide] of draft.slides.entries()) {
+    const title = slide.title.trim();
+    if (!title) continue;
+    byTitle.set(title, [...(byTitle.get(title) ?? []), index]);
+  }
+  const duplicates = [...byTitle.entries()].filter(([, indexes]) => indexes.length > 1);
+  if (duplicates.length > 0) {
+    const [title, indexes] = duplicates[0]!;
+    const pageList = indexes.map((index) => `第 ${index + 1} 页`).join("、");
+    issues.push({
+      kind: "duplicate-title",
+      indexes,
+      message: `${indexes.length} 页标题重复（${pageList}：${title}）`,
+      blocking: false,
+    });
+  }
+  return issues;
+}
+
+/** A page needs something the renderer can draw, not just a heading. */
+export function slideHasContent(slide: DraftSlide): boolean {
+  return sanitizeBlocks(slide.blocks).length > 0 || splitBodyItems(slide.body).length > 0;
+}
+
 export function isSlideEdited(slide: DraftSlide, original: DraftSlide | undefined): boolean {
   if (!original) return false;
   return (

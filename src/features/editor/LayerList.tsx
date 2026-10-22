@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { BarChart3, Circle, Image as ImageIcon, Lock, Square, Table2, Type } from "lucide-react";
 import type { ElementId, Slide, SlideElement } from "../../core/document-model";
 
@@ -27,7 +28,7 @@ export interface LayerListProps {
  * Layer list of the current page, topmost element first. It only reports the
  * selection; every other change still goes through a document command.
  */
-export function LayerList({ slide, selectedElementId, onSelect }: LayerListProps) {
+export const LayerList = memo(function LayerList({ slide, selectedElementId, onSelect }: LayerListProps) {
   const ordered = [...slide.elements].reverse();
   return (
     <div className="layer-list">
@@ -47,4 +48,4 @@ export function LayerList({ slide, selectedElementId, onSelect }: LayerListProps
       ))}
     </div>
   );
-}
+});

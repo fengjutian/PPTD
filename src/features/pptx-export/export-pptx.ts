@@ -33,6 +33,12 @@ export interface ExportReport {
 export interface ExportOptions {
   signal?: AbortSignal;
   fontAvailable?: (fontFamily: string) => boolean | Promise<boolean>;
+  /**
+   * Pre-computed preflight issues. A worker has no DOM, so the caller runs the
+   * validation (including the font probe) on the main thread and hands the
+   * result over; the worker then skips the duplicate pass.
+   */
+  prevalidatedIssues?: ExportIssue[];
 }
 
 /**
@@ -120,9 +126,10 @@ export async function buildPptx(
   document: PresentationDocument,
   options: ExportOptions = {},
 ): Promise<{ bytes: Uint8Array; report: ExportReport }> {
-  const issues = await validatePresentationForExport(document, {
-    fontAvailable: options.fontAvailable ?? isFontAvailable,
-  });
+  const issues = options.prevalidatedIssues
+    ?? await validatePresentationForExport(document, {
+      fontAvailable: options.fontAvailable ?? isFontAvailable,
+    });
   const blocking = issues.filter((issue) => issue.severity === "error");
   if (blocking.length > 0) {
     throw new Error(`EXPORT_VALIDATION_FAILED: ${blocking.map((issue) => issue.message).join("；")}`);

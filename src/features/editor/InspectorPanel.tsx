@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Trash2, Unlink } from "lucide-react";
 import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
@@ -476,7 +476,7 @@ function PageProperties({ slideId, background, pageSize, unit, onCommand }: Page
   );
 }
 
-export function InspectorPanel() {
+export const InspectorPanel = memo(function InspectorPanel() {
   const document = useEditorStore((state) => state.document);
   const activeSlideId = useEditorStore((state) => state.activeSlideId);
   const selectedElementId = useEditorStore((state) => state.selectedElementId);
@@ -515,4 +515,4 @@ export function InspectorPanel() {
         </div>}
     </aside>
   );
-}
+});

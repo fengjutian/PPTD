@@ -143,6 +143,7 @@ export type DocumentCommand =
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
+  | { type: "fit-text"; slideId: SlideId; elementId: ElementId }
   | { type: "set-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number; style: TextRunStyle }
   | { type: "clear-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number }
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
@@ -161,6 +162,20 @@ function assertTextStyle(style: Partial<TextElementStyle>): void {
   if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_TEXT_STYLE");
   if (style.bold !== undefined && typeof style.bold !== "boolean") throw new Error("INVALID_TEXT_STYLE");
   if (style.align !== undefined && style.align !== "left" && style.align !== "center" && style.align !== "right") throw new Error("INVALID_TEXT_STYLE");
+}
+
+/**
+ * The largest size the text fits into its frame at, or the current size when it
+ * already fits. The thresholds are the ones the quality gate uses, so a text
+ * that is reported as overflowing can be repaired and the report disappears.
+ */
+function fittingTextSize(text: string, frame: RectEmu, fontFamily: string, preferredPt: number): number {
+  const widthPt = frame.width / 12_700;
+  const heightPt = frame.height / 12_700;
+  for (let size = preferredPt; size >= 8; size -= 1) {
+    if (estimateTextLines(text, widthPt, size, fontFamily) * size * 1.2 <= heightPt * 1.08) return size;
+  }
+  return 8;
 }
 
 /** The style of a run is presentation-only, so it is guarded like the others. */
@@ -261,6 +276,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-slide": return null;
     case "set-slide-background": return "design";
     case "set-text-style":
+    case "fit-text":
     case "set-text-emphasis":
     case "clear-text-emphasis":
     case "set-shape-style":
@@ -369,7 +385,8 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
     delete slide.layoutId;
     return;
   }
-  const existingLayout = document.layouts?.find((layout) => layout.name === generatedLayout.name && layout.backgroundColor === generatedLayout.backgroundColor);
+  const existingLayout = document.layouts?.find((layout) => layout.name === generatedLayout.name
+    && layout.backgroundColor.toUpperCase() === generatedLayout.backgroundColor.toUpperCase());
   if (existingLayout) {
     slide.layoutId = existingLayout.id;
     return;
@@ -878,13 +895,20 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         } else {
           const countText = String(items.length).padStart(2, "0");
           // The numeral is the anchor, so measure its own block and place the
-          // rule and label below it instead of guessing a fixed fraction.
-          const countFrame = frame(panelX + 0.05, contentBox.y + contentBox.height * 0.10, panelWidth - 0.10, blockHeight(countText, panelWidth - 0.10, 86) * 1.04);
+          // rule and label below it instead of guessing a fixed fraction. Short
+          // panels step the numeral down so the label and footer still fit.
+          const compact = contentBox.height < 0.40;
+          const countSize = compact ? 64 : 86;
+          const labelSize = compact ? 14 : 18;
+          const labelHeight = compact ? 0.05 : 0.07;
+          const footerY = contentBox.y + contentBox.height - (compact ? 0.04 : 0.055);
+          const countFrame = frame(panelX + 0.05, contentBox.y + contentBox.height * 0.10, panelWidth - 0.10, blockHeight(countText, panelWidth - 0.10, countSize) * 1.04);
           const countBottom = countFrame.y / pageHeight + countFrame.height / pageHeight;
-          slide.elements.push(text(countText, countFrame, 86, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          const labelY = Math.min(countBottom + 0.04, footerY - labelHeight - 0.01);
+          slide.elements.push(text(countText, countFrame, countSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
           slide.elements.push(shape(frame(panelX + 0.05, countBottom + 0.02, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("项要点", frame(panelX + 0.05, countBottom + 0.05, panelWidth - 0.10, 0.07), 18, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-          slide.elements.push(text("本页要点", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.055, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("项要点", frame(panelX + 0.05, labelY, panelWidth - 0.10, labelHeight), labelSize, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("本页要点", frame(panelX + 0.05, footerY, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
         }
       } else if (items.length > 1 && items.length <= 6 && (design.layout === "cards" || shortSplitAsCards || (items.length >= 3 && (design.layout === "title-body" || design.layout === "summary") && shortItems))) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
@@ -1175,6 +1199,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     assertTextStyle(command.style);
     element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "fit-text") {
+    if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
+    // Fitting only changes the design: the copy and the review state stay.
+    const size = fittingTextSize(element.text, element.frame, element.style.fontFamily, element.style.fontSizePt);
+    if (size !== element.style.fontSizePt) {
+      element.style = { ...element.style, fontSizePt: size };
+    }
     return;
   }
   if (command.type === "set-text-emphasis") {
