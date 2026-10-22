@@ -1,7 +1,7 @@
 import type { ChartElementStyle, ChartKind, ContentBlock, DocumentTheme, ElementId, Emu, ImageCrop, PresentationDocument, RectEmu, ShapeElementStyle, Slide, SlideElement, SlideId, SlideLayoutSpec, SupportedImageMimeType, TableElementStyle, TextElementStyle } from "../document-model";
 import { createDocument, createSlide, inches, parseMetricValue, applyTextRun, subtractTextRange, type TextRunStyle } from "../document-model";
 import { colorLuminance, fillForInk, isLargeText, readableTextColor, readableTextColorOnRange, type BackgroundRange } from "../rendering/contrast";
-import { estimateTextLines } from "../rendering/text-fit";
+import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 import { layoutFlow } from "../rendering/flow";
 import {
   planTemplateLayouts,
@@ -640,11 +640,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.background = recipe?.backgroundColor ?? design.background;
       const pageLuminance = colorLuminance(slide.background) ?? 1;
       // The artwork under the placeholders is a range, not a single value: the
-      // ink has to read on the patch that carries the text.
-      const titleBackground = recipe?.backgroundLuminance?.title;
-      const bodyBackground = recipe?.backgroundLuminance?.body ?? titleBackground;
+      // ink has to read on the patch that carries the text. The probe describes
+      // artwork that is only painted when the layout is actually kept; on a flat
+      // page it would describe a picture that is not there and turn the title
+      // white on a light background.
+      const titleBackground = keepsArtwork ? recipe?.backgroundLuminance?.title : undefined;
+      const bodyBackground = keepsArtwork ? (recipe?.backgroundLuminance?.body ?? titleBackground) : undefined;
       const titleLuminance = titleBackground ?? pageLuminance;
-      const bodyLuminance = bodyBackground ?? titleBackground ?? pageLuminance;
+      const bodyLuminance = bodyBackground ?? pageLuminance;
       const isSafeRegion = (candidate: { x: number; y: number; width: number; height: number } | undefined, minimumWidth: number, minimumHeight: number) => Boolean(candidate && candidate.x >= 0 && candidate.y >= 0 && candidate.width >= minimumWidth && candidate.height >= minimumHeight && candidate.x + candidate.width <= 1 && candidate.y + candidate.height <= 1);
       const safeFrame = (candidate: { x: number; y: number; width: number; height: number } | undefined, fallback: [number, number, number, number], minimumWidth = 0.25, minimumHeight = 0.08) => isSafeRegion(candidate, minimumWidth, minimumHeight) ? frame(candidate!.x, candidate!.y, candidate!.width, candidate!.height) : frame(...fallback);
       const [leftRecipe, rightRecipe] = recipeColumnRegions?.map((region) => region.frame) ?? [];
@@ -1182,16 +1185,30 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         }
       } else if (composition === "grid" && items.length > 1 && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));
-        if (!keepsArtwork) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance), shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
+        if (!keepsArtwork) {
+          // A single-page deck has no footer, so the page index is its own mark.
+          // A longer deck prints the number in the footer; repeating it at the
+          // top right made the page look like it had two page numbers.
+          if (command.slides.length === 1) slide.elements.push(text(String(index + 1).padStart(2, "0"), frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight), 14, titleInk, true, "right", undefined, titleLuminance));
+          slide.elements.push(shape(frame(alignmentGrid.left, alignmentGrid.ruleY, Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.20), 0.009), design.accent));
+        }
         const visible = items.slice(0, 6);
         const columns = visible.length === 3 || visible.length >= 5 ? 3 : 2;
         const rows = Math.ceil(visible.length / columns);
         const contentWidth = contentBox.width; const contentHeight = contentBox.height;
         const columnGap = 0.022 * density.gap; const rowGap = 0.040 * density.gap;
         const cardWidth = (contentWidth - columnGap * (columns - 1)) / columns;
-        // A single row of cards can carry more height than a two-row grid; use
-        // that space instead of leaving the lower half of the page empty.
-        const cardHeight = Math.min(rows === 1 ? 0.30 : 0.24, contentHeight / rows - 0.04);
+        // A top-left badge frees the whole card width for copy. Placing the
+        // badge in a left gutter made the text column narrow and the card
+        // look unbalanced on portrait-ish three-column grids.
+        const badgeDiameter = 0.36;
+        const badgeHeight = badgeDiameter / pageHeightIn;
+        const cardTextTop = 0.035 + badgeHeight + 0.03;
+        const cardTextHeight = Math.max(...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, 16)));
+        // A card is as tall as the badge and the copy it carries. Stretching a
+        // one-line card to the row's full height left the copy stranded in the
+        // middle of an empty box.
+        const cardHeight = Math.min(rows === 1 ? 0.30 : 0.24, Math.max(0.16, cardTextTop + cardTextHeight + 0.03), contentHeight / rows - 0.04);
         const gridHeight = rows * cardHeight + (rows - 1) * rowGap;
         const gridTop = contentBox.y + (contentHeight - gridHeight) * CONTENT_REGION.blockVerticalAnchor;
         visible.forEach((item, itemIndex) => {
@@ -1201,22 +1218,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const rowStart = contentBox.x + (contentWidth - rowWidth) / 2;
           const x = rowStart + column * (cardWidth + columnGap); const y = gridTop + row * (cardHeight + rowGap);
           const cleanItem = cleanPoint(item);
-          // A top-left badge frees the whole card width for copy. Placing the
-          // badge in a left gutter made the text column narrow and the card
-          // look unbalanced on portrait-ish three-column grids.
-          const badgeDiameter = 0.36;
           const badgeWidth = badgeDiameter / pageWidthIn;
-          const badgeHeight = badgeDiameter / pageHeightIn;
           const badgeX = x + 0.03;
           const badgeY = y + 0.035;
-          const textTop = badgeY + badgeHeight + 0.03;
+          const textTop = y + cardTextTop;
           slide.elements.push(shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75), shape(frame(x, y, cardWidth, 0.008), design.accent));
           slide.elements.push(shape(circleFrame(badgeX, badgeY, badgeDiameter), accentFill, "ellipse"));
           const badgeText = String(itemIndex + 1).padStart(2, "0");
           slide.elements.push(text(badgeText, centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 12), 12, "#FFFFFF", true, "center", undefined, accentFillLuminance));
-          const cardTextBox = { x: x + 0.03, y: textTop, width: cardWidth - 0.06, height: Math.max(0.06, y + cardHeight - 0.03 - textTop) };
+          const cardTextBox = { x: x + 0.03, y: textTop, width: cardWidth - 0.06, height: Math.max(0.05, cardHeight - cardTextTop - 0.03) };
           const fittedCardSize = fittedFontSize(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height), 16, 12);
-          slide.elements.push(text(cleanItem, centeredBlock(cleanItem, cardTextBox, fittedCardSize), fittedCardSize, "#293241", false, "left", undefined, cardLuminance));
+          const fittedHeight = blockHeight(cleanItem, cardWidth - 0.06, fittedCardSize);
+          slide.elements.push(text(cleanItem, frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, Math.max(0.04, Math.min(cardTextBox.height, fittedHeight))), fittedCardSize, "#293241", false, "left", undefined, cardLuminance));
         });
       } else if (composition === "columns" && items.length > 1) {
         slide.elements.push(text(content.title, safeFrame(recipeTitle, [0.07, 0.07, 0.84, 0.13], 0.25, 0.04), templateTitleSize ?? 30, titleInk, true, "left", undefined, titleLuminance));
@@ -1316,11 +1329,28 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const area = Math.max(1e-6, box.width * box.height);
         return ((right - left) * (bottom - top)) / area;
       };
+      const pageArea = pageWidth * pageHeight;
+      const containsFrame = (outer: RectEmu, inner: RectEmu, tolerance = 9144): boolean =>
+        inner.x >= outer.x - tolerance
+        && inner.y >= outer.y - tolerance
+        && inner.x + inner.width <= outer.x + outer.width + tolerance
+        && inner.y + inner.height <= outer.y + outer.height + tolerance;
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
+        // Text that sits inside a generated card, header bar or panel belongs to
+        // that shape. A repair that moves the text alone detaches it from its
+        // card and paints it over the page — which is exactly how a generated
+        // deck ends up with copy outside its boxes. Geometry repairs therefore
+        // stop at the shape boundary; restyling is still allowed.
+        const elementArea = element.frame.width * element.frame.height;
+        const container = elementArea > 0
+          ? slide.elements.find((candidate) => candidate.type === "shape"
+            && candidate.frame.width * candidate.frame.height < pageArea * 0.4
+            && containsFrame(candidate.frame, element.frame))
+          : undefined;
         const repair = element.text === content.title ? titleRepair : element.text === content.body ? bodyRepair : undefined;
         if (repair) {
-          if (repair.action === "move" || repair.action === "resize") {
+          if ((repair.action === "move" || repair.action === "resize") && !container) {
             const collisionFreeFrame = obstacles.some((obstacle) => intersects(repair.frame, obstacle))
               ? repair.target === "title"
                 ? { x: visualSafe.x, y: visualSafe.y, width: visualSafe.width, height: Math.min(0.14, visualSafe.height * 0.22) }
@@ -1335,6 +1365,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const regionFrame = "frame" in regionRepair ? regionRepair.frame : undefined;
           if (!regionFrame) continue;
           if (overlapRatio(element, regionFrame) < 0.5) continue;
+          // Moving a contained text without its shape tears the composition
+          // apart; only a restyle can be applied safely inside a card.
+          if (container && regionRepair.action !== "restyle") continue;
           if (regionRepair.action === "move" || regionRepair.action === "resize") {
             // A region move needs a destination. Without one there is nothing
             // to move towards, so the element keeps its place.
@@ -1396,6 +1429,43 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           if (content.body.trim() && element.text === content.body) emphasisTarget(element, emphasis.body);
         }
       }
+      // A repair or an emphasis can enlarge a text after the layout fitted it.
+      // Refit the ink to the frame it ended up in, so a scaled title cannot
+      // spill out of its box and paint over the copy below it.
+      for (const element of slide.elements) {
+        if (element.type !== "text" || !textLikelyOverflows(element)) continue;
+        let fitted = element.style.fontSizePt;
+        while (fitted > 8) {
+          fitted -= 1;
+          if (!textLikelyOverflows({ ...element, style: { ...element.style, fontSizePt: fitted } })) break;
+        }
+        element.style = { ...element.style, fontSizePt: fitted };
+      }
+      // A repair may also repaint a text with a colour that does not read on the
+      // surface it sits on. The last pass resolves every ink against the shape
+      // that actually carries it, so a repaint cannot leave invisible copy.
+      slide.elements.forEach((element, elementIndex) => {
+        if (element.type !== "text") return;
+        let carrying: string | undefined;
+        for (let candidateIndex = 0; candidateIndex < elementIndex; candidateIndex += 1) {
+          const candidate = slide.elements[candidateIndex]!;
+          if (candidate.type === "shape" && containsFrame(candidate.frame, element.frame)) carrying = candidate.style.fill;
+        }
+        const large = isLargeText(element.style.fontSizePt, element.style.bold);
+        if (!carrying && keepsArtwork) {
+          // The artwork probe is a range of luminance, not one value; resolve
+          // against the same range the page was built with.
+          const range = element.contentRef === "title" ? titleBackground : bodyBackground;
+          if (range) {
+            element.style = { ...element.style, color: readableTextColorOnRange(element.style.color, range, large, bodyInk) };
+            return;
+          }
+        }
+        const background = carrying ?? (keepsArtwork ? undefined : slide.background);
+        const luminance = background ? colorLuminance(background) : undefined;
+        if (luminance === undefined) return;
+        element.style = { ...element.style, color: readableTextColor(element.style.color, luminance, large, bodyInk) };
+      });
       // Page numbers are part of the generated design, not of the reviewed copy:
       // they are added after the composition so no layout branch has to remember
       // them. A one-page draft has nothing to number, a cover or a section page
@@ -1421,9 +1491,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           }
         }
         const titleChars = [...(sectionLabel ?? command.title.trim())];
-        const deckLabel = titleChars.length > 30 ? `${titleChars.slice(0, 29).join("")}…` : titleChars.join("");
+        const footerLabel = titleChars.length > 30 ? `${titleChars.slice(0, 29).join("")}…` : titleChars.join("");
         const footerInk = readableTextColor("#5F6B76", pageLuminance, false, bodyInk);
-        slide.elements.push({ ...text(deckLabel, frame(alignmentGrid.left, 0.947, 0.55, 0.03), 10, footerInk, false, "left", "decorative", pageLuminance, 8), origin: "generated" });
+        slide.elements.push({ ...text(footerLabel, frame(alignmentGrid.left, 0.947, 0.55, 0.03), 10, footerInk, false, "left", "decorative", pageLuminance, 8), origin: "generated" });
         slide.elements.push({ ...text(pageLabel, frame(alignmentGrid.right - 0.16, 0.947, 0.16, 0.03), 10, footerInk, false, "right", "decorative", pageLuminance, 8), origin: "generated" });
       }
       // Provenance is what lets a later design-only relayout replace the

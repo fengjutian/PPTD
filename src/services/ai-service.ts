@@ -6,6 +6,7 @@ import type { AiPaletteRole } from "../core/commands/design-intent";
 import { contrastRatio as colorContrastRatio } from "../core/rendering/contrast";
 import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
+import { normalizeDraftPunctuation } from "./ai-draft-normalize";
 
 export const narrativeStrategySchema = z.enum(["management-report", "proposal", "retrospective", "training", "product-launch", "fundraising", "general"]);
 export const contentBlockSchema = z.discriminatedUnion("type", [
@@ -412,7 +413,8 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
     const draft = aiDraftSchema.parse(raw);
     if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
     options.onProgress?.({ stage: "content", completed: 1, total: 1, label: "草稿已生成" });
-    return draft;
+    // 标点在这里收拾：模型刚写完、用户还没看到的时候。
+    return normalizeDraftPunctuation(draft);
   }
 
   options.onProgress?.({ stage: "outline", completed: 0, total: 1, label: "正在规划演示大纲…" });
@@ -461,7 +463,8 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   const draft = aiDraftSchema.parse({ title: outline.title, presentationBrief: outline.presentationBrief, slides });
   if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
   options.onProgress?.({ stage: "content", completed: batches.length, total: batches.length, label: "草稿已生成" });
-  return draft;
+  // 标点在这里收拾：模型刚写完、用户还没看到的时候。
+  return normalizeDraftPunctuation(draft);
 }
 
 export async function polishPresentationTopic(topic: string): Promise<string> {

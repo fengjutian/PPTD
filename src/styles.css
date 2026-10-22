@@ -38,6 +38,7 @@ button { color: inherit; }
 .brand small { color: #858991; font-size: 10px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .toolbar-group { display: flex; align-items: center; gap: 4px; }
 .insert-tools { margin-left: auto; }
+.assist-tools { padding-left: 6px; border-left: 1px solid #34363c; }
 .separator { width: 1px; height: 24px; background: #34363c; margin: 0 5px; }
 .tool-button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
 .tool-button svg { width: 18px; }
@@ -445,6 +446,21 @@ button { color: inherit; }
 .workspace { position: relative; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 62px; scrollbar-gutter: stable; background-color: #26272b; background-image: radial-gradient(#42444b 0.65px, transparent 0.65px); background-size: 18px 18px; }
 .canvas-ruler { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); color: #747881; font-size: 11px; letter-spacing: .07em; }
 .slide-canvas { position: relative; flex: 0 0 auto; overflow: hidden; border: 1px solid #444; touch-action: none; }
+/* 网格和参考线只存在于编辑过程，不进文档模型，也不导出。 */
+.canvas-grid-layer { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.canvas-guide-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.canvas-guide { position: absolute; pointer-events: auto; touch-action: none; }
+.canvas-guide.vertical { top: 0; bottom: 0; width: 9px; margin-left: -4px; cursor: ew-resize; }
+.canvas-guide.horizontal { left: 0; right: 0; height: 9px; margin-top: -4px; cursor: ns-resize; }
+.canvas-guide i { position: absolute; background: var(--ppt-accent); opacity: .55; }
+.canvas-guide.vertical i { top: 0; bottom: 0; left: 4px; width: 1px; }
+.canvas-guide.horizontal i { left: 0; right: 0; top: 4px; height: 1px; }
+.canvas-guide:hover i { opacity: 1; }
+/* 吸附命中时的那条线，比参考线更亮，提示对象贴住了哪里。 */
+.canvas-snap-line { position: absolute; pointer-events: none; background: #ff7a45; }
+.canvas-snap-line.vertical { top: 0; bottom: 0; width: 1px; margin-left: -.5px; }
+.canvas-snap-line.horizontal { left: 0; right: 0; height: 1px; margin-top: -.5px; }
+:root[data-theme="light"] .canvas-grid-layer { filter: brightness(.55); }
 .slide-element { position: absolute; cursor: move; user-select: none; transform-origin: center; }
 .slide-element.locked { cursor: default; }
 .slide-element.text { padding: 0; display: flex; align-items: flex-start; line-height: 1.2; }

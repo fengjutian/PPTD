@@ -14,6 +14,7 @@ const LEXICON_JSON: &str = include_str!("../../../../assets/content-lexicon.json
 #[serde(rename_all = "camelCase")]
 struct LexiconFile {
     title_rules: TitleRules,
+    punctuation: Punctuation,
 }
 
 #[derive(Deserialize)]
@@ -24,6 +25,14 @@ struct TitleRules {
     banned_lead_phrases: Vec<String>,
     empty_tail_phrases: Vec<String>,
     connectors: Vec<String>,
+}
+
+/// 中文标点规则。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Punctuation {
+    /// 半角标点到全角标点的对照表。
+    half_width_to_full_width: std::collections::BTreeMap<String, String>,
 }
 
 /// 标题规则。
@@ -39,6 +48,8 @@ pub struct TitleLexicon {
     pub empty_tail_phrases: Vec<String>,
     /// 连接词。
     pub connectors: Vec<String>,
+    /// 半角标点到全角标点的对照表。
+    pub half_width_to_full_width: std::collections::BTreeMap<String, String>,
 }
 
 impl TitleLexicon {
@@ -52,7 +63,29 @@ impl TitleLexicon {
             banned_lead_phrases: file.title_rules.banned_lead_phrases,
             empty_tail_phrases: file.title_rules.empty_tail_phrases,
             connectors: file.title_rules.connectors,
+            half_width_to_full_width: file.punctuation.half_width_to_full_width,
         }
+    }
+
+    /// 中文标点纪律，写进生成提示。
+    ///
+    /// 实测一整册六页的真实产出，四页标题写成"Q2 营收达成预算目标,盈利能力…"——
+    /// 半角逗号夹在中文中间，整册看上去就是机器排的。要求模型写全角，
+    /// 前端再按同一张表规范化，两边不会各说各话。
+    pub fn punctuation_rules_prompt(&self) -> String {
+        let pairs = self
+            .half_width_to_full_width
+            .iter()
+            .map(|(half, full)| format!("{half} → {full}"))
+            .collect::<Vec<_>>()
+            .join("、");
+        format!(
+            "【中文标点】\n\
+             1. 中文句子里的标点必须用全角：{pairs}。\n\
+             2. 数字千分位、英文单词之间的半角标点保持原样（如 12,345、Revenue, net）。\n\
+             3. 括号成对使用：中文语境用（），书名用《》，引文用“”。\n\
+             4. 标题里不要出现标点堆叠，也不要用省略号断在半句中间。"
+        )
     }
 
     /// 标题纪律，写进生成提示。

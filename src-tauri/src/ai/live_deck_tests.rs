@@ -114,7 +114,10 @@ async fn runs_the_whole_deck_pipeline_against_the_real_model() {
 
     let pages = outline["pages"].as_array().expect("pages 必须是数组");
     eprintln!("=== 大纲 ===");
-    eprintln!("文稿标题：{}", outline["title"].as_str().unwrap_or_default());
+    eprintln!(
+        "文稿标题：{}",
+        outline["title"].as_str().unwrap_or_default()
+    );
     for page in pages {
         eprintln!(
             "  [{}] {}",
@@ -140,8 +143,7 @@ async fn runs_the_whole_deck_pipeline_against_the_real_model() {
 5. visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text。
 6. 第一页用 hero，其余按内容性质选。
 
-仅返回严格 JSON：{{"title":"页面标题","body":"正文","speakerNotes":"备注","blocks":[],"plan":{{"visualIntent":"summary"}}}}"#
-            ,
+仅返回严格 JSON：{{"title":"页面标题","body":"正文","speakerNotes":"备注","blocks":[],"plan":{{"visualIntent":"summary"}}}}"#,
             TOPIC,
             page["title"].as_str().unwrap_or_default(),
             page["purpose"].as_str().unwrap_or_default(),
@@ -189,7 +191,9 @@ async fn runs_the_whole_deck_pipeline_against_the_real_model() {
     )
     .await;
 
-    let designs = design["slides"].as_array().expect("design.slides 必须是数组");
+    let designs = design["slides"]
+        .as_array()
+        .expect("design.slides 必须是数组");
     eprintln!("=== 视觉设计 ===");
     for (index, item) in designs.iter().enumerate() {
         eprintln!(
@@ -255,7 +259,9 @@ async fn runs_the_whole_deck_pipeline_against_the_real_model() {
     // 5. 断言：只检查链路本身，不检查审美
     assert!(!slides.is_empty(), "必须产出页面");
     assert!(
-        slides.iter().all(|slide| !slide["title"].as_str().unwrap_or_default().is_empty()),
+        slides
+            .iter()
+            .all(|slide| !slide["title"].as_str().unwrap_or_default().is_empty()),
         "每页都必须有标题"
     );
 }

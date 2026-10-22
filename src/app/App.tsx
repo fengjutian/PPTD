@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, LayoutDashboard, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, Grid2x2, Grid3x3, ImagePlus, Info, LayoutDashboard, Magnet, MoveHorizontal, MoveVertical, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type Slide, type SlideElement } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
@@ -8,6 +8,10 @@ import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { LayerList } from "../features/editor/LayerList";
 import { SlideElementContent, SlideElementFrame } from "../features/editor/SlideScene";
+import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
+import { useSnapContext, type SnapContext } from "../features/editor/use-snap-context";
+import { resizeEdgesOf, snapMovingFrame, snapResizedFrame } from "../core/rendering/snap";
+import { useCanvasGuidesStore } from "../store/canvas-guides-store";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
@@ -111,10 +115,11 @@ async function readImageSize(dataUrl: string): Promise<{ width: number; height: 
   }
 }
 
-const ElementView = memo(function ElementView({ element, slide, scale, selected }: { element: SlideElement; slide: Slide; scale: number; selected: boolean }) {
+const ElementView = memo(function ElementView({ element, slide, scale, selected, snap }: { element: SlideElement; slide: Slide; scale: number; selected: boolean; snap: SnapContext }) {
   const execute = useEditorStore((s) => s.execute);
   const activeSlideId = useEditorStore((s) => s.activeSlideId);
   const selectElement = useEditorStore((s) => s.selectElement);
+  const setActiveSnap = useCanvasGuidesStore((s) => s.setActiveSnap);
   const rootRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<{
     kind: "move" | "resize" | "rotate";
@@ -126,16 +131,47 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected 
     rotation: number;
     startAngle?: number;
   } | null>(null);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [previewFrame, setPreviewFrame] = useState<RectEmu | null>(null);
   const [previewRotation, setPreviewRotation] = useState<number | null>(null);
   const frame = previewFrame ?? element.frame;
   const rotation = previewRotation ?? element.rotationMilliDegree;
   const style: React.CSSProperties = {
-    left: frame.x * scale + offset.x, top: frame.y * scale + offset.y,
+    left: frame.x * scale, top: frame.y * scale,
     width: frame.width * scale, height: frame.height * scale,
     transform: `rotate(${rotation / 1000}deg)`,
     touchAction: "none",
+  };
+
+  /**
+   * 把一次拖拽的结果吸附到网格或参考线上。
+   *
+   * 吸附只在拖拽过程中发生，结束时提交的仍然是普通的设计命令：吸附不
+   * 产生新的坐标类型，也不会让撤销栈多出一项。
+   */
+  const applyMoveSnap = (candidate: RectEmu, report: boolean) => {
+    if (!snap.enabled) {
+      if (report) setActiveSnap({});
+      return { frame: candidate, hitX: undefined, hitY: undefined };
+    }
+    const snapped = snapMovingFrame(candidate, snap.targets, snap.threshold);
+    if (report) setActiveSnap({ x: snapped.hitX, y: snapped.hitY });
+    return snapped;
+  };
+
+  /**
+   * 缩放时只吸附被拖动的那条边。
+   *
+   * 缩放的对象不该整体平移：那样每拖一次，位置就悄悄变了。所以这里不走
+   * 移动吸附，只让被拖动的边贴到目标线上。
+   */
+  const applyResizeSnap = (candidate: RectEmu, direction: ResizeDirection, report: boolean) => {
+    if (!snap.enabled) {
+      if (report) setActiveSnap({});
+      return { frame: candidate, hitX: undefined, hitY: undefined };
+    }
+    const snapped = snapResizedFrame(candidate, resizeEdgesOf(direction), snap.targets, snap.threshold);
+    if (report) setActiveSnap({ x: snapped.hitX, y: snapped.hitY });
+    return snapped;
   };
 
   const begin = (kind: "move" | "resize" | "rotate", event: React.PointerEvent, direction?: ResizeDirection) => {
@@ -162,12 +198,16 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected 
   const pointerMove = (event: React.PointerEvent) => {
     const current = interaction.current;
     if (!current) return;
+    const dx = (event.clientX - current.startX) / scale;
+    const dy = (event.clientY - current.startY) / scale;
     if (current.kind === "move") {
-      setOffset({ x: event.clientX - current.startX, y: event.clientY - current.startY });
+      const candidate = { ...current.frame, x: emu(current.frame.x + dx), y: emu(current.frame.y + dy) };
+      setPreviewFrame(applyMoveSnap(candidate, true).frame);
       return;
     }
     if (current.kind === "resize") {
-      setPreviewFrame(resizeFrame(current.frame, current.direction!, (event.clientX - current.startX) / scale, (event.clientY - current.startY) / scale));
+      const resized = resizeFrame(current.frame, current.direction!, dx, dy);
+      setPreviewFrame(applyResizeSnap(resized, current.direction!, true).frame);
       return;
     }
     const rect = rootRef.current?.getBoundingClientRect();
@@ -182,21 +222,25 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected 
     const current = interaction.current;
     if (!current) return;
     interaction.current = null;
-    setOffset({ x: 0, y: 0 });
     setPreviewFrame(null);
     setPreviewRotation(null);
+    setActiveSnap({});
     if (cancelled) return;
     const dx = (event.clientX - current.startX) / scale;
     const dy = (event.clientY - current.startY) / scale;
     if (current.kind === "move") {
       if (!dx && !dy) return;
-      execute({ type: "move-element", slideId: activeSlideId, elementId: element.id, x: emu(current.frame.x + dx), y: emu(current.frame.y + dy) });
+      const candidate = { ...current.frame, x: emu(current.frame.x + dx), y: emu(current.frame.y + dy) };
+      const snapped = applyMoveSnap(candidate, false);
+      if (snapped.frame.x === current.frame.x && snapped.frame.y === current.frame.y) return;
+      execute({ type: "move-element", slideId: activeSlideId, elementId: element.id, x: emu(snapped.frame.x), y: emu(snapped.frame.y) });
       return;
     }
     if (current.kind === "resize") {
-      const frame = resizeFrame(current.frame, current.direction!, dx, dy);
-      if (frame.width === current.frame.width && frame.height === current.frame.height && frame.x === current.frame.x && frame.y === current.frame.y) return;
-      execute({ type: "transform-element", slideId: activeSlideId, elementId: element.id, frame, rotationMilliDegree: current.rotation });
+      const resized = resizeFrame(current.frame, current.direction!, dx, dy);
+      const snapped = applyResizeSnap(resized, current.direction!, false);
+      if (snapped.frame.width === current.frame.width && snapped.frame.height === current.frame.height && snapped.frame.x === current.frame.x && snapped.frame.y === current.frame.y) return;
+      execute({ type: "transform-element", slideId: activeSlideId, elementId: element.id, frame: snapped.frame, rotationMilliDegree: current.rotation });
       return;
     }
     const rect = rootRef.current?.getBoundingClientRect();
@@ -309,10 +353,22 @@ export function App() {
   const [designQualityReport, setDesignQualityReport] = useState<{ templateName: string; issues: PresentationQualityIssue[]; notes: string[] }>();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const clipboardElementId = useRef<ElementId | null>(null);
+  const gridEnabled = useCanvasGuidesStore((s) => s.gridEnabled);
+  const gridSnapEnabled = useCanvasGuidesStore((s) => s.gridSnapEnabled);
+  const snapEnabled = useCanvasGuidesStore((s) => s.snapEnabled);
+  const toggleGrid = useCanvasGuidesStore((s) => s.toggleGrid);
+  const toggleGridSnap = useCanvasGuidesStore((s) => s.toggleGridSnap);
+  const toggleSnap = useCanvasGuidesStore((s) => s.toggleSnap);
+  const addGuideToSlide = useCanvasGuidesStore((s) => s.addGuide);
+  const clearGuidesOnSlide = useCanvasGuidesStore((s) => s.clearGuides);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
+  const activeGuides = useCanvasGuidesStore((s) => s.guidesBySlide[activeSlideId]) ?? [];
+  const addGuide = (axis: "x" | "y", position: number) => addGuideToSlide(activeSlide.id, axis, emu(position));
   const scale = (CANVAS_WIDTH / document.pageSize.width) * zoom;
   const canvasHeight = document.pageSize.height * scale;
+  // 吸附目标一页只算一次，画布上的所有对象共用同一份。
+  const snapContext = useSnapContext(activeSlide.id, document.pageSize.width, document.pageSize.height, scale);
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
@@ -1245,6 +1301,14 @@ export function App() {
           <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { handleImageFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
           <ToolButton label="重排版式（保留手工对象）" onClick={() => { execute({ type: "relayout-slide", slideId: activeSlide.id }); setTaskStatus("已按当前内容重新应用版式，手工添加的图片、文本和锁定对象已保留"); }}><Wand2 /></ToolButton>
         </div>
+        <div className="toolbar-group assist-tools">
+          <ToolButton label={gridEnabled ? "关闭网格" : "显示网格"} onClick={toggleGrid}><Grid3x3 /></ToolButton>
+          <ToolButton label={gridSnapEnabled ? "关闭网格吸附" : "吸附到网格"} onClick={toggleGridSnap}><Grid2x2 /></ToolButton>
+          <ToolButton label={snapEnabled ? "关闭吸附" : "开启吸附"} onClick={toggleSnap}><Magnet /></ToolButton>
+          <ToolButton label="添加垂直参考线" onClick={() => addGuide("x", document.pageSize.width / 2)}><MoveVertical /></ToolButton>
+          <ToolButton label="添加水平参考线" onClick={() => addGuide("y", document.pageSize.height / 2)}><MoveHorizontal /></ToolButton>
+          <ToolButton label="清除本页参考线" onClick={() => clearGuidesOnSlide(activeSlide.id)} disabled={!activeGuides.length}><Trash2 /></ToolButton>
+        </div>
         <button className="export-button" onClick={handleExport}><Download size={17} /> {exportBusy ? "取消导出" : "导出 PPTX"}</button>
       </header>}
 
@@ -1280,7 +1344,9 @@ export function App() {
       <main className="workspace" onPointerDown={() => selectElement(null)}>
         <div className="canvas-ruler">13.33 × 7.5 in</div>
         <div className="slide-canvas" style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }}>
-          {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={element.id === selectedElementId} />)}
+          <CanvasGridLayer scale={scale} />
+          {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={element.id === selectedElementId} snap={snapContext} />)}
+          <CanvasGuideLayer slideId={activeSlide.id} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} scale={scale} />
         </div>
       </main>
 

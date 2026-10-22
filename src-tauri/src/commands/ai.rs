@@ -480,6 +480,7 @@ pub async fn generate_presentation(
 1. slides 必须恰好 {count} 项。
 2. 每页只承担一个主要沟通任务，title 必须是可验证的结论或判断。
 {title_rules}
+{punctuation_rules}
 3. body 必须回答标题，使用陈述句和事实，禁止用疑问句充当正文；不得虚构数字、来源、引语或案例。
 4. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须拆页或改为结构化内容块。封面只保留标题和一句不超过 30 字的副标题，不得放编号列表或五点概述；内容概述从第二页开始。
 5. body 必须与 blocks 表达相同事实，方便用户直接编辑；不得虚构数字、来源、引语或案例。中文引文使用“”，篇名使用《》，不要用英文直引号。
@@ -504,7 +505,8 @@ pub async fn generate_presentation(
 主题：{topic}"#,
         count = request.slide_count,
         topic = request.topic.trim(),
-        title_rules = TitleLexicon::load().title_rules_prompt()
+        title_rules = TitleLexicon::load().title_rules_prompt(),
+        punctuation_rules = TitleLexicon::load().punctuation_rules_prompt()
     );
     let body = ChatRequest {
         model,
@@ -561,6 +563,7 @@ pub async fn generate_presentation_outline(
 2. pages 必须恰好 {count} 项，index 从 0 开始连续递增，不得跳号或重复。
 3. 每页 title 必须是一个可验证的结论或判断。
 {title_rules}
+{punctuation_rules}
 4. 每页 purpose 说明这一页在整套演示中承担的沟通任务，不复述正文。
 5. 每页只承担一个主要沟通任务，相邻页不得重复同一件事。
 6. presentationBrief.narrativeStrategy 只能为 management-report、proposal、retrospective、training、product-launch、fundraising、general。
@@ -573,7 +576,8 @@ pub async fn generate_presentation_outline(
 主题：{topic}"#,
         count = request.slide_count,
         topic = request.topic.trim(),
-        title_rules = TitleLexicon::load().title_rules_prompt()
+        title_rules = TitleLexicon::load().title_rules_prompt(),
+        punctuation_rules = TitleLexicon::load().punctuation_rules_prompt()
     );
     let body = ChatRequest {
         model,
@@ -660,6 +664,7 @@ pub async fn generate_presentation_slides_batch(
 
 规则：
 1. slides 数量必须与上面给出的页面数量完全一致，顺序一致。
+{punctuation_rules}
 2. body 必须回答该页标题，使用陈述句和事实，禁止用疑问句充当正文；不得虚构数字、来源、引语或案例。
 3. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须改用结构化内容块。封面只保留标题和一句不超过 30 字的副标题，不得放编号列表或五点概述。
 4. body 必须与 blocks 表达相同事实，方便用户直接编辑。中文引文使用“”，篇名使用《》，不要用英文直引号。
@@ -681,7 +686,8 @@ pub async fn generate_presentation_slides_batch(
 {{"slides":[{{"title":"该页标题","body":"可编辑正文","speakerNotes":"演讲备注","plan":{{"purpose":"页面目的","conclusion":"单一结论","visualIntent":"structured-text","density":"medium"}},"blocks":[{{"type":"bullet-list","items":["要点一","要点二"]}}]}}]}}"#,
         topic = request.topic.trim(),
         outline = outline,
-        batch = batch
+        batch = batch,
+        punctuation_rules = TitleLexicon::load().punctuation_rules_prompt()
     );
     let body = ChatRequest {
         model,
