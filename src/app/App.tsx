@@ -14,7 +14,7 @@ import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState 
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
+import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -245,6 +245,8 @@ export function App() {
   const aiUnsavedRef = useRef(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
+  /** 流式汇报的实时进度：正文分批并行，这里是各批汇总后的结果。 */
+  const [aiStreamProgress, setAiStreamProgress] = useState<{ pages: number; received: number }>();
   const aiRequestId = useRef(0);
   /** 后端取消用的生成任务号；一次生成任务内的所有请求共享它。 */
   const aiTaskId = useRef(0);
@@ -443,8 +445,18 @@ export function App() {
     const taskId = aiTaskId.current;
     setAiBusy(true); setAiDraft(undefined);
     setAiProgress({ stage: "outline", completed: 0, total: 1, label: "正在准备生成…" });
+    setAiStreamProgress(undefined);
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
+    let unlisten: (() => void) | undefined;
     try {
+      // 正文分批并行，各批的进度要按请求标识汇总，不能直接相加。
+      const totals = new Map<string, { received: number; pages: number }>();
+      unlisten = await listenAiGenerationProgress((progress) => {
+        if (requestId !== aiRequestId.current || progress.taskId !== taskId) return;
+        totals.set(progress.key, { received: progress.received, pages: progress.pages });
+        const pages = [...totals.values()].reduce((sum, item) => sum + item.pages, 0);
+        setAiStreamProgress({ pages, received: [...totals.values()].reduce((sum, item) => sum + item.received, 0) });
+      }).catch(() => undefined);
       const draft = withSlideIds(await generatePresentationDraft(aiTopic, aiSlideCount, {
         onProgress: (progress) => {
           if (requestId === aiRequestId.current) setAiProgress(progress);
@@ -471,8 +483,9 @@ export function App() {
       if ("Notification" in window && Notification.permission === "granted") new Notification("PPTD · AI 生成失败", { body: detail });
     }
     finally {
+      unlisten?.();
       void endAiGeneration(taskId).catch(() => undefined);
-      if (requestId === aiRequestId.current) { setAiBusy(false); setAiProgress(undefined); }
+      if (requestId === aiRequestId.current) { setAiBusy(false); setAiProgress(undefined); setAiStreamProgress(undefined); }
     }
   };
 
@@ -636,12 +649,20 @@ export function App() {
 
   const aiDraftMissingTitles = useMemo(() => (aiDraft ? missingTitleIndexes(aiDraft) : []), [aiDraft]);
   const aiDraftMetrics = useMemo(() => (aiDraft ? draftMetrics(aiDraft) : { characters: 0, points: 0 }), [aiDraft]);
-  // 大纲阶段占一小段，正文分批阶段按已完成批次推进。
+  // 大纲阶段占一小段，正文分批阶段按已完成批次推进；流式汇报的页数更细，取两者里更靠前的。
   const aiGenerationPercent = aiProgress
-    ? aiProgress.stage === "outline"
-      ? 12
-      : 12 + Math.round((88 * aiProgress.completed) / Math.max(1, aiProgress.total))
+    ? Math.max(
+        aiProgress.stage === "outline"
+          ? 12
+          : 12 + Math.round((88 * aiProgress.completed) / Math.max(1, aiProgress.total)),
+        aiStreamProgress
+          ? 12 + Math.round((88 * aiStreamProgress.pages) / Math.max(1, aiSlideCount))
+          : 0,
+      )
     : 0;
+  const aiGenerationLabel = aiStreamProgress && aiStreamProgress.pages > 0
+    ? `正在生成正文（已写 ${aiStreamProgress.pages} 页）`
+    : aiProgress?.label ?? "";
 
   const continueToTheme = () => {
     if (!aiDraft) return;
@@ -954,7 +975,7 @@ export function App() {
           <label>主题与要求<textarea value={aiTopic} onChange={(event) => setAiTopic(event.target.value)} placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动" /></label>
           <label className="slide-count-field">页数<input type="number" min="1" max="20" value={aiSlideCount} onChange={(event) => setAiSlideCount(Math.max(1, Math.min(20, Number(event.target.value))))} /></label>
           <button className="primary-action" disabled={!aiTopic.trim()} onClick={handleAiGenerate}>{aiBusy ? "取消生成" : "生成 PPT 草稿"}<ArrowRight /></button>
-          {aiBusy && aiProgress && <div className="ai-generation-progress" role="status" aria-live="polite"><strong>{aiProgress.label}</strong><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={aiGenerationPercent} role="progressbar"><i style={{ width: `${aiGenerationPercent}%` }} /></div><span>生成中可随时点击“取消生成”停止本次任务</span></div>}
+          {aiBusy && aiProgress && <div className="ai-generation-progress" role="status" aria-live="polite"><strong>{aiGenerationLabel}</strong><div className="design-progress-track" aria-label="AI 生成进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={aiGenerationPercent} role="progressbar"><i style={{ width: `${aiGenerationPercent}%` }} /></div><span>生成中可随时点击“取消生成”停止本次任务</span></div>}
           <small>生成结果通过结构化 Schema 校验，应用前不会修改当前文稿。</small>
           </div>
           </div>

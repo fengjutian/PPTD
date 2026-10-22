@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { z } from "zod";
 import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
@@ -206,6 +207,25 @@ export interface AiGenerationProgress {
   label: string;
 }
 
+/** 后端在流式生成过程中汇报的进度。 */
+export interface AiGenerationStreamProgress {
+  taskId: number;
+  /** 同一次任务里的请求标识：正文分批并行，各批进度由前端汇总。 */
+  key: string;
+  phase: string;
+  received: number;
+  pages: number;
+}
+
+/**
+ * 订阅生成进度。
+ *
+ * 返回的取消函数必须在生成结束时调用，否则监听会一直挂着。
+ */
+export function listenAiGenerationProgress(handler: (progress: AiGenerationStreamProgress) => void): Promise<UnlistenFn> {
+  return listen<AiGenerationStreamProgress>("ai-generation-progress", (event) => handler(event.payload));
+}
+
 export interface AiGenerationOptions {
   onProgress?: (progress: AiGenerationProgress) => void;
   /** 返回 true 时放弃本次生成，用于响应用户取消。 */
@@ -234,7 +254,7 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   const { provider, model } = await aiSelection();
   if (slideCount <= SINGLE_CALL_PAGE_LIMIT) {
     options.onProgress?.({ stage: "content", completed: 0, total: 1, label: "正在生成演示草稿…" });
-    const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider, taskId: options.taskId } });
+    const raw = await invoke<unknown>("generate_presentation", { request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true } });
     const draft = aiDraftSchema.parse(raw);
     if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
     options.onProgress?.({ stage: "content", completed: 1, total: 1, label: "草稿已生成" });
@@ -242,7 +262,7 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
   }
 
   options.onProgress?.({ stage: "outline", completed: 0, total: 1, label: "正在规划演示大纲…" });
-  const outlineRaw = await invoke<unknown>("generate_presentation_outline", { request: { topic, slideCount, model, provider, taskId: options.taskId } });
+  const outlineRaw = await invoke<unknown>("generate_presentation_outline", { request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true } });
   const outline = aiOutlineSchema.parse(outlineRaw);
   if (outline.pages.length !== slideCount) throw new Error("AI_OUTLINE_PAGE_COUNT_MISMATCH");
   assertNotCancelled(options);
@@ -255,7 +275,7 @@ export async function generatePresentationDraft(topic: string, slideCount: numbe
 
   let completed = 0;
   const batchResults = await Promise.all(batches.map(async (batch) => {
-    const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider, taskId: options.taskId } });
+    const raw = await invoke<unknown>("generate_presentation_slides_batch", { request: { topic, outline, startIndex: batch.startIndex, count: batch.count, model, provider, taskId: options.taskId, streamProgress: true } });
     const parsed = aiSlideBatchSchema.parse(raw);
     if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
     completed += 1;

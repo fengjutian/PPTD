@@ -372,6 +372,7 @@ pub async fn generate_presentation(
         &app,
         request.task_id,
         "draft",
+        "draft",
         request.stream_progress.unwrap_or(false),
     )
     .await?;
@@ -435,6 +436,7 @@ pub async fn generate_presentation_outline(
         &cancel,
         &app,
         request.task_id,
+        "outline",
         "outline",
         request.stream_progress.unwrap_or(false),
     )
@@ -541,6 +543,7 @@ pub async fn generate_presentation_slides_batch(
         &cancel,
         &app,
         request.task_id,
+        &format!("batch-{}", request.start_index),
         "content",
         request.stream_progress.unwrap_or(false),
     )

@@ -102,7 +102,9 @@ mod tests {
     fn keeps_a_partial_line_until_the_rest_arrives() {
         let mut parser = SseParser::new();
 
-        assert!(parser.push("data: {\"choices\":[{\"delta\":{\"content\":\"半").is_empty());
+        assert!(parser
+            .push("data: {\"choices\":[{\"delta\":{\"content\":\"半")
+            .is_empty());
         let deltas = parser.push("句\"}}]}\n");
 
         assert_eq!(deltas, vec!["半句"]);
@@ -111,7 +113,9 @@ mod tests {
     #[test]
     fn reads_a_final_line_without_a_newline() {
         let mut parser = SseParser::new();
-        assert!(parser.push("data: {\"choices\":[{\"delta\":{\"content\":\"结尾\"}}]}").is_empty());
+        assert!(parser
+            .push("data: {\"choices\":[{\"delta\":{\"content\":\"结尾\"}}]}")
+            .is_empty());
 
         assert_eq!(parser.finish(), vec!["结尾"]);
     }
@@ -119,9 +123,8 @@ mod tests {
     #[test]
     fn survives_a_broken_frame_without_losing_the_following_ones() {
         let mut parser = SseParser::new();
-        let deltas = parser.push(
-            "data: {not json}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}\n",
-        );
+        let deltas = parser
+            .push("data: {not json}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}\n");
 
         assert_eq!(deltas, vec!["好"]);
     }
