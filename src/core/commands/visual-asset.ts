@@ -67,10 +67,13 @@ export function buildVisualAssetPrompt(description: string | undefined, topic: s
 }
 
 /**
- * 这一页该不该配图。
+ * 这一页该不该配图、配成什么角色。
  *
  * 规则来自内容本身：只有页面角色和内容密度共同允许时才配图。
  * 一张图会占掉半个页面，页面上的文字必须还能装下。
+ *
+ * AI 指定的角色会被采纳，但只在它装得下这一页时：主视觉要一整块地方，
+ * 侧栏和通栏要一张还能读得清的图。
  */
 export function resolveVisualAsset(input: {
   /** 页面在整套演示中的角色。 */
@@ -81,6 +84,8 @@ export function resolveVisualAsset(input: {
   hasDeterministicBlock: boolean;
   /** AI 是否要求配图。 */
   requested?: boolean;
+  /** AI 指定的角色。 */
+  requestedRole?: AiVisualAssetRole;
 }): { enabled: boolean; role?: AiVisualAssetRole; reason?: string } {
   if (!input.requested) return { enabled: false, reason: "AI 没有为这一页要求配图" };
   if (input.hasDeterministicBlock) {
@@ -88,14 +93,21 @@ export function resolveVisualAsset(input: {
     // 再塞一张图会让这一页同时讲两件事。
     return { enabled: false, reason: "该页有结构化内容块，版面由内容块决定" };
   }
-  if (input.layout === "cover" || input.layout === "section") {
+  const isCover = input.layout === "cover" || input.layout === "section";
+  if (input.requestedRole === "hero") {
+    // 主视觉要占掉半个页面，文字必须还剩得下一块地方。
+    if (!isCover) return { enabled: false, reason: "主视觉只能用于封面或章节页" };
+    return { enabled: true, role: "hero" };
+  }
+  if (isCover) {
+    // 封面和章节页本来就没有几行字，配一张侧栏图反而挤。
     return { enabled: true, role: "hero" };
   }
   if (input.itemCount > 4) {
     // 四条以上的要点已经占满一页，图会把正文挤到读不下去。
     return { enabled: false, reason: `该页有 ${input.itemCount} 条要点，放不下配图` };
   }
-  return { enabled: true, role: "side" };
+  return { enabled: true, role: input.requestedRole ?? "side" };
 }
 
 /** 配图占页面多大比例。 */

@@ -684,6 +684,21 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const scrimLuminance = colorLuminance(scrimFill) ?? 1;
       const contentBox = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
       const titleBox = recipeTitle ?? { x: alignmentGrid.left, y: alignmentGrid.titleY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.titleHeight };
+      // A picture takes its own place on the page and the text moves out of its
+      // way. The image is never laid over the copy: a page where the text is
+      // unreadable under a picture is worse than a page without a picture.
+      const assetPlan = resolveVisualAsset({
+        layout: design.layout,
+        itemCount: items.length,
+        hasDeterministicBlock,
+        requested: Boolean(visualAsset && design.visualAsset?.enabled),
+        requestedRole: design.visualAsset?.role,
+      });
+      const assetLayout = visualAsset && assetPlan.enabled && assetPlan.role
+        ? planVisualAssetLayout(assetPlan.role, contentBox)
+        : undefined;
+      // The text area shrinks to whatever the picture left behind.
+      const textBox = assetLayout ? assetLayout.text : contentBox;
       // The intent of the page: which composition it is drawn in, which level of
       // the hierarchy carries the weight and how much white space it spends.
       // The composition is checked against the reviewed content, so an intent
