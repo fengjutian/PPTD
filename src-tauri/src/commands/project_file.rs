@@ -723,7 +723,6 @@ pub async fn save_project(
 ) -> Result<AssetReport, String> {
     let layout_cache_root = layout_render_cache_root(&app);
     tauri::async_runtime::spawn_blocking(move || {
-        let path = validate_path(&path, "pptd")?;
         let source = source_path.map(PathBuf::from);
         save_project_at(&path, document, source.as_deref(), Some(&layout_cache_root))
     })
@@ -740,14 +739,15 @@ pub async fn save_project(
 /// references intact and nothing behind them. Carrying the files here closes
 /// that without depending on the caller having done it first.
 fn save_project_at(
-    path: &Path,
+    path: &str,
     mut document: Value,
     source_path: Option<&Path>,
     layout_cache_root: Option<&Path>,
 ) -> Result<AssetReport, String> {
-    externalize_images(path, &mut document)?;
-    let missing_assets = copy_referenced_assets(path, &document, source_path, layout_cache_root)?;
-    atomic_write_json(path, &document)?;
+    let path = validate_path(path, "pptd")?;
+    externalize_images(&path, &mut document)?;
+    let missing_assets = copy_referenced_assets(&path, &document, source_path, layout_cache_root)?;
+    atomic_write_json(&path, &document)?;
     Ok(AssetReport { missing_assets })
 }
 
@@ -2029,9 +2029,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("sample.pptd");
         let value = json!({ "schemaVersion": 1, "title": "测试" });
-        save_project(path.to_string_lossy().into_owned(), value.clone())
-            .await
-            .unwrap();
+        save_project_at(&path.to_string_lossy(), value.clone(), None, None).unwrap();
         assert_eq!(
             open_project(path.to_string_lossy().into_owned())
                 .await
@@ -2045,9 +2043,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("large.pptd");
         let value = json!({ "schemaVersion": 2, "payload": "x".repeat(17 * 1024 * 1024) });
-        save_project(path.to_string_lossy().into_owned(), value)
-            .await
-            .unwrap();
+        save_project_at(&path.to_string_lossy(), value, None, None).unwrap();
         assert!(path.metadata().unwrap().len() > 16 * 1024 * 1024);
     }
 
@@ -2056,9 +2052,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let wrong = directory.path().join("sample.json");
         assert_eq!(
-            save_project(wrong.to_string_lossy().into_owned(), json!({}))
-                .await
-                .unwrap_err(),
+            save_project_at(&wrong.to_string_lossy(), json!({}), None, None).unwrap_err(),
             "INVALID_FILE_EXTENSION"
         );
 
@@ -2084,9 +2078,7 @@ mod tests {
                 }]
             }]
         });
-        save_project(path.to_string_lossy().into_owned(), value.clone())
-            .await
-            .unwrap();
+        save_project_at(&path.to_string_lossy(), value.clone(), None, None).unwrap();
         let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         let stored_url = stored
             .pointer("/slides/0/elements/0/source/dataUrl")
