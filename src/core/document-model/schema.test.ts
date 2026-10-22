@@ -266,4 +266,19 @@ describe("presentation document schema", () => {
     broken.theme!.textStyles!.title!.fontSizePt = 0;
     expect(() => presentationDocumentSchema.parse(broken)).toThrow();
   });
+
+  it("accepts tracking and leading on a text style and rejects an impossible range", () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.style = { ...element.style, letterSpacingPt: 0.8, lineHeight: 1.3 };
+    const parsed = parsePresentationDocument(document);
+    const parsedElement = parsed.slides[0]!.elements[0]!;
+    expect(parsedElement.type === "text" ? parsedElement.style.letterSpacingPt : undefined).toBe(0.8);
+    expect(parsedElement.type === "text" ? parsedElement.style.lineHeight : undefined).toBe(1.3);
+
+    const broken = structuredClone(document);
+    if (broken.slides[0]!.elements[0]!.type === "text") broken.slides[0]!.elements[0]!.style.letterSpacingPt = 40;
+    expect(() => presentationDocumentSchema.parse(broken)).toThrow();
+  });
 });

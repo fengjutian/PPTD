@@ -19,9 +19,10 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
         color: element.style.color,
         fontWeight: element.style.bold ? 700 : 400,
         textAlign: element.style.align,
-        letterSpacing: element.style.letterSpacingPt === undefined
-          ? undefined
-          : (element.style.letterSpacingPt * scale * EMU_PER_INCH) / 72,
+        letterSpacing:
+          element.style.letterSpacingPt === undefined
+            ? undefined
+            : (element.style.letterSpacingPt * scale * EMU_PER_INCH) / 72,
         lineHeight: element.style.lineHeight,
       }}
     >

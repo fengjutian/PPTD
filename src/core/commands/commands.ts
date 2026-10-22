@@ -2631,7 +2631,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (element.contentRef !== "title" && bodyFontFamily) element.style.fontFamily = bodyFontFamily;
         // The type token may also carry tracking and leading. They are design
         // state, so they live on the element like its size and colour.
-        const token = element.contentRef === "title" ? titleToken : element.contentRef === "body" ? bodyToken : undefined;
+        const token =
+          element.contentRef === "title" ? titleToken : element.contentRef === "body" ? bodyToken : undefined;
         if (token?.letterSpacingPt !== undefined) element.style.letterSpacingPt = token.letterSpacingPt;
         if (token?.lineHeight !== undefined) element.style.lineHeight = token.lineHeight;
       }

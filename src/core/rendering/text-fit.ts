@@ -61,10 +61,14 @@ export function estimateTextLines(text: string, widthPt: number, fontSizePt: num
 export function textLikelyOverflows(element: TextElement): boolean {
   const widthPt = element.frame.width / 12_700;
   const heightPt = element.frame.height / 12_700;
+  // An explicit leading changes how tall the block is. Counting it here lets the
+  // refit pass catch a text style that no longer fits its frame; the default
+  // stays at the renderer's 1.2 for documents that never set one.
+  const lineHeight = element.style.lineHeight ?? 1.2;
   return (
     estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) *
       element.style.fontSizePt *
-      1.2 >
+      lineHeight >
     heightPt * 1.08
   );
 }

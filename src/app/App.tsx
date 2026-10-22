@@ -2361,8 +2361,8 @@ export function App() {
                   </button>
                   <button
                     className="primary-action"
-                    title={aiDraftBlockReason}
-                    disabled={Boolean(aiDraftBlockReason)}
+                    title={aiRegenerating ? "正在重新生成整份草稿，完成后再确认内容" : aiDraftBlockReason}
+                    disabled={Boolean(aiDraftBlockReason) || aiRegenerating}
                     onClick={continueToTheme}
                   >
                     确认内容，选择 PPT 模板

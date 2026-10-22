@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { estimateTextLines } from "./text-fit";
+import { createDocument, emu } from "../document-model";
+import { estimateTextLines, textLikelyOverflows } from "./text-fit";
 
 describe("text fit estimation", () => {
   it("measures a CJK glyph as a full em", () => {
@@ -17,5 +18,17 @@ describe("text fit estimation", () => {
 
   it("counts an empty paragraph as a line of its own", () => {
     expect(estimateTextLines("A\n\nB", 4 * 10, 10)).toBe(3);
+  });
+
+  it("counts an explicit line height when deciding whether a text fits", () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.text = "标题";
+    element.frame = { ...element.frame, width: emu(2_000_000), height: emu(24 * 12_700) };
+    element.style = { ...element.style, fontSizePt: 20, lineHeight: 1.2 };
+    expect(textLikelyOverflows(element)).toBe(false);
+    element.style = { ...element.style, lineHeight: 1.6 };
+    expect(textLikelyOverflows(element)).toBe(true);
   });
 });
