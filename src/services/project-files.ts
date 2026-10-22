@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { parsePresentationDocument, repairDanglingLayoutReferences, type PresentationDocument } from "../core/document-model";
-import { resolveDocumentImages } from "./image-url-service";
+import { resolveDocumentImages, getImageProjectPath } from "./image-url-service";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
@@ -64,29 +64,46 @@ export const analyzePptxTemplate = (templateId: string) => invoke<TemplateAnalys
 
 export const projectModifiedAt = (path: string) => invoke<number>("project_modified_at", { path });
 
-export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<{ path: string; modifiedAt: number | null } | null> {
+/**
+ * What a save could not write down.
+ *
+ * The document is written either way: losing one picture is not a reason to
+ * throw away the rest of the deck. But the gap has to be reported, because a
+ * project that keeps an `asset://` reference with no file behind it comes back
+ * as a blank page, and nothing else in the app would say so.
+ */
+export interface AssetReport { missingAssets: string[] }
+
+export async function saveProject(document: PresentationDocument, currentPath?: string): Promise<{ path: string; modifiedAt: number | null; report: AssetReport } | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const path = currentPath ?? await save({ filters: projectFilter, defaultPath: `${safeFileName(document.title)}.pptd` });
   if (!path) return null;
   // A document keeps its pictures as references into the asset directory of the
   // project they were saved to. Writing it to another path has to carry the
   // pictures over, otherwise the new project keeps the references and loses the
-  // files behind them.
+  // files behind them. The pictures are inlined here for the document that is
+  // written out, and the source path is passed along so the backend can carry
+  // whatever is still a reference.
   const payload = currentPath === path ? document : await resolveDocumentImages(document);
-  await invoke("save_project", { path, document: payload });
-  return { path, modifiedAt: await projectModifiedAt(path) };
+  const report = await invoke<AssetReport>("save_project", {
+    path,
+    document: payload,
+    sourcePath: currentPath ?? getImageProjectPath() ?? null,
+  });
+  return { path, modifiedAt: await projectModifiedAt(path), report };
 }
 
-let recoveryQueue: Promise<void> = Promise.resolve();
+let recoveryQueue: Promise<AssetReport | undefined> = Promise.resolve();
 
-const enqueueRecovery = (task: () => Promise<void>): Promise<void> => {
-  recoveryQueue = recoveryQueue.catch(() => undefined).then(task);
-  return recoveryQueue;
+const enqueueRecovery = <T,>(task: () => Promise<T>): Promise<T> => {
+  const result = recoveryQueue.catch(() => undefined).then(task);
+  recoveryQueue = result.then(() => undefined, () => undefined);
+  return result;
 };
 
-export function saveRecovery(document: PresentationDocument, sourcePath?: string): Promise<void> {
-  if (!isTauri()) return Promise.resolve();
-  return enqueueRecovery(() => invoke("save_recovery", { document, sourcePath: sourcePath ?? null }));
+export function saveRecovery(document: PresentationDocument, sourcePath?: string): Promise<AssetReport | undefined> {
+  if (!isTauri()) return Promise.resolve(undefined);
+  return enqueueRecovery(() => invoke<AssetReport>("save_recovery", { document, sourcePath: sourcePath ?? null }));
 }
 
 export async function loadRecovery(): Promise<StoredDocument | null> {

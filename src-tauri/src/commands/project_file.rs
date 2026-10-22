@@ -399,7 +399,7 @@ fn is_content_addressed_reference(reference: &str) -> bool {
 /// behind it is not a smaller document: it is a page that renders blank. The
 /// caller has to be able to say so, otherwise losing the template artwork is
 /// indistinguishable from the author never having used one.
-#[derive(Default, serde::Serialize)]
+#[derive(Debug, Default, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssetReport {
     /// References the document still points at, but which have no file.
@@ -2202,7 +2202,7 @@ mod tests {
         let path = directory.path().join("latest.pptd");
         let value = json!({ "schemaVersion": 2, "title": "恢复测试" });
 
-        save_recovery_at(&path, value.clone(), None).unwrap();
+        save_recovery_at(&path, value.clone(), None, None).unwrap();
 
         assert_eq!(load_recovery_at(&path).unwrap(), Some(value));
     }
@@ -2212,7 +2212,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("latest.pptd");
 
-        save_recovery_at(&path, recovery_document(), None).unwrap();
+        save_recovery_at(&path, recovery_document(), None, None).unwrap();
 
         // 落盘时图片变成资源引用，读回时必须还原成内嵌数据。
         let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
@@ -2259,9 +2259,166 @@ mod tests {
             }]
         });
 
-        save_recovery_at(&recovery, document, Some(&project)).unwrap();
+        save_recovery_at(&recovery, document, Some(&project), None).unwrap();
 
         assert!(assets_root(&recovery).unwrap().join(&reference).is_file());
+    }
+
+    /// 写一份只引用 `reference` 的文档。
+    fn referenced_document(reference: &str) -> Value {
+        json!({
+            "schemaVersion": 2,
+            "title": "带图恢复",
+            "slides": [{
+                "elements": [{
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "type": "image",
+                    "source": { "kind": "embedded", "dataUrl": format!("asset://{reference}"), "mimeType": "image/png" }
+                }]
+            }]
+        })
+    }
+
+    /// 造一份版式渲染缓存，返回它的根目录。
+    fn layout_render_cache(directory: &Path, bytes: &[u8]) -> PathBuf {
+        let cache_root = directory.join("layout-render-cache");
+        let template = cache_root.join("v1-content");
+        fs::create_dir_all(&template).unwrap();
+        fs::write(template.join("layouts.tsv"), "1\t标题页\n").unwrap();
+        fs::write(template.join("layout1.png"), bytes).unwrap();
+        cache_root
+    }
+
+    #[test]
+    fn reports_the_pictures_a_recovery_copy_could_not_carry() {
+        // 引用还在、文件不在的副本恢复出来就是一片空白。静默跳过的代价是用户
+        // 看着"保存成功"，几页模板背景无声无息地没了，所以缺口必须报出来。
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project.pptd");
+        let recovery = directory.path().join("latest.pptd");
+        let reference = format!("{}.png", "a".repeat(64));
+        fs::create_dir_all(assets_root(&project).unwrap()).unwrap();
+
+        let report = save_recovery_at(
+            &recovery,
+            referenced_document(&reference),
+            Some(&project),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(report.missing_assets, vec![reference.clone()]);
+        // 文稿本身必须保住：丢一张图不该让整份自动保存失败。
+        assert!(recovery.is_file());
+        assert!(!assets_root(&recovery).unwrap().join(&reference).exists());
+    }
+
+    #[test]
+    fn reports_missing_pictures_when_there_is_no_source_project_at_all() {
+        // 恢复出来的文档会指向恢复副本自己的资源目录，而来源路径往往就是它
+        // 自己。来源和目标相同的时候不能把自己当成来源。
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = directory.path().join("latest.pptd");
+        let reference = format!("{}.png", "b".repeat(64));
+
+        let report = save_recovery_at(&recovery, referenced_document(&reference), None, None).unwrap();
+
+        assert_eq!(report.missing_assets, vec![reference]);
+    }
+
+    #[test]
+    fn carries_a_layout_background_out_of_the_render_cache() {
+        // 版式背景是从渲染缓存里外置成资源文件的。资源目录空了之后，按内容
+        // 摘要还能在缓存里找回同一份字节，背景不该就此消失。
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = directory.path().join("latest.pptd");
+        let bytes = b"rendered layout background";
+        let cache_root = layout_render_cache(directory.path(), bytes);
+        let reference = format!("{}.png", hex_digest(bytes));
+
+        let report =
+            save_recovery_at(&recovery, referenced_document(&reference), None, Some(&cache_root))
+                .unwrap();
+
+        assert!(report.missing_assets.is_empty());
+        assert_eq!(
+            fs::read(assets_root(&recovery).unwrap().join(&reference)).unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn reads_a_layout_background_back_after_its_asset_is_gone() {
+        // 这条路径决定了用户看到什么：项目资源目录里没有这张图时，回落到版式
+        // 渲染缓存就能把模板背景画回来，而不是留一整页空白。
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project.pptd");
+        let bytes = b"rendered layout background";
+        let cache_root = layout_render_cache(directory.path(), bytes);
+        let reference = format!("{}.png", hex_digest(bytes));
+
+        let data_url = read_image_asset_at(
+            &project,
+            &format!("asset://{reference}"),
+            Some(&cache_root),
+        )
+        .unwrap();
+
+        assert_eq!(
+            data_url,
+            format!("data:image/png;base64,{}", BASE64.encode(bytes))
+        );
+        // 缓存里也没有才谈得上缺失。
+        assert_eq!(
+            read_image_asset_at(&project, &format!("asset://{reference}"), None).unwrap_err(),
+            "ASSET_NOT_FOUND"
+        );
+    }
+
+    #[test]
+    fn saving_to_another_path_carries_the_referenced_pictures() {
+        // "另存为"写出来的新项目必须自带图片。引用留着、文件没跟过去的话，
+        // 新项目一打开就是空白页。
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project.pptd");
+        let target = directory.path().join("other.pptd");
+        let reference = format!("{}.png", "c".repeat(64));
+        fs::create_dir_all(assets_root(&project).unwrap()).unwrap();
+        fs::write(assets_root(&project).unwrap().join(&reference), b"bytes").unwrap();
+
+        let report = save_project_at(
+            &target.to_string_lossy(),
+            referenced_document(&reference),
+            Some(&project),
+            None,
+        )
+        .unwrap();
+
+        assert!(report.missing_assets.is_empty());
+        assert!(assets_root(&target).unwrap().join(&reference).is_file());
+    }
+
+    #[test]
+    fn reports_a_reference_that_escapes_the_asset_directory() {
+        // 引用来自文档内容，路径必须被挡住，既不能读到资源目录外面，也不能把
+        // 文件写到外面去。
+        let directory = tempfile::tempdir().unwrap();
+        let recovery = directory.path().join("latest.pptd");
+
+        let report = save_recovery_at(
+            &recovery,
+            referenced_document("../escaped.png"),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(report.missing_assets, vec!["../escaped.png"]);
+        assert!(!directory.path().join("escaped.png").exists());
+        assert_eq!(
+            read_image_asset_at(&recovery, "asset://../escaped.png", None).unwrap_err(),
+            "ASSET_PATH_INVALID"
+        );
     }
 
     #[test]
@@ -2287,7 +2444,7 @@ mod tests {
     fn clears_the_recovery_copy_and_its_assets() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("latest.pptd");
-        save_recovery_at(&path, recovery_document(), None).unwrap();
+        save_recovery_at(&path, recovery_document(), None, None).unwrap();
         assert!(assets_root(&path).unwrap().exists());
 
         clear_recovery_at(&path).unwrap();

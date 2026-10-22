@@ -26,7 +26,7 @@ import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 import { renderRealPptxForReview } from "../features/pptx-export/render-real-pptx";
-import { resolveDocumentImages, setImageProjectPath, getImageProjectPath } from "../services/image-url-service";
+import { resolveDocumentImages, setImageProjectPath, getImageProjectPath, failedImageReferences, subscribeImageFailures } from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
 /** The narrowest and the widest the property panel may be dragged to. */
@@ -377,10 +377,14 @@ export function App() {
   useEffect(() => {
     if (!dirty || !isDesktopRuntime()) return;
     const timer = window.setTimeout(() => {
-      // The snapshot keeps the pictures of the document. They live in the asset
       // directory of the project the document belongs to, so the backend needs
       // that path to carry them into the snapshot.
-      void saveRecovery(document, getImageProjectPath()).catch((error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
+      void saveRecovery(document, getImageProjectPath()).then((report) => {
+        // 自动保存失败要让用户看见，而不是继续显示"已保存"。
+        if (report && report.missingAssets.length > 0) {
+          setTaskStatus(`自动保存完成，但 ${report.missingAssets.length} 张图片资源缺失，请检查模板`);
+        }
+      }, (error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`));
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [dirty, document]);
@@ -434,7 +438,10 @@ export function App() {
       setProjectMtime(result.modifiedAt ?? undefined);
       setSavedRevision(document.revisions.document);
       await clearRecovery();
-      setTaskStatus(isDesktopRuntime() ? "项目已保存" : "浏览器草稿已保存");
+      // 文稿存下来了，但有图片没存进去。悄悄说"已保存"等于把缺口藏起来。
+      setTaskStatus(result.report.missingAssets.length > 0
+        ? `项目已保存，但 ${result.report.missingAssets.length} 张图片资源缺失，请检查模板`
+        : isDesktopRuntime() ? "项目已保存" : "浏览器草稿已保存");
     } catch (error) { setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`); }
     finally {
       savingRef.current = false;

@@ -53,7 +53,7 @@ export function setImageProjectPath(path: string | undefined): void {
   // one is not a failure of the new one.
   if (failures.size > 0) {
     failures.clear();
-    for (const listener of [...failureListeners]) listener();
+    notifyImageFailures();
   }
   for (const listener of [...pathListeners]) listener();
 }
@@ -81,6 +81,11 @@ export function subscribeImageFailures(listener: () => void): () => void {
   return () => {
     failureListeners.delete(listener);
   };
+}
+
+/** 告诉所有订阅者失败集合变了。集合没变时不通知，避免渲染来回抖。 */
+function notifyImageFailures(): void {
+  for (const listener of [...failureListeners]) listener();
 }
 
 /**
@@ -112,6 +117,12 @@ export function peekImageUrl(reference: string): string | undefined {
  * Returns `undefined` while the reference cannot be read yet, which happens
  * when the project path is not known. The caller keeps its placeholder and
  * resolves the picture again once the path arrives.
+ *
+ * A read that fails is recorded before the error is passed on. A picture that
+ * is quietly dropped looks exactly like a page the author designed that way,
+ * and the template artwork is the one thing nobody notices is missing until the
+ * deck is exported. The error itself is still thrown: the export has to stop
+ * rather than write a picture it could not read.
  */
 export async function resolveImageUrl(source: string): Promise<string | undefined> {
   if (!isAssetReference(source)) return source;
@@ -131,9 +142,15 @@ export async function resolveImageUrl(source: string): Promise<string | undefine
     // project, so its bytes must not be kept for the new one.
     if (path === currentProjectPath) cache.set(source, dataUrl);
     inFlight.delete(source);
+    // 读回来一次就不再是缺失，之前记下的失败要让位给成功。
+    if (failures.delete(source)) notifyImageFailures();
     return dataUrl;
   }, (error: unknown) => {
     inFlight.delete(source);
+    if (!failures.has(source)) {
+      failures.add(source);
+      notifyImageFailures();
+    }
     throw error;
   });
   inFlight.set(source, request);

@@ -452,6 +452,14 @@ button { color: inherit; }
 .slide-element.shape .shape-fill { width: 100%; height: 100%; border-style: solid; }
 .slide-element.image { overflow: hidden; }
 .slide-element.image .image-fill { display: block; position: absolute; object-fit: fill; pointer-events: none; }
+/* 读不到的图片必须看得出来。一块纯白会被当成作者本来就没放图，模板版式背景就是
+   这样消失得无声无息：斜纹加虚线边框占住原来的位置，缺口一眼可见。 */
+.slide-element.image .image-missing {
+  background-color: rgba(230, 174, 98, 0.08);
+  background-image: repeating-linear-gradient(45deg, rgba(230, 174, 98, 0.22) 0 5px, transparent 5px 10px);
+  outline: 1px dashed rgba(230, 174, 98, 0.75);
+  outline-offset: -1px;
+}
 .slide-element.chart { overflow: hidden; }
 .chart-view { width: 100%; height: 100%; display: flex; pointer-events: none; }
 .chart-vertical { flex-direction: row; align-items: flex-end; justify-content: space-around; gap: 4%; padding: 2% 1% 0; }
