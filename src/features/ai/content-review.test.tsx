@@ -393,7 +393,12 @@ describe("table grid editing", () => {
   });
 });
 
-function renderReview(draft: AiDraft, activeIndex = 0, originalDraft?: AiDraft) {
+function renderReview(
+  draft: AiDraft,
+  activeIndex = 0,
+  originalDraft?: AiDraft,
+  regeneration?: { label: string; percent: number },
+) {
   return renderToStaticMarkup(
     <ContentReview
       draft={draft}
@@ -403,6 +408,8 @@ function renderReview(draft: AiDraft, activeIndex = 0, originalDraft?: AiDraft) 
       restoreUndoSlideIds={[]}
       canUndo={false}
       canRedo={false}
+      regenerating={Boolean(regeneration)}
+      regenerateProgress={regeneration}
       onActiveIndexChange={() => undefined}
       onDraftTitleChange={() => undefined}
       onSlideFieldChange={() => undefined}
