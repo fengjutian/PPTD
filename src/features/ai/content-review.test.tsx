@@ -13,6 +13,7 @@ import {
   nearestSlideIndex,
   outlineNavTarget,
   reviewIssues,
+  slideCardScrollTop,
   slideHasContent,
   slideMetrics,
   TABLE_REVIEW_MAX_COLUMNS,
@@ -297,6 +298,14 @@ describe("content review layout", () => {
     expect(markup).toContain('data-outline-index="0"');
     expect(markup).toContain('tabindex="0"');
     expect(markup).toContain('tabindex="-1"');
+  });
+
+  it("scrolls the card list itself when a page is selected", () => {
+    // The list is the only container that may move: scrolling the page would
+    // shift the whole application window and leave an empty band below.
+    expect(slideCardScrollTop({ listTop: 100, cardTop: 420, scrollTop: 0, margin: 12 })).toBe(308);
+    expect(slideCardScrollTop({ listTop: 100, cardTop: 420, scrollTop: 200, margin: 12 })).toBe(508);
+    expect(slideCardScrollTop({ listTop: 100, cardTop: 90, scrollTop: 0, margin: 12 })).toBe(0);
   });
 
   it("edits structured pages through their blocks instead of flattening them into body text", () => {

@@ -107,6 +107,26 @@ function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
   );
 }
 
+/**
+ * Puts the card of a page at the top of the card list.
+ *
+ * The list is the only container that may move. scrollIntoView scrolls every
+ * scrollable ancestor, including the page, and a scrolled page shifts the
+ * whole application window: the header disappears above the window and an
+ * empty band shows under the status bar.
+ */
+function scrollCardIntoView(list: HTMLDivElement | null, index: number): void {
+  const card = list?.querySelector<HTMLElement>(`[data-slide-index="${index}"]`);
+  if (!list || !card) return;
+  const margin = Number.parseFloat(getComputedStyle(card).scrollMarginTop) || 0;
+  const listRect = list.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  list.scrollTo({
+    top: slideCardScrollTop({ listTop: listRect.top, cardTop: cardRect.top, scrollTop: list.scrollTop, margin }),
+    behavior: "smooth",
+  });
+}
+
 function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string; items: Array<{ label: string; text: string }>; max: number; onChange: (items: Array<{ label: string; text: string }>) => void }) {
   const listRef = useRef<HTMLDivElement>(null);
   const focusRow = (index: number) => {
@@ -494,8 +514,7 @@ export function ContentReview({
     scrollLockTimer.current = window.setTimeout(() => {
       scrollLock.current = null;
     }, 450);
-    const card = listRef.current?.querySelector<HTMLElement>(`[data-slide-index="${index}"]`);
-    card?.scrollIntoView({ block: "start", behavior: "smooth" });
+    scrollCardIntoView(listRef.current, index);
     if (focus === "title") document.getElementById(`draft-slide-title-${index}`)?.focus({ preventScroll: true });  };
 
   // The outline is one tab stop with arrow-key movement, so a ten page draft
