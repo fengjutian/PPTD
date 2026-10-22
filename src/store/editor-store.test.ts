@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createDocument, inches } from "../core/document-model";
+import { createDocument, inches, presentationDocumentSchema } from "../core/document-model";
 import { useEditorStore } from "./editor-store";
 
 describe("editor history", () => {
@@ -172,5 +172,27 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
     useEditorStore.getState().redo();
     expect(useEditorStore.getState().document.title).toBe("AI 生成文稿");
+  });
+
+  it("keeps the template binding of a designed document", () => {
+    // The generated pages carry a reference to the template layout they were
+    // designed against. Dropping the layout registry would leave every
+    // reference dangling: the saved file could no longer be read back and the
+    // exporter would lose the slide master.
+    const generated = createDocument();
+    const layoutId = crypto.randomUUID();
+    generated.title = "带模板的文稿";
+    generated.theme = { name: "昆佰泰", majorFont: "思源黑体", minorFont: "思源宋体", colors: [{ name: "accent1", value: "#C04A32" }] };
+    generated.layouts = [{ id: layoutId, name: "内页（浅色）1", backgroundColor: "#FFFFFF" }];
+    generated.slides[0]!.layoutId = layoutId;
+
+    useEditorStore.getState().replaceDocument(generated, "both");
+
+    const document = useEditorStore.getState().document;
+    expect(document.layouts).toEqual(generated.layouts);
+    expect(document.theme).toEqual(generated.theme);
+    expect(document.slides[0]!.layoutId).toBe(layoutId);
+    // A document that cannot be read back is a lost document.
+    expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
   });
 });

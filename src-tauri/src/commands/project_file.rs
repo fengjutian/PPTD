@@ -651,6 +651,16 @@ pub async fn load_recovery(app: tauri::AppHandle) -> Result<Option<Value>, Strin
     .map_err(|error| format!("RECOVERY_LOAD_TASK_FAILED: {error}"))?
 }
 
+/// The file the recovery copy is written to.
+///
+/// A restored document keeps its pictures as asset references next to that
+/// file, so the front end needs the path to read them back.
+#[tauri::command]
+pub fn recovery_project_path(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = recovery_path(&app)?;
+    Ok(path.is_file().then(|| path.to_string_lossy().into_owned()))
+}
+
 /// 读取恢复副本。文件不存在时返回空，文件损坏时报告错误而不是返回半个文档。
 fn load_recovery_at(path: &Path) -> Result<Option<Value>, String> {
     if !path.is_file() {

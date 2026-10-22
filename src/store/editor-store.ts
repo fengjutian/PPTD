@@ -115,6 +115,14 @@ export const useEditorStore = create<EditorState>((set) => ({
       draft.title = document.title;
       draft.pageSize = { ...document.pageSize };
       draft.slides = structuredClone(document.slides);
+      // The template binding belongs to the document, not to a single page. A
+      // page carries a reference to a layout, so dropping the layout registry
+      // here would leave every reference dangling: the saved file could no
+      // longer be read back and the exporter would lose the slide master.
+      if (document.theme) draft.theme = structuredClone(document.theme);
+      else delete draft.theme;
+      if (document.layouts) draft.layouts = structuredClone(document.layouts);
+      else delete draft.layouts;
       refreshContentHashes(draft);
       draft.revisions = {
         document: draft.revisions.document + 1,

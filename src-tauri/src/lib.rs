@@ -46,6 +46,7 @@ pub fn run() {
             commands::project_file::read_image_asset,
             commands::project_file::save_recovery,
             commands::project_file::load_recovery,
+            commands::project_file::recovery_project_path,
             commands::project_file::clear_recovery,
             commands::project_file::write_pptx,
             commands::project_file::write_pptx_raw,

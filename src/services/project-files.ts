@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { parsePresentationDocument, type PresentationDocument } from "../core/document-model";
+import { parsePresentationDocument, repairDanglingLayoutReferences, type PresentationDocument } from "../core/document-model";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
@@ -12,12 +12,40 @@ export interface TemplateDecoration { shape: "rectangle" | "ellipse"; x: number;
 export interface TemplateLayoutSummary { index: number; name: string; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }
 export interface TemplateAnalysis { slideCount: number; slideWidthEmu: number | null; slideHeightEmu: number | null; masterCount: number; layoutCount: number; themeCount: number; themeColors: Array<{ name: string; value: string }>; majorFont: string | null; minorFont: string | null; defaultBackgroundColor: string | null; defaultDecorations: TemplateDecoration[]; slides: Array<{ index: number; title: string; textCount: number; imageCount: number; shapeCount: number; layout: string | null; backgroundColor: string | null; decorations: TemplateDecoration[]; regions: TemplateRegion[] }>; layouts: TemplateLayoutSummary[]; warnings: string[] }
 
-export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument; modifiedAt: number } | null> {
+export interface StoredDocument {
+  document: PresentationDocument;
+  /** How many page references had to be dropped to read the document. */
+  removedLayoutReferences: number;
+}
+
+/**
+ * Reads a stored document.
+ *
+ * A file written by an older build can reference a layout it does not declare.
+ * The schema rejects such a document, and losing every page over one dangling
+ * reference is worse than the reference itself, so the reference is dropped
+ * and the rest of the document is kept.
+ */
+export function readStoredDocument(raw: unknown): StoredDocument {
+  try {
+    return { document: parsePresentationDocument(raw) as PresentationDocument, removedLayoutReferences: 0 };
+  } catch (error) {
+    const repair = repairDanglingLayoutReferences(raw);
+    if (repair.removedLayoutReferences === 0) throw error;
+    return {
+      document: parsePresentationDocument(repair.document) as PresentationDocument,
+      removedLayoutReferences: repair.removedLayoutReferences,
+    };
+  }
+}
+
+export async function chooseProjectToOpen(): Promise<{ path: string; document: PresentationDocument; modifiedAt: number; removedLayoutReferences: number } | null> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const path = await open({ multiple: false, directory: false, filters: projectFilter });
   if (!path) return null;
   const raw = await invoke<unknown>("open_project", { path });
-  return { path, document: parsePresentationDocument(raw) as PresentationDocument, modifiedAt: await projectModifiedAt(path) };
+  const stored = readStoredDocument(raw);
+  return { path, document: stored.document, modifiedAt: await projectModifiedAt(path), removedLayoutReferences: stored.removedLayoutReferences };
 }
 
 export async function choosePptxTemplate(): Promise<{ path: string; name: string } | null> {
@@ -55,12 +83,19 @@ export function saveRecovery(document: PresentationDocument): Promise<void> {
   return enqueueRecovery(() => invoke("save_recovery", { document }));
 }
 
-export async function loadRecovery(): Promise<PresentationDocument | null> {
+export async function loadRecovery(): Promise<StoredDocument | null> {
   if (!isTauri()) return null;
   const raw: unknown = await invoke("load_recovery");
   if (raw === null) return null;
-  return parsePresentationDocument(raw) as PresentationDocument;
+  return readStoredDocument(raw);
 }
+
+/**
+ * The file the recovery copy is written to. A restored document keeps its
+ * pictures in the asset directory next to that file, so the front end needs
+ * the path to read them.
+ */
+export const recoveryProjectPath = () => invoke<string | null>("recovery_project_path");
 
 export async function clearRecovery(): Promise<void> {
   if (!isTauri()) return;

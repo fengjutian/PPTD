@@ -18,7 +18,7 @@ import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
 import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, mergeStreamProgress, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
-import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
+import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, recoveryProjectPath, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { defaultPresentationVisualGoal } from "../services/visual-alignment";
 import { runDesignQualityStage, summarizeQualityIssues } from "../services/design-quality-stage";
@@ -314,11 +314,19 @@ export function App() {
         void clearRecovery();
         return;
       }
-      setImageProjectPath(undefined);
-      loadDocument(recovery);
+      // The pictures of a snapshot live next to the recovery file, so the
+      // document is read against that path until the user saves it as a
+      // project of its own.
+      void recoveryProjectPath().then((path) => {
+        if (!active) return;
+        setImageProjectPath(path ?? undefined);
+      });
+      loadDocument(recovery.document);
       setProjectPath(undefined);
       setSavedRevision(-1);
-      setTaskStatus("已恢复自动保存快照，请另存项目");
+      setTaskStatus(recovery.removedLayoutReferences > 0
+        ? `已恢复自动保存快照，但 ${recovery.removedLayoutReferences} 个页面的模板引用缺失，请另存项目`
+        : "已恢复自动保存快照，请另存项目");
     }).catch((error: unknown) => setTaskStatus(`恢复检查失败：${error instanceof Error ? error.message : String(error)}`));
     return () => { active = false; };
   }, [loadDocument]);
@@ -353,7 +361,9 @@ export function App() {
       setProjectPath(result.path);
       setProjectMtime(result.modifiedAt);
       setSavedRevision(result.document.revisions.document);
-      setTaskStatus("项目已打开");
+      setTaskStatus(result.removedLayoutReferences > 0
+        ? `项目已打开，但 ${result.removedLayoutReferences} 个页面的模板引用缺失`
+        : "项目已打开");
     } catch (error) { setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`); }
   };
 
