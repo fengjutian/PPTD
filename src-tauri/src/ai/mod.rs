@@ -169,6 +169,22 @@ pub enum ImagePayload {
     Url { url: String },
 }
 
+/// 厂商对图像请求的长度与尺寸限制。
+///
+/// 这些数字来自厂商各自的接口文档，放在适配器里；命令层只按端口给出的限制校验，
+/// 免得换一个厂商就要改命令层的常量。
+#[derive(Clone, Copy)]
+pub struct ImageLimits {
+    /// 提示词字符数上限。
+    pub max_prompt_chars: usize,
+    /// 像素边长下限。
+    pub min_edge: u32,
+    /// 像素边长上限。
+    pub max_edge: u32,
+    /// 像素边长的步进。
+    pub edge_step: u32,
+}
+
 /// 图像生成端口。
 ///
 /// 与 [`ChatProvider`] 平行：同一个厂商可以只支持对话、只支持图像，或两者都支持。
@@ -185,6 +201,8 @@ pub trait ImageProvider: Send + Sync {
     fn supported_image_models(&self) -> &'static [&'static str];
     /// 未指定尺寸时的默认像素尺寸。
     fn default_image_size(&self) -> (u32, u32);
+    /// 厂商对提示词长度与像素尺寸的限制。
+    fn image_limits(&self) -> ImageLimits;
     /// 附加厂商鉴权。
     fn apply_auth(&self, request: reqwest::RequestBuilder, api_key: &str)
         -> reqwest::RequestBuilder;

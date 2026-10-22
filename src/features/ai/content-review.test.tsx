@@ -123,6 +123,28 @@ describe("content review metrics", () => {
     expect(issues[0]!.message).toBe("2 组标题重复（第 1 页、第 2 页：甲；第 3 页、第 4 页：乙）");
   });
 
+  it("warns about titles that are template column names without blocking confirmation", () => {
+    const draft = createDraft();
+    const templated: AiDraft = {
+      ...draft,
+      slides: draft.slides.map((slide, index) => ({ ...slide, title: index === 0 ? "现状" : "作者简介——范仲淹" })),
+    };
+    const issues = reviewIssues(templated);
+    const issue = issues.find((item) => item.kind === "templated-title");
+    expect(issue).toMatchObject({ blocking: false, indexes: [0] });
+    expect(issue!.message).toContain("第 1 页");
+  });
+
+  it("warns when several pages share the same title sentence pattern", () => {
+    const draft = createDraft();
+    const titles = ["增长放缓与利润承压", "获客成本上升与转化下滑", "团队扩张与交付放缓"];
+    const repeated: AiDraft = { ...draft, slides: titles.map((title) => ({ ...draft.slides[0]!, title })) };
+    const issues = reviewIssues(repeated);
+    const issue = issues.find((item) => item.kind === "repeated-title-pattern");
+    expect(issue).toMatchObject({ blocking: false, indexes: [0, 1, 2] });
+    expect(issue!.message).toContain("句式重复");
+  });
+
   it("moves the outline selection with arrow, Home and End keys", () => {
     expect(outlineNavTarget("ArrowDown", 0, 3)).toBe(1);
     expect(outlineNavTarget("ArrowUp", 2, 3)).toBe(1);

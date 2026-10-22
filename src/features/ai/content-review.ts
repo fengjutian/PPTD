@@ -1,5 +1,6 @@
 import { TABLE_MAX_COLUMNS } from "../../core/document-model/table-data";
 import { assessLayoutCapacity, type CapacityBlockFacts, type LayoutCapacityNote } from "../../core/commands/layout-capacity";
+import { describeTitleSkeleton, findRepeatedTitlePatterns, analyzeTitle } from "../../core/content/title-quality";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
 import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
 
@@ -175,7 +176,7 @@ export function missingTitleIndexes(draft: AiDraft): number[] {
   return draft.slides.flatMap((slide, index) => (slide.title.trim() ? [] : [index]));
 }
 
-export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title" | "table-too-large" | "table-ragged";
+export type ReviewIssueKind = "missing-title" | "empty-content" | "duplicate-title" | "table-too-large" | "table-ragged" | "templated-title" | "repeated-title-pattern";
 export type ReviewIssue = {
   kind: ReviewIssueKind;
   /** Pages the issue applies to, in page order. The first one is the jump target. */
@@ -237,6 +238,34 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
   const ragged = draft.slides.flatMap((slide, index) => (slide.blocks.some((block) => block.type === "table-data" && tableBlockRagged(block)) ? [index] : []));
   if (ragged.length > 0) {
     issues.push({ kind: "table-ragged", indexes: ragged, message: `还有 ${ragged.length} 页表格行比表头宽，导出会丢失多出的列`, blocking: true });
+  }
+  // 标题写成栏目名或空泛壳子时，文稿读起来像一份还没写完的大纲。
+  // 这不是错误，内容照旧成立，但值得在确认之前提醒一次。
+  const templated = draft.slides.flatMap((slide, index) => {
+    const analysis = analyzeTitle(slide.title);
+    return analysis.issues.length > 0 ? [{ index, labels: analysis.labels }] : [];
+  });
+  if (templated.length > 0) {
+    const detail = templated.map((item) => `第 ${item.index + 1} 页（${item.labels.join("、")}）`).join("；");
+    issues.push({
+      kind: "templated-title",
+      indexes: templated.map((item) => item.index),
+      message: `还有 ${templated.length} 页标题是模板或空泛说法，建议改成一句结论：${detail}`,
+      blocking: false,
+    });
+  }
+  // 多页共用同一个句法骨架时，整册读下来像同一句话换了词。
+  const repeated = findRepeatedTitlePatterns(draft.slides.map((slide) => slide.title));
+  if (repeated.length > 0) {
+    const detail = repeated
+      .map((group) => `第 ${group.indexes.map((index) => index + 1).join("、")} 页（${describeTitleSkeleton(group.skeleton)}）`)
+      .join("；");
+    issues.push({
+      kind: "repeated-title-pattern",
+      indexes: [...new Set(repeated.flatMap((group) => group.indexes))],
+      message: `有 ${repeated.length} 组标题句式重复，建议打散：${detail}`,
+      blocking: false,
+    });
   }
   return issues;
 }

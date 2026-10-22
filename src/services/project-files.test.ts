@@ -62,20 +62,38 @@ describe("保存时把图片一起带走", () => {
     setImageProjectPath("C:/source.pptd");
   });
 
-  it("另存项目时告诉后端图片来自哪个项目", async () => {
+  it("另存为新路径时告诉后端图片来自当前项目", async () => {
+    const dialog = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(dialog.save).mockResolvedValue("C:/other.pptd");
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "project_modified_at") return Promise.resolve(1);
+      if (command === "save_project" || command === "save_recovery") return Promise.resolve({ missingAssets: [] });
+      if (command === "read_image_asset") return Promise.resolve("data:image/png;base64,AA==");
+      return Promise.resolve(undefined);
+    });
     const document = createDocument();
     document.slides[0]!.elements.push(withBackground());
 
-    // 资源引用留在文档里交给后端搬，不再把所有图片塞回 base64 走一遍 IPC。
-    const result = await saveProject(document, "C:/other.pptd");
+    const result = await saveProject(document, undefined);
 
     expect(result?.report.missingAssets).toEqual([]);
+    // 路径变了以后后端拿不到来源项目就会写出一份只有引用的文件，这里必须告诉它来源。
     expect(invokeMock).toHaveBeenCalledWith("save_project", expect.objectContaining({
       path: "C:/other.pptd",
       sourcePath: "C:/source.pptd",
     }));
-    const payload = invokeMock.mock.calls.find(([command]) => command === "save_project")?.[1] as { document: typeof document };
-    expect(payload.document.slides[0]!.elements.at(-1)).toMatchObject({ source: { dataUrl: "asset://background.png" } });
+  });
+
+  it("存回同一个路径时来源就是它自己", async () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push(withBackground());
+
+    await saveProject(document, "C:/other.pptd");
+
+    expect(invokeMock).toHaveBeenCalledWith("save_project", expect.objectContaining({
+      path: "C:/other.pptd",
+      sourcePath: "C:/other.pptd",
+    }));
   });
 
   it("另存项目后把后端报回来的缺图带给调用方", async () => {

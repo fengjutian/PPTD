@@ -42,6 +42,7 @@ pub fn run() {
             commands::ai::delete_ai_api_key,
             commands::ai::ai_api_key_configured,
             commands::ai::test_ai_connection,
+            commands::image::generate_presentation_image,
             commands::project_file::save_project,
             commands::project_file::open_project,
             commands::project_file::project_modified_at,
