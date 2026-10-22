@@ -145,7 +145,10 @@ button { color: inherit; }
 .draft-save-state.saving { color: #e6ae62; background: rgb(230 174 98 / 12%); }
 .draft-validation { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid #6b4a2b; border-radius: 9px; color: #e6ae62; background: rgb(230 174 98 / 8%); }
 .draft-validation > svg { flex: none; width: 16px; height: 16px; }
-.draft-validation > div { display: grid; gap: 2px; min-width: 0; }
+.draft-validation > div { display: grid; gap: 6px; min-width: 0; }
+.draft-validation p { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; }
+.draft-validation p .link-action { margin-left: 0; font-size: 10px; }
+.draft-validation p.warning strong { color: #a99a83; font-weight: 600; }
 .draft-validation strong { color: #f0c182; font-size: 11px; }
 .draft-validation span { color: #a99a83; font-size: 10px; }
 .draft-validation .link-action { margin-left: auto; color: #e6ae62; white-space: nowrap; }
@@ -203,6 +206,7 @@ button { color: inherit; }
 .block-table th, .block-table td { padding: 5px 8px; border: 1px solid #2f3137; color: #c9ccd2; text-align: left; }
 .block-table th { color: #8f949d; background: #191a1e; font-weight: 700; }
 .block-table small { display: block; margin-top: 6px; color: #777c85; font-size: 9px; }
+.block-empty-note { margin-top: 8px; }
 :root[data-theme="light"] .block-row, :root[data-theme="green"] .block-row, :root[data-theme="blue"] .block-row { border-color: #e1e4e9; background: #f7f8fa; }
 :root[data-theme="light"] .block-row .icon-action, :root[data-theme="green"] .block-row .icon-action, :root[data-theme="blue"] .block-row .icon-action { border-color: #d4d7dc; color: #5f646d; }
 :root[data-theme="light"] .block-type, :root[data-theme="green"] .block-type, :root[data-theme="blue"] .block-type { color: #a33b24; }
@@ -629,6 +633,17 @@ button { color: inherit; }
 :root[data-theme="light"] .draft-validation { border-color: #e0b06a; color: #9a5b12; background: #fff8ed; }
 :root[data-theme="light"] .draft-validation strong { color: #8a4f0e; }
 :root[data-theme="light"] .draft-validation span { color: #75695a; }
+:root[data-theme="blue"] .draft-validation { border-color: #e0b06a; color: #9a5b12; background: #fff8ed; }
+:root[data-theme="blue"] .draft-validation strong { color: #8a4f0e; }
+:root[data-theme="blue"] .draft-validation span { color: #605e5c; }
+:root[data-theme="blue"] .draft-field-error { color: #9a5b12; }
+:root[data-theme="blue"] .draft-save-state { color: #107c41; }
+:root[data-theme="blue"] .draft-save-state.saving { color: #b26b00; }
+/* Duplicate-title warnings are advisory, so they stay quieter than blocking errors in every light theme. */
+:root[data-theme="light"] .draft-validation p.warning strong,
+:root[data-theme="amber"] .draft-validation p.warning strong,
+:root[data-theme="green"] .draft-validation p.warning strong,
+:root[data-theme="blue"] .draft-validation p.warning strong { color: #6b6153; }
 :root[data-theme="light"] .slide-plan { border-color: #d4d7dc; background: #f1f2f4; }
 :root[data-theme="light"] .slide-plan summary { color: #686e77; }
 :root[data-theme="light"] .slide-plan-body p { color: #686e77; }

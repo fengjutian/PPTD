@@ -73,7 +73,7 @@ function reviewedText(slide: Slide): string {
   for (const block of slide.content.blocks ?? []) {
     if (block.type === "paragraph") values.push(block.text);
     else if (block.type === "bullet-list") values.push(...block.items);
-    else if (block.type === "quote") values.push(block.text);
+    else if (block.type === "quote") values.push(block.text, block.attribution ?? "");
     else if (block.type === "metric") values.push(block.label, block.value);
     else if (block.type === "timeline" || block.type === "process") values.push(...block.items.flatMap((item) => [item.label, item.text]));
     else if (block.type === "comparison") values.push(block.leftLabel, block.rightLabel, ...block.leftItems, ...block.rightItems);

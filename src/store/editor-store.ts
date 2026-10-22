@@ -6,10 +6,34 @@ import { createDocument, refreshContentHashes, type ElementId, type Presentation
 enablePatches();
 
 const HISTORY_LIMIT = 100;
+// 撤销栈的字节预算。图片 add/delete 的 patch 携带 base64，一个 10 MB 图片的
+// patch 就超过整个文本编辑历史；限制总量，避免大量图片操作让撤销栈无限膨胀。
+// 超过预算时只丢弃最旧的条目，正常操作的撤销语义不变。
+const HISTORY_BYTE_BUDGET = 64 * 1024 * 1024;
 
 interface HistoryEntry {
   forward: Patch[];
   inverse: Patch[];
+}
+
+/** 估算 patch 里大字符串的总长度。图片 base64 是唯一会达到 MB 级的部分。 */
+function estimateValueBytes(value: unknown): number {
+  if (typeof value === "string") return value.length;
+  if (Array.isArray(value)) return value.reduce((sum, item) => sum + estimateValueBytes(item), 0);
+  if (value && typeof value === "object") {
+    return Object.values(value).reduce((sum, item) => sum + estimateValueBytes(item), 0);
+  }
+  return 0;
+}
+
+function estimatePatchBytes(patch: Patch): number {
+  if (patch.op !== "add" || patch.value === undefined) return 0;
+  return estimateValueBytes(patch.value);
+}
+
+function estimateEntryBytes(entry: HistoryEntry): number {
+  return entry.forward.reduce((sum, patch) => sum + estimatePatchBytes(patch), 0)
+    + entry.inverse.reduce((sum, patch) => sum + estimatePatchBytes(patch), 0);
 }
 
 interface EditorState {
@@ -29,7 +53,15 @@ interface EditorState {
 }
 
 const initial = createDocument();
-const pushHistory = (stack: HistoryEntry[], entry: HistoryEntry): HistoryEntry[] => [...stack, entry].slice(-HISTORY_LIMIT);
+const pushHistory = (stack: HistoryEntry[], entry: HistoryEntry): HistoryEntry[] => {
+  let next = [...stack, entry].slice(-HISTORY_LIMIT);
+  let total = next.reduce((sum, item) => sum + estimateEntryBytes(item), 0);
+  while (total > HISTORY_BYTE_BUDGET && next.length > 1) {
+    total -= estimateEntryBytes(next[0]!);
+    next = next.slice(1);
+  }
+  return next;
+};
 
 export const useEditorStore = create<EditorState>((set) => ({
   document: initial,

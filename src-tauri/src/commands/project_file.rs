@@ -340,6 +340,17 @@ fn hex_digest(bytes: &[u8]) -> String {
     hex
 }
 
+/// A content-addressed reference is `{64 lowercase hex}.{png|jpg|webp}`. Newer
+/// saves use this shape; the legacy `revision-N/…` shape is handled elsewhere.
+fn is_content_addressed_reference(reference: &str) -> bool {
+    let Some((name, extension)) = reference.rsplit_once('.') else {
+        return false;
+    };
+    matches!(extension, "png" | "jpg" | "webp")
+        && name.len() == 64
+        && name.chars().all(|character| character.is_ascii_hexdigit())
+}
+
 fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
     let directory = assets_root(path)?;
     fs::create_dir_all(&directory)
@@ -468,6 +479,13 @@ fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
             else {
                 continue;
             };
+            // A content-addressed reference stays as-is: the front end loads it
+            // on demand instead of turning every picture back into base64 at
+            // open time. The legacy `revision-N/…` shape still falls through to
+            // the read-and-inline path below, so old projects keep working.
+            if is_content_addressed_reference(reference) {
+                continue;
+            }
             let relative = Path::new(reference);
             if relative.is_absolute()
                 || relative
@@ -502,6 +520,44 @@ fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Reads a single stored image back as an inline data URL.
+///
+/// Opening a project no longer inlines every picture (see `hydrate_images`);
+/// the front end calls this lazily for the pictures it actually renders, and
+/// caches the result.
+#[tauri::command]
+pub async fn read_image_asset(project_path: String, reference: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+        let path = validate_path(&project_path, "pptd")?;
+        let root = assets_root(&path)?;
+        let relative = reference
+            .strip_prefix("asset://")
+            .ok_or("ASSET_REF_INVALID")?;
+        let relative_path = Path::new(relative);
+        if relative_path.is_absolute()
+            || relative_path
+                .components()
+                .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        {
+            return Err("ASSET_PATH_INVALID".into());
+        }
+        let asset_path = root.join(relative_path);
+        let bytes = fs::read(&asset_path).map_err(|_| "ASSET_NOT_FOUND".to_string())?;
+        if bytes.len() > MAX_IMAGE_BYTES {
+            return Err("IMAGE_TOO_LARGE".into());
+        }
+        let mime = match relative_path.extension().and_then(|value| value.to_str()) {
+            Some("png") => "image/png",
+            Some("jpg") | Some("jpeg") => "image/jpeg",
+            Some("webp") => "image/webp",
+            _ => return Err("ASSET_MIME_INVALID".into()),
+        };
+        Ok(format!("data:{mime};base64,{}", BASE64.encode(bytes)))
+    })
+    .await
+    .map_err(|error| format!("IMAGE_READ_TASK_FAILED: {error}"))?
+}
+
 #[tauri::command]
 pub async fn save_project(path: String, document: Value) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -521,8 +577,8 @@ pub async fn open_project(path: String) -> Result<Value, String> {
         let path = validate_path(&path, "pptd")?;
         ensure_project_size(&path)?;
         let file = File::open(&path).map_err(|error| format!("PROJECT_OPEN_FAILED: {error}"))?;
-        let mut document: Value =
-            serde_json::from_reader(file).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
+        let mut document: Value = serde_json::from_reader(file)
+            .map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
         hydrate_images(&path, &mut document)?;
         Ok(document)
     })
@@ -691,41 +747,42 @@ pub async fn import_pptx_template(
     source_path: String,
 ) -> Result<TemplateRecord, String> {
     tauri::async_runtime::spawn_blocking(move || {
-    let source = validate_path(&source_path, "pptx")?;
-    let metadata =
-        fs::metadata(&source).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
-    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_TEMPLATE_BYTES {
-        return Err("TEMPLATE_SIZE_INVALID".into());
-    }
-    let mut signature = [0_u8; 2];
-    File::open(&source)
-        .and_then(|mut file| file.read_exact(&mut signature))
-        .map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
-    if signature != *b"PK" {
-        return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
-    }
-    validate_pptx_archive(&source)?;
-    let imported_at = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| "SYSTEM_TIME_INVALID")?
-        .as_millis() as u64;
-    let name = safe_template_name(
-        source
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("template.pptx"),
-    );
-    let id = format!("{imported_at}-{name}");
-    let root = template_root(&app)?;
-    fs::create_dir_all(&root)
-        .map_err(|error| format!("TEMPLATE_DIRECTORY_CREATE_FAILED: {error}"))?;
-    fs::copy(&source, root.join(&id)).map_err(|error| format!("TEMPLATE_COPY_FAILED: {error}"))?;
-    Ok(TemplateRecord {
-        id,
-        name,
-        size: metadata.len(),
-        imported_at,
-    })
+        let source = validate_path(&source_path, "pptx")?;
+        let metadata =
+            fs::metadata(&source).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+        if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_TEMPLATE_BYTES {
+            return Err("TEMPLATE_SIZE_INVALID".into());
+        }
+        let mut signature = [0_u8; 2];
+        File::open(&source)
+            .and_then(|mut file| file.read_exact(&mut signature))
+            .map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+        if signature != *b"PK" {
+            return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
+        }
+        validate_pptx_archive(&source)?;
+        let imported_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "SYSTEM_TIME_INVALID")?
+            .as_millis() as u64;
+        let name = safe_template_name(
+            source
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("template.pptx"),
+        );
+        let id = format!("{imported_at}-{name}");
+        let root = template_root(&app)?;
+        fs::create_dir_all(&root)
+            .map_err(|error| format!("TEMPLATE_DIRECTORY_CREATE_FAILED: {error}"))?;
+        fs::copy(&source, root.join(&id))
+            .map_err(|error| format!("TEMPLATE_COPY_FAILED: {error}"))?;
+        Ok(TemplateRecord {
+            id,
+            name,
+            size: metadata.len(),
+            imported_at,
+        })
     })
     .await
     .map_err(|error| format!("TEMPLATE_IMPORT_TASK_FAILED: {error}"))?
@@ -773,48 +830,48 @@ pub async fn get_pptx_template_preview(
     template_id: String,
 ) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-    if template_id.is_empty()
-        || template_id.contains('/')
-        || template_id.contains('\\')
-        || template_id == "."
-        || template_id == ".."
-    {
-        return Err("TEMPLATE_ID_INVALID".into());
-    }
-    let root = template_root(&app)?;
-    let path = root.join(&template_id);
-    if !path.starts_with(&root) || !path.is_file() {
-        return Err("TEMPLATE_NOT_FOUND".into());
-    }
-    let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
-    let mut archive =
-        ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
-    validate_archive_limits(&mut archive)?;
-    for (entry_name, mime_type) in [
-        ("docProps/thumbnail.jpeg", "image/jpeg"),
-        ("docProps/thumbnail.jpg", "image/jpeg"),
-        ("docProps/thumbnail.png", "image/png"),
-    ] {
-        let Ok(entry) = archive.by_name(entry_name) else {
-            continue;
-        };
-        if entry.size() == 0 || entry.size() > MAX_TEMPLATE_PREVIEW_BYTES {
-            return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
+        if template_id.is_empty()
+            || template_id.contains('/')
+            || template_id.contains('\\')
+            || template_id == "."
+            || template_id == ".."
+        {
+            return Err("TEMPLATE_ID_INVALID".into());
         }
-        let mut bytes = Vec::with_capacity(entry.size() as usize);
-        entry
-            .take(MAX_TEMPLATE_PREVIEW_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|error| format!("TEMPLATE_PREVIEW_READ_FAILED: {error}"))?;
-        if bytes.len() as u64 > MAX_TEMPLATE_PREVIEW_BYTES {
-            return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
+        let root = template_root(&app)?;
+        let path = root.join(&template_id);
+        if !path.starts_with(&root) || !path.is_file() {
+            return Err("TEMPLATE_NOT_FOUND".into());
         }
-        return Ok(Some(format!(
-            "data:{mime_type};base64,{}",
-            BASE64.encode(bytes)
-        )));
-    }
-    Ok(None)
+        let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+        let mut archive =
+            ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+        validate_archive_limits(&mut archive)?;
+        for (entry_name, mime_type) in [
+            ("docProps/thumbnail.jpeg", "image/jpeg"),
+            ("docProps/thumbnail.jpg", "image/jpeg"),
+            ("docProps/thumbnail.png", "image/png"),
+        ] {
+            let Ok(entry) = archive.by_name(entry_name) else {
+                continue;
+            };
+            if entry.size() == 0 || entry.size() > MAX_TEMPLATE_PREVIEW_BYTES {
+                return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
+            }
+            let mut bytes = Vec::with_capacity(entry.size() as usize);
+            entry
+                .take(MAX_TEMPLATE_PREVIEW_BYTES + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|error| format!("TEMPLATE_PREVIEW_READ_FAILED: {error}"))?;
+            if bytes.len() as u64 > MAX_TEMPLATE_PREVIEW_BYTES {
+                return Err("TEMPLATE_PREVIEW_SIZE_INVALID".into());
+            }
+            return Ok(Some(format!(
+                "data:{mime_type};base64,{}",
+                BASE64.encode(bytes)
+            )));
+        }
+        Ok(None)
     })
     .await
     .map_err(|error| format!("TEMPLATE_PREVIEW_TASK_FAILED: {error}"))?
@@ -1152,277 +1209,282 @@ pub async fn analyze_pptx_template(
     template_id: String,
 ) -> Result<TemplateAnalysis, String> {
     tauri::async_runtime::spawn_blocking(move || {
-    if template_id.is_empty()
-        || template_id.contains('/')
-        || template_id.contains('\\')
-        || template_id == "."
-        || template_id == ".."
-    {
-        return Err("TEMPLATE_ID_INVALID".into());
-    }
-    let root = template_root(&app)?;
-    let path = root.join(&template_id);
-    if !path.starts_with(&root) || !path.is_file() {
-        return Err("TEMPLATE_NOT_FOUND".into());
-    }
-    let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
-    let mut archive =
-        ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
-    validate_archive_limits(&mut archive)?;
-    let mut slide_count = 0;
-    let mut master_count = 0;
-    let mut layout_count = 0;
-    let mut theme_count = 0;
-    for index in 0..archive.len() {
-        let name = archive
-            .by_index(index)
-            .map_err(|error| format!("PPTX_ARCHIVE_READ_FAILED: {error}"))?
-            .name()
-            .to_owned();
-        if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
-            slide_count += 1;
-        } else if name.starts_with("ppt/slideMasters/slideMaster") && name.ends_with(".xml") {
-            master_count += 1;
-        } else if name.starts_with("ppt/slideLayouts/slideLayout") && name.ends_with(".xml") {
-            layout_count += 1;
-        } else if name.starts_with("ppt/theme/theme") && name.ends_with(".xml") {
-            theme_count += 1;
-        }
-    }
-
-    let mut slide_width_emu = None;
-    let mut slide_height_emu = None;
-    if let Some(xml) = read_zip_text(&mut archive, "ppt/presentation.xml")? {
-        let document = roxmltree::Document::parse(&xml)
-            .map_err(|error| format!("PPTX_PRESENTATION_XML_INVALID: {error}"))?;
-        if let Some(size) = document
-            .descendants()
-            .find(|node| node.tag_name().name() == "sldSz")
+        if template_id.is_empty()
+            || template_id.contains('/')
+            || template_id.contains('\\')
+            || template_id == "."
+            || template_id == ".."
         {
-            slide_width_emu = size.attribute("cx").and_then(|value| value.parse().ok());
-            slide_height_emu = size.attribute("cy").and_then(|value| value.parse().ok());
+            return Err("TEMPLATE_ID_INVALID".into());
         }
-    }
+        let root = template_root(&app)?;
+        let path = root.join(&template_id);
+        if !path.starts_with(&root) || !path.is_file() {
+            return Err("TEMPLATE_NOT_FOUND".into());
+        }
+        let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
+        let mut archive =
+            ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
+        validate_archive_limits(&mut archive)?;
+        let mut slide_count = 0;
+        let mut master_count = 0;
+        let mut layout_count = 0;
+        let mut theme_count = 0;
+        for index in 0..archive.len() {
+            let name = archive
+                .by_index(index)
+                .map_err(|error| format!("PPTX_ARCHIVE_READ_FAILED: {error}"))?
+                .name()
+                .to_owned();
+            if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
+                slide_count += 1;
+            } else if name.starts_with("ppt/slideMasters/slideMaster") && name.ends_with(".xml") {
+                master_count += 1;
+            } else if name.starts_with("ppt/slideLayouts/slideLayout") && name.ends_with(".xml") {
+                layout_count += 1;
+            } else if name.starts_with("ppt/theme/theme") && name.ends_with(".xml") {
+                theme_count += 1;
+            }
+        }
 
-    let mut theme_colors = Vec::new();
-    let mut major_font = None;
-    let mut minor_font = None;
-    let mut theme_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    if let Some(xml) = read_zip_text(&mut archive, "ppt/theme/theme1.xml")? {
-        let document = roxmltree::Document::parse(&xml)
-            .map_err(|error| format!("PPTX_THEME_XML_INVALID: {error}"))?;
-        if let Some(scheme) = document
-            .descendants()
-            .find(|node| node.tag_name().name() == "clrScheme")
-        {
-            for color in scheme.children().filter(|node| node.is_element()) {
-                if let Some(value_node) = color.children().find(|node| node.is_element()) {
-                    if let Some(value) = value_node
-                        .attribute("val")
-                        .or_else(|| value_node.attribute("lastClr"))
-                    {
-                        let resolved = format!("#{value}");
-                        theme_map.insert(
-                            color.tag_name().name().to_ascii_lowercase(),
-                            resolved.clone(),
-                        );
-                        theme_colors.push(TemplateThemeColor {
-                            name: color.tag_name().name().to_owned(),
-                            value: resolved,
-                        });
+        let mut slide_width_emu = None;
+        let mut slide_height_emu = None;
+        if let Some(xml) = read_zip_text(&mut archive, "ppt/presentation.xml")? {
+            let document = roxmltree::Document::parse(&xml)
+                .map_err(|error| format!("PPTX_PRESENTATION_XML_INVALID: {error}"))?;
+            if let Some(size) = document
+                .descendants()
+                .find(|node| node.tag_name().name() == "sldSz")
+            {
+                slide_width_emu = size.attribute("cx").and_then(|value| value.parse().ok());
+                slide_height_emu = size.attribute("cy").and_then(|value| value.parse().ok());
+            }
+        }
+
+        let mut theme_colors = Vec::new();
+        let mut major_font = None;
+        let mut minor_font = None;
+        let mut theme_map: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        if let Some(xml) = read_zip_text(&mut archive, "ppt/theme/theme1.xml")? {
+            let document = roxmltree::Document::parse(&xml)
+                .map_err(|error| format!("PPTX_THEME_XML_INVALID: {error}"))?;
+            if let Some(scheme) = document
+                .descendants()
+                .find(|node| node.tag_name().name() == "clrScheme")
+            {
+                for color in scheme.children().filter(|node| node.is_element()) {
+                    if let Some(value_node) = color.children().find(|node| node.is_element()) {
+                        if let Some(value) = value_node
+                            .attribute("val")
+                            .or_else(|| value_node.attribute("lastClr"))
+                        {
+                            let resolved = format!("#{value}");
+                            theme_map.insert(
+                                color.tag_name().name().to_ascii_lowercase(),
+                                resolved.clone(),
+                            );
+                            theme_colors.push(TemplateThemeColor {
+                                name: color.tag_name().name().to_owned(),
+                                value: resolved,
+                            });
+                        }
                     }
                 }
             }
-        }
-        let theme_font = |family: &str| {
-            document
-                .descendants()
-                .find(|node| node.tag_name().name() == family)
-                .and_then(|node| {
-                    node.descendants()
-                        .find(|child| {
-                            child.tag_name().name() == "ea"
-                                && child
-                                    .attribute("typeface")
-                                    .is_some_and(|value| !value.is_empty())
-                        })
-                        .or_else(|| {
-                            node.descendants().find(|child| {
-                                child.tag_name().name() == "font"
-                                    && matches!(child.attribute("script"), Some("Hans" | "Hant"))
+            let theme_font = |family: &str| {
+                document
+                    .descendants()
+                    .find(|node| node.tag_name().name() == family)
+                    .and_then(|node| {
+                        node.descendants()
+                            .find(|child| {
+                                child.tag_name().name() == "ea"
                                     && child
                                         .attribute("typeface")
                                         .is_some_and(|value| !value.is_empty())
                             })
-                        })
-                        .or_else(|| {
-                            node.descendants()
-                                .find(|child| child.tag_name().name() == "latin")
-                        })
-                })
-                .and_then(|node| node.attribute("typeface"))
-                .filter(|value| !value.is_empty())
-                .map(str::to_owned)
-        };
-        major_font = theme_font("majorFont");
-        minor_font = theme_font("minorFont");
-    }
-
-    let mut slide_entries = Vec::new();
-    for index in 0..archive.len() {
-        let name = archive
-            .by_index(index)
-            .map_err(|error| format!("PPTX_ARCHIVE_READ_FAILED: {error}"))?
-            .name()
-            .to_owned();
-        if let Some(number) = name
-            .strip_prefix("ppt/slides/slide")
-            .and_then(|value| value.strip_suffix(".xml"))
-            .and_then(|value| value.parse::<usize>().ok())
-        {
-            slide_entries.push((number, name));
+                            .or_else(|| {
+                                node.descendants().find(|child| {
+                                    child.tag_name().name() == "font"
+                                        && matches!(
+                                            child.attribute("script"),
+                                            Some("Hans" | "Hant")
+                                        )
+                                        && child
+                                            .attribute("typeface")
+                                            .is_some_and(|value| !value.is_empty())
+                                })
+                            })
+                            .or_else(|| {
+                                node.descendants()
+                                    .find(|child| child.tag_name().name() == "latin")
+                            })
+                    })
+                    .and_then(|node| node.attribute("typeface"))
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned)
+            };
+            major_font = theme_font("majorFont");
+            minor_font = theme_font("minorFont");
         }
-    }
-    slide_entries.sort_by_key(|(number, _)| *number);
-    let mut slides = Vec::with_capacity(slide_entries.len());
-    for (number, entry_name) in slide_entries {
-        let Some(xml) = read_zip_text(&mut archive, &entry_name)? else {
-            continue;
-        };
-        let document = roxmltree::Document::parse(&xml)
-            .map_err(|error| format!("PPTX_SLIDE_XML_INVALID: {error}"))?;
-        let text_nodes: Vec<&str> = document
-            .descendants()
-            .filter(|node| node.tag_name().name() == "t")
-            .filter_map(|node| node.text())
-            .filter(|text| !text.trim().is_empty())
-            .collect();
-        let title = document
-            .descendants()
-            .filter(|node| node.tag_name().name() == "sp")
-            .find_map(|shape| {
-                let is_title = shape.descendants().any(|node| {
-                    node.tag_name().name() == "ph"
-                        && matches!(node.attribute("type"), Some("title" | "ctrTitle"))
-                });
-                is_title.then(|| {
-                    shape
-                        .descendants()
-                        .filter(|node| node.tag_name().name() == "t")
-                        .filter_map(|node| node.text())
-                        .collect::<Vec<_>>()
-                        .join("")
-                })
-            })
-            .filter(|value| !value.trim().is_empty())
-            .or_else(|| text_nodes.first().map(|value| (*value).to_owned()))
-            .unwrap_or_else(|| format!("第 {number} 页"));
-        let relationship_name = format!("ppt/slides/_rels/slide{number}.xml.rels");
-        let layout = read_zip_text(&mut archive, &relationship_name)?.and_then(|relationships| {
-            roxmltree::Document::parse(&relationships)
-                .ok()
-                .and_then(|doc| {
-                    doc.descendants()
-                        .find(|node| {
-                            node.tag_name().name() == "Relationship"
-                                && node
-                                    .attribute("Type")
-                                    .is_some_and(|value| value.ends_with("/slideLayout"))
-                        })
-                        .and_then(|node| node.attribute("Target"))
-                        .and_then(|target| target.rsplit('/').next())
-                        .map(str::to_owned)
-                })
-        });
-        let regions = extract_template_regions(&document, &theme_map);
-        let background_color = extract_background_color(&document);
-        let decorations = extract_template_decorations(&document);
-        slides.push(TemplateSlideSummary {
-            index: number,
-            title,
-            text_count: text_nodes.len(),
-            image_count: document
+
+        let mut slide_entries = Vec::new();
+        for index in 0..archive.len() {
+            let name = archive
+                .by_index(index)
+                .map_err(|error| format!("PPTX_ARCHIVE_READ_FAILED: {error}"))?
+                .name()
+                .to_owned();
+            if let Some(number) = name
+                .strip_prefix("ppt/slides/slide")
+                .and_then(|value| value.strip_suffix(".xml"))
+                .and_then(|value| value.parse::<usize>().ok())
+            {
+                slide_entries.push((number, name));
+            }
+        }
+        slide_entries.sort_by_key(|(number, _)| *number);
+        let mut slides = Vec::with_capacity(slide_entries.len());
+        for (number, entry_name) in slide_entries {
+            let Some(xml) = read_zip_text(&mut archive, &entry_name)? else {
+                continue;
+            };
+            let document = roxmltree::Document::parse(&xml)
+                .map_err(|error| format!("PPTX_SLIDE_XML_INVALID: {error}"))?;
+            let text_nodes: Vec<&str> = document
                 .descendants()
-                .filter(|node| node.tag_name().name() == "pic")
-                .count(),
-            shape_count: document
+                .filter(|node| node.tag_name().name() == "t")
+                .filter_map(|node| node.text())
+                .filter(|text| !text.trim().is_empty())
+                .collect();
+            let title = document
                 .descendants()
                 .filter(|node| node.tag_name().name() == "sp")
-                .count(),
-            layout,
-            background_color,
-            decorations,
-            regions,
-        });
-    }
+                .find_map(|shape| {
+                    let is_title = shape.descendants().any(|node| {
+                        node.tag_name().name() == "ph"
+                            && matches!(node.attribute("type"), Some("title" | "ctrTitle"))
+                    });
+                    is_title.then(|| {
+                        shape
+                            .descendants()
+                            .filter(|node| node.tag_name().name() == "t")
+                            .filter_map(|node| node.text())
+                            .collect::<Vec<_>>()
+                            .join("")
+                    })
+                })
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| text_nodes.first().map(|value| (*value).to_owned()))
+                .unwrap_or_else(|| format!("第 {number} 页"));
+            let relationship_name = format!("ppt/slides/_rels/slide{number}.xml.rels");
+            let layout =
+                read_zip_text(&mut archive, &relationship_name)?.and_then(|relationships| {
+                    roxmltree::Document::parse(&relationships)
+                        .ok()
+                        .and_then(|doc| {
+                            doc.descendants()
+                                .find(|node| {
+                                    node.tag_name().name() == "Relationship"
+                                        && node
+                                            .attribute("Type")
+                                            .is_some_and(|value| value.ends_with("/slideLayout"))
+                                })
+                                .and_then(|node| node.attribute("Target"))
+                                .and_then(|target| target.rsplit('/').next())
+                                .map(str::to_owned)
+                        })
+                });
+            let regions = extract_template_regions(&document, &theme_map);
+            let background_color = extract_background_color(&document);
+            let decorations = extract_template_decorations(&document);
+            slides.push(TemplateSlideSummary {
+                index: number,
+                title,
+                text_count: text_nodes.len(),
+                image_count: document
+                    .descendants()
+                    .filter(|node| node.tag_name().name() == "pic")
+                    .count(),
+                shape_count: document
+                    .descendants()
+                    .filter(|node| node.tag_name().name() == "sp")
+                    .count(),
+                layout,
+                background_color,
+                decorations,
+                regions,
+            });
+        }
 
-    let mut layouts = Vec::new();
-    for number in 1..=layout_count {
-        let entry_name = format!("ppt/slideLayouts/slideLayout{number}.xml");
-        let Some(xml) = read_zip_text(&mut archive, &entry_name)? else {
-            continue;
-        };
-        let document = roxmltree::Document::parse(&xml)
-            .map_err(|error| format!("PPTX_LAYOUT_XML_INVALID: {error}"))?;
-        let name = document
-            .descendants()
-            .find(|node| node.tag_name().name() == "cSld")
-            .and_then(|node| node.attribute("name"))
-            .unwrap_or("未命名版式")
-            .to_owned();
-        // Keep only placeholders explicitly declared by this layout. Copying all
-        // master placeholders into every layout makes cover layouts look like
-        // content layouts and causes the cover artwork to be reused everywhere.
-        let regions = extract_template_regions(&document, &theme_map);
-        let background_color = extract_background_color(&document);
-        let decorations = extract_template_decorations(&document);
-        layouts.push(TemplateLayoutSummary {
-            index: number,
-            name,
-            background_color,
-            decorations,
-            regions,
-        });
-    }
+        let mut layouts = Vec::new();
+        for number in 1..=layout_count {
+            let entry_name = format!("ppt/slideLayouts/slideLayout{number}.xml");
+            let Some(xml) = read_zip_text(&mut archive, &entry_name)? else {
+                continue;
+            };
+            let document = roxmltree::Document::parse(&xml)
+                .map_err(|error| format!("PPTX_LAYOUT_XML_INVALID: {error}"))?;
+            let name = document
+                .descendants()
+                .find(|node| node.tag_name().name() == "cSld")
+                .and_then(|node| node.attribute("name"))
+                .unwrap_or("未命名版式")
+                .to_owned();
+            // Keep only placeholders explicitly declared by this layout. Copying all
+            // master placeholders into every layout makes cover layouts look like
+            // content layouts and causes the cover artwork to be reused everywhere.
+            let regions = extract_template_regions(&document, &theme_map);
+            let background_color = extract_background_color(&document);
+            let decorations = extract_template_decorations(&document);
+            layouts.push(TemplateLayoutSummary {
+                index: number,
+                name,
+                background_color,
+                decorations,
+                regions,
+            });
+        }
 
-    let mut warnings = Vec::new();
-    if slide_count == 0 {
-        warnings.push("未发现可解析的幻灯片页面".into());
-    }
-    if theme_count == 0 {
-        warnings.push("未发现 OOXML 主题定义".into());
-    }
-    warnings.push("动画、切换、SmartArt、视频和宏尚未解析".into());
-    let master_xml = read_zip_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?;
-    let default_background_color = master_xml.as_ref().and_then(|xml| {
-        roxmltree::Document::parse(xml)
-            .ok()
-            .and_then(|document| extract_background_color(&document))
-    });
-    let default_decorations = master_xml
-        .as_ref()
-        .and_then(|xml| {
+        let mut warnings = Vec::new();
+        if slide_count == 0 {
+            warnings.push("未发现可解析的幻灯片页面".into());
+        }
+        if theme_count == 0 {
+            warnings.push("未发现 OOXML 主题定义".into());
+        }
+        warnings.push("动画、切换、SmartArt、视频和宏尚未解析".into());
+        let master_xml = read_zip_text(&mut archive, "ppt/slideMasters/slideMaster1.xml")?;
+        let default_background_color = master_xml.as_ref().and_then(|xml| {
             roxmltree::Document::parse(xml)
                 .ok()
-                .map(|document| extract_template_decorations(&document))
+                .and_then(|document| extract_background_color(&document))
+        });
+        let default_decorations = master_xml
+            .as_ref()
+            .and_then(|xml| {
+                roxmltree::Document::parse(xml)
+                    .ok()
+                    .map(|document| extract_template_decorations(&document))
+            })
+            .unwrap_or_default();
+        Ok(TemplateAnalysis {
+            slide_count,
+            slide_width_emu,
+            slide_height_emu,
+            master_count,
+            layout_count,
+            theme_count,
+            theme_colors,
+            major_font,
+            minor_font,
+            default_background_color,
+            default_decorations,
+            slides,
+            layouts,
+            warnings,
         })
-        .unwrap_or_default();
-    Ok(TemplateAnalysis {
-        slide_count,
-        slide_width_emu,
-        slide_height_emu,
-        master_count,
-        layout_count,
-        theme_count,
-        theme_colors,
-        major_font,
-        minor_font,
-        default_background_color,
-        default_decorations,
-        slides,
-        layouts,
-        warnings,
-    })
     })
     .await
     .map_err(|error| format!("TEMPLATE_ANALYSIS_TASK_FAILED: {error}"))?
@@ -1442,7 +1504,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            open_project(path.to_string_lossy().into_owned()).await.unwrap(),
+            open_project(path.to_string_lossy().into_owned())
+                .await
+                .unwrap(),
             value
         );
     }
@@ -1512,9 +1576,15 @@ mod tests {
             .join("images.pptd.assets")
             .join(file_name)
             .is_file());
+        // 打开时不再把所有图片还原成 base64：内容寻址引用保持原样，前端按需读取。
+        let opened = open_project(path.to_string_lossy().into_owned())
+            .await
+            .unwrap();
         assert_eq!(
-            open_project(path.to_string_lossy().into_owned()).await.unwrap(),
-            value
+            opened
+                .pointer("/slides/0/elements/0/source/dataUrl")
+                .and_then(Value::as_str),
+            Some(stored_url)
         );
     }
 
@@ -1630,6 +1700,7 @@ mod tests {
             .and_then(Value::as_str)
             .unwrap();
         assert!(stored_url.starts_with("asset://") && stored_url.ends_with(".png"));
+        // 内容寻址引用在打开时保持原样，前端按需读取，不再还原成 base64。
         let restored = load_recovery_at(&path)
             .unwrap()
             .expect("recovery copy must exist");
@@ -1637,7 +1708,7 @@ mod tests {
             restored
                 .pointer("/slides/0/elements/0/source/dataUrl")
                 .and_then(Value::as_str),
-            Some("data:image/png;base64,iVBORw0KGgo=")
+            Some(stored_url)
         );
     }
 

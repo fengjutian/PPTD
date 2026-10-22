@@ -8,7 +8,11 @@ import {
   densityLabels,
   draftMetrics,
   isSlideEdited,
+  itemKeyAction,
   missingTitleIndexes,
+  nearestSlideIndex,
+  outlineNavTarget,
+  reviewIssues,
   slideMetrics,
   visualIntentLabels,
   withSlideIds,
@@ -81,6 +85,56 @@ describe("content review metrics", () => {
     expect(missingTitleIndexes(createDraft())).toEqual([1]);
   });
 
+  it("reports blocking issues with the page each one should jump to", () => {
+    const draft = createDraft();
+    expect(reviewIssues(draft)).toEqual([{ kind: "missing-title", indexes: [1], message: "还有 1 页缺少标题", blocking: true }]);
+
+    const empty: AiDraft = {
+      ...draft,
+      slides: draft.slides.map((slide, index) => (index === 1 ? { ...slide, title: "空白页", body: "", blocks: [] } : slide)),
+    };
+    expect(reviewIssues(empty)).toEqual([{ kind: "empty-content", indexes: [1], message: "还有 1 页没有内容", blocking: true }]);
+  });
+
+  it("warns about duplicate titles without blocking confirmation", () => {
+    const draft = createDraft();
+    const duplicated: AiDraft = { ...draft, slides: draft.slides.map((slide) => ({ ...slide, title: "同一个标题" })) };
+    const issues = reviewIssues(duplicated);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: "duplicate-title", blocking: false, indexes: [0, 1] });
+  });
+
+  it("moves the outline selection with arrow, Home and End keys", () => {
+    expect(outlineNavTarget("ArrowDown", 0, 3)).toBe(1);
+    expect(outlineNavTarget("ArrowUp", 2, 3)).toBe(1);
+    expect(outlineNavTarget("ArrowDown", 2, 3)).toBe(2);
+    expect(outlineNavTarget("ArrowUp", 0, 3)).toBe(0);
+    expect(outlineNavTarget("Home", 2, 3)).toBe(0);
+    expect(outlineNavTarget("End", 0, 3)).toBe(2);
+    expect(outlineNavTarget("Tab", 0, 3)).toBeUndefined();
+    expect(outlineNavTarget("ArrowDown", 0, 0)).toBeUndefined();
+  });
+
+  it("highlights the card nearest the list top while scrolling", () => {
+    const cards = [
+      { index: 0, top: -420 },
+      { index: 1, top: 4 },
+      { index: 2, top: 380 },
+    ];
+    expect(nearestSlideIndex(cards, 0)).toBe(1);
+    expect(nearestSlideIndex([{ index: 0, top: 200 }], 0)).toBe(0);
+    expect(nearestSlideIndex([], 0)).toBeUndefined();
+  });
+
+  it("adds a row on Enter and removes an empty row on Backspace", () => {
+    expect(itemKeyAction("Enter", "", 0, 2, 6)).toEqual({ type: "insert" });
+    expect(itemKeyAction("Enter", "", 5, 6, 6)).toBeUndefined();
+    expect(itemKeyAction("Backspace", "  ", 2, 3, 6)).toEqual({ type: "remove", focus: 1 });
+    expect(itemKeyAction("Backspace", "已经写好的要点", 1, 3, 6)).toBeUndefined();
+    expect(itemKeyAction("Backspace", "", 0, 1, 6)).toBeUndefined();
+    expect(itemKeyAction("a", "", 0, 2, 6)).toBeUndefined();
+  });
+
   it("detects edited slides against the AI original", () => {
     const draft = createDraft();
     expect(isSlideEdited(draft.slides[0]!, draft.slides[0])).toBe(false);
@@ -140,24 +194,27 @@ describe("structured content editing", () => {
   });
 });
 
+function renderReview(draft: AiDraft, activeIndex = 0) {
+  return renderToStaticMarkup(
+    <ContentReview
+      draft={draft}
+      activeIndex={activeIndex}
+      saveState="saved"
+      restoreUndoIndexes={[]}
+      onActiveIndexChange={() => undefined}
+      onDraftTitleChange={() => undefined}
+      onSlideFieldChange={() => undefined}
+      onSlideBlocksChange={() => undefined}
+      onRestoreSlide={() => undefined}
+      onUndoRestore={() => undefined}
+      onNewDraft={() => undefined}
+    />,
+  );
+}
+
 describe("content review layout", () => {
   it("shows every page in one continuous list with localized plan labels", () => {
-    const draft = withSlideIds(createDraft());
-    const markup = renderToStaticMarkup(
-      <ContentReview
-        draft={draft}
-        activeIndex={0}
-        saveState="saved"
-        restoreUndoIndexes={[]}
-        onActiveIndexChange={() => undefined}
-        onDraftTitleChange={() => undefined}
-        onSlideFieldChange={() => undefined}
-        onSlideBlocksChange={() => undefined}
-        onRestoreSlide={() => undefined}
-        onUndoRestore={() => undefined}
-        onNewDraft={() => undefined}
-      />,
-    );
+    const markup = renderReview(withSlideIds(createDraft()));
     expect(markup).toContain("结构化文本 · 中等信息密度");
     expect(markup).not.toContain("medium density");
     expect(markup).toContain("还有 1 页缺少标题");
@@ -166,23 +223,15 @@ describe("content review layout", () => {
     expect(markup).toContain("已自动保存");
   });
 
+  it("keeps the outline as a single tab stop with arrow-key movement", () => {
+    const markup = renderReview(withSlideIds(createDraft()));
+    expect(markup).toContain('data-outline-index="0"');
+    expect(markup).toContain('tabindex="0"');
+    expect(markup).toContain('tabindex="-1"');
+  });
+
   it("edits structured pages through their blocks instead of flattening them into body text", () => {
-    const draft = withSlideIds(createDraft());
-    const markup = renderToStaticMarkup(
-      <ContentReview
-        draft={draft}
-        activeIndex={0}
-        saveState="saved"
-        restoreUndoIndexes={[]}
-        onActiveIndexChange={() => undefined}
-        onDraftTitleChange={() => undefined}
-        onSlideFieldChange={() => undefined}
-        onSlideBlocksChange={() => undefined}
-        onRestoreSlide={() => undefined}
-        onUndoRestore={() => undefined}
-        onNewDraft={() => undefined}
-      />,
-    );
+    const markup = renderReview(withSlideIds(createDraft()));
     expect(markup).toContain("要点列表");
     expect(markup).toContain("第 1 页要点第 1 条");
     expect(markup).not.toContain("第 1 页正文");
@@ -194,22 +243,19 @@ describe("content review layout", () => {
       ...draft,
       slides: draft.slides.map((slide) => ({ ...slide, blocks: [] })),
     };
-    const markup = renderToStaticMarkup(
-      <ContentReview
-        draft={legacy}
-        activeIndex={0}
-        saveState="saved"
-        restoreUndoIndexes={[]}
-        onActiveIndexChange={() => undefined}
-        onDraftTitleChange={() => undefined}
-        onSlideFieldChange={() => undefined}
-        onSlideBlocksChange={() => undefined}
-        onRestoreSlide={() => undefined}
-        onUndoRestore={() => undefined}
-        onNewDraft={() => undefined}
-      />,
-    );
+    const markup = renderReview(legacy);
     expect(markup).toContain("第 1 页正文");
     expect(markup).not.toContain("要点列表");
+  });
+
+  it("flags a page with neither blocks nor body copy", () => {
+    const draft = withSlideIds(createDraft());
+    const empty: AiDraft = {
+      ...draft,
+      slides: draft.slides.map((slide) => ({ ...slide, body: "", blocks: [] })),
+    };
+    const markup = renderReview(empty);
+    expect(markup).toContain("本页还没有内容，补全后才能确认");
+    expect(markup).toContain("还有 2 页没有内容");
   });
 });

@@ -157,6 +157,52 @@ export function slideHasContent(slide: DraftSlide): boolean {
   return sanitizeBlocks(slide.blocks).length > 0 || splitBodyItems(slide.body).length > 0;
 }
 
+/**
+ * The outline is a single tab stop, so arrow keys move the selection instead of
+ * each page adding a Tab press. Returns undefined for keys the outline ignores.
+ */
+export function outlineNavTarget(key: string, index: number, total: number): number | undefined {
+  if (total <= 0) return undefined;
+  const last = total - 1;
+  if (key === "ArrowDown") return Math.min(last, index + 1);
+  if (key === "ArrowUp") return Math.max(0, index - 1);
+  if (key === "Home") return 0;
+  if (key === "End") return last;
+  return undefined;
+}
+
+/**
+ * List editors behave like a text list: Enter opens the next row and Backspace
+ * on an empty row removes it, so a reviewer can build a slide without reaching
+ * for the mouse. Both actions are no-ops when they would leave no row or exceed
+ * the block's item limit.
+ */
+export type ItemKeyAction = { type: "insert" } | { type: "remove"; focus: number };
+
+export function itemKeyAction(key: string, value: string, index: number, total: number, max: number): ItemKeyAction | undefined {
+  if (key === "Enter") return total < max ? { type: "insert" } : undefined;
+  if (key === "Backspace" && total > 1 && value.trim() === "") return { type: "remove", focus: Math.max(0, index - 1) };
+  return undefined;
+}
+
+/**
+ * Scroll sync picks the card nearest a fixed anchor below the list top rather
+ * than the first visible card, so a tall card does not steal the highlight from
+ * the page the reader just scrolled to.
+ */
+export function nearestSlideIndex(cards: readonly { index: number; top: number }[], listTop: number, anchorOffset = 8): number | undefined {
+  let nearest: number | undefined;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const card of cards) {
+    const distance = Math.abs(card.top - listTop - anchorOffset);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = card.index;
+    }
+  }
+  return nearest;
+}
+
 export function isSlideEdited(slide: DraftSlide, original: DraftSlide | undefined): boolean {
   if (!original) return false;
   return (

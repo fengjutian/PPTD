@@ -26,6 +26,7 @@ import type { PresentationQualityIssue } from "../services/presentation-quality-
 import { TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
+import { resolveDocumentImages, setImageProjectPath } from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
 type AppView = "editor" | "ai" | "theme" | "settings";
@@ -313,6 +314,7 @@ export function App() {
         void clearRecovery();
         return;
       }
+      setImageProjectPath(undefined);
       loadDocument(recovery);
       setProjectPath(undefined);
       setSavedRevision(-1);
@@ -333,6 +335,7 @@ export function App() {
     if (dirty && !window.confirm("当前项目还有未保存的修改，确定新建吗？")) return;
     await clearRecovery().catch(() => undefined);
     newDocument();
+    setImageProjectPath(undefined);
     setProjectPath(undefined);
     setProjectMtime(undefined);
     setSavedRevision(0);
@@ -344,6 +347,7 @@ export function App() {
       if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开其他项目吗？")) return;
       const result = await chooseProjectToOpen();
       if (!result) return;
+      setImageProjectPath(result.path);
       loadDocument(result.document);
       await clearRecovery();
       setProjectPath(result.path);
@@ -370,7 +374,7 @@ export function App() {
       }
       const result = await saveProject(document, projectPath);
       if (!result) { setTaskStatus(undefined); return; }
-      if (isDesktopRuntime()) setProjectPath(result.path);
+      if (isDesktopRuntime()) { setProjectPath(result.path); setImageProjectPath(result.path); }
       setProjectMtime(result.modifiedAt ?? undefined);
       setSavedRevision(document.revisions.document);
       await clearRecovery();
@@ -399,7 +403,9 @@ export function App() {
         throw new Error(`EXPORT_VALIDATION_FAILED: ${blocking.map((issue) => issue.message).join("；")}`);
       }
       const { buildPptxInWorker } = await import("../features/pptx-export/export-worker-client");
-      const task = buildPptxInWorker(document, issues);
+      // asset 引用在 Worker 里没有 IPC 可读，先在主线程解析成内嵌数据。
+      const exportDocument = await resolveDocumentImages(document);
+      const task = buildPptxInWorker(exportDocument, issues);
       exportCancelRef.current = task.cancel;
       const { bytes, report } = await task.promise;
       const path = await choosePptxPath(document.title);
@@ -661,7 +667,19 @@ export function App() {
     setTaskStatus("已新建空白草稿");
   };
 
-  const aiDraftMissingTitles = useMemo(() => (aiDraft ? missingTitleIndexes(aiDraft) : []), [aiDraft]);
+  const aiDraftIssues = useMemo(() => (aiDraft ? reviewIssues(aiDraft) : []), [aiDraft]);
+  const aiDraftBlockingIssues = useMemo(() => aiDraftIssues.filter((issue) => issue.blocking), [aiDraftIssues]);
+  const aiDraftBlockReason = !aiDraft
+    ? undefined
+    : !aiDraft.title.trim()
+      ? "请先填写演示文稿标题"
+      : aiDraftBlockingIssues.map((issue) => issue.message).join("；") || undefined;
+  // The header keeps the hint to one line; the tooltip on the disabled button carries every reason.
+  const aiDraftBlockHint = aiDraftBlockingIssues.length === 0
+    ? undefined
+    : aiDraftBlockingIssues.length === 1
+      ? aiDraftBlockingIssues[0]!.message
+      : `${aiDraftBlockingIssues.length} 项待补全：${aiDraftBlockingIssues[0]!.message}`;
   const aiDraftMetrics = useMemo(() => (aiDraft ? draftMetrics(aiDraft) : { characters: 0, points: 0 }), [aiDraft]);
   // 大纲阶段占一小段，正文分批阶段按已完成批次推进；流式汇报的页数更细，取两者里更靠前的。
   const aiGenerationPercent = aiProgress
@@ -980,7 +998,7 @@ export function App() {
     </>}
 
       {activeView === "ai" && <main className="feature-workspace ai-workspace">
-        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>生成并审核内容，确认后再套用 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps" aria-label="制作流程"><span className={!aiDraft ? "active" : "done"} aria-current={!aiDraft ? "step" : undefined}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""} aria-current={aiDraft ? "step" : undefined}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions">{aiDraftMissingTitles.length > 0 && <span className="draft-blocked-hint"><CircleAlert />{aiDraftMissingTitles.length} 页缺少标题</span>}<button className="primary-action" title={aiDraftMissingTitles.length > 0 ? "请先补全所有页面标题" : undefined} disabled={!aiDraft.title.trim() || aiDraftMissingTitles.length > 0} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
+        <header className="feature-header"><div><Sparkles /><div><h1>AI 内容工作台</h1><p>生成并审核内容，确认后再套用 PPT 模板</p></div></div><div className="feature-header-actions"><div className="workflow-steps" aria-label="制作流程"><span className={!aiDraft ? "active" : "done"} aria-current={!aiDraft ? "step" : undefined}>{aiDraft ? <Check /> : "1"} 生成草稿</span><i /><span className={aiDraft ? "active" : ""} aria-current={aiDraft ? "step" : undefined}>2 编辑文字</span><i /><span>3 上传模板</span></div>{aiDraft && <div className="draft-header-actions">{aiDraftBlockingIssues.length > 0 && <span className="draft-blocked-hint"><CircleAlert />{aiDraftBlockHint}</span>}<button className="primary-action" title={aiDraftBlockReason} disabled={Boolean(aiDraftBlockReason)} onClick={continueToTheme}>确认内容，选择 PPT 模板<ArrowRight /></button></div>}</div></header>
         {!aiDraft ? <div className="ai-split">
           <aside className="ai-history"><div className="ai-history-heading"><strong>制作历史</strong><span>{aiHistory.length} 个草稿</span></div>{aiHistory.length === 0 ? <p className="ai-history-empty">还没有草稿</p> : aiHistory.map((entry) => <button type="button" key={entry.id} onClick={() => openAiHistory(entry)}><Sparkles /><div><strong>{entry.draft.title}</strong><span>{entry.draft.slides.length} 页 · {new Date(entry.updatedAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span><p>{entry.topic}</p></div></button>)}</aside>
           <div className="feature-scroll ai-plan-pane">

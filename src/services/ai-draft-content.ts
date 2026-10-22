@@ -28,7 +28,9 @@ function blockLines(block: ContentBlock): string[] {
     case "comparison":
       return [block.leftLabel, ...block.leftItems, block.rightLabel, ...block.rightItems];
     case "table-data":
-      return [block.header.join(" | "), ...block.rows.map((row) => row.join(" | "))];
+      // Cells may be blank while the writer is still filling the grid, so the
+      // projection uses trimmed values instead of the storage placeholder.
+      return [block.header.map((cell) => cell.trim()).join(" | "), ...block.rows.map((row) => row.map((cell) => cell.trim()).join(" | "))];
   }
 }
 

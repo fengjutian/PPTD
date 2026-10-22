@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 
-export const CURRENT_SCHEMA_VERSION = 8 as const;
+export const CURRENT_SCHEMA_VERSION = 9 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -48,7 +49,13 @@ const imageElement = base.extend({
   type: z.literal("image"),
   source: z.object({
     kind: z.literal("embedded"),
-    dataUrl: z.string().max(360_000_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/),
+    // Either an inline data URL (legacy / not-yet-saved) or a content-addressed
+    // asset reference written by the desktop backend when the picture is stored.
+    dataUrl: z.string().max(360_000_000).refine(
+      (value) => /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(value)
+        || /^asset:\/\/[a-f0-9]{64}\.(png|jpg|webp)$/.test(value),
+      { message: "INVALID_IMAGE_DATA_URL" },
+    ),
     mimeType: z.enum(["image/png", "image/jpeg", "image/webp"]),
   }),
   altText: z.string().max(500),
@@ -97,7 +104,7 @@ const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ id: z.string().uuid(), type: z.literal("timeline"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
   z.object({ id: z.string().uuid(), type: z.literal("comparison"), leftLabel: z.string().max(1_000), rightLabel: z.string().max(1_000), leftItems: z.array(z.string().max(2_000)).max(50), rightItems: z.array(z.string().max(2_000)).max(50) }),
   z.object({ id: z.string().uuid(), type: z.literal("process"), items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50) }),
-  z.object({ id: z.string().uuid(), type: z.literal("table-data"), header: z.array(z.string().max(200)).min(1).max(8), rows: z.array(z.array(z.string().max(500)).min(1).max(8)).min(1).max(30) }),
+  z.object({ id: z.string().uuid(), type: z.literal("table-data"), header: z.array(z.string().max(200)).min(1).max(TABLE_MAX_COLUMNS), rows: z.array(z.array(z.string().max(500)).min(1).max(TABLE_MAX_COLUMNS)).min(1).max(TABLE_MAX_ROWS) }),
 ]);
 
 const slideSchema = z.object({
@@ -152,6 +159,10 @@ export const presentationDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionEightDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(8) })
+  .superRefine(validateUniqueIds);
+
 const versionSevenDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(7) })
   .superRefine(validateUniqueIds);
@@ -205,6 +216,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // optional, so a version 7 document keeps every page and simply renders one
   // uniform style per text box.
   7: (document) => ({ ...versionSevenDocumentSchema.parse(document), schemaVersion: 8 }),
+  // Version 9 widens the picture source so it may carry a content-addressed
+  // asset reference instead of an inline data URL. A version 8 document has
+  // only inline data, which the new schema still accepts, so nothing changes.
+  8: (document) => ({ ...versionEightDocumentSchema.parse(document), schemaVersion: 9 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

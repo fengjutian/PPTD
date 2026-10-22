@@ -1,5 +1,5 @@
 import { CircleAlert, FilePlus2, Plus, RotateCcw, Undo2, X } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { AiDraft, ContentBlock } from "../../services/ai-service";
 import {
   blockTypeLabels,
@@ -7,7 +7,10 @@ import {
   densityLabels,
   draftMetrics,
   isSlideEdited,
+  itemKeyAction,
   narrativeStrategyLabels,
+  nearestSlideIndex,
+  outlineNavTarget,
   reviewIssues,
   slideHasContent,
   slideMetrics,
@@ -53,15 +56,37 @@ function DraftNotes({ index, value, onChange }: { index: number; value: string; 
 }
 
 function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string; items: string[]; max: number; onChange: (items: string[]) => void }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  // Focus has to move after React commits the new row, so the follow-up focus
+  // is scheduled instead of applied to a node that is not rendered yet.
+  const focusRow = (index: number) => {
+    window.requestAnimationFrame(() => {
+      listRef.current?.querySelector<HTMLInputElement>(`input[data-item-index="${index}"]`)?.focus();
+    });
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
+    const action = itemKeyAction(event.key, items[index] ?? "", index, items.length, max);
+    if (!action) return;
+    event.preventDefault();
+    if (action.type === "insert") {
+      onChange([...items, ""]);
+      focusRow(index + 1);
+    } else {
+      onChange(items.filter((_, itemIndex) => itemIndex !== index));
+      focusRow(action.focus);
+    }
+  };
   return (
-    <div className="block-item-list">
+    <div className="block-item-list" ref={listRef}>
       {items.map((item, index) => (
         <div className="block-item-row" key={index}>
           <input
             aria-label={`${ariaLabel}第 ${index + 1} 条`}
+            data-item-index={index}
             maxLength={500}
-            placeholder="输入要点"
+            placeholder="输入要点（Enter 新增下一条）"
             value={item}
+            onKeyDown={(event) => handleKeyDown(event, index)}
             onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? event.target.value : value)))}
           />
           <button type="button" className="icon-action" aria-label={`删除${ariaLabel}第 ${index + 1} 条`} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}>
@@ -69,7 +94,7 @@ function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
           </button>
         </div>
       ))}
-      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => onChange([...items, ""])}>
+      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => { onChange([...items, ""]); focusRow(items.length); }}>
         <Plus />
         添加一条
       </button>
@@ -78,22 +103,46 @@ function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
 }
 
 function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string; items: Array<{ label: string; text: string }>; max: number; onChange: (items: Array<{ label: string; text: string }>) => void }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const focusRow = (index: number) => {
+    window.requestAnimationFrame(() => {
+      listRef.current?.querySelector<HTMLInputElement>(`input[data-item-index="${index}"]`)?.focus();
+    });
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
+    const item = items[index];
+    if (!item) return;
+    const action = itemKeyAction(event.key, `${item.label}${item.text}`, index, items.length, max);
+    if (!action) return;
+    event.preventDefault();
+    if (action.type === "insert") {
+      onChange([...items, { label: "", text: "" }]);
+      focusRow(index + 1);
+    } else {
+      onChange(items.filter((_, itemIndex) => itemIndex !== index));
+      focusRow(action.focus);
+    }
+  };
   return (
-    <div className="block-item-list">
+    <div className="block-item-list" ref={listRef}>
       {items.map((item, index) => (
         <div className="block-pair-row" key={index}>
           <input
             aria-label={`${ariaLabel}第 ${index + 1} 条标签`}
+            data-item-index={index}
             maxLength={100}
             placeholder="阶段"
             value={item.label}
+            onKeyDown={(event) => handleKeyDown(event, index)}
             onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? { ...value, label: event.target.value } : value)))}
           />
           <input
             aria-label={`${ariaLabel}第 ${index + 1} 条说明`}
+            data-item-index={index}
             maxLength={500}
             placeholder="说明"
             value={item.text}
+            onKeyDown={(event) => handleKeyDown(event, index)}
             onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? { ...value, text: event.target.value } : value)))}
           />
           <button type="button" className="icon-action" aria-label={`删除${ariaLabel}第 ${index + 1} 条`} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}>
@@ -101,7 +150,7 @@ function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string
           </button>
         </div>
       ))}
-      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => onChange([...items, { label: "", text: "" }])}>
+      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => { onChange([...items, { label: "", text: "" }]); focusRow(items.length); }}>
         <Plus />
         添加一条
       </button>
@@ -257,6 +306,9 @@ export function ContentReview({
 
   const metrics = draftMetrics(draft);
   const issues = reviewIssues(draft);
+  // Both the outline and the cards show the same numbers; computing them once
+  // per draft keeps a ten page review from re-splitting every body on each keypress.
+  const slideStats = useMemo(() => draft.slides.map((slide) => slideMetrics(slide)), [draft]);
 
   useEffect(() => () => {
     window.clearTimeout(scrollLockTimer.current);
@@ -294,12 +346,7 @@ export function ContentReview({
   };
 
   const handleOutlineKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const last = draft.slides.length - 1;
-    let next: number | undefined;
-    if (event.key === "ArrowDown") next = Math.min(last, index + 1);
-    else if (event.key === "ArrowUp") next = Math.max(0, index - 1);
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
+    const next = outlineNavTarget(event.key, index, draft.slides.length);
     if (next === undefined) return;
     event.preventDefault();
     focusOutline(next);
@@ -313,16 +360,12 @@ export function ContentReview({
     const list = listRef.current;
     if (!list) return;
     const listTop = list.getBoundingClientRect().top;
-    let nearest = 0;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    list.querySelectorAll<HTMLElement>("[data-slide-index]").forEach((card) => {
-      const distance = Math.abs(card.getBoundingClientRect().top - listTop - 8);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = Number(card.dataset.slideIndex);
-      }
-    });
-    if (nearest !== activeIndex) onActiveIndexChange(nearest);
+    const cards = [...list.querySelectorAll<HTMLElement>("[data-slide-index]")].map((card) => ({
+      index: Number(card.dataset.slideIndex),
+      top: card.getBoundingClientRect().top,
+    }));
+    const nearest = nearestSlideIndex(cards, listTop);
+    if (nearest !== undefined && nearest !== activeIndex) onActiveIndexChange(nearest);
   };
 
   return (
@@ -340,7 +383,7 @@ export function ContentReview({
         </div>
         <div className="draft-outline-list" ref={outlineRef}>
           {draft.slides.map((slide, index) => {
-            const slideStat = slideMetrics(slide);
+            const slideStat = slideStats[index]!;
             const missing = !slide.title.trim();
             const empty = !slideHasContent(slide);
             return (
@@ -417,7 +460,7 @@ export function ContentReview({
 
         <div className="draft-slide-list" ref={listRef} onScroll={handleScroll}>
           {draft.slides.map((slide, index) => {
-            const slideStat = slideMetrics(slide);
+            const slideStat = slideStats[index]!;
             const missing = !slide.title.trim();
             const empty = !slideHasContent(slide);
             const edited = isSlideEdited(slide, originalDraft?.slides[index]);

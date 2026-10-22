@@ -4,7 +4,7 @@ import { applyCommand, commandDomain } from "./commands";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
 import { createDocument, inches } from "../document-model";
 import { contrastRatio, contrastRatioAgainstLuminance } from "../rendering/contrast";
-import { estimateTextLines } from "../rendering/text-fit";
+import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 
 describe("document commands", () => {
   it("keeps design commands out of content", () => {
@@ -919,6 +919,36 @@ describe("document commands", () => {
     expect(copy.id).not.toBe(original.id);
     // The copy points at the table block of its own page, not at the original.
     expect(copy.type === "table" && copy.contentBlockId).toBe(result.slides[1]!.content.blocks?.find((block) => block.type === "table-data")?.id);
+  });
+
+  it("shrinks a text that overflows so it fits into its frame and keeps the copy frozen", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    if (title.type !== "text") throw new Error("expected a text element");
+    title.text = "一段很长的标题需要放进同一个文本框里所以它必须换行很多次";
+    const originalHash = slide.content.contentHash;
+    const before = title.style.fontSizePt;
+    expect(textLikelyOverflows(title)).toBe(true);
+
+    const result = produce(source, (draft) => applyCommand(draft, { type: "fit-text", slideId: slide.id, elementId: title.id }));
+    const element = result.slides[0]!.elements[0]!;
+    expect(element.type === "text" && element.style.fontSizePt).toBeLessThan(before);
+    // The text now fits, so the quality gate stops reporting an overflow.
+    expect(element.type === "text" && textLikelyOverflows(element)).toBe(false);
+    // Fitting is design: the copy and the review state stay.
+    expect(result.slides[0]!.content.contentHash).toBe(originalHash);
+    expect(result.slides[0]!.content.status).toBe(source.slides[0]!.content.status);
+  });
+
+  it("keeps the size of a text that already fits", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = slide.elements[0]!;
+    const before = title.type === "text" ? title.style.fontSizePt : 0;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "fit-text", slideId: slide.id, elementId: title.id }));
+    const element = result.slides[0]!.elements[0]!;
+    expect(element.type === "text" && element.style.fontSizePt).toBe(before);
   });
 
   it("emphasises a range of a text without touching the approved copy", () => {

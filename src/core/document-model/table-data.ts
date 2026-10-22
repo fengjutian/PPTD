@@ -15,6 +15,19 @@ export interface ResolvedTableData {
 }
 
 /**
+ * Grid limits enforced by the document schema. They are exported so the review
+ * screen can stop a writer from building a table the project file cannot store,
+ * instead of failing validation at save or export time.
+ */
+export const TABLE_MAX_COLUMNS = 8;
+export const TABLE_MAX_ROWS = 30;
+
+/** Whether a reviewed table block fits what the document model can persist. */
+export function tableFitsDocumentLimits(header: readonly string[], rows: readonly (readonly string[])[]): boolean {
+  return header.length <= TABLE_MAX_COLUMNS && rows.length <= TABLE_MAX_ROWS && rows.every((row) => row.length <= TABLE_MAX_COLUMNS);
+}
+
+/**
  * Reads the cells of a table from the content block it points at. Returns
  * undefined when the block is gone, is not a table, carries an empty header or
  * has no rows: a table without cells is not a table.

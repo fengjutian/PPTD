@@ -43,6 +43,7 @@ pub fn run() {
             commands::project_file::save_project,
             commands::project_file::open_project,
             commands::project_file::project_modified_at,
+            commands::project_file::read_image_asset,
             commands::project_file::save_recovery,
             commands::project_file::load_recovery,
             commands::project_file::clear_recovery,

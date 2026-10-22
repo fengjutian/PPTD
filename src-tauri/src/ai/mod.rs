@@ -539,4 +539,141 @@ mod tests {
         .expect_err("a cancelled task must not produce content");
         assert_eq!(error, REQUEST_CANCELLED_ERROR);
     }
+
+    /// 指向本地测试服务器的假厂商。
+    struct FakeProvider {
+        url: &'static str,
+    }
+
+    impl ChatProvider for FakeProvider {
+        fn id(&self) -> &'static str {
+            "fake"
+        }
+        fn display_name(&self) -> &'static str {
+            "本地测试厂商"
+        }
+        fn api_base_url(&self) -> &'static str {
+            self.url
+        }
+        fn default_model(&self) -> &'static str {
+            "Fake-Model"
+        }
+        fn model_env_var(&self) -> &'static str {
+            "FAKE_MODEL"
+        }
+        fn api_key_env_var(&self) -> &'static str {
+            "FAKE_API_KEY"
+        }
+        fn apply_auth(
+            &self,
+            request: reqwest::RequestBuilder,
+            _api_key: &str,
+        ) -> reqwest::RequestBuilder {
+            request
+        }
+        fn build_request(&self, request: &ChatRequest) -> serde_json::Value {
+            serde_json::to_value(request).unwrap_or(serde_json::Value::Null)
+        }
+        fn parse_response(&self, _payload: serde_json::Value) -> Result<String, PayloadError> {
+            // 流式请求不走这里。
+            Err(PayloadError::Empty)
+        }
+    }
+
+    /// 起一个只回一次 SSE 响应的本地服务器。
+    ///
+    /// 响应分两次写出，中间停一下：这样一次 SSE 行会被切在两个网络分片里，
+    /// 正好覆盖流式解析最容易出错的地方。
+    fn spawn_sse_server(first: &str, second: &str) -> &'static str {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a test port");
+        let address = listener.local_addr().expect("read the test address");
+        let first = first.to_string();
+        let second = second.to_string();
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            use std::io::{Read, Write};
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request);
+            let body = format!("{first}{second}");
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\n\r\n",
+                body.len()
+            );
+            let _ = stream.write_all(head.as_bytes());
+            let split = body.len() / 2;
+            let _ = stream.write_all(&body.as_bytes()[..split]);
+            let _ = stream.flush();
+            std::thread::sleep(Duration::from_millis(30));
+            let _ = stream.write_all(&body.as_bytes()[split..]);
+        });
+        let url = format!("http://{address}/chat");
+        Box::leak(url.into_boxed_str())
+    }
+
+    #[tokio::test]
+    async fn reads_a_streamed_answer_across_network_pieces() {
+        let url = spawn_sse_server(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"岳阳\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"cont",
+            "ent\":\"楼记\"}}]}\n\ndata: [DONE]\n\n",
+        );
+        let provider = FakeProvider { url };
+        let body = ChatRequest {
+            model: "Fake-Model".into(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "测试".into(),
+            }],
+            temperature: 0.0,
+        };
+        let cancel = CancelToken::new();
+        let mut deltas: Vec<String> = Vec::new();
+
+        let content = chat_stream(
+            &provider,
+            "unused-key",
+            &body,
+            Duration::from_secs(10),
+            "AI_TEST_REQUEST_FAILED",
+            &cancel,
+            &mut |delta: &str| deltas.push(delta.to_string()),
+        )
+        .await
+        .expect("the stream must be read");
+
+        assert_eq!(content, "岳阳楼记");
+        assert_eq!(deltas, vec!["岳阳", "楼记"]);
+    }
+
+    #[tokio::test]
+    async fn reports_a_stream_failure_so_the_caller_can_fall_back() {
+        // 服务器不存在的地址：流式必须报可退回的错误，而不是假装成功。
+        let provider = FakeProvider {
+            url: "http://127.0.0.1:1/chat",
+        };
+        let body = ChatRequest {
+            model: "Fake-Model".into(),
+            messages: vec![ChatMessage {
+                role: "user".into(),
+                content: "测试".into(),
+            }],
+            temperature: 0.0,
+        };
+        let cancel = CancelToken::new();
+
+        let error = chat_stream(
+            &provider,
+            "unused-key",
+            &body,
+            Duration::from_secs(5),
+            "AI_TEST_REQUEST_FAILED",
+            &cancel,
+            &mut |_delta: &str| {},
+        )
+        .await
+        .expect_err("a dead server must not produce content");
+
+        assert!(error.starts_with(STREAM_FAILED_ERROR), "{error}");
+    }
 }

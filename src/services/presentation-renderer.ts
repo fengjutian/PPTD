@@ -1,4 +1,5 @@
 import { formatChartValue, resolveChartData, resolveFragmentStyle, resolveTableData, textFragments, type ChartElement, type PresentationDocument, type Slide, type TableElement, type TextElement } from "../core/document-model";
+import { resolveImageUrl } from "./image-url-service";
 
 export interface PresentationRender { slides: string[]; contactSheet: string }
 export interface RenderedContrastIssue { slideIndex: number; elementId: string; contrastRatio: number; /** The sampled artwork color that carries the text. */ backgroundColor: string }
@@ -24,7 +25,7 @@ async function renderSlide(document: PresentationDocument, slide: Slide, width: 
     context.save(); context.translate(x + w / 2, y + h / 2); context.rotate(element.rotationMilliDegree * Math.PI / 180_000); context.translate(-w / 2, -h / 2);
     if (element.type === "image") {
       try {
-        const image = await loadImage(element.source.dataUrl);
+        const image = await loadImage(await resolveImageUrl(element.source.dataUrl));
         context.drawImage(image, 0, 0, w, h);
       } catch (error) {
         // 评审图可以缺一张底图，整段质检不能因为一张图解码失败就中断。
