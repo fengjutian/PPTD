@@ -2480,6 +2480,8 @@ export function App() {
                 restoreUndoSlideIds={aiRestoreUndoSlideIds}
                 canUndo={aiContentUndo.current.length > 0}
                 canRedo={aiContentRedo.current.length > 0}
+                regenerating={aiRegenerating}
+                regenerateProgress={aiProgress ? { label: aiGenerationLabel, percent: aiGenerationPercent } : undefined}
                 onActiveIndexChange={selectAiDraftSlide}
                 onDraftTitleChange={updateAiDraftTitle}
                 onSlideFieldChange={updateAiSlide}
@@ -2584,7 +2586,7 @@ export function App() {
                     {templateLibrary.map((template) => (
                       <button
                         type="button"
-                        className={selectedTemplate?.id === template.id ? "active" : ""}
+                        className={`template-card${selectedTemplate?.id === template.id ? " active" : ""}`}
                         key={template.id}
                         onClick={() => void handleSelectTemplate(template)}
                       >
@@ -2845,7 +2847,7 @@ export function App() {
                     <button
                       type="button"
                       disabled={designBusy}
-                      className={selectedTemplate?.id === template.id ? "active" : ""}
+                      className={`template-card${selectedTemplate?.id === template.id ? " active" : ""}`}
                       key={template.id}
                       onClick={() => void handleSelectTemplate(template)}
                     >

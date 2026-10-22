@@ -69,6 +69,10 @@ export type ContentReviewProps = {
   restoreUndoSlideIds: readonly string[];
   canUndo: boolean;
   canRedo: boolean;
+  /** 整份草稿正在按同一主题重新生成；这段时间旧内容保持可见。 */
+  regenerating: boolean;
+  /** 重新生成的进度；生成结束后为空。 */
+  regenerateProgress?: { label: string; percent: number };
   onActiveIndexChange: (index: number) => void;
   onDraftTitleChange: (title: string) => void;
   onSlideFieldChange: (index: number, field: SlideField, value: string) => void;

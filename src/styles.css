@@ -1846,9 +1846,25 @@ button {
   font-size: 12px;
 }
 .template-library-heading > div {
+  min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+/* 标题行控件不参与压缩：中文字符可在任意位置断行，允许收缩会被挤成单字竖排。 */
+.template-library-heading > div > * {
+  flex: none;
+  white-space: nowrap;
+}
+.template-library-heading .secondary-action {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+.template-library-heading .secondary-action:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .template-library-heading span {
   color: #797e87;
@@ -1862,7 +1878,7 @@ button {
 .template-browser .template-library > div:last-child {
   grid-template-columns: 1fr;
 }
-.template-library button {
+.template-library .template-card {
   min-width: 0;
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) 18px;
@@ -1876,31 +1892,31 @@ button {
   text-align: left;
   cursor: pointer;
 }
-.template-library button:hover,
-.template-library button.active {
+.template-library .template-card:hover,
+.template-library .template-card.active {
   border-color: var(--ppt-accent);
   background: #242126;
 }
-.template-library button > svg {
+.template-library .template-card > svg {
   width: 18px;
   height: 18px;
   color: var(--ppt-accent-hover);
 }
-.template-library button > span {
+.template-library .template-card > span {
   min-width: 0;
 }
-.template-library button strong,
-.template-library button small {
+.template-library .template-card strong,
+.template-library .template-card small {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.template-library button strong {
+.template-library .template-card strong {
   color: #e1e3e7;
   font-size: 11px;
 }
-.template-library button small {
+.template-library .template-card small {
   margin-top: 4px;
   color: #777c85;
   font-size: 9px;
@@ -2316,12 +2332,20 @@ button {
 }
 .template-picker-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-top: 22px;
   color: #d8dae0;
   font-size: 12px;
+}
+/* 同标题行：避免 select 与按钮在中文字符上被压缩换行。 */
+.template-picker-toolbar > strong,
+.template-picker-toolbar > label,
+.template-picker-toolbar > button {
+  flex: none;
+  white-space: nowrap;
 }
 .template-picker-toolbar .secondary-action {
   min-height: 36px;
@@ -4519,17 +4543,17 @@ button {
 :root[data-theme="light"] .template-library-heading {
   color: #353a42;
 }
-:root[data-theme="light"] .template-library button {
+:root[data-theme="light"] .template-library .template-card {
   color: #5d636d;
   background: #fff;
   border-color: #d4d7dc;
 }
-:root[data-theme="light"] .template-library button:hover,
-:root[data-theme="light"] .template-library button.active {
+:root[data-theme="light"] .template-library .template-card:hover,
+:root[data-theme="light"] .template-library .template-card.active {
   border-color: var(--ppt-accent);
   background: #fff8f5;
 }
-:root[data-theme="light"] .template-library button strong {
+:root[data-theme="light"] .template-library .template-card strong {
   color: #272b31;
 }
 :root[data-theme="light"] .template-preview-heading {
@@ -5037,16 +5061,16 @@ button {
 :root[data-theme="amber"] .template-library-heading {
   color: #3a3229;
 }
-:root[data-theme="amber"] .template-library button {
+:root[data-theme="amber"] .template-library .template-card {
   color: #5d5346;
   background: #fffdf8;
   border-color: #ded1bb;
 }
-:root[data-theme="amber"] .template-library button:hover,
-:root[data-theme="amber"] .template-library button.active {
+:root[data-theme="amber"] .template-library .template-card:hover,
+:root[data-theme="amber"] .template-library .template-card.active {
   background: #fdf2e2;
 }
-:root[data-theme="amber"] .template-library button strong {
+:root[data-theme="amber"] .template-library .template-card strong {
   color: #2f2820;
 }
 :root[data-theme="amber"] .template-preview-heading {
@@ -5528,16 +5552,16 @@ button {
 :root[data-theme="green"] .template-library-heading {
   color: #323130;
 }
-:root[data-theme="green"] .template-library button {
+:root[data-theme="green"] .template-library .template-card {
   color: #484644;
   background: #fff;
   border-color: #d2d0ce;
 }
-:root[data-theme="green"] .template-library button:hover,
-:root[data-theme="green"] .template-library button.active {
+:root[data-theme="green"] .template-library .template-card:hover,
+:root[data-theme="green"] .template-library .template-card.active {
   background: #f3f2f1;
 }
-:root[data-theme="green"] .template-library button strong {
+:root[data-theme="green"] .template-library .template-card strong {
   color: #323130;
 }
 :root[data-theme="green"] .template-preview-heading {
@@ -6019,16 +6043,16 @@ button {
 :root[data-theme="blue"] .template-library-heading {
   color: #323130;
 }
-:root[data-theme="blue"] .template-library button {
+:root[data-theme="blue"] .template-library .template-card {
   color: #484644;
   background: #fff;
   border-color: #d2d0ce;
 }
-:root[data-theme="blue"] .template-library button:hover,
-:root[data-theme="blue"] .template-library button.active {
+:root[data-theme="blue"] .template-library .template-card:hover,
+:root[data-theme="blue"] .template-library .template-card.active {
   background: #f3f2f1;
 }
-:root[data-theme="blue"] .template-library button strong {
+:root[data-theme="blue"] .template-library .template-card strong {
   color: #323130;
 }
 :root[data-theme="blue"] .template-preview-heading {
