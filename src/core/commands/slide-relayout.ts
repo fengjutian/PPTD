@@ -232,9 +232,12 @@ function inferAccent(generated: SlideElement[], titleColor: string): string {
 
 function backgroundRangeFor(textColor: string): BackgroundRange {
   const luminance = colorLuminance(textColor) ?? 0.5;
+  // A dark title needs a light background range to stay dark. The previous
+  // polarity forced every dark title onto a dark range, so the contrast repair
+  // turned it white on a white page.
   return luminance < 0.45
-    ? { darkest: 0.02, lightest: 0.32 }
-    : { darkest: 0.68, lightest: 0.98 };
+    ? { darkest: 0.68, lightest: 0.98 }
+    : { darkest: 0.02, lightest: 0.32 };
 }
 
 /**

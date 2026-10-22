@@ -14,7 +14,7 @@ import { draftMetrics, missingTitleIndexes, withSlideIds, type AiDraftSaveState 
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
+import { briefsFromDraft, cancelAiGeneration, describeAiError, endAiGeneration, generatePresentationDesign, generatePresentationDraft, listenAiGenerationProgress, mergeStreamProgress, type AiDraft, type AiGenerationProgress } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import { analyzePptxTemplate, choosePptxPath, choosePptxTemplate, chooseProjectToOpen, clearRecovery, getPptxTemplatePreview, importPptxTemplate, isDesktopRuntime, listPptxTemplates, loadRecovery, projectModifiedAt, renderPptxTemplateLayouts, saveProject, saveRecovery, writePptx, type TemplateAnalysis, type TemplateRecord } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
@@ -453,9 +453,7 @@ export function App() {
       const totals = new Map<string, { received: number; pages: number }>();
       unlisten = await listenAiGenerationProgress((progress) => {
         if (requestId !== aiRequestId.current || progress.taskId !== taskId) return;
-        totals.set(progress.key, { received: progress.received, pages: progress.pages });
-        const pages = [...totals.values()].reduce((sum, item) => sum + item.pages, 0);
-        setAiStreamProgress({ pages, received: [...totals.values()].reduce((sum, item) => sum + item.received, 0) });
+        setAiStreamProgress(mergeStreamProgress(totals, progress));
       }).catch(() => undefined);
       const draft = withSlideIds(await generatePresentationDraft(aiTopic, aiSlideCount, {
         onProgress: (progress) => {

@@ -11,26 +11,27 @@ use tauri::Emitter;
 /// 流式生成进度的事件名。前端据此把"正在写第几页"显示出来。
 const GENERATION_PROGRESS_EVENT: &str = "ai-generation-progress";
 
+/// 一次生成请求的进度汇报器。
+struct ProgressReporter<'a> {
+    app: &'a tauri::AppHandle,
+    task_id: Option<u64>,
+    key: &'a str,
+    phase: &'a str,
+}
+
 /// 汇报一次生成进度。
 ///
 /// `key` 区分同一次任务里的不同请求：正文分批并行，各批的进度要由前端汇总。
-fn emit_generation_progress(
-    app: &tauri::AppHandle,
-    task_id: Option<u64>,
-    key: &str,
-    phase: &str,
-    received: usize,
-    content: &str,
-) {
-    let Some(task_id) = task_id else {
+fn emit_generation_progress(reporter: &ProgressReporter<'_>, received: usize, content: &str) {
+    let Some(task_id) = reporter.task_id else {
         return;
     };
-    let _ = app.emit(
+    let _ = reporter.app.emit(
         GENERATION_PROGRESS_EVENT,
         serde_json::json!({
             "taskId": task_id,
-            "key": key,
-            "phase": phase,
+            "key": reporter.key,
+            "phase": reporter.phase,
             "received": received,
             "pages": ai::stream::estimate_completed_pages(content),
         }),
@@ -48,15 +49,11 @@ async fn complete_chat(
     timeout: Duration,
     transport_error: &str,
     cancel: &ai::CancelToken,
-    app: &tauri::AppHandle,
-    task_id: Option<u64>,
-    key: &str,
-    phase: &str,
-    stream_progress: bool,
+    reporter: Option<ProgressReporter<'_>>,
 ) -> Result<String, String> {
-    if !stream_progress {
+    let Some(reporter) = reporter else {
         return ai::chat(provider, api_key, body, timeout, transport_error, cancel).await;
-    }
+    };
     let mut accumulated = String::new();
     let mut received = 0usize;
     let mut last_emitted = 0usize;
@@ -65,7 +62,7 @@ async fn complete_chat(
         received += delta.chars().count();
         if received >= last_emitted + 200 {
             last_emitted = received;
-            emit_generation_progress(app, task_id, key, phase, received, &accumulated);
+            emit_generation_progress(&reporter, received, &accumulated);
         }
     };
     match ai::chat_stream(
@@ -85,6 +82,25 @@ async fn complete_chat(
         }
         Err(error) => Err(error),
     }
+}
+
+/// 按需构造进度汇报器：没开流式就没有汇报器。
+fn progress_reporter<'a>(
+    app: &'a tauri::AppHandle,
+    task_id: Option<u64>,
+    key: &'a str,
+    phase: &'a str,
+    stream_progress: bool,
+) -> Option<ProgressReporter<'a>> {
+    if !stream_progress {
+        return None;
+    }
+    Some(ProgressReporter {
+        app,
+        task_id,
+        key,
+        phase,
+    })
 }
 
 #[derive(Deserialize)]
@@ -369,11 +385,13 @@ pub async fn generate_presentation(
         FULL_DRAFT_TIMEOUT,
         "AI_DRAFT_REQUEST_FAILED",
         &cancel,
-        &app,
-        request.task_id,
-        "draft",
-        "draft",
-        request.stream_progress.unwrap_or(false),
+        progress_reporter(
+            &app,
+            request.task_id,
+            "draft",
+            "draft",
+            request.stream_progress.unwrap_or(false),
+        ),
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_JSON_INVALID")
@@ -434,11 +452,13 @@ pub async fn generate_presentation_outline(
         OUTLINE_TIMEOUT,
         "AI_OUTLINE_REQUEST_FAILED",
         &cancel,
-        &app,
-        request.task_id,
-        "outline",
-        "outline",
-        request.stream_progress.unwrap_or(false),
+        progress_reporter(
+            &app,
+            request.task_id,
+            "outline",
+            "outline",
+            request.stream_progress.unwrap_or(false),
+        ),
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_OUTLINE_JSON_INVALID")
@@ -541,11 +561,13 @@ pub async fn generate_presentation_slides_batch(
         SLIDE_BATCH_TIMEOUT,
         "AI_BATCH_REQUEST_FAILED",
         &cancel,
-        &app,
-        request.task_id,
-        &format!("batch-{}", request.start_index),
-        "content",
-        request.stream_progress.unwrap_or(false),
+        progress_reporter(
+            &app,
+            request.task_id,
+            &format!("batch-{}", request.start_index),
+            "content",
+            request.stream_progress.unwrap_or(false),
+        ),
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_BATCH_JSON_INVALID")

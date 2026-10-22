@@ -226,6 +226,26 @@ export function listenAiGenerationProgress(handler: (progress: AiGenerationStrea
   return listen<AiGenerationStreamProgress>("ai-generation-progress", (event) => handler(event.payload));
 }
 
+/**
+ * 汇总同一次任务里各批次的流式进度。
+ *
+ * 正文分批并行，每个批次只知道自己写到第几页。批次之间互不重叠，所以把各批
+ * 的页数相加就是整份草稿已经写出的页数；同一个批次重复上报时取最新的那次。
+ */
+export function mergeStreamProgress(
+  totals: Map<string, { received: number; pages: number }>,
+  progress: AiGenerationStreamProgress,
+): { pages: number; received: number } {
+  totals.set(progress.key, { received: progress.received, pages: progress.pages });
+  let pages = 0;
+  let received = 0;
+  for (const value of totals.values()) {
+    pages += value.pages;
+    received += value.received;
+  }
+  return { pages, received };
+}
+
 export interface AiGenerationOptions {
   onProgress?: (progress: AiGenerationProgress) => void;
   /** 返回 true 时放弃本次生成，用于响应用户取消。 */

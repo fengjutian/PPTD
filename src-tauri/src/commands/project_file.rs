@@ -259,13 +259,13 @@ static WRITE_LOCK: Mutex<()> = Mutex::new(());
 /// 读了一下。句柄通常很短命，所以重试几次就能挤过去。
 fn persist_with_retry(temporary: NamedTempFile, path: &Path) -> Result<(), String> {
     let mut pending = temporary;
-    for attempt in 0..5_u32 {
+    for attempt in 0..8_u32 {
         match pending.persist(path) {
             Ok(_) => return Ok(()),
             Err(error) => {
                 let detail = error.error;
                 pending = error.file;
-                if attempt == 4 {
+                if attempt == 7 {
                     return Err(format!("FILE_REPLACE_FAILED: {detail}"));
                 }
                 std::thread::sleep(Duration::from_millis(25 * u64::from(attempt) + 25));

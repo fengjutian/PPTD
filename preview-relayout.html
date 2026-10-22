@@ -74,6 +74,7 @@
           ],
         },
       ];
+      window.sourceDoc = source;
       const doc = produce(source, (draft) => {
         for (const slide of draft.slides) applyCommand(draft, { type: "relayout-slide", slideId: slide.id });
       });

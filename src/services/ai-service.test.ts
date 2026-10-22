@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
-import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, cancelAiGeneration, chooseSlideLayout, constrainDesignToTemplate, describeAiError, generatePresentationDraft, slideBriefsSchema, splitBodyItems, type AiGenerationProgress } from "./ai-service";
+import { aiDraftSchema, aiPresentationDesignSchema, briefsFromDraft, cancelAiGeneration, chooseSlideLayout, constrainDesignToTemplate, describeAiError, generatePresentationDraft, mergeStreamProgress, slideBriefsSchema, splitBodyItems, type AiGenerationProgress } from "./ai-service";
 import { contrastRatio } from "../core/rendering/contrast";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => false }));
@@ -256,5 +256,42 @@ describe("多页草稿的分批编排", () => {
     // 取消必须打到后端：只停界面等待，模型会继续生成一份没人要的草稿。
     await expect(cancelAiGeneration(42)).resolves.toBe(true);
     expect(vi.mocked(invoke).mock.calls.at(-1)).toEqual(["cancel_ai_generation", { taskId: 42 }]);
+  });
+
+  it("开启流式进度，让后端边写边汇报", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "generate_presentation") {
+        return { title: "短稿", slides: Array.from({ length: 4 }, (_, index) => ({ title: `第 ${index + 1} 页`, body: "正文", speakerNotes: "" })) };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    await generatePresentationDraft("主题", 4, { taskId: 9 });
+
+    const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "generate_presentation");
+    expect(call?.[1]).toMatchObject({ request: { taskId: 9, streamProgress: true } });
+  });
+});
+
+describe("流式进度汇总", () => {
+  it("把并行批次的页数相加，同一批次重复上报时取最新值", () => {
+    const totals = new Map<string, { received: number; pages: number }>();
+
+    const first = mergeStreamProgress(totals, { taskId: 1, key: "batch-0", phase: "content", received: 100, pages: 1 });
+    const second = mergeStreamProgress(totals, { taskId: 1, key: "batch-5", phase: "content", received: 80, pages: 1 });
+    const again = mergeStreamProgress(totals, { taskId: 1, key: "batch-0", phase: "content", received: 240, pages: 3 });
+
+    expect(first).toEqual({ pages: 1, received: 100 });
+    expect(second).toEqual({ pages: 2, received: 180 });
+    // 同一批次不会把页数重复累加。
+    expect(again).toEqual({ pages: 4, received: 320 });
+  });
+
+  it("大纲阶段不计入已写页数", () => {
+    const totals = new Map<string, { received: number; pages: number }>();
+
+    const outline = mergeStreamProgress(totals, { taskId: 1, key: "outline", phase: "outline", received: 400, pages: 0 });
+
+    expect(outline.pages).toBe(0);
   });
 });
