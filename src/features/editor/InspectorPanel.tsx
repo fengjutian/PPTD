@@ -502,6 +502,9 @@ export const InspectorPanel = memo(function InspectorPanel() {
   // change a revision or the undo stack.
   const [unit, setUnit] = useState<LengthUnit>("inch");
   const [aspectLocked, setAspectLocked] = useState(false);
+  // The colors of the template are offered next to every color field. A deck
+  // without a template falls back to the default colors.
+  const palette: readonly string[] = document.theme?.colors.map((color) => color.value) ?? DEFAULT_PALETTE;
 
   return (
     <aside className="right-panel">
@@ -522,6 +525,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
           onUnitChange={setUnit}
           aspectLocked={aspectLocked}
           onToggleAspectLock={() => setAspectLocked((current) => !current)}
+          palette={palette}
           onCommand={execute}
         />
         : <div className="property-form">

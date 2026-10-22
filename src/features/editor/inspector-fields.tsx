@@ -145,7 +145,7 @@ export function NumberField({ label, value, unit, min, max, precision = 2, step,
           onClick={() => stepBy(-step)}>
           <ChevronDown />
         </button>}
-        <span className="field-input">
+        <span className={`field-input${unit ? " with-unit" : ""}`}>
           <input
             type="number"
             inputMode="decimal"

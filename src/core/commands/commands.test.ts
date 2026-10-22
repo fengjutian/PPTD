@@ -130,6 +130,36 @@ describe("document commands", () => {
     expect(aligned.slides[0]!.content).toEqual(source.slides[0]!.content);
   });
 
+  it("places an element in a corner of the page with one command", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = slide.elements[0]!;
+    const aligned = produce(source, (draft) => applyCommand(draft, {
+      type: "align-element",
+      slideId: slide.id,
+      elementId: element.id,
+      align: { horizontal: "right", vertical: "bottom" },
+    }));
+    const frame = aligned.slides[0]!.elements[0]!.frame;
+    expect(frame.x).toBe(source.pageSize.width - element.frame.width);
+    expect(frame.y).toBe(source.pageSize.height - element.frame.height);
+  });
+
+  it("leaves the other axis alone when only one of them is aligned", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = slide.elements[0]!;
+    const aligned = produce(source, (draft) => applyCommand(draft, {
+      type: "align-element",
+      slideId: slide.id,
+      elementId: element.id,
+      align: { horizontal: "left" },
+    }));
+    const frame = aligned.slides[0]!.elements[0]!.frame;
+    expect(frame.x).toBe(0);
+    expect(frame.y).toBe(element.frame.y);
+  });
+
   it("validates and applies element transforms", () => {
     const source = createDocument();
     const slide = source.slides[0]!;

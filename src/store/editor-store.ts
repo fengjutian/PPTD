@@ -66,7 +66,7 @@ const pushHistory = (stack: HistoryEntry[], entry: HistoryEntry): HistoryEntry[]
 export const useEditorStore = create<EditorState>((set) => ({
   document: initial,
   activeSlideId: initial.slides[0]!.id,
-  selectedElementId: null,
+  selectedElementId: initial.slides[0]!.elements[0]!.id,
   undoStack: [],
   redoStack: [],
 

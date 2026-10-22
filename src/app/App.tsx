@@ -28,6 +28,25 @@ import type { ExportReport } from "../features/pptx-export/export-pptx";
 import { resolveDocumentImages, setImageProjectPath, getImageProjectPath } from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
+/** The narrowest and the widest the property panel may be dragged to. */
+const INSPECTOR_MIN_WIDTH = 220;
+const INSPECTOR_MAX_WIDTH = 520;
+const INSPECTOR_WIDTH_KEY = "pptd.inspector-width";
+
+/**
+ * The width of the property panel is a display preference. It is kept in the
+ * local storage of the application, because it belongs to the window and not
+ * to the document.
+ */
+function readInspectorWidth(): number {
+  try {
+    const stored = Number(window.localStorage.getItem(INSPECTOR_WIDTH_KEY));
+    if (Number.isFinite(stored) && stored >= INSPECTOR_MIN_WIDTH && stored <= INSPECTOR_MAX_WIDTH) return stored;
+  } catch {
+    // A window without a local storage keeps the default width.
+  }
+  return 252;
+}
 type AppView = "editor" | "ai" | "theme" | "settings";
 type PageMessage = { id: number; text: string; kind: "info" | "success" | "error" };
 type DesignProgress = { percent: number; label: string };
@@ -233,6 +252,7 @@ export function App() {
   const savingRef = useRef(false);
   const [savedRevision, setSavedRevision] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [inspectorWidth, setInspectorWidth] = useState(readInspectorWidth);
   const [message, setMessage] = useState<PageMessage>();
   const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
   const [exportBusy, setExportBusy] = useState(false);
@@ -967,8 +987,33 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeSlide, document.pageSize.height, document.pageSize.width, execute, redo, redoStack.length, selected, undo, undoStack.length]);
 
+  /**
+   * Dragging the border of the property panel changes its width. The width is
+   * a display preference of the window, so it never reaches the document.
+   */
+  const startInspectorResize = (event: React.PointerEvent) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = inspectorWidth;
+    const move = (moveEvent: PointerEvent) => {
+      const next = Math.min(INSPECTOR_MAX_WIDTH, Math.max(INSPECTOR_MIN_WIDTH, startWidth - (moveEvent.clientX - startX)));
+      setInspectorWidth(next);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      try {
+        window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(inspectorWidth));
+      } catch {
+        // A window without a local storage simply forgets the width.
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
+
   return (
-    <div className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`}>
+    <div className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`} style={{ "--inspector-width": `${inspectorWidth}px` } as React.CSSProperties}>
       {activeView === "editor" && <header className="topbar">
         <div className="brand"><span className="brand-mark">P</span><div><strong>PPTD</strong><small>{document.title}</small></div></div>
         <div className="toolbar-group">
@@ -1022,6 +1067,14 @@ export function App() {
           {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={element.id === selectedElementId} />)}
         </div>
       </main>
+
+      <div
+        className="panel-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整属性面板宽度"
+        onPointerDown={startInspectorResize}
+      />
 
       <InspectorPanel />
     </>}

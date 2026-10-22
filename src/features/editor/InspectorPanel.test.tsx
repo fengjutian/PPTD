@@ -9,6 +9,7 @@ interface ViewOptions {
   aspectLocked?: boolean;
   elementIndex?: number;
   elementCount?: number;
+  palette?: readonly string[];
 }
 
 function renderView(element: SlideElement, background = "#ffffff", options: ViewOptions = {}): string {
@@ -24,6 +25,7 @@ function renderView(element: SlideElement, background = "#ffffff", options: View
       onUnitChange={() => undefined}
       aspectLocked={options.aspectLocked ?? false}
       onToggleAspectLock={() => undefined}
+      palette={options.palette}
       onCommand={() => undefined}
     />,
   );
@@ -72,13 +74,31 @@ describe("inspector panel", () => {
 
   it("labels the alignment buttons with their real meaning instead of a truncated first character", () => {
     const markup = renderView(textElement());
-    for (const label of ["左对齐", "水平居中", "右对齐", "顶对齐", "垂直居中", "底对齐"]) {
+    // The align matrix names every place an object can take on the page.
+    for (const label of ["左上对齐", "顶端对齐", "右上对齐", "左对齐", "居中对齐", "右对齐", "左下对齐", "底端对齐", "右下对齐"]) {
       expect(markup).toContain(`aria-label="${label}"`);
     }
     // The old panel truncated every label to its first character, which rendered
     // "水平居中" as a button reading "水" and "垂直居中" as "垂".
     expect(markup).not.toContain(">水</button>");
     expect(markup).not.toContain(">垂</button>");
+  });
+
+  it("offers the colors of the template next to every color field", () => {
+    const markup = renderView(textElement(), "#ffffff", { palette: ["#2b579a", "#d35230"] });
+    expect(markup).toContain('aria-label="使用颜色 #2b579a"');
+    expect(markup).toContain('aria-label="使用颜色 #d35230"');
+  });
+
+  it("folds the groups of properties away, because the panel is longer than the window", () => {
+    const markup = renderView(textElement());
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain("section-toggle");
+  });
+
+  it("lets a number be changed by dragging its label", () => {
+    const markup = renderView(textElement());
+    expect(markup).toContain("按住左右拖动改值");
   });
 
   it("exposes text styling that the exporter writes into the PPTX", () => {
