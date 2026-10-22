@@ -5,11 +5,13 @@
 
 pub mod cancel;
 pub mod minimax;
+pub mod stream;
 
 use serde::Serialize;
 use std::time::Duration;
 
 pub use cancel::{CancelRegistry, CancelToken};
+use stream::SseParser;
 
 const CREDENTIAL_SERVICE: &str = "com.pptd.desktop";
 
@@ -74,6 +76,14 @@ pub trait ChatProvider: Send + Sync {
     ) -> reqwest::RequestBuilder;
     /// 构造厂商请求体。
     fn build_request(&self, request: &ChatRequest) -> serde_json::Value;
+    /// 构造厂商的流式请求体。默认在普通请求体上打开 `stream`。
+    fn build_stream_request(&self, request: &ChatRequest) -> serde_json::Value {
+        let mut payload = self.build_request(request);
+        if let Some(object) = payload.as_object_mut() {
+            object.insert("stream".into(), serde_json::Value::Bool(true));
+        }
+        payload
+    }
     fn supports_vision(&self) -> bool {
         false
     }
@@ -139,12 +149,12 @@ const REQUEST_TIMEOUT_ERROR: &str = "AI_REQUEST_TIMEOUT";
 /// 任务被取消的稳定错误码。
 const REQUEST_CANCELLED_ERROR: &str = "AI_REQUEST_CANCELLED";
 
-async fn post_chat(
+async fn post_chat_raw(
     provider: &dyn ChatProvider,
     client: &reqwest::Client,
     api_key: &str,
     payload: &serde_json::Value,
-) -> Result<serde_json::Value, ProviderFailure> {
+) -> Result<reqwest::Response, ProviderFailure> {
     let response = provider
         .apply_auth(client.post(provider.api_base_url()), api_key)
         .json(payload)
@@ -161,7 +171,17 @@ async fn post_chat(
             provider_error_detail(response).await,
         ));
     }
-    response
+    Ok(response)
+}
+
+async fn post_chat(
+    provider: &dyn ChatProvider,
+    client: &reqwest::Client,
+    api_key: &str,
+    payload: &serde_json::Value,
+) -> Result<serde_json::Value, ProviderFailure> {
+    post_chat_raw(provider, client, api_key, payload)
+        .await?
         .json()
         .await
         .map_err(|error| ProviderFailure::Payload(PayloadError::Invalid(error.to_string())))
@@ -262,6 +282,77 @@ pub async fn chat(
         tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
     }
     Err("AI_PROVIDER_BUSY".into())
+}
+
+/// 流式请求失败时的错误前缀。
+///
+/// 流式只是进度反馈的增强，不该让生成失败：调用方看到带这个前缀的错误时，
+/// 应当退回一次性请求重新生成。
+const STREAM_FAILED_ERROR: &str = "AI_STREAM_FAILED";
+
+/// 发送一次流式对话请求，边收边回调增量片段，最后返回完整正文。
+///
+/// 与 [`chat`] 的区别只有两点：响应按 SSE 逐块读取，以及每收到一段正文就调用
+/// `on_delta`。协议层面的失败一律带 `AI_STREAM_FAILED` 前缀，由调用方决定是否
+/// 退回一次性请求。
+pub async fn chat_stream(
+    provider: &dyn ChatProvider,
+    api_key: &str,
+    body: &ChatRequest,
+    timeout: Duration,
+    transport_error: &str,
+    cancel: &CancelToken,
+    on_delta: &mut dyn FnMut(&str),
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
+    let payload = provider.build_stream_request(body);
+    let mut response = match tokio::select! {
+        biased;
+        () = cancel.cancelled() => return Err(REQUEST_CANCELLED_ERROR.into()),
+        result = post_chat_raw(provider, &client, api_key, &payload) => result,
+    } {
+        Ok(response) => response,
+        Err(ProviderFailure::Status(status, detail)) => {
+            return Err(format!("{STREAM_FAILED_ERROR}: HTTP {status}{detail}"));
+        }
+        Err(ProviderFailure::Transport { detail, timed_out }) => {
+            if timed_out {
+                return Err(REQUEST_TIMEOUT_ERROR.into());
+            }
+            return Err(format!("{STREAM_FAILED_ERROR}: {detail}"));
+        }
+        Err(ProviderFailure::Payload(error)) => {
+            return Err(format!("{STREAM_FAILED_ERROR}: {error:?}"));
+        }
+        Err(ProviderFailure::Cancelled) => return Err(REQUEST_CANCELLED_ERROR.into()),
+    };
+    let mut parser = SseParser::new();
+    let mut content = String::new();
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            () = cancel.cancelled() => return Err(REQUEST_CANCELLED_ERROR.into()),
+            result = response.chunk() => result,
+        };
+        let Some(chunk) = chunk.map_err(|error| format!("{STREAM_FAILED_ERROR}: {error}"))? else {
+            break;
+        };
+        for delta in parser.push(&String::from_utf8_lossy(&chunk)) {
+            content.push_str(&delta);
+            on_delta(&delta);
+        }
+    }
+    for delta in parser.finish() {
+        content.push_str(&delta);
+        on_delta(&delta);
+    }
+    if content.trim().is_empty() {
+        return Err(format!("{STREAM_FAILED_ERROR}: no content in stream"));
+    }
+    Ok(content)
 }
 
 pub async fn vision_chat(

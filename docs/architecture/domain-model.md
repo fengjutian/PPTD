@@ -65,7 +65,7 @@ interface ElementBase {
 - `CreateSlide`、`DeleteSlide`、`MoveSlide`
 - `AddElement`、`DeleteElements`、`DuplicateElements`
 - `TransformElements`、`ReorderElements`、`SetElementLock`
-- `EditText`、`SetTextStyle`、`SetShapeStyle`、`SetImageCrop`
+- `EditText`、`SetTextStyle`、`SetTextEmphasis`、`ClearTextEmphasis`、`SetShapeStyle`、`SetImageCrop`
 - `SetPageSize`、`ApplyThemeTokens`
 - `ApproveSlideContent`、`ReopenSlideContent`
 
@@ -160,3 +160,31 @@ interface TableElement extends ElementBase {
 `resolveTableData` 从 `slide.content.blocks` 里读回表头和行。块缺失、类型不对、表头为空或没有行时表格无法解析，导出前检查会报 `invalid-table-data` 并阻止导出。
 
 新增表格元素使持久化格式升到第 7 版，`6 → 7` 迁移与固定样例见 `src/core/document-model/__fixtures__/v6-document.json`。详见 [0012 表格数据渲染为原生表格](decisions/0012-native-table-for-tabular-data.md)。
+
+## 11. 文字片段（V0.1 已实现）
+
+文字属于内容，片段的样式属于设计。`TextRun` 因此不复制文字，只用偏移量指向文本里的一个区间：
+
+```ts
+interface TextRun {
+  start: number;
+  end: number;
+  bold?: boolean;
+  color?: string;
+  underline?: boolean;
+}
+
+interface TextElement extends ElementBase {
+  type: "text";
+  text: string;
+  contentRef?: TextContentRole;
+  style: TextElementStyle;
+  runs?: TextRun[];
+}
+```
+
+`textFragments` 把文字切成片段，`resolveFragmentStyle` 决定每段的最终样式：片段提到的属性以片段为准，没提到的以元素为准。片段不参与内容哈希，因此强调是设计态；正文被改写时（`edit-text`）片段被清空，因为偏移量已经指向了旧正文。
+
+导出把有片段的文本写成原生 run，导出前检查不阻止导出——片段是装饰，缺了片段只是少一处强调，不会让文件不可用。
+
+新增片段使持久化格式升到第 8 版，`7 → 8` 迁移与固定样例见 `src/core/document-model/__fixtures__/v7-document.json`。详见 [0013 文字片段级样式](decisions/0013-styled-text-fragments.md)。

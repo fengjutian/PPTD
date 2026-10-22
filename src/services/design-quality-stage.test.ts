@@ -115,4 +115,25 @@ describe("设计质检阶段", () => {
     expect(result.notes.join("；")).toContain("像素对比度检查不可用");
     expect(result.document.slides).toHaveLength(1);
   });
+
+  it("确定性质量门自身报错时降级，不把没检查误报成通过", async () => {
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: visionPort(async () => passingReview),
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+      validateQuality: () => { throw new Error("QUALITY_GATE_FAILED"); },
+    });
+
+    // passed 为 false 表示"没检查完"，文档仍然产出。
+    expect(result.passed).toBe(false);
+    expect(result.degraded).toBe(true);
+    expect(result.notes.join("；")).toContain("确定性质量门不可用");
+    expect(result.document.slides).toHaveLength(1);
+  });
 });

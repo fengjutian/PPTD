@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sanitizeDraftForSave } from "./ai-draft-content";
 import { aiDraftSchema, type AiDraft } from "./ai-service";
 import { loadStoredAiHistory, saveStoredAiHistory } from "./app-database";
 
@@ -23,6 +24,9 @@ export async function loadAiHistory(): Promise<AiHistoryEntry[]> {
 }
 
 export async function saveAiHistory(entry: { id: string; topic: string; slideCount: number; draft: AiDraft }): Promise<AiHistoryEntry[]> {
-  const next: AiHistoryEntry = { ...entry, updatedAt: new Date().toISOString() };
+  // A draft is saved while it is still being reviewed, so partially emptied
+  // fields are normal here. Sanitizing keeps the next load from dropping the
+  // whole entry because the storage schema requires present fields.
+  const next: AiHistoryEntry = { ...entry, draft: sanitizeDraftForSave(entry.draft), updatedAt: new Date().toISOString() };
   return parseHistory(await saveStoredAiHistory(next));
 }

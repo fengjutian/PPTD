@@ -67,6 +67,29 @@ function fixedGeneratedText(value: string): boolean {
   return /^(?:\d{1,2}|[“”"'‘’「」『』]|关键摘录|项要点|本页要点|→|•)$/u.test(value.trim());
 }
 
+/** The reviewed copy of the page, without presentation prefixes such as "1. ". */
+function reviewedText(slide: Slide): string {
+  const values: string[] = [slide.content.title, slide.content.body];
+  for (const block of slide.content.blocks ?? []) {
+    if (block.type === "paragraph") values.push(block.text);
+    else if (block.type === "bullet-list") values.push(...block.items);
+    else if (block.type === "quote") values.push(block.text);
+    else if (block.type === "metric") values.push(block.label, block.value);
+    else if (block.type === "timeline" || block.type === "process") values.push(...block.items.flatMap((item) => [item.label, item.text]));
+    else if (block.type === "comparison") values.push(block.leftLabel, block.rightLabel, ...block.leftItems, ...block.rightItems);
+    else if (block.type === "table-data") values.push(...block.header, ...block.rows.flat());
+  }
+  return values.join("\n");
+}
+
+function textFromReviewedCopy(text: string, reviewed: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (reviewed.includes(trimmed)) return true;
+  const withoutPrefix = trimmed.replace(/^[\s•·\-–—\d.、]+/u, "").trim();
+  return withoutPrefix.length >= 2 && reviewed.includes(withoutPrefix);
+}
+
 /**
  * Older documents predate `origin`. Their generated decorative text sits inside
  * the generated cards/panels, while user copy is normally placed on the page
@@ -76,6 +99,7 @@ function fixedGeneratedText(value: string): boolean {
 export function classifyRelayoutElements(slide: Slide): RelayoutElements {
   const generated = new Set<string>();
   const preserved = new Set<string>();
+  const reviewed = reviewedText(slide);
   const decide = (element: SlideElement, origin: ElementOrigin) => {
     if (generated.has(element.id) || preserved.has(element.id)) return;
     if (origin === "generated") generated.add(element.id);
@@ -112,6 +136,13 @@ export function classifyRelayoutElements(slide: Slide): RelayoutElements {
       continue;
     }
     if (element.type === "text" && fixedGeneratedText(element.text)) {
+      decide(element, "generated");
+      continue;
+    }
+    // Legacy editorial pages keep their list copy in decorative text boxes.
+    // When the string is verbatim reviewed copy, it belongs to the generated
+    // composition, not to a hand-written note.
+    if (element.type === "text" && element.contentRef === "decorative" && textFromReviewedCopy(element.text, reviewed)) {
       decide(element, "generated");
     }
   }
@@ -160,10 +191,12 @@ function inferLayout(slide: Slide, document: PresentationDocument, generated: Sl
   const name = layoutName(slide, document).toLocaleLowerCase();
   if (/(封面|cover|title slide|扉页)/u.test(name)) return "cover";
   if (/(章节|section|过渡|分隔)/u.test(name)) return "section";
+  // An explicit two-column name is a strong signal. A generic content name is
+  // not: vendor templates call both a card grid and a plain two-column page
+  // "内页", so the composition of the page has to win over that label.
   if (/(双栏|两栏|左右|对比|比较|split|two content|comparison)/u.test(name)) return "split";
   if (/(引用|引言|金句|quote)/u.test(name)) return "quote";
   if (/(总结|summary)/u.test(name)) return "summary";
-  if (/(卡片|要点|流程|时间|cards|content)/u.test(name)) return "cards";
 
   const texts = generated.filter((element): element is TextElement => element.type === "text" && element.contentRef !== "title");
   const bodyFrames = texts.map((element) => element.frame);
@@ -173,6 +206,7 @@ function inferLayout(slide: Slide, document: PresentationDocument, generated: Sl
     if (left.length > 0 && right.length > 0) return "split";
   }
   if (texts.length >= 3) return "cards";
+  if (/(卡片|cards)/u.test(name)) return "cards";
   return "title-body";
 }
 

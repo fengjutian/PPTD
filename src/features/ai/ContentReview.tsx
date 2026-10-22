@@ -1,7 +1,8 @@
-import { CircleAlert, FilePlus2, RotateCcw } from "lucide-react";
+import { CircleAlert, FilePlus2, Plus, RotateCcw, Undo2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { AiDraft } from "../../services/ai-service";
+import type { AiDraft, ContentBlock } from "../../services/ai-service";
 import {
+  blockTypeLabels,
   countCharacters,
   densityLabels,
   draftMetrics,
@@ -20,10 +21,14 @@ export type ContentReviewProps = {
   originalDraft?: AiDraft;
   activeIndex: number;
   saveState: AiDraftSaveState;
+  /** Pages whose last "restore original" step can still be undone. */
+  restoreUndoIndexes: readonly number[];
   onActiveIndexChange: (index: number) => void;
   onDraftTitleChange: (title: string) => void;
   onSlideFieldChange: (index: number, field: SlideField, value: string) => void;
+  onSlideBlocksChange: (index: number, blocks: ContentBlock[]) => void;
   onRestoreSlide: (index: number) => void;
+  onUndoRestore: (index: number) => void;
   onNewDraft: () => void;
 };
 
@@ -46,15 +51,202 @@ function DraftNotes({ index, value, onChange }: { index: number; value: string; 
   );
 }
 
+function ItemListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string; items: string[]; max: number; onChange: (items: string[]) => void }) {
+  return (
+    <div className="block-item-list">
+      {items.map((item, index) => (
+        <div className="block-item-row" key={index}>
+          <input
+            aria-label={`${ariaLabel}第 ${index + 1} 条`}
+            maxLength={500}
+            placeholder="输入要点"
+            value={item}
+            onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? event.target.value : value)))}
+          />
+          <button type="button" className="icon-action" aria-label={`删除${ariaLabel}第 ${index + 1} 条`} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}>
+            <X />
+          </button>
+        </div>
+      ))}
+      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => onChange([...items, ""])}>
+        <Plus />
+        添加一条
+      </button>
+    </div>
+  );
+}
+
+function PairListEditor({ ariaLabel, items, max, onChange }: { ariaLabel: string; items: Array<{ label: string; text: string }>; max: number; onChange: (items: Array<{ label: string; text: string }>) => void }) {
+  return (
+    <div className="block-item-list">
+      {items.map((item, index) => (
+        <div className="block-pair-row" key={index}>
+          <input
+            aria-label={`${ariaLabel}第 ${index + 1} 条标签`}
+            maxLength={100}
+            placeholder="阶段"
+            value={item.label}
+            onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? { ...value, label: event.target.value } : value)))}
+          />
+          <input
+            aria-label={`${ariaLabel}第 ${index + 1} 条说明`}
+            maxLength={500}
+            placeholder="说明"
+            value={item.text}
+            onChange={(event) => onChange(items.map((value, itemIndex) => (itemIndex === index ? { ...value, text: event.target.value } : value)))}
+          />
+          <button type="button" className="icon-action" aria-label={`删除${ariaLabel}第 ${index + 1} 条`} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}>
+            <X />
+          </button>
+        </div>
+      ))}
+      <button type="button" className="link-action block-add" disabled={items.length >= max} onClick={() => onChange([...items, { label: "", text: "" }])}>
+        <Plus />
+        添加一条
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Structured pages are edited through their blocks, because a block is what
+ * the renderer draws. Editing only the body string here used to flatten a
+ * metric, comparison or timeline page into a bullet list.
+ */
+function BlockEditor({ slideIndex, blocks, onChange }: { slideIndex: number; blocks: ContentBlock[]; onChange: (blocks: ContentBlock[]) => void }) {
+  const replace = (index: number, block: ContentBlock) => onChange(blocks.map((current, currentIndex) => (currentIndex === index ? block : current)));
+  const remove = (index: number) => onChange(blocks.filter((_, currentIndex) => currentIndex !== index));
+  const pageLabel = `第 ${slideIndex + 1} 页`;
+  return (
+    <div className="block-editor">
+      {blocks.map((block, index) => {
+        const typeLabel = blockTypeLabels[block.type];
+        return (
+          <section className={`block-row ${block.type}`} key={`${block.type}-${index}`} aria-label={`${pageLabel}的${typeLabel}`}>
+            <header className="block-row-header">
+              <span className="block-type">{typeLabel}</span>
+              <button type="button" className="icon-action" aria-label={`删除${pageLabel}的${typeLabel}`} onClick={() => remove(index)}>
+                <X />
+              </button>
+            </header>
+            {block.type === "paragraph" && (
+              <textarea
+                aria-label={`${pageLabel}段落`}
+                rows={3}
+                maxLength={2000}
+                placeholder="输入本页正文"
+                value={block.text}
+                onChange={(event) => replace(index, { ...block, text: event.target.value })}
+              />
+            )}
+            {block.type === "quote" && (
+              <>
+                <textarea
+                  aria-label={`${pageLabel}引用内容`}
+                  rows={2}
+                  maxLength={2000}
+                  placeholder="输入引用原文"
+                  value={block.text}
+                  onChange={(event) => replace(index, { ...block, text: event.target.value })}
+                />
+                <input
+                  aria-label={`${pageLabel}引用出处`}
+                  maxLength={300}
+                  placeholder="出处（可选）"
+                  value={block.attribution ?? ""}
+                  onChange={(event) => replace(index, { ...block, attribution: event.target.value || undefined })}
+                />
+              </>
+            )}
+            {block.type === "bullet-list" && (
+              <ItemListEditor ariaLabel={`${pageLabel}要点`} items={block.items} max={12} onChange={(items) => replace(index, { ...block, items })} />
+            )}
+            {block.type === "metric" && (
+              <div className="block-pair-row">
+                <input
+                  aria-label={`${pageLabel}指标名称`}
+                  maxLength={300}
+                  placeholder="指标名称"
+                  value={block.label}
+                  onChange={(event) => replace(index, { ...block, label: event.target.value })}
+                />
+                <input
+                  aria-label={`${pageLabel}指标数值`}
+                  maxLength={100}
+                  placeholder="数值"
+                  value={block.value}
+                  onChange={(event) => replace(index, { ...block, value: event.target.value })}
+                />
+              </div>
+            )}
+            {(block.type === "timeline" || block.type === "process") && (
+              <PairListEditor ariaLabel={`${pageLabel}${typeLabel}`} items={block.items} max={10} onChange={(items) => replace(index, { ...block, items })} />
+            )}
+            {block.type === "comparison" && (
+              <>
+                <div className="block-pair-row">
+                  <input
+                    aria-label={`${pageLabel}左侧标题`}
+                    maxLength={100}
+                    value={block.leftLabel}
+                    onChange={(event) => replace(index, { ...block, leftLabel: event.target.value })}
+                  />
+                  <input
+                    aria-label={`${pageLabel}右侧标题`}
+                    maxLength={100}
+                    value={block.rightLabel}
+                    onChange={(event) => replace(index, { ...block, rightLabel: event.target.value })}
+                  />
+                </div>
+                <ItemListEditor ariaLabel={`${pageLabel}左侧要点`} items={block.leftItems} max={8} onChange={(leftItems) => replace(index, { ...block, leftItems })} />
+                <ItemListEditor ariaLabel={`${pageLabel}右侧要点`} items={block.rightItems} max={8} onChange={(rightItems) => replace(index, { ...block, rightItems })} />
+              </>
+            )}
+            {block.type === "table-data" && (
+              <div className="block-table">
+                <table>
+                  <thead>
+                    <tr>{block.header.map((cell, cellIndex) => <th key={cellIndex}>{cell}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, rowIndex) => (
+                      <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+                <small>表格已按结构化单元格保存，生成后可在编辑器中逐格修改。</small>
+              </div>
+            )}
+          </section>
+        );
+      })}
+      <div className="block-add-row">
+        <button type="button" className="link-action" onClick={() => onChange([...blocks, { type: "paragraph", text: "" }])}>
+          <Plus />
+          添加段落
+        </button>
+        <button type="button" className="link-action" onClick={() => onChange([...blocks, { type: "bullet-list", items: [""] }])}>
+          <Plus />
+          添加要点
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 export function ContentReview({
   draft,
   originalDraft,
   activeIndex,
   saveState,
+  restoreUndoIndexes,
   onActiveIndexChange,
   onDraftTitleChange,
   onSlideFieldChange,
+  onSlideBlocksChange,
   onRestoreSlide,
+  onUndoRestore,
   onNewDraft,
 }: ContentReviewProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -201,6 +393,7 @@ export function ContentReview({
             const slideStat = slideMetrics(slide);
             const missing = !slide.title.trim();
             const edited = isSlideEdited(slide, originalDraft?.slides[index]);
+            const canUndoRestore = restoreUndoIndexes.includes(index);
             return (
               <article
                 id={`draft-slide-${index}`}
@@ -237,16 +430,23 @@ export function ContentReview({
                     <span>
                       {slideStat.characters} 字 · {slideStat.points} 条要点
                     </span>
-                    <button
-                      type="button"
-                      className="link-action"
-                      disabled={!edited}
-                      title="恢复本页 AI 生成的原始文字"
-                      onClick={() => onRestoreSlide(index)}
-                    >
-                      <RotateCcw />
-                      恢复原文
-                    </button>
+                    {canUndoRestore ? (
+                      <button type="button" className="link-action" title="撤销刚才的恢复操作，回到恢复前的内容" onClick={() => onUndoRestore(index)}>
+                        <Undo2 />
+                        撤销恢复
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="link-action"
+                        disabled={!edited}
+                        title="恢复本页 AI 生成的原始文字"
+                        onClick={() => onRestoreSlide(index)}
+                      >
+                        <RotateCcw />
+                        恢复原文
+                      </button>
+                    )}
                   </div>
                 </header>
 
@@ -269,17 +469,21 @@ export function ContentReview({
                   </div>
                 </details>
 
-                <label className="draft-body-field">
-                  正文
-                  <textarea
-                    aria-label={`第 ${index + 1} 页正文`}
-                    rows={Math.max(4, slide.body.split("\n").length + 1)}
-                    maxLength={4000}
-                    value={slide.body}
-                    placeholder="输入本页要讲的内容"
-                    onChange={(event) => onSlideFieldChange(index, "body", event.target.value)}
-                  />
-                </label>
+                {slide.blocks.length > 0 ? (
+                  <BlockEditor slideIndex={index} blocks={slide.blocks} onChange={(blocks) => onSlideBlocksChange(index, blocks)} />
+                ) : (
+                  <label className="draft-body-field">
+                    正文
+                    <textarea
+                      aria-label={`第 ${index + 1} 页正文`}
+                      rows={Math.max(4, slide.body.split("\n").length + 1)}
+                      maxLength={4000}
+                      value={slide.body}
+                      placeholder="输入本页要讲的内容"
+                      onChange={(event) => onSlideFieldChange(index, "body", event.target.value)}
+                    />
+                  </label>
+                )}
 
                 <DraftNotes
                   index={index}

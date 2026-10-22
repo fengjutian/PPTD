@@ -105,7 +105,7 @@ function cloneElement(element: SlideElement): SlideElement {
   if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
   if (element.type === "chart") return { ...element, frame: { ...element.frame }, style: { ...element.style, seriesColors: [...element.style.seriesColors] }, contentBlockIds: [...element.contentBlockIds] };
   if (element.type === "table") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
-  return { ...element, frame: { ...element.frame }, source: { ...element.source } };
+  return { ...element, frame: { ...element.frame }, source: { ...element.source }, ...(element.crop ? { crop: { ...element.crop } } : {}) };
 }
 
 /** Strips document block IDs before handing reviewed content back to the renderer. */
@@ -299,11 +299,16 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
  */
 function relayoutSlide(document: PresentationDocument, slide: Slide): void {
   const context = inferRelayoutContext(slide, document);
-  const preserved = classifyRelayoutElements(slide).preserved.map((element) => {
-    const copy = cloneElement(element);
-    copy.origin = "user";
-    return copy;
-  });
+  const preserved = classifyRelayoutElements(slide).preserved
+    // A locked title/body placeholder is still the content binding. Keeping it
+    // beside the newly rendered placeholder would duplicate the heading or the
+    // body; the reviewed content itself is unchanged either way.
+    .filter((element) => element.type !== "text" || (element.contentRef !== "title" && element.contentRef !== "body"))
+    .map((element) => {
+      const copy = cloneElement(element);
+      copy.origin = "user";
+      return copy;
+    });
   const blocks = toAiBlocks(slide.content.blocks);
   const draft: AiSlideDraft = {
     title: slide.content.title,
@@ -312,11 +317,12 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
     ...(blocks ? { blocks } : {}),
   };
   const temp = createDocument();
-  temp.title = document.title;
+  const documentTitle = document.title.trim() || "未命名演示文稿";
+  temp.title = documentTitle;
   temp.pageSize = { ...document.pageSize };
   const relayoutCommand: DocumentCommand = {
     type: "apply-ai-designed-draft",
-    title: document.title,
+    title: documentTitle,
     slides: [draft],
     designs: [context.design],
     pageSize: { ...document.pageSize },
@@ -329,6 +335,32 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
   applyCommand(temp, relayoutCommand);
   const generatedSlide = temp.slides[0];
   if (!generatedSlide) throw new Error("RELAYOUT_FAILED");
+
+  // Chart and table elements point at reviewed content blocks. The temporary
+  // render creates fresh block ids, so map those references back to the ids of
+  // the page that stays in the document.
+  const tempBlocks = generatedSlide.content.blocks ?? [];
+  const targetBlocks = slide.content.blocks ?? [];
+  const mapBlockId = (id: string): string | undefined => {
+    const index = tempBlocks.findIndex((block) => block.id === id);
+    const target = index >= 0 ? targetBlocks[index] : undefined;
+    return target && target.type === tempBlocks[index]?.type ? target.id : undefined;
+  };
+  generatedSlide.elements = generatedSlide.elements.flatMap((element): SlideElement[] => {
+    if (element.type === "chart") {
+      const ids = element.contentBlockIds.map(mapBlockId).filter((id): id is string => Boolean(id));
+      if (ids.length === 0) return [];
+      element.contentBlockIds = ids;
+      return [element];
+    }
+    if (element.type === "table") {
+      const id = mapBlockId(element.contentBlockId);
+      if (!id) return [];
+      element.contentBlockId = id;
+      return [element];
+    }
+    return [element];
+  });
 
   slide.background = generatedSlide.background;
   slide.elements = [...generatedSlide.elements, ...preserved];

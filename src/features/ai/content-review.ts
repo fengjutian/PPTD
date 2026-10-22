@@ -1,3 +1,4 @@
+import { sanitizeBlocks } from "../../services/ai-draft-content";
 import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
 
 export type DraftSlide = AiDraft["slides"][number];
@@ -31,6 +32,17 @@ export const densityLabels: Record<SlideBrief["density"], string> = {
   high: "高信息密度",
 };
 
+export const blockTypeLabels: Record<ContentBlock["type"], string> = {
+  paragraph: "段落",
+  "bullet-list": "要点列表",
+  quote: "引用",
+  metric: "指标",
+  timeline: "时间线",
+  process: "流程",
+  comparison: "对比",
+  "table-data": "表格",
+};
+
 export function countCharacters(text: string): number {
   return [...text.replace(/\s/g, "")].length;
 }
@@ -55,15 +67,18 @@ function blockPointCount(block: ContentBlock): number {
 
 /**
  * Blocks are the reviewed fact source; body copy is only the fallback for
- * legacy drafts that never produced structured blocks.
+ * legacy drafts that never produced structured blocks. Empty items are
+ * ignored so the counter follows what the page will actually render.
  */
 export function countSlidePoints(slide: DraftSlide): number {
-  if (slide.blocks.length === 0) return splitBodyItems(slide.body).length;
-  return slide.blocks.reduce((total, block) => total + blockPointCount(block), 0);
+  const blocks = sanitizeBlocks(slide.blocks);
+  if (blocks.length === 0) return splitBodyItems(slide.body).length;
+  return blocks.reduce((total, block) => total + blockPointCount(block), 0);
 }
 
 function firstPoint(slide: DraftSlide): string {
-  const bulletList = slide.blocks.find((block): block is Extract<ContentBlock, { type: "bullet-list" }> => block.type === "bullet-list");
+  const blocks = sanitizeBlocks(slide.blocks);
+  const bulletList = blocks.find((block): block is Extract<ContentBlock, { type: "bullet-list" }> => block.type === "bullet-list");
   const raw = bulletList?.items[0] ?? splitBodyItems(slide.body)[0] ?? "";
   return raw.replace(/^\s*(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*/, "").trim();
 }
@@ -94,7 +109,12 @@ export function missingTitleIndexes(draft: AiDraft): number[] {
 
 export function isSlideEdited(slide: DraftSlide, original: DraftSlide | undefined): boolean {
   if (!original) return false;
-  return slide.title !== original.title || slide.body !== original.body || slide.speakerNotes !== original.speakerNotes;
+  return (
+    slide.title !== original.title ||
+    slide.body !== original.body ||
+    slide.speakerNotes !== original.speakerNotes ||
+    JSON.stringify(slide.blocks) !== JSON.stringify(original.blocks)
+  );
 }
 
 /**

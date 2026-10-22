@@ -278,6 +278,7 @@ button { color: inherit; }
 .export-report-list li.error > svg { color: #ee9199; }
 .export-report-list strong { font-size: 12px; }
 .export-report-list p { margin: 4px 0 0; color: #a3a7af; font-size: 11px; line-height: 1.5; }
+.design-quality-notes { margin: 14px 0 0; color: inherit; opacity: .72; font-size: 11px; line-height: 1.6; }
 .template-picker-dialog { width: min(920px, 100%); }
 .template-picker-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 22px; color: #d8dae0; font-size: 12px; }
 .template-picker-toolbar .secondary-action { min-height: 36px; }

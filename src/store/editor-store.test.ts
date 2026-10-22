@@ -115,6 +115,23 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
   });
 
+  it("commits an emphasis as one design transaction and keeps reviewed content frozen", () => {
+    const state = useEditorStore.getState();
+    const slide = state.document.slides[0]!;
+    const title = slide.elements[0]!;
+    const originalHash = slide.content.contentHash;
+    state.execute({ type: "set-text-emphasis", slideId: slide.id, elementId: title.id, start: 0, end: 2, style: { bold: true } });
+    const emphasised = useEditorStore.getState().document.slides[0]!.elements[0]!;
+    expect(emphasised.type === "text" ? emphasised.runs : undefined).toEqual([{ start: 0, end: 2, bold: true }]);
+    // The emphasis is design: the approved copy stays frozen.
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
+    expect(useEditorStore.getState().document.slides[0]!.content.contentHash).toBe(originalHash);
+
+    useEditorStore.getState().undo();
+    const reverted = useEditorStore.getState().document.slides[0]!.elements[0]!;
+    expect(reverted.type === "text" ? reverted.runs : undefined).toBeUndefined();
+  });
+
   it("commits a picture crop as one design transaction and can undo it", () => {
     const state = useEditorStore.getState();
     const slide = state.document.slides[0]!;

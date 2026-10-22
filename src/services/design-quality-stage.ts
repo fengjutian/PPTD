@@ -26,6 +26,8 @@ export interface DesignQualityStageOptions {
   renderForReview?: (document: PresentationDocument) => Promise<{ slides: string[]; contactSheet: string }>;
   /** 采样文字下方真实像素。测试可替换。 */
   inspectContrast?: (document: PresentationDocument) => Promise<RenderedContrastReport>;
+  /** 确定性质量门。测试可替换。 */
+  validateQuality?: (document: PresentationDocument, designs: AiSlideDesign[]) => { passed: boolean; issues: PresentationQualityIssue[] };
 }
 
 export interface DesignQualityStageResult {
@@ -189,12 +191,27 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     contrast = await inspectContrast(document);
   }
 
-  const quality = validatePresentationVisualQuality(document, designs);
-  const issues = [...quality.issues, ...contrastIssues(contrast.issues)];
-  const passed = issues.length === 0;
+  const validateQuality = options.validateQuality ?? validatePresentationVisualQuality;
+  // 质量门本身也不能把已经生成好的文档吞掉：它抛错时只降级，并把
+  // passed 记为 false，避免把"没检查"误报成"没问题"。
+  let gatePassed = false;
+  let gateIssues: PresentationQualityIssue[] = [];
+  try {
+    const quality = validateQuality(document, designs);
+    gatePassed = quality.passed;
+    gateIssues = quality.issues;
+  } catch (error) {
+    if (isGenerationCancelled(error)) throw error;
+    degraded = true;
+    notes.push(`确定性质量门不可用：${error instanceof Error ? error.message : String(error)}`);
+  }
+  const issues = [...gateIssues, ...contrastIssues(contrast.issues)];
+  const passed = gatePassed && issues.length === 0;
   if (!passed) {
     const pages = [...new Set(issues.map((issue) => issue.slideIndex + 1))].join("、");
-    notes.push(`质量门发现 ${issues.length} 个问题，涉及第 ${pages} 页`);
+    notes.push(issues.length > 0
+      ? `质量门发现 ${issues.length} 个问题，涉及第 ${pages} 页`
+      : "质量门未能完成检查，问题清单不完整");
   }
   return { designs, document, notes, issues, passed, degraded };
 }
