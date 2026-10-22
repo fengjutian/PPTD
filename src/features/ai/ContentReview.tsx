@@ -12,6 +12,7 @@ import {
   nearestSlideIndex,
   outlineNavTarget,
   reviewIssues,
+  slideCardScrollTop,
   slideHasContent,
   slideMetrics,
   TABLE_REVIEW_MAX_COLUMNS,
@@ -495,8 +496,7 @@ export function ContentReview({
     }, 450);
     const card = listRef.current?.querySelector<HTMLElement>(`[data-slide-index="${index}"]`);
     card?.scrollIntoView({ block: "start", behavior: "smooth" });
-    if (focus === "title") document.getElementById(`draft-slide-title-${index}`)?.focus({ preventScroll: true });
-  };
+    if (focus === "title") document.getElementById(`draft-slide-title-${index}`)?.focus({ preventScroll: true });  };
 
   // The outline is one tab stop with arrow-key movement, so a ten page draft
   // does not require ten Tab presses before the writer reaches the page body.

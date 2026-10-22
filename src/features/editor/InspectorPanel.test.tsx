@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createDocument, emu, type ElementId, type SlideElement } from "../../core/document-model";
-import { useEditorStore } from "../../store/editor-store";
-import { InspectorPanel, InspectorPanelView } from "./InspectorPanel";
+import { InspectorPanel, InspectorPanelView, InspectorTitleBar } from "./InspectorPanel";
 import type { LengthUnit } from "./inspector-geometry";
 
 interface ViewOptions {
@@ -244,21 +243,20 @@ describe("inspector panel", () => {
     const document = createDocument();
     const slide = document.slides[0]!;
     const element = slide.elements[0]!;
-    const before = useEditorStore.getState();
-    useEditorStore.setState({ document, activeSlideId: slide.id, selectedElementId: element.id });
-    try {
-      const markup = renderToStaticMarkup(<InspectorPanel />);
-      // The picture is drawn with the same code the canvas uses, so the panel
-      // shows the object instead of only naming it.
-      expect(markup).toContain("element-preview");
-      expect(markup).toContain("type-chip");
-      expect(markup).toContain("文本");
-    } finally {
-      useEditorStore.setState({
-        document: before.document,
-        activeSlideId: before.activeSlideId,
-        selectedElementId: before.selectedElementId,
-      });
-    }
+    const markup = renderToStaticMarkup(<InspectorTitleBar element={element} slide={slide} />);
+    // The picture is drawn with the same code the canvas uses, so the panel
+    // shows the object instead of only naming it.
+    expect(markup).toContain("element-preview");
+    expect(markup).toContain("type-chip");
+    expect(markup).toContain("文本");
+    expect(markup).toContain("开始创造你的演示文稿");
+  });
+
+  it("keeps the title bar free of a picture when nothing is selected", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    const markup = renderToStaticMarkup(<InspectorTitleBar element={undefined} slide={slide} />);
+    expect(markup).not.toContain("element-preview");
+    expect(markup).not.toContain("type-chip");
   });
 });

@@ -276,6 +276,18 @@ export function nearestSlideIndex(cards: readonly { index: number; top: number }
   return nearest;
 }
 
+/**
+ * The scroll position of the card list that puts a page at the top of it.
+ *
+ * Only the list may move here. scrollIntoView scrolls the page as well, and a
+ * scrolled page shifts the whole application window up: the header disappears
+ * and an empty band shows under the status bar.
+ */
+export function slideCardScrollTop(input: { listTop: number; cardTop: number; scrollTop: number; margin?: number }): number {
+  const margin = input.margin ?? 0;
+  return Math.max(0, input.scrollTop + input.cardTop - input.listTop - margin);
+}
+
 export function isSlideEdited(slide: DraftSlide, original: DraftSlide | undefined): boolean {
   if (!original) return false;
   return (

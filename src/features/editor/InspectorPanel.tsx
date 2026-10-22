@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { AlignCenterHorizontal, AlignLeft, AlignRight, ArrowDown, ArrowUp, Bold, BringToFront, ChevronDown, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Square, Trash2, Type, Unlink } from "lucide-react";
-import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
+import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type Slide, type SlideElement, type SlideId, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
 import { isFontAvailable } from "../../core/validation/export-validation";
