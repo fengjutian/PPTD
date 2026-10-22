@@ -866,15 +866,25 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           };
           const panelQuote = quoteAttribution ? `${displayQuote(pullQuote)}\n— ${quoteAttribution}` : displayQuote(pullQuote);
           const quoteSize = panelQuote.length > 60 ? 16 : panelQuote.length > 40 ? 18 : 22;
-          slide.elements.push(text(panelQuote, centeredBlock(panelQuote, { x: panelX + 0.05, y: contentBox.y + 0.14, width: panelWidth - 0.10, height: contentBox.height * 0.58 }, quoteSize), quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
-          slide.elements.push(shape(frame(panelX + 0.05, contentBox.y + contentBox.height - 0.18, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("关键摘录", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.145, panelWidth - 0.10, 0.06), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          // Anchor the quote to the top of the panel. Centering a multi-line
+          // quote inside a tall slot pushed the last line into the rule and the
+          // "关键摘录" label. The reviewed copy is unchanged; this only sets
+          // the display box.
+          const quoteFrame = frame(panelX + 0.05, contentBox.y + contentBox.height * 0.36, panelWidth - 0.10, Math.max(0.12, contentBox.height * 0.35));
+          const quoteBottom = quoteFrame.y / pageHeight + quoteFrame.height / pageHeight;
+          slide.elements.push(text(panelQuote, quoteFrame, quoteSize, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+          slide.elements.push(shape(frame(panelX + 0.05, quoteBottom + 0.02, panelWidth - 0.10, 0.004), "#FFFFFF"));
+          slide.elements.push(text("关键摘录", frame(panelX + 0.05, quoteBottom + 0.05, panelWidth - 0.10, 0.06), 12, "#FFFFFF", true, "left", undefined, accentFillLuminance));
         } else {
           const countText = String(items.length).padStart(2, "0");
-          slide.elements.push(text(countText, centeredBlock(countText, { x: panelX + 0.05, y: contentBox.y + 0.16, width: panelWidth - 0.10, height: contentBox.height * 0.24 }, 86), 86, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-          slide.elements.push(shape(frame(panelX + 0.05, contentBox.y + contentBox.height * 0.47, panelWidth - 0.10, 0.004), "#FFFFFF"));
-          slide.elements.push(text("项要点", frame(panelX + 0.05, contentBox.y + contentBox.height * 0.50, panelWidth - 0.10, 0.07), 18, "#FFFFFF", true, "left", undefined, accentFillLuminance));
-          slide.elements.push(text("本页要点", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.145, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
+          // The numeral is the anchor, so measure its own block and place the
+          // rule and label below it instead of guessing a fixed fraction.
+          const countFrame = frame(panelX + 0.05, contentBox.y + contentBox.height * 0.10, panelWidth - 0.10, blockHeight(countText, panelWidth - 0.10, 86) * 1.04);
+          const countBottom = countFrame.y / pageHeight + countFrame.height / pageHeight;
+          slide.elements.push(text(countText, countFrame, 86, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(shape(frame(panelX + 0.05, countBottom + 0.02, panelWidth - 0.10, 0.004), "#FFFFFF"));
+          slide.elements.push(text("项要点", frame(panelX + 0.05, countBottom + 0.05, panelWidth - 0.10, 0.07), 18, "#FFFFFF", true, "left", undefined, accentFillLuminance));
+          slide.elements.push(text("本页要点", frame(panelX + 0.05, contentBox.y + contentBox.height - 0.055, panelWidth - 0.10, 0.06), 12, "#FFFFFF", false, "left", undefined, accentFillLuminance));
         }
       } else if (items.length > 1 && items.length <= 6 && (design.layout === "cards" || shortSplitAsCards || (items.length >= 3 && (design.layout === "title-body" || design.layout === "summary") && shortItems))) {
         slide.elements.push(text(content.title, frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height), templateTitleSize ?? 32, titleInk, true, "left", undefined, titleLuminance));

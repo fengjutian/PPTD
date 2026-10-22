@@ -1,5 +1,6 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
     io::{Read, Write},
@@ -324,13 +325,25 @@ fn assets_root(path: &Path) -> Result<PathBuf, String> {
     Ok(path.with_file_name(format!("{file_name}.assets")))
 }
 
+/// The lowercase hex SHA-256 digest of image bytes, used as the resource file
+/// name. The digest depends only on the bytes, never on the page, order or
+/// revision, so the same picture is written once and a text-only autosave no
+/// longer rewrites every image. Cleanup then removes a file only when no
+/// element references it anymore.
+fn hex_digest(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
 fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
-    let revision = document
-        .pointer("/revisions/document")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    let version = format!("revision-{revision}");
-    let directory = assets_root(path)?.join(&version);
+    let directory = assets_root(path)?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("ASSET_DIRECTORY_CREATE_FAILED: {error}"))?;
     let Some(elements) = document
         .pointer_mut("/slides")
         .and_then(Value::as_array_mut)
@@ -344,17 +357,6 @@ fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
         for element in items {
             if element.get("type").and_then(Value::as_str) != Some("image") {
                 continue;
-            }
-            let id = element
-                .get("id")
-                .and_then(Value::as_str)
-                .ok_or("IMAGE_ID_INVALID")?
-                .to_owned();
-            if !id
-                .chars()
-                .all(|character| character.is_ascii_alphanumeric() || character == '-')
-            {
-                return Err("IMAGE_ID_INVALID".into());
             }
             let source = element
                 .get_mut("source")
@@ -384,37 +386,56 @@ fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
             if bytes.len() > MAX_IMAGE_BYTES {
                 return Err("IMAGE_TOO_LARGE".into());
             }
-            fs::create_dir_all(&directory)
-                .map_err(|error| format!("ASSET_DIRECTORY_CREATE_FAILED: {error}"))?;
-            let file_name = format!("{id}.{extension}");
-            atomic_write(&directory.join(&file_name), &bytes)?;
+            let file_name = format!("{}.{extension}", hex_digest(&bytes));
+            let file_path = directory.join(&file_name);
+            // 同一张图只写一次：内容没变时跳过写盘，纯文字编辑的自动保存不再重写所有图片。
+            if !file_path.is_file() {
+                atomic_write(&file_path, &bytes)?;
+            }
             source.insert(
                 "dataUrl".into(),
-                Value::String(format!("asset://{version}/{file_name}")),
+                Value::String(format!("asset://{file_name}")),
             );
         }
     }
+    cleanup_unreferenced_assets(path, document);
     Ok(())
 }
 
-fn current_asset_version(document: &Value) -> String {
-    let revision = document
-        .pointer("/revisions/document")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    format!("revision-{revision}")
-}
-
-fn cleanup_old_asset_versions(path: &Path, keep: &str) {
+/// Removes resource files no element references and legacy `revision-N`
+/// directories. Runs after a save, so an old project opened before its first
+/// save still reads its revision directory; only a save in the new format
+/// retires it.
+fn cleanup_unreferenced_assets(path: &Path, document: &Value) {
     let Ok(root) = assets_root(path) else { return };
+    let mut referenced = std::collections::HashSet::new();
+    if let Some(slides) = document.pointer("/slides").and_then(Value::as_array) {
+        for slide in slides {
+            if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
+                for element in elements {
+                    if let Some(data_url) = element
+                        .get("source")
+                        .and_then(|source| source.get("dataUrl"))
+                        .and_then(Value::as_str)
+                    {
+                        if let Some(reference) = data_url.strip_prefix("asset://") {
+                            referenced.insert(reference.to_owned());
+                        }
+                    }
+                }
+            }
+        }
+    }
     let Ok(entries) = fs::read_dir(root) else {
         return;
     };
     for entry in entries.flatten() {
-        let file_name = entry.file_name();
-        let name = file_name.to_string_lossy();
-        if name.starts_with("revision-") && name != keep {
+        let name = entry.file_name();
+        let name = name.to_string_lossy().into_owned();
+        if name.starts_with("revision-") {
             let _ = fs::remove_dir_all(entry.path());
+        } else if !referenced.contains(&name) {
+            let _ = fs::remove_file(entry.path());
         }
     }
 }
@@ -482,23 +503,31 @@ fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_project(path: String, mut document: Value) -> Result<(), String> {
-    let path = validate_path(&path, "pptd")?;
-    externalize_images(&path, &mut document)?;
-    atomic_write_json(&path, &document)?;
-    cleanup_old_asset_versions(&path, &current_asset_version(&document));
-    Ok(())
+pub async fn save_project(path: String, document: Value) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = validate_path(&path, "pptd")?;
+        let mut document = document;
+        externalize_images(&path, &mut document)?;
+        atomic_write_json(&path, &document)?;
+        Ok(())
+    })
+    .await
+    .map_err(|error| format!("PROJECT_SAVE_TASK_FAILED: {error}"))?
 }
 
 #[tauri::command]
-pub fn open_project(path: String) -> Result<Value, String> {
-    let path = validate_path(&path, "pptd")?;
-    ensure_project_size(&path)?;
-    let file = File::open(&path).map_err(|error| format!("PROJECT_OPEN_FAILED: {error}"))?;
-    let mut document: Value =
-        serde_json::from_reader(file).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
-    hydrate_images(&path, &mut document)?;
-    Ok(document)
+pub async fn open_project(path: String) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = validate_path(&path, "pptd")?;
+        ensure_project_size(&path)?;
+        let file = File::open(&path).map_err(|error| format!("PROJECT_OPEN_FAILED: {error}"))?;
+        let mut document: Value =
+            serde_json::from_reader(file).map_err(|error| format!("PROJECT_JSON_INVALID: {error}"))?;
+        hydrate_images(&path, &mut document)?;
+        Ok(document)
+    })
+    .await
+    .map_err(|error| format!("PROJECT_OPEN_TASK_FAILED: {error}"))?
 }
 
 #[tauri::command]
@@ -530,23 +559,30 @@ fn recovery_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn save_recovery(app: tauri::AppHandle, document: Value) -> Result<(), String> {
-    let path = recovery_path(&app)?;
-    save_recovery_at(&path, document)
+pub async fn save_recovery(app: tauri::AppHandle, document: Value) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = recovery_path(&app)?;
+        save_recovery_at(&path, document)
+    })
+    .await
+    .map_err(|error| format!("RECOVERY_SAVE_TASK_FAILED: {error}"))?
 }
 
 /// 写入恢复副本。落盘用临时文件加原子替换，中断时保留上一个有效版本。
 fn save_recovery_at(path: &Path, mut document: Value) -> Result<(), String> {
     externalize_images(path, &mut document)?;
     atomic_write_json(path, &document)?;
-    cleanup_old_asset_versions(path, &current_asset_version(&document));
     Ok(())
 }
 
 #[tauri::command]
-pub fn load_recovery(app: tauri::AppHandle) -> Result<Option<Value>, String> {
-    let path = recovery_path(&app)?;
-    load_recovery_at(&path)
+pub async fn load_recovery(app: tauri::AppHandle) -> Result<Option<Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = recovery_path(&app)?;
+        load_recovery_at(&path)
+    })
+    .await
+    .map_err(|error| format!("RECOVERY_LOAD_TASK_FAILED: {error}"))?
 }
 
 /// 读取恢复副本。文件不存在时返回空，文件损坏时报告错误而不是返回半个文档。
@@ -650,10 +686,11 @@ fn safe_template_name(name: &str) -> String {
 }
 
 #[tauri::command]
-pub fn import_pptx_template(
+pub async fn import_pptx_template(
     app: tauri::AppHandle,
     source_path: String,
 ) -> Result<TemplateRecord, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let source = validate_path(&source_path, "pptx")?;
     let metadata =
         fs::metadata(&source).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
@@ -689,6 +726,9 @@ pub fn import_pptx_template(
         size: metadata.len(),
         imported_at,
     })
+    })
+    .await
+    .map_err(|error| format!("TEMPLATE_IMPORT_TASK_FAILED: {error}"))?
 }
 
 #[tauri::command]
@@ -728,10 +768,11 @@ pub fn list_pptx_templates(app: tauri::AppHandle) -> Result<Vec<TemplateRecord>,
 }
 
 #[tauri::command]
-pub fn get_pptx_template_preview(
+pub async fn get_pptx_template_preview(
     app: tauri::AppHandle,
     template_id: String,
 ) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     if template_id.is_empty()
         || template_id.contains('/')
         || template_id.contains('\\')
@@ -774,6 +815,9 @@ pub fn get_pptx_template_preview(
         )));
     }
     Ok(None)
+    })
+    .await
+    .map_err(|error| format!("TEMPLATE_PREVIEW_TASK_FAILED: {error}"))?
 }
 
 #[tauri::command]
@@ -1103,10 +1147,11 @@ fn extract_template_decorations(document: &roxmltree::Document<'_>) -> Vec<Templ
 }
 
 #[tauri::command]
-pub fn analyze_pptx_template(
+pub async fn analyze_pptx_template(
     app: tauri::AppHandle,
     template_id: String,
 ) -> Result<TemplateAnalysis, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     if template_id.is_empty()
         || template_id.contains('/')
         || template_id.contains('\\')
@@ -1378,6 +1423,9 @@ pub fn analyze_pptx_template(
         layouts,
         warnings,
     })
+    })
+    .await
+    .map_err(|error| format!("TEMPLATE_ANALYSIS_TASK_FAILED: {error}"))?
 }
 
 #[cfg(test)]
@@ -1385,33 +1433,39 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn saves_and_opens_a_project() {
+    #[tokio::test]
+    async fn saves_and_opens_a_project() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("sample.pptd");
         let value = json!({ "schemaVersion": 1, "title": "测试" });
-        save_project(path.to_string_lossy().into_owned(), value.clone()).unwrap();
+        save_project(path.to_string_lossy().into_owned(), value.clone())
+            .await
+            .unwrap();
         assert_eq!(
-            open_project(path.to_string_lossy().into_owned()).unwrap(),
+            open_project(path.to_string_lossy().into_owned()).await.unwrap(),
             value
         );
     }
 
-    #[test]
-    fn project_json_is_not_rejected_at_the_previous_size_boundary() {
+    #[tokio::test]
+    async fn project_json_is_not_rejected_at_the_previous_size_boundary() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("large.pptd");
         let value = json!({ "schemaVersion": 2, "payload": "x".repeat(17 * 1024 * 1024) });
-        save_project(path.to_string_lossy().into_owned(), value).unwrap();
+        save_project(path.to_string_lossy().into_owned(), value)
+            .await
+            .unwrap();
         assert!(path.metadata().unwrap().len() > 16 * 1024 * 1024);
     }
 
-    #[test]
-    fn rejects_wrong_extensions_and_invalid_pptx_bytes() {
+    #[tokio::test]
+    async fn rejects_wrong_extensions_and_invalid_pptx_bytes() {
         let directory = tempfile::tempdir().unwrap();
         let wrong = directory.path().join("sample.json");
         assert_eq!(
-            save_project(wrong.to_string_lossy().into_owned(), json!({})).unwrap_err(),
+            save_project(wrong.to_string_lossy().into_owned(), json!({}))
+                .await
+                .unwrap_err(),
             "INVALID_FILE_EXTENSION"
         );
 
@@ -1422,8 +1476,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn stores_embedded_images_in_the_project_asset_directory() {
+    #[tokio::test]
+    async fn stores_embedded_images_in_the_project_asset_directory() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("images.pptd");
         let value = json!({
@@ -1437,20 +1491,29 @@ mod tests {
                 }]
             }]
         });
-        save_project(path.to_string_lossy().into_owned(), value.clone()).unwrap();
+        save_project(path.to_string_lossy().into_owned(), value.clone())
+            .await
+            .unwrap();
         let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let stored_url = stored
+            .pointer("/slides/0/elements/0/source/dataUrl")
+            .and_then(Value::as_str)
+            .unwrap();
+        // 图片按内容哈希命名，同一张图只落盘一次，纯文字编辑不再重写图片。
+        assert!(stored_url.starts_with("asset://") && stored_url.ends_with(".png"));
+        let file_name = stored_url.strip_prefix("asset://").unwrap();
         assert_eq!(
-            stored
-                .pointer("/slides/0/elements/0/source/dataUrl")
-                .unwrap(),
-            "asset://revision-7/33333333-3333-4333-8333-333333333333.png"
+            file_name.len(),
+            64 + 4,
+            "资源文件名应是 64 位十六进制摘要加扩展名"
         );
         assert!(directory
             .path()
-            .join("images.pptd.assets/revision-7/33333333-3333-4333-8333-333333333333.png")
+            .join("images.pptd.assets")
+            .join(file_name)
             .is_file());
         assert_eq!(
-            open_project(path.to_string_lossy().into_owned()).unwrap(),
+            open_project(path.to_string_lossy().into_owned()).await.unwrap(),
             value
         );
     }
@@ -1562,12 +1625,11 @@ mod tests {
 
         // 落盘时图片变成资源引用，读回时必须还原成内嵌数据。
         let stored: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        assert_eq!(
-            stored
-                .pointer("/slides/0/elements/0/source/dataUrl")
-                .and_then(Value::as_str),
-            Some("asset://revision-3/33333333-3333-4333-8333-333333333333.png")
-        );
+        let stored_url = stored
+            .pointer("/slides/0/elements/0/source/dataUrl")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(stored_url.starts_with("asset://") && stored_url.ends_with(".png"));
         let restored = load_recovery_at(&path)
             .unwrap()
             .expect("recovery copy must exist");
@@ -1636,6 +1698,8 @@ mod tests {
                         "a reader must never see a half-written file"
                     );
                 }
+                // 真实的读取是零散的，不是死循环占用。
+                std::thread::sleep(std::time::Duration::from_millis(1));
             }
         });
         for _ in 0..30 {

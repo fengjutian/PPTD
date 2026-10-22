@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowRight, ArrowUp, Check, Circle, CircleAlert, CircleCheck, Copy, Download, Eye, FilePlus2, FileUp, ImagePlus, Info, LayoutDashboard, MousePointer2, Palette, Plus, Redo2, Save, Settings, Sparkles, Square, Trash2, Type, Undo2, Wand2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type SlideElement } from "../core/document-model";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { EMU_PER_INCH, emu, type ElementId, type RectEmu, type Slide, type SlideElement } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { CroppedImage } from "../features/editor/CroppedImage";
@@ -88,9 +88,10 @@ async function readImageSize(dataUrl: string): Promise<{ width: number; height: 
   }
 }
 
-function ElementView({ element, slide, scale, selected, onSelect }: { element: SlideElement; slide: ReturnType<typeof useEditorStore.getState>["document"]["slides"][number]; scale: number; selected: boolean; onSelect: () => void }) {
+const ElementView = memo(function ElementView({ element, slide, scale, selected }: { element: SlideElement; slide: Slide; scale: number; selected: boolean }) {
   const execute = useEditorStore((s) => s.execute);
   const activeSlideId = useEditorStore((s) => s.activeSlideId);
+  const selectElement = useEditorStore((s) => s.selectElement);
   const rootRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<{
     kind: "move" | "resize" | "rotate";
@@ -117,7 +118,7 @@ function ElementView({ element, slide, scale, selected, onSelect }: { element: S
   const begin = (kind: "move" | "resize" | "rotate", event: React.PointerEvent, direction?: ResizeDirection) => {
     event.stopPropagation();
     event.preventDefault();
-    onSelect();
+    selectElement(element.id);
     if (element.locked) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     const rect = rootRef.current?.getBoundingClientRect();
@@ -192,9 +193,9 @@ function ElementView({ element, slide, scale, selected, onSelect }: { element: S
       </>}
     </div>
   );
-}
+});
 
-function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<typeof useEditorStore.getState>["document"]["slides"][number]; pageWidth: number; pageHeight: number }) {
+const SlideThumbnail = memo(function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: Slide; pageWidth: number; pageHeight: number }) {
   return <div className="thumbnail-scene">{slide.elements.map((element) => {
     const style: React.CSSProperties = {
       left: `${element.frame.x / pageWidth * 100}%`,
@@ -209,7 +210,7 @@ function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: ReturnType<ty
     if (element.type === "table") return <div className="thumbnail-element thumbnail-table" key={element.id} style={style}><TableView element={element} slide={slide} scale={0.18} compact /></div>;
     return <div className={`thumbnail-element thumbnail-shape ${element.shape}`} key={element.id} style={{ ...style, background: element.style.fill, borderColor: element.style.stroke, borderWidth: Math.max(1, element.style.strokeWidthPt * 0.3), borderRadius: element.shape === "ellipse" ? "50%" : Math.max(0, element.style.radiusPt * 0.3) }} />;
   })}{slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}</div>;
-}
+});
 
 export function App() {
   const { document, activeSlideId, selectedElementId, undoStack, redoStack, execute, replaceDocument, selectSlide, selectElement, undo, redo, newDocument, loadDocument } = useEditorStore();
@@ -586,12 +587,10 @@ export function App() {
     setAiDraft((draft) => draft ? { ...draft, slides: draft.slides.map((slide, slideIndex) => {
       if (slideIndex !== index) return slide;
       if (field !== "body") return { ...slide, [field]: value };
-      // A structured page is edited through its blocks. Rebuilding blocks from
-      // this plain-text projection would flatten a metric, comparison or
-      // timeline page, so keep the structure and only sync the projection.
-      if (slide.blocks.length > 0) return { ...slide, body: value };
-      const items = value.split(/\n+|(?=(?:\d+[.、]|[一二三四五六七八九十]+[、.]|[•·▪])\s*)/).map((item) => item.trim()).filter(Boolean);
-      return { ...slide, body: value, blocks: items.length > 1 ? [{ type: "bullet-list" as const, items }] : value.trim() ? [{ type: "paragraph" as const, text: value.trim() }] : [] };
+      // Body copy is only editable on legacy drafts that carry no structured
+      // blocks. Deriving blocks here used to swap the textarea for the block
+      // editor on the first keystroke, which dropped focus mid-sentence.
+      return { ...slide, body: value };
     }) } : draft);
   };
 
@@ -956,7 +955,7 @@ export function App() {
       <main className="workspace" onPointerDown={() => selectElement(null)}>
         <div className="canvas-ruler">13.33 × 7.5 in</div>
         <div className="slide-canvas" style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }}>
-          {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={element.id === selectedElementId} onSelect={() => selectElement(element.id)} />)}
+          {activeSlide.elements.map((element) => <ElementView key={element.id} element={element} slide={activeSlide} scale={scale} selected={element.id === selectedElementId} />)}
         </div>
       </main>
 

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { EMU_PER_INCH, resolveFragmentStyle, textFragments, type TextElement } from "../../core/document-model";
 
 /**
@@ -9,7 +10,7 @@ import { EMU_PER_INCH, resolveFragmentStyle, textFragments, type TextElement } f
  * emphasis the content does not carry.
  */
 export function RichText({ element, scale }: { element: TextElement; scale: number }) {
-  const fragments = textFragments(element.text, element.runs);
+  const fragments = useMemo(() => textFragments(element.text, element.runs), [element.text, element.runs]);
   return (
     <div
       style={{

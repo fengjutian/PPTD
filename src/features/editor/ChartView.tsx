@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { EMU_PER_INCH, formatChartValue, resolveChartData, type ChartElement, type Slide } from "../../core/document-model";
 
 /**
@@ -9,7 +10,9 @@ import { EMU_PER_INCH, formatChartValue, resolveChartData, type ChartElement, ty
  * the element, so the canvas cannot show a number the content does not carry.
  */
 export function ChartView({ element, slide, scale, compact = false }: { element: ChartElement; slide: Slide; scale: number; compact?: boolean }) {
-  const resolved = resolveChartData(slide, element);
+  // The data only depends on the reviewed blocks the chart points at, so it can
+  // be reused while the element and its page keep the same identity.
+  const resolved = useMemo(() => resolveChartData(slide, element), [slide, element]);
   const fontSize = Math.max(4, element.style.fontSizePt * scale * EMU_PER_INCH / 72);
   if (!resolved) {
     return <div className="chart-view chart-missing" style={{ fontSize, color: element.style.textColor }}>图表数据缺失</div>;
