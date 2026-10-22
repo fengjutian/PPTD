@@ -758,8 +758,12 @@ describe("document commands", () => {
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "模板匹配", slides: [content], designs: [design], templateLayouts }));
     expect(result.slides[0]!.background).toBe("#F5F1E8");
     const bodies = result.slides[0]!.elements.filter((element) => element.type === "text" && element.text !== content.title);
-    expect(bodies[0]!.frame.x).toBe(Math.round(source.pageSize.width * 0.08));
-    expect(bodies[1]!.frame.x).toBe(Math.round(source.pageSize.width * 0.56));
+    // The copy is inset inside the column card, so it starts just right of the
+    // slot edge rather than exactly on it.
+    expect(bodies[0]!.frame.x).toBeGreaterThanOrEqual(Math.round(source.pageSize.width * 0.08));
+    expect(bodies[0]!.frame.x).toBeLessThan(Math.round(source.pageSize.width * 0.12));
+    expect(bodies[1]!.frame.x).toBeGreaterThanOrEqual(Math.round(source.pageSize.width * 0.56));
+    expect(bodies[1]!.frame.x).toBeLessThan(Math.round(source.pageSize.width * 0.60));
   });
 
   it("places a rendered complex template layout behind editable content", () => {
@@ -923,6 +927,60 @@ describe("document commands", () => {
     const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }));
     const title = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.text === content.title)!;
     expect(textLikelyOverflows(title)).toBe(false);
+  });
+
+  it("paints a local scrim with the page colour instead of the design background", () => {
+    const source = createDocument();
+    const content = { title: "页", body: "正文", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#1A1A1A", accent: "#0F7869", titleColor: "#FFFFFF", bodyColor: "#DCE3EA", backgroundTreatment: "local-scrim" as const };
+    const layout = {
+      index: 0,
+      name: "内页",
+      backgroundColor: "#FFFFFF",
+      backgroundImageDataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      regions: [
+        { role: "title" as const, frame: { x: 0.07, y: 0.08, width: 0.86, height: 0.10 } },
+        { role: "body" as const, frame: { x: 0.07, y: 0.22, width: 0.86, height: 0.60 } },
+      ],
+    };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "页", slides: [content], designs: [design], templateLayouts: [layout] }));
+    const large = result.slides[0]!.elements.filter((element) => element.type === "shape"
+      && element.frame.width > result.pageSize.width * 0.4
+      && element.frame.height > result.pageSize.height * 0.3);
+    expect(large.some((element) => element.type === "shape" && element.style.fill === "#1A1A1A")).toBe(false);
+  });
+
+  it("keeps the footer readable over artwork whose probe is dark", () => {
+    const source = createDocument();
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
+    const layout = {
+      index: 0,
+      name: "内页",
+      backgroundColor: "#FFFFFF",
+      backgroundImageDataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      backgroundLuminance: { title: { darkest: 0.02, lightest: 0.12 }, body: { darkest: 0.02, lightest: 0.12 } },
+      regions: [
+        { role: "title" as const, frame: { x: 0.07, y: 0.08, width: 0.86, height: 0.10 } },
+        { role: "body" as const, frame: { x: 0.07, y: 0.22, width: 0.86, height: 0.60 } },
+      ],
+    };
+    const pages = [
+      { title: "第一页", body: "正文", speakerNotes: "" },
+      { title: "第二页", body: "正文", speakerNotes: "" },
+    ];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "课件", slides: pages, designs: [design, design], templateLayouts: [layout] }));
+    const footer = result.slides[0]!.elements.find((element): element is TextElement => element.type === "text" && element.text === "01 / 02")!;
+    expect(contrastRatio(footer.style.color, "#FFFFFF")!).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("draws split columns as cards instead of bare text", () => {
+    const source = createDocument();
+    const items = ["滕子京因事被贬，出任岳州巴陵郡地方官", "到任后主持重修岳阳楼，使旧迹重光", "滕子京以书信形式嘱托范仲淹为新楼作记，并附上洞庭湖的图景与修建始末，请他以文字记下这件事并寄托自己的政治理想与人生感慨", "范仲淹应嘱作文，遂成《岳阳楼记》"];
+    const content = { title: "写作缘起", body: items.join("\n"), speakerNotes: "" };
+    const design = { layout: "split" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "分层", slides: [content], designs: [design] }));
+    const cards = result.slides[0]!.elements.filter((element) => element.type === "shape" && element.style.fill === "#F3F5F7");
+    expect(cards).toHaveLength(2);
   });
 
   it("numbers the pages of a generated deck but not a one-page draft or a cover", () => {

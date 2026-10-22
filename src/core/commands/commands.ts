@@ -681,7 +681,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // A scrim belongs to the text block only. Painting the whole page erased the
       // template artwork and was the single biggest reason a generated deck looked
       // like a blank sheet with a coloured border.
-      const scrimFill = design.background;
+      // The scrim restores the flat page colour over busy artwork. Using the
+      // design background painted a black box on a white page: the design's
+      // background is not the page's background.
+      const scrimFill = slide.background;
       const scrimLuminance = colorLuminance(scrimFill) ?? 1;
       const contentRegion = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
       const titleBox = recipeTitle ?? { x: alignmentGrid.left, y: alignmentGrid.titleY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.titleHeight };
@@ -1245,18 +1248,29 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const rightSlot = hasSafeColumns
           ? { x: rightRecipe!.x, y: rightRecipe!.y, width: rightRecipe!.width, height: rightRecipe!.height }
           : { x: 0.57, y: 0.28, width: 0.35, height: 0.54 };
-        // Long copy can fill a split column, but a short column was previously
-        // pinned to the top and left the lower half of the page blank. Center
-        // the block when it fits; keep the full slot when it needs to shrink.
-        const columnFrame = (copy: string, slot: { x: number; y: number; width: number; height: number }) => {
-          const usedHeight = blockHeight(copy, slot.width, columnFont);
-          const height = Math.max(0.04, Math.min(slot.height, usedHeight));
-          const top = usedHeight < slot.height ? slot.y + (slot.height - usedHeight) / 2 : slot.y;
-          return frame(slot.x, top, slot.width, height);
-        };
+        // Two bare bullet columns on a white page read as a page that was never
+        // finished: the copy floats with nothing holding it. The columns get the
+        // same card language as the rest of the deck, sized to their copy and
+        // centred in the slot, so a four-point page still has a body.
         const leftCopy = columnCopy(items.slice(0, middle));
         const rightCopy = columnCopy(items.slice(middle));
-        slide.elements.push(text(leftCopy, columnFrame(leftCopy, leftSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance), text(rightCopy, columnFrame(rightCopy, rightSlot), columnFont, bodyInk, false, "left", undefined, contentTextLuminance));
+        const padding = 0.035;
+        const leftTextWidth = leftSlot.width - padding * 2;
+        const rightTextWidth = rightSlot.width - padding * 2;
+        const leftHeight = blockHeight(leftCopy, leftTextWidth, columnFont);
+        const rightHeight = blockHeight(rightCopy, rightTextWidth, columnFont);
+        // Both cards share one height: two panels of different heights read as
+        // two unrelated blocks instead of one comparison.
+        const panelHeight = Math.min(Math.min(leftSlot.height, rightSlot.height), Math.max(contentBox.height * 0.5, Math.max(leftHeight, rightHeight) + padding * 2));
+        const drawColumn = (copy: string, textWidth: number, usedHeight: number, slot: { x: number; y: number; width: number; height: number }) => {
+          const panelTop = slot.y + (slot.height - panelHeight) / 2;
+          const textTop = panelTop + (panelHeight - usedHeight) / 2;
+          slide.elements.push(shape(frame(slot.x, panelTop, slot.width, panelHeight), cardFill, "rectangle", cardStroke, 0.75));
+          slide.elements.push(shape(frame(slot.x, panelTop, slot.width, 0.008), design.accent));
+          slide.elements.push(text(copy, frame(slot.x + padding, textTop, textWidth, Math.max(0.04, usedHeight * 1.04 + 0.002)), columnFont, bodyInk, false, "left", undefined, contentTextLuminance));
+        };
+        drawColumn(leftCopy, leftTextWidth, leftHeight, leftSlot);
+        drawColumn(rightCopy, rightTextWidth, rightHeight, rightSlot);
       } else if (composition === "stacked" && (design.layout === "title-body" || design.layout === "summary") && items.length >= LAYOUT_CAPACITY.cardsGridMinItems && items.length <= LAYOUT_CAPACITY.cardsMaxItems) {
         // A short list is a sequence of visual units, not one paragraph. Keeping
         // it as a single text box was the reason a five-point page looked like a
@@ -1456,7 +1470,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           if (candidate.type === "shape" && carrierArea > 0 && overlapArea(candidate.frame, element.frame) / carrierArea >= 0.8) carrying = candidate.style.fill;
         }
         const large = isLargeText(element.style.fontSizePt, element.style.bold);
-        if (!carrying && keepsArtwork) {
+        // The footer sits outside the artwork placeholders, so the artwork
+        // probe does not describe what is behind it. Resolving it against the
+        // dark content range turned the page number white on a white page.
+        const inFooter = element.frame.y >= pageHeight * 0.9;
+        if (!carrying && keepsArtwork && !inFooter) {
           // The artwork probe is a range of luminance, not one value; resolve
           // against the same range the page was built with.
           const range = element.contentRef === "title" ? titleBackground : bodyBackground;
@@ -1465,7 +1483,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             return;
           }
         }
-        const background = carrying ?? (keepsArtwork ? undefined : slide.background);
+        const background = carrying ?? ((keepsArtwork && !inFooter) ? undefined : slide.background);
         const luminance = background ? colorLuminance(background) : undefined;
         if (luminance === undefined) return;
         element.style = { ...element.style, color: readableTextColor(element.style.color, luminance, large, bodyInk) };
