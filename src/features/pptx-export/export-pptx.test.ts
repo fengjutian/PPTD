@@ -200,6 +200,30 @@ describe("PPTX export", () => {
     expect(result.report.nativeObjectCount).toBe(2);
   });
 
+  it("paints the chart area with the color of the page, so a dark page keeps no white block", async () => {
+    const document = createDocument();
+    document.slides[0]!.background = "#0E2A47";
+    const metric = { id: crypto.randomUUID(), type: "metric" as const, label: "完成率", value: "62%" };
+    document.slides[0]!.content.blocks = [metric];
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "chart",
+      contentBlockIds: [metric.id],
+      kind: "column",
+      frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(4) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 14, textColor: "#FFFFFF", seriesColors: ["#3366CC"], showLegend: false, showValueLabels: true },
+    });
+    const result = await buildPptx(document);
+    const entries = unzipSync(result.bytes);
+    const chartEntries = Object.keys(entries).filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+    const chartXml = strFromU8(entries[chartEntries[0]!]!);
+    // The chart area carries the color of the page. A white block on a dark
+    // page would be a rectangle the editor never drew.
+    expect(chartXml).toContain("0E2A47");
+  });
+
   it("refuses to export a chart whose numbers are gone", async () => {
     const document = createDocument();
     document.slides[0]!.elements.push({

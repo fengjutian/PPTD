@@ -276,8 +276,11 @@ export async function buildPptx(
           valGridLine: { color: "E3E7EC", size: 1 },
           catAxisLineShow: false,
           valAxisLineShow: false,
-          border: { pt: 0, color: "FFFFFF" },
-          fill: "FFFFFF",
+          // The chart area carries the color of the page, not a white block:
+          // a native chart on a dark page would otherwise show a bright
+          // rectangle that the editor never drew.
+          border: { pt: 0, color: color(model.background) },
+          fill: color(model.background),
         });
         nativeChartCount += 1;
       } else if (element.type === "table") {

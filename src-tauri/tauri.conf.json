@@ -26,6 +26,18 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "PPTD",
+    "shortDescription": "以结构化文档模型为核心的 PPT 生成、设计与编辑工具",
+    "longDescription": "PPTD 先生成并审核结构化内容，再完成视觉设计与 PPTX 导出，导出结果保留 PowerPoint 原生可编辑对象。",
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      },
+      "nsis": {
+        "languages": ["SimpChinese"],
+        "displayLanguageSelector": false
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

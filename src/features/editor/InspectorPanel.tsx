@@ -10,6 +10,7 @@ import { ColorField, NumberField, SelectField, TextField } from "./inspector-fie
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
 import { AlignGrid, type AlignCell } from "./AlignGrid";
 import { ElementPreview } from "./ElementPreview";
+import { DEFAULT_PALETTE } from "./inspector-palette";
 
 const FONT_OPTIONS = ["Microsoft YaHei", "Source Han Serif SC", "Noto Serif SC", "SimSun", "SimHei", "KaiTi", "FangSong", "Arial", "Calibri", "Times New Roman", "Georgia"] as const;
 
@@ -19,15 +20,6 @@ const TEXT_ALIGN = [
   { align: "left", label: "左对齐", Icon: AlignLeft },
   { align: "center", label: "文字居中", Icon: AlignCenterHorizontal },
   { align: "right", label: "右对齐", Icon: AlignRight },
-] as const;
-
-/**
- * The colors a page can be painted with when the deck has no template yet.
- * With a template the palette of the template is used instead.
- */
-export const DEFAULT_PALETTE = [
-  "#000000", "#7F7F7F", "#C0C0C0", "#FFFFFF",
-  "#D35230", "#2B579A", "#217346", "#C2660F", "#7030A0", "#0F8B8D",
 ] as const;
 
 function elementTypeLabel(element: SlideElement): string {

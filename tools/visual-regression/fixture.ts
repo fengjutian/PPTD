@@ -67,6 +67,19 @@ const TABLE_BLOCK: ContentBlock = {
   ],
 };
 
+/** The metrics a chart reads. Their values share one unit, or the chart refuses them. */
+const TREND_BLOCKS: ContentBlock[] = [
+  { id: "block-metric-q1", type: "metric", label: "一季度", value: "62%" },
+  { id: "block-metric-q2", type: "metric", label: "二季度", value: "71%" },
+  { id: "block-metric-q3", type: "metric", label: "三季度", value: "78%" },
+];
+
+const MIX_BLOCKS: ContentBlock[] = [
+  { id: "block-metric-east", type: "metric", label: "华东", value: "42%" },
+  { id: "block-metric-south", type: "metric", label: "华南", value: "31%" },
+  { id: "block-metric-other", type: "metric", label: "其他", value: "27%" },
+];
+
 function coverSlide(): Slide {
   return {
     id: "slide-cover" as SlideId,
@@ -157,6 +170,108 @@ function contentSlide(): Slide {
   };
 }
 
+/** A page with a native chart, an ellipse and a turned object. */
+function chartSlide(): Slide {
+  const title = "季度完成率";
+  const body = "连续三个季度完成率稳步提升。";
+  return {
+    id: "slide-chart" as SlideId,
+    background: "#FFFFFF",
+    content: {
+      title,
+      body,
+      speakerNotes: "",
+      status: "approved",
+      blocks: TREND_BLOCKS,
+      contentHash: hashSlideContent({ title, body, speakerNotes: "", blocks: TREND_BLOCKS }),
+    },
+    elements: [
+      element({
+        ...base("el-chart-title", 0.9, 0.6, 7, 0.7),
+        type: "text",
+        contentRef: "title",
+        text: title,
+        style: { fontFamily: FONT, fontSizePt: 26, color: "#0E2A47", bold: true, align: "left" },
+      }),
+      element({
+        ...base("el-chart-body", 0.9, 5.9, 8, 0.6),
+        type: "text",
+        contentRef: "body",
+        text: body,
+        style: { fontFamily: FONT, fontSizePt: 14, color: "#555555", bold: false, align: "left" },
+      }),
+      element({
+        ...base("el-chart-plot", 0.9, 1.5, 7.4, 4.2),
+        type: "chart",
+        contentBlockIds: TREND_BLOCKS.map((block) => block.id),
+        kind: "column",
+        style: {
+          fontFamily: FONT,
+          fontSizePt: 11,
+          textColor: "#333333",
+          seriesColors: ["#2B579A"],
+          showLegend: false,
+          showValueLabels: true,
+        },
+      }),
+      element({
+        ...base("el-chart-ellipse", 9.1, 2.2, 2.6, 2.6),
+        type: "shape",
+        shape: "ellipse",
+        style: { fill: "#4EA3E0", stroke: "#1F6E9C", strokeWidthPt: 1, radiusPt: 0 },
+      }),
+      element({
+        ...base("el-chart-turned", 9.1, 5.1, 2.8, 1),
+        type: "shape",
+        shape: "rectangle",
+        rotationMilliDegree: 15_000,
+        style: { fill: "#D35230", stroke: "#8E2C16", strokeWidthPt: 1, radiusPt: 8 },
+      }),
+    ],
+  };
+}
+
+/** A dark page with a pie chart, so the legend and the data labels are covered too. */
+function pieSlide(): Slide {
+  const title = "收入构成";
+  const body = "";
+  return {
+    id: "slide-pie" as SlideId,
+    background: "#0E2A47",
+    content: {
+      title,
+      body,
+      speakerNotes: "",
+      status: "approved",
+      blocks: MIX_BLOCKS,
+      contentHash: hashSlideContent({ title, body, speakerNotes: "", blocks: MIX_BLOCKS }),
+    },
+    elements: [
+      element({
+        ...base("el-pie-title", 0.9, 0.7, 7, 0.7),
+        type: "text",
+        contentRef: "title",
+        text: title,
+        style: { fontFamily: FONT, fontSizePt: 26, color: "#FFFFFF", bold: true, align: "left" },
+      }),
+      element({
+        ...base("el-pie-plot", 1.4, 1.7, 6.6, 4.6),
+        type: "chart",
+        contentBlockIds: MIX_BLOCKS.map((block) => block.id),
+        kind: "pie",
+        style: {
+          fontFamily: FONT,
+          fontSizePt: 11,
+          textColor: "#FFFFFF",
+          seriesColors: ["#D35230", "#2B579A", "#217346"],
+          showLegend: true,
+          showValueLabels: true,
+        },
+      }),
+    ],
+  };
+}
+
 /** The deck the visual regression check exports and compares. */
 export function visualRegressionFixture(): PresentationDocument {
   return {
@@ -165,6 +280,6 @@ export function visualRegressionFixture(): PresentationDocument {
     title: "视觉回归夹具",
     pageSize: { width: inches(13.333), height: inches(7.5) },
     revisions: { document: 0, content: 0, design: 0 },
-    slides: [coverSlide(), contentSlide()],
+    slides: [coverSlide(), contentSlide(), chartSlide(), pieSlide()],
   };
 }
