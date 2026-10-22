@@ -2,7 +2,25 @@ import { describe, expect, it } from "vitest";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
 import type { AiDraft } from "./ai-service";
 
-function draft(slides: AiDraft["slides"]): AiDraft {
+/**
+ * 一页草稿的最小可用形态。
+ *
+ * Schema 给 plan 和 blocks 都设了默认值，所以解析过的草稿一定有这两项；
+ * 测试里手写草稿时也补上，免得测试和真实数据长得不一样。
+ */
+type SlideInput = Omit<AiDraft["slides"][number], "plan" | "blocks"> & {
+  plan?: AiDraft["slides"][number]["plan"];
+  blocks?: AiDraft["slides"][number]["blocks"];
+};
+
+const defaultPlan: AiDraft["slides"][number]["plan"] = {
+  purpose: "传达本页已审核内容",
+  conclusion: "以本页标题和正文为准",
+  visualIntent: "structured-text",
+  density: "medium",
+};
+
+function draft(slides: SlideInput[]): AiDraft {
   return {
     title: "季度经营回顾",
     presentationBrief: {
@@ -14,7 +32,11 @@ function draft(slides: AiDraft["slides"]): AiDraft {
       narrativeStrategy: "management-report",
       assumptions: ["数据来自内部系统"],
     },
-    slides,
+    slides: slides.map((slide) => ({
+      plan: defaultPlan,
+      blocks: [],
+      ...slide,
+    })),
   };
 }
 
@@ -72,6 +94,7 @@ describe("草稿标点规范化", () => {
         body: "",
         speakerNotes: "",
         plan: { purpose: "回顾经营,确认重点", conclusion: "毛利承压,客单待提", visualIntent: "summary", density: "medium" },
+        blocks: [],
       }],
     });
     expect(result.title).toBe("经营回顾，下季度重点");

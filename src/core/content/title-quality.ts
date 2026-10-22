@@ -14,6 +14,7 @@
  */
 
 import lexicon from "../../../assets/content-lexicon.json";
+import { normalizeChinesePunctuation } from "./punctuation";
 
 /** 词表里的栏目名：它们是表格的列头，不是结论。 */
 const COLUMN_NAMES: readonly string[] = lexicon.titleRules.columnNames;
