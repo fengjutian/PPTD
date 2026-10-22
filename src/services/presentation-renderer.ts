@@ -25,7 +25,11 @@ async function renderSlide(document: PresentationDocument, slide: Slide, width: 
     context.save(); context.translate(x + w / 2, y + h / 2); context.rotate(element.rotationMilliDegree * Math.PI / 180_000); context.translate(-w / 2, -h / 2);
     if (element.type === "image") {
       try {
-        const image = await loadImage(await resolveImageUrl(element.source.dataUrl));
+        const url = await resolveImageUrl(element.source.dataUrl);
+        // A reference that is not readable yet is the same kind of failure as
+        // a picture that cannot be decoded: the page is drawn without it.
+        if (!url) throw new Error("VISUAL_RENDER_IMAGE_FAILED");
+        const image = await loadImage(url);
         context.drawImage(image, 0, 0, w, h);
       } catch (error) {
         // 评审图可以缺一张底图，整段质检不能因为一张图解码失败就中断。

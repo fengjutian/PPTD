@@ -9,10 +9,16 @@ import type { PresentationDocument } from "../core/document-model";
  * time. This service loads a reference lazily on first render and caches the
  * data URL, so a picture is read from disk once per session instead of being
  * decoded into base64 for every slide.
+ *
+ * A reference that cannot be read yet resolves to `undefined` instead of the
+ * reference itself: an `asset://` string is not something a browser can load,
+ * and handing it to an `<img>` makes the page show the broken image icon.
  */
 
 let currentProjectPath: string | undefined;
 const cache = new Map<string, string>();
+const inFlight = new Map<string, Promise<string>>();
+const pathListeners = new Set<() => void>();
 
 export function isAssetReference(source: string): boolean {
   return source.startsWith("asset://");
@@ -23,12 +29,28 @@ export function isAssetReference(source: string): boolean {
  * because the same hash in another project may point at different bytes (the
  * hash is content-addressed, so it should not, but a project boundary is the
  * safe place to reset the map).
+ *
+ * Listeners are told about the change, because a document can be rendered
+ * before the path is known: the recovery flow reads the snapshot and the path
+ * of its asset directory in two separate calls, so a picture that was drawn
+ * too early has to be resolved again.
  */
 export function setImageProjectPath(path: string | undefined): void {
-  if (path !== currentProjectPath) {
-    currentProjectPath = path;
-    cache.clear();
-  }
+  if (path === currentProjectPath) return;
+  currentProjectPath = path;
+  cache.clear();
+  inFlight.clear();
+  for (const listener of [...pathListeners]) listener();
+}
+
+/**
+ * Watches the project path. The returned function stops the watch.
+ */
+export function subscribeImageProjectPath(listener: () => void): () => void {
+  pathListeners.add(listener);
+  return () => {
+    pathListeners.delete(listener);
+  };
 }
 
 /**
@@ -44,18 +66,38 @@ export function peekImageUrl(reference: string): string | undefined {
   return cache.get(reference);
 }
 
-/** Resolves a picture source (inline data URL or asset reference) to a data URL. */
-export async function resolveImageUrl(source: string): Promise<string> {
+/**
+ * Resolves a picture source (inline data URL or asset reference) to a data URL.
+ *
+ * Returns `undefined` while the reference cannot be read yet, which happens
+ * when the project path is not known. The caller keeps its placeholder and
+ * resolves the picture again once the path arrives.
+ */
+export async function resolveImageUrl(source: string): Promise<string | undefined> {
   if (!isAssetReference(source)) return source;
   const cached = cache.get(source);
   if (cached) return cached;
-  if (!currentProjectPath) return source;
-  const dataUrl = await invoke<string>("read_image_asset", {
-    projectPath: currentProjectPath,
+  // Several pictures of a document share the same artwork, so one read serves
+  // all of them instead of asking the backend once per picture.
+  const reading = inFlight.get(source);
+  if (reading) return reading;
+  if (!currentProjectPath) return undefined;
+  const path = currentProjectPath;
+  const request = invoke<string>("read_image_asset", {
+    projectPath: path,
     reference: source,
+  }).then((dataUrl) => {
+    // A read that started before the project changed belongs to the old
+    // project, so its bytes must not be kept for the new one.
+    if (path === currentProjectPath) cache.set(source, dataUrl);
+    inFlight.delete(source);
+    return dataUrl;
+  }, (error: unknown) => {
+    inFlight.delete(source);
+    throw error;
   });
-  cache.set(source, dataUrl);
-  return dataUrl;
+  inFlight.set(source, request);
+  return request;
 }
 
 /**
@@ -71,7 +113,11 @@ export async function resolveDocumentImages(document: PresentationDocument): Pro
     const elements = [];
     for (const element of slide.elements) {
       if (element.type === "image" && isAssetReference(element.source.dataUrl)) {
-        elements.push({ ...element, source: { ...element.source, dataUrl: await resolveImageUrl(element.source.dataUrl) } });
+        const dataUrl = await resolveImageUrl(element.source.dataUrl);
+        // Exporting a reference the backend cannot read would put a broken
+        // picture into the deck, so the export stops with a readable message.
+        if (!dataUrl) throw new Error("IMAGE_ASSET_UNAVAILABLE: 图片资源尚未就绪，请先保存项目后重试");
+        elements.push({ ...element, source: { ...element.source, dataUrl } });
         slideChanged = true;
       } else {
         elements.push(element);
