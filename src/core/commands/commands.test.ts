@@ -1001,6 +1001,28 @@ describe("document commands", () => {
     expect(contrastRatio(body.style.color, slide.background)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it("lets an explicitly chosen preset restyle a template deck", () => {
+    const source = createDocument();
+    const content = { title: "标题", body: "正文内容", speakerNotes: "" };
+    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
+    const templateTheme = { name: "模板", majorFont: "微软雅黑", minorFont: "微软雅黑", colors: [], textStyles: { title: { fontSizePt: 22 }, body: { fontSizePt: 14 } } };
+    const templateLayouts = [{
+      index: 0,
+      name: "内页",
+      regions: [
+        { role: "title" as const, frame: { x: 0.07, y: 0.08, width: 0.86, height: 0.10 }, fontSizePt: 22 },
+        { role: "body" as const, frame: { x: 0.07, y: 0.22, width: 0.86, height: 0.60 }, fontSizePt: 14 },
+      ],
+    }];
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "预设", slides: [content], designs: [design], templateTheme, templateLayouts, themePresetId: "warm-paper" }));
+    const slide = result.slides[0]!;
+    const title = slide.elements.find((element): element is TextElement => element.type === "text" && element.text === content.title)!;
+    expect(result.theme?.name).toBe("素纸");
+    expect(title.style.fontFamily).toBe("华文中宋");
+    expect(title.style.fontSizePt).toBe(32);
+    expect(slide.elements.some((element) => element.type === "shape" && element.style.fill === "#A8642E")).toBe(true);
+  });
+
   it("paints a local scrim with the page colour instead of the design background", () => {
     const source = createDocument();
     const content = { title: "页", body: "正文", speakerNotes: "" };

@@ -8,7 +8,7 @@
  * 所有坐标都是页面坐标（EMU）。
  */
 
-import { emu, type ElementId, type Emu, type RectEmu } from "../document-model";
+import { emu, type ElementId, type RectEmu } from "../document-model";
 
 /** 水平方向的对齐方式。 */
 export type ArrangeHorizontal = "left" | "center" | "right";
