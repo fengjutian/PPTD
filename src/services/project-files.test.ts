@@ -50,3 +50,58 @@ describe("stored documents", () => {
     expect(() => readStoredDocument({ schemaVersion: 9, title: "缺少页面" })).toThrow();
   });
 });
+
+describe("保存时把图片一起带走", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "project_modified_at") return Promise.resolve(1);
+      if (command === "save_project" || command === "save_recovery") return Promise.resolve({ missingAssets: [] });
+      return Promise.resolve(undefined);
+    });
+    setImageProjectPath("C:/source.pptd");
+  });
+
+  it("另存项目时告诉后端图片来自哪个项目", async () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push(withBackground());
+
+    // 资源引用留在文档里交给后端搬，不再把所有图片塞回 base64 走一遍 IPC。
+    const result = await saveProject(document, "C:/other.pptd");
+
+    expect(result?.report.missingAssets).toEqual([]);
+    expect(invokeMock).toHaveBeenCalledWith("save_project", expect.objectContaining({
+      path: "C:/other.pptd",
+      sourcePath: "C:/source.pptd",
+    }));
+    const payload = invokeMock.mock.calls.find(([command]) => command === "save_project")?.[1] as { document: typeof document };
+    expect(payload.document.slides[0]!.elements.at(-1)).toMatchObject({ source: { dataUrl: "asset://background.png" } });
+  });
+
+  it("另存项目后把后端报回来的缺图带给调用方", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "save_project") return Promise.resolve({ missingAssets: ["asset://background.png"] });
+      if (command === "project_modified_at") return Promise.resolve(1);
+      return Promise.resolve(undefined);
+    });
+    const document = createDocument();
+
+    const result = await saveProject(document, "C:/other.pptd");
+
+    // 后端写了文件但没写全，这个缺口必须能报给用户。
+    expect(result?.report.missingAssets).toEqual(["asset://background.png"]);
+  });
+
+  it("自动保存把缺图原样带回来", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "save_recovery") return Promise.resolve({ missingAssets: ["asset://background.png"] });
+      return Promise.resolve(undefined);
+    });
+    const document = createDocument();
+
+    const report = await saveRecovery(document, "C:/source.pptd");
+
+    expect(report?.missingAssets).toEqual(["asset://background.png"]);
+    expect(invokeMock).toHaveBeenCalledWith("save_recovery", expect.objectContaining({ sourcePath: "C:/source.pptd" }));
+  });
+});

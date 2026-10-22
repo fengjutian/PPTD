@@ -515,6 +515,327 @@ pub async fn vision_chat(
     Err("AI_PROVIDER_BUSY".into())
 }
 
+/// 下载生成结果时允许的最大体积。超过这个体积的图片对页面没有价值，
+/// 而且会把内存和磁盘撑满。
+pub const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
+
+/// 厂商在 200 响应里报告的业务错误。
+///
+/// MiniMax 系列的接口即使失败也可能返回 200，真正的错误码放在 `base_resp` 里。
+/// 只看 HTTP 状态码会把失败当成功。
+fn base_resp_failure(payload: &serde_json::Value) -> Option<(i64, String)> {
+    let base = payload.get("base_resp")?;
+    let code = match base.get("status_code") {
+        Some(serde_json::Value::Number(number)) => number.as_i64()?,
+        Some(serde_json::Value::String(text)) => text.trim().parse::<i64>().ok()?,
+        _ => return None,
+    };
+    if code == 0 {
+        return None;
+    }
+    let message = base
+        .get("status_msg")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(200)
+        .collect::<String>();
+    Some((code, message))
+}
+
+/// 发送一次图像生成请求。
+async fn post_image(
+    provider: &dyn ImageProvider,
+    client: &reqwest::Client,
+    api_key: &str,
+    payload: &serde_json::Value,
+) -> Result<serde_json::Value, ProviderFailure> {
+    let response = provider
+        .apply_auth(client.post(provider.image_endpoint()), api_key)
+        .json(payload)
+        .send()
+        .await
+        .map_err(|error| ProviderFailure::Transport {
+            detail: error.to_string(),
+            timed_out: error.is_timeout(),
+        })?;
+    let status = response.status().as_u16();
+    if !(200..300).contains(&status) {
+        return Err(ProviderFailure::Status(
+            status,
+            provider_error_detail(response).await,
+        ));
+    }
+    response
+        .json()
+        .await
+        .map_err(|error| ProviderFailure::Payload(PayloadError::Invalid(error.to_string())))
+}
+
+/// 下载厂商给出的图片。
+///
+/// 这里刻意不带任何鉴权头：图片地址是厂商自己给出的公开地址，把 API Key 发过去
+/// 等于把凭据交给图片服务器。只允许厂商官方域名，避免厂商返回的地址被当成
+/// 任意 URL 去请求。
+async fn download_image(
+    provider: &dyn ImageProvider,
+    client: &reqwest::Client,
+    url: &str,
+    cancel: &CancelToken,
+) -> Result<(Vec<u8>, Option<String>), String> {
+    provider.ensure_image_url_allowed(url)?;
+    let response = tokio::select! {
+        biased;
+        () = cancel.cancelled() => return Err(REQUEST_CANCELLED_ERROR.into()),
+        result = client.get(url).send() => result,
+    }
+    .map_err(|error| format!("AI_IMAGE_DOWNLOAD_FAILED: {error}"))?;
+    let status = response.status().as_u16();
+    if !(200..300).contains(&status) {
+        return Err(format!("AI_IMAGE_DOWNLOAD_FAILED: HTTP {status}"));
+    }
+    if let Some(length) = response.content_length() {
+        if length > MAX_IMAGE_BYTES as u64 {
+            return Err("AI_IMAGE_DOWNLOAD_FAILED: image is too large".into());
+        }
+    }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.split(';').next().unwrap_or(value).trim().to_string());
+    let bytes = tokio::select! {
+        biased;
+        () = cancel.cancelled() => return Err(REQUEST_CANCELLED_ERROR.into()),
+        result = response.bytes() => result,
+    }
+    .map_err(|error| format!("AI_IMAGE_DOWNLOAD_FAILED: {error}"))?;
+    // 响应可能没有声明长度，读完之后还要再查一次。
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err("AI_IMAGE_DOWNLOAD_FAILED: image is too large".into());
+    }
+    Ok((bytes.to_vec(), content_type))
+}
+
+/// 从图片字节里识别常见格式。
+pub fn detect_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
+        return Some("image/png");
+    }
+    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("image/jpeg");
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some("image/gif");
+    }
+    if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        return Some("image/webp");
+    }
+    None
+}
+
+/// 从图片字节里读取像素尺寸。
+///
+/// 页面里摆放图片需要真实尺寸：厂商返回的地址不带尺寸信息，
+/// 而尺寸又要参与版式计算，只能从图片头里读。
+pub fn image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    // PNG 的 IHDR 块固定在文件头之后，宽高是大端 u32。
+    if bytes.len() >= 24 && bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
+        let width = u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        let height = u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]);
+        return Some((width, height));
+    }
+    jpeg_dimensions(bytes)
+}
+
+/// 从 JPEG 字节里读取像素尺寸。
+fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    if !bytes.starts_with(&[0xff, 0xd8]) {
+        return None;
+    }
+    let mut index = 2usize;
+    while index < bytes.len() {
+        if bytes[index] != 0xff {
+            index += 1;
+            continue;
+        }
+        // 标记前允许有若干 0xff 填充字节。
+        while index < bytes.len() && bytes[index] == 0xff {
+            index += 1;
+        }
+        if index >= bytes.len() {
+            break;
+        }
+        let marker = bytes[index];
+        index += 1;
+        match marker {
+            // 这些标记后面没有长度字段，直接继续。
+            0x01 | 0xd0..=0xd9 => continue,
+            // 图像数据开始，后面不再有尺寸信息。
+            0xda => break,
+            _ => {}
+        }
+        if index + 1 >= bytes.len() {
+            break;
+        }
+        let length = u16::from_be_bytes([bytes[index], bytes[index + 1]]) as usize;
+        if length < 2 {
+            break;
+        }
+        // SOF 段里依次是精度、高度、宽度。
+        let is_frame_header = matches!(
+            marker,
+            0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf
+        );
+        if is_frame_header {
+            if index + 6 >= bytes.len() {
+                return None;
+            }
+            let height = u16::from_be_bytes([bytes[index + 3], bytes[index + 4]]) as u32;
+            let width = u16::from_be_bytes([bytes[index + 5], bytes[index + 6]]) as u32;
+            return Some((width, height));
+        }
+        index += length;
+    }
+    None
+}
+
+/// 拆开 `data:image/png;base64,xxxx` 形式的内联图片。
+fn split_data_uri(value: &str) -> Option<(Option<String>, &str)> {
+    let rest = value.strip_prefix("data:")?;
+    let (meta, payload) = rest.split_once(',')?;
+    let mime = meta
+        .split(';')
+        .next()
+        .map(str::trim)
+        .filter(|value| value.starts_with("image/"))
+        .map(str::to_string);
+    Some((mime, payload))
+}
+
+/// 把厂商给出的图片变成 data URL。
+///
+/// 尺寸优先从图片头里读；读不出来时退回请求时的尺寸：厂商可能按比例做了微调，
+/// 但页面里至少需要一个能用的尺寸。
+async fn materialize_image(
+    provider: &dyn ImageProvider,
+    client: &reqwest::Client,
+    image: ImagePayload,
+    cancel: &CancelToken,
+    fallback_size: (u32, u32),
+) -> Result<ImageResult, String> {
+    let (bytes, mime_hint) = match image {
+        ImagePayload::Base64 { data, mime_type } => {
+            let (mime, payload) = match split_data_uri(&data) {
+                Some((mime, payload)) => (mime.or(mime_type), payload.to_string()),
+                None => (mime_type, data),
+            };
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(payload.as_bytes())
+                .map_err(|_| "AI_IMAGE_RESPONSE_INVALID: image payload is not valid base64")?;
+            (bytes, mime)
+        }
+        ImagePayload::Url { url } => {
+            let (bytes, content_type) = download_image(provider, client, &url, cancel).await?;
+            (bytes, content_type)
+        }
+    };
+    let mime_type = mime_hint
+        .filter(|value| value.starts_with("image/"))
+        .or_else(|| detect_image_mime(&bytes).map(str::to_string))
+        .unwrap_or_else(|| "image/png".to_string());
+    let (width, height) = image_dimensions(&bytes).unwrap_or(fallback_size);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(ImageResult {
+        data_url: format!("data:{mime_type};base64,{encoded}"),
+        mime_type,
+        width,
+        height,
+    })
+}
+
+/// 生成一张图片。
+///
+/// 重试策略与 [`chat`] 一致：只对限流、服务端错误和传输层抖动重试。HTTP 4xx
+/// 与响应解析失败不重试——重试只会把同一份失败再写一遍，而图片生成是按张计费的。
+pub async fn generate_image(
+    provider: &dyn ImageProvider,
+    api_key: &str,
+    body: &ImageRequest,
+    timeout: Duration,
+    cancel: &CancelToken,
+) -> Result<ImageResult, String> {
+    let client = reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
+    let fallback_size = match (body.width, body.height) {
+        (Some(width), Some(height)) => (width, height),
+        _ => provider.default_image_size(),
+    };
+    for attempt in 0..3_u32 {
+        let payload = provider.build_image_request(body);
+        let outcome = tokio::select! {
+            biased;
+            () = cancel.cancelled() => Err(ProviderFailure::Cancelled),
+            result = post_image(provider, &client, api_key, &payload) => result,
+        };
+        match outcome {
+            Ok(response) => {
+                if let Some((code, message)) = base_resp_failure(&response) {
+                    // 1002 是厂商的限流码，值得退避后重试；其余错误重试没有意义。
+                    if code != 1002 {
+                        return Err(if message.is_empty() {
+                            format!("AI_IMAGE_PROVIDER_ERROR:{code}")
+                        } else {
+                            format!("AI_IMAGE_PROVIDER_ERROR:{code} {message}")
+                        });
+                    }
+                    if attempt == 2 {
+                        return Err("AI_IMAGE_PROVIDER_BUSY".into());
+                    }
+                } else {
+                    let image = provider
+                        .parse_image_response(response)
+                        .map_err(|detail| format!("AI_IMAGE_RESPONSE_INVALID: {detail}"))?;
+                    return materialize_image(provider, &client, image, cancel, fallback_size).await;
+                }
+            }
+            Err(ProviderFailure::Status(status, detail)) => {
+                let retryable = status == 429 || status == 529 || (500..=599).contains(&status);
+                if !retryable {
+                    return Err(format!("AI_IMAGE_REQUEST_FAILED: HTTP {status}{detail}"));
+                }
+                if attempt == 2 {
+                    return Err("AI_IMAGE_PROVIDER_BUSY".into());
+                }
+            }
+            Err(ProviderFailure::Transport { detail, timed_out }) => {
+                if timed_out {
+                    return Err(REQUEST_TIMEOUT_ERROR.into());
+                }
+                if attempt == 2 {
+                    return Err(format!("AI_IMAGE_REQUEST_FAILED: {detail}"));
+                }
+            }
+            Err(ProviderFailure::Payload(error)) => {
+                return Err(match error {
+                    PayloadError::Empty => "AI_IMAGE_RESPONSE_INVALID: empty body".into(),
+                    PayloadError::Invalid(detail) => {
+                        format!("AI_IMAGE_RESPONSE_INVALID: {detail}")
+                    }
+                });
+            }
+            Err(ProviderFailure::Cancelled) => {
+                return Err(REQUEST_CANCELLED_ERROR.into());
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
+    }
+    Err("AI_IMAGE_PROVIDER_BUSY".into())
+}
+
 /// 厂商凭据槽位。每个厂商一个槽位，互不覆盖。
 fn credential_slot(provider: &dyn ChatProvider) -> Result<keyring::Entry, String> {
     keyring::Entry::new(CREDENTIAL_SERVICE, &format!("ai-api-key/{}", provider.id()))
