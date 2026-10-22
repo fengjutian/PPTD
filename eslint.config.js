@@ -48,6 +48,11 @@ export default tseslint.config(
     },
   },
   {
+    // ES module helper scripts are Node programs too.
+    files: ["**/*.mjs"],
+    languageOptions: { globals: globals.node, sourceType: "module" },
+  },
+  {
     files: ["src-tauri/**"],
     languageOptions: { globals: globals.node },
   },

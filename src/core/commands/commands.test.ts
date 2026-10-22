@@ -328,6 +328,57 @@ describe("document commands", () => {
     expect(body?.type === "text" && body.style.fontFamily).toBe("Georgia");
   });
 
+  it("places a generated picture on the page and moves the text out of its way", () => {
+    const source = createDocument();
+    const content = { title: "封面", body: "一句话副标题", speakerNotes: "" };
+    const design = {
+      layout: "cover" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+      visualAsset: { enabled: true, prompt: "一座明亮的现代化数据中心", role: "hero" as const },
+    };
+    const result = produce(source, (draft) => applyCommand(draft, {
+      type: "apply-ai-designed-draft",
+      title: "配图",
+      slides: [content],
+      designs: [design],
+      visualAssets: [{ slideIndex: 0, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" as const, naturalWidth: 1600, naturalHeight: 900, altText: "现代化数据中心" }],
+    }));
+    const picture = result.slides[0]!.elements.find((element): element is Extract<typeof element, { type: "image" }> => element.type === "image");
+    expect(picture).toBeDefined();
+    expect(picture!.altText).toBe("现代化数据中心");
+    // 图被裁成填满它的框，而不是被拉变形。
+    expect(picture!.crop).toBeDefined();
+    // 文字落在图的左边，两者不重叠。
+    const titleElement = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === content.title)!;
+    expect(picture!.frame.x).toBeGreaterThan(titleElement.frame.x + titleElement.frame.width);
+  });
+
+  it("leaves the page alone when no picture was generated for it", () => {
+    const source = createDocument();
+    const content = { title: "封面", body: "一句话副标题", speakerNotes: "" };
+    const design = { layout: "cover" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333", visualAsset: { enabled: true, role: "hero" as const } };
+    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "配图", slides: [content], designs: [design] }));
+    expect(result.slides[0]!.elements.some((element) => element.type === "image")).toBe(false);
+  });
+
+  it("does not put a picture on a page whose content is a structured block", () => {
+    const source = createDocument();
+    const content = { title: "流程", body: "甲\n乙", speakerNotes: "", blocks: [{ type: "process" as const, items: [{ label: "甲", text: "第一步" }, { label: "乙", text: "第二步" }] }] };
+    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#3366CC", titleColor: "#111111", bodyColor: "#333333", visualAsset: { enabled: true, role: "side" as const } };
+    const result = produce(source, (draft) => applyCommand(draft, {
+      type: "apply-ai-designed-draft",
+      title: "配图",
+      slides: [content],
+      designs: [design],
+      visualAssets: [{ slideIndex: 0, dataUrl: "data:image/png;base64,iVBORw0KGgo=", mimeType: "image/png" as const, naturalWidth: 1024, naturalHeight: 1024, altText: "配图" }],
+    }));
+    // 内容块自己就是版面，再叠一张图会让这一页同时讲两件事。
+    expect(result.slides[0]!.elements.some((element) => element.type === "image")).toBe(false);
+  });
+
   it("draws the composition the design asked for instead of the one the layout implies", () => {
     const source = createDocument();
     const content = { title: "四个要点", body: "甲\n乙\n丙\n丁", speakerNotes: "" };

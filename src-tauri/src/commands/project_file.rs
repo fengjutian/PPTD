@@ -689,7 +689,9 @@ fn read_image_asset_at(
     layout_cache_root: Option<&Path>,
 ) -> Result<String, String> {
     let root = assets_root(path)?;
-    let relative = reference.strip_prefix("asset://").ok_or("ASSET_REF_INVALID")?;
+    let relative = reference
+        .strip_prefix("asset://")
+        .ok_or("ASSET_REF_INVALID")?;
     if !is_safe_asset_reference(relative) {
         return Err("ASSET_PATH_INVALID".into());
     }
@@ -705,7 +707,10 @@ fn read_image_asset_at(
     if bytes.len() > MAX_IMAGE_BYTES {
         return Err("IMAGE_TOO_LARGE".into());
     }
-    let mime = match Path::new(relative).extension().and_then(|value| value.to_str()) {
+    let mime = match Path::new(relative)
+        .extension()
+        .and_then(|value| value.to_str())
+    {
         Some("png") => "image/png",
         Some("jpg") | Some("jpeg") => "image/jpeg",
         Some("webp") => "image/webp",
@@ -2321,7 +2326,8 @@ mod tests {
         let recovery = directory.path().join("latest.pptd");
         let reference = format!("{}.png", "b".repeat(64));
 
-        let report = save_recovery_at(&recovery, referenced_document(&reference), None, None).unwrap();
+        let report =
+            save_recovery_at(&recovery, referenced_document(&reference), None, None).unwrap();
 
         assert_eq!(report.missing_assets, vec![reference]);
     }
@@ -2336,9 +2342,13 @@ mod tests {
         let cache_root = layout_render_cache(directory.path(), bytes);
         let reference = format!("{}.png", hex_digest(bytes));
 
-        let report =
-            save_recovery_at(&recovery, referenced_document(&reference), None, Some(&cache_root))
-                .unwrap();
+        let report = save_recovery_at(
+            &recovery,
+            referenced_document(&reference),
+            None,
+            Some(&cache_root),
+        )
+        .unwrap();
 
         assert!(report.missing_assets.is_empty());
         assert_eq!(
@@ -2357,12 +2367,9 @@ mod tests {
         let cache_root = layout_render_cache(directory.path(), bytes);
         let reference = format!("{}.png", hex_digest(bytes));
 
-        let data_url = read_image_asset_at(
-            &project,
-            &format!("asset://{reference}"),
-            Some(&cache_root),
-        )
-        .unwrap();
+        let data_url =
+            read_image_asset_at(&project, &format!("asset://{reference}"), Some(&cache_root))
+                .unwrap();
 
         assert_eq!(
             data_url,
@@ -2405,13 +2412,8 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let recovery = directory.path().join("latest.pptd");
 
-        let report = save_recovery_at(
-            &recovery,
-            referenced_document("../escaped.png"),
-            None,
-            None,
-        )
-        .unwrap();
+        let report =
+            save_recovery_at(&recovery, referenced_document("../escaped.png"), None, None).unwrap();
 
         assert_eq!(report.missing_assets, vec!["../escaped.png"]);
         assert!(!directory.path().join("escaped.png").exists());
@@ -2455,7 +2457,7 @@ mod tests {
         clear_recovery_at(&path).unwrap();
     }
 
-        #[test]
+    #[test]
     fn never_exposes_a_half_written_file() {
         // 保存中断的可观测后果只有一个：读者永远只能看到完整的旧版本或完整的新版本，
         // 不能看到写了一半的文件。

@@ -11,7 +11,8 @@ import { SlideElementContent, SlideElementFrame } from "../features/editor/Slide
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
-import { draftMetrics, resolveActiveSlideIndex, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
+import { countSlidePoints, draftMetrics, resolveActiveSlideIndex, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
+import { generateDeckVisualAssets, planVisualAssets } from "../services/ai-visual-asset";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
@@ -998,6 +999,15 @@ export function App() {
           // A layout without a probe falls back to the page color.
         }
       }));
+      // 配图：AI 说哪些页想配图，排版引擎说哪些页配得下。两边都同意的页才
+      // 生成图片。图片生成失败只是少一张图，文稿照常成立。
+      const assetPlan = planVisualAssets({
+        designs: design.slides,
+        itemCounts: aiDraft.slides.map((slide) => countSlidePoints(slide)),
+        deterministicBlocks: aiDraft.slides.map((slide) => (slide.blocks ?? []).some((block) => block.type !== "paragraph" && block.type !== "bullet-list" && block.type !== "quote")),
+        topic: aiDraft.title,
+      });
+      const visualAssets = await generateDeckVisualAssets({ decisions: assetPlan.decisions, prompts: assetPlan.prompts });
       const generationCommand: DocumentCommand = {
         type: "apply-ai-designed-draft",
         title: aiDraft.title,
@@ -1017,6 +1027,14 @@ export function App() {
           colors: templateAnalysis.themeColors.map((color) => ({ name: color.name, value: color.value })),
         },
         backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+        visualAssets: visualAssets.map((asset) => ({
+          slideIndex: asset.slideIndex,
+          dataUrl: asset.dataUrl,
+          mimeType: asset.mimeType === "image/jpeg" ? "image/jpeg" : asset.mimeType === "image/webp" ? "image/webp" : "image/png",
+          naturalWidth: asset.naturalWidth,
+          naturalHeight: asset.naturalHeight,
+          altText: asset.altText,
+        })),
       };
       const buildFinalDocument = (designs: AiSlideDesign[]) => {
         const candidate = structuredClone(document);

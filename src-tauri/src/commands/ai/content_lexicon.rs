@@ -63,16 +63,32 @@ impl TitleLexicon {
         format!(
             "【标题纪律】\n\
              1. 标题必须是一个可验证的结论，不得直接使用栏目名（如 {}），也不得把栏目名拼成标题（如 {}）。\n\
-             2. 标题不得以 {} 开头：标题要下判断，不能提问。\n\
-             3. 标题不得以 {} 收尾：这种结尾没有告诉读者任何事。\n\
-             4. 整套演示的标题不能共用同一个句法骨架。不要每页都写成 \"A与B\" 或 \"A、B与C\"，\
+             2. 标题不得写成\"栏目名 + 后缀\"（如 {}）：那仍然是表格的列头，不是结论。\n\
+             3. 标题不得以 {} 开头：标题要下判断，不能提问。\n\
+             4. 标题不得以 {} 收尾：这种结尾没有告诉读者任何事。\n\
+             5. 整套演示的标题不能共用同一个句法骨架。不要每页都写成 \"A与B\" 或 \"A、B与C\"，\
              段落数量和连接词要在整册里变化开。\n\
-             5. 标题要能独立说明这一页的结论，不能靠读者看正文才知道它在讲什么。",
+             6. 标题要能独立说明这一页的结论，不能靠读者看正文才知道它在讲什么。",
             join_or(&self.column_names),
             self.column_composition_examples(),
+            self.column_suffix_examples(),
             join_or(&self.banned_lead_phrases),
             join_or(&self.empty_tail_phrases),
         )
+    }
+
+    /// 用词表里的栏目名和后缀拼出反面例子。
+    ///
+    /// "现状分析"这种写法看起来像标题，其实只是列头加后缀，
+    /// 所以栏目名和后缀必须成对出现在提示里，模型才知道要避开的是组合而不是单个词。
+    fn column_suffix_examples(&self) -> String {
+        let first = self.column_names.first().map(String::as_str).unwrap_or("");
+        let suffix = self
+            .column_suffixes
+            .first()
+            .map(String::as_str)
+            .unwrap_or("");
+        format!("\"{first}{suffix}\"")
     }
 
     /// 用词表里的词拼出一组反面例子。
@@ -107,8 +123,14 @@ mod tests {
     fn reads_the_shared_lexicon_file() {
         let lexicon = TitleLexicon::load();
         assert!(lexicon.column_names.iter().any(|word| word == "现状"));
-        assert!(lexicon.banned_lead_phrases.iter().any(|word| word == "如何"));
-        assert!(lexicon.empty_tail_phrases.iter().any(|word| word == "的意义"));
+        assert!(lexicon
+            .banned_lead_phrases
+            .iter()
+            .any(|word| word == "如何"));
+        assert!(lexicon
+            .empty_tail_phrases
+            .iter()
+            .any(|word| word == "的意义"));
     }
 
     #[test]
@@ -130,5 +152,15 @@ mod tests {
         let second = lexicon.column_names.get(1).expect("词表至少有两个栏目名");
         assert!(examples.contains(first.as_str()));
         assert!(examples.contains(second.as_str()));
+    }
+
+    #[test]
+    fn the_suffix_examples_pair_a_column_name_with_a_suffix() {
+        let lexicon = TitleLexicon::load();
+        let examples = lexicon.column_suffix_examples();
+        let name = lexicon.column_names.first().expect("词表至少有一个栏目名");
+        let suffix = lexicon.column_suffixes.first().expect("词表至少有一个后缀");
+        assert!(examples.contains(name.as_str()));
+        assert!(examples.contains(suffix.as_str()));
     }
 }

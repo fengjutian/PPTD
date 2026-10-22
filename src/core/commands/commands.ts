@@ -18,9 +18,10 @@ import {
 } from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
 import { CONTENT_REGION, DEFAULT_CONTENT_REGION, LAYOUT_CAPACITY, stripListPrefix } from "./layout-capacity";
+import { coverCrop } from "../rendering/image-fit";
 import { DENSITY_FACTORS, EMPHASIS_FACTORS, autoComposition, detectPullQuote, resolvePageDesign, type CompositionFacts } from "./design-intent";
 import { planDeckCompositions } from "./deck-composition";
-import { planVisualAssetLayout, resolveVisualAsset, type AiVisualAssetRole } from "./visual-asset";
+import { planVisualAssetLayout, resolveVisualAsset } from "./visual-asset";
 
 export type {
   AiElementRepair,
@@ -682,7 +683,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // like a blank sheet with a coloured border.
       const scrimFill = design.background;
       const scrimLuminance = colorLuminance(scrimFill) ?? 1;
-      const contentBox = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
+      const contentRegion = recipeContent ?? { x: alignmentGrid.left, y: alignmentGrid.contentY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.contentBottom - alignmentGrid.contentY };
       const titleBox = recipeTitle ?? { x: alignmentGrid.left, y: alignmentGrid.titleY, width: alignmentGrid.right - alignmentGrid.left, height: alignmentGrid.titleHeight };
       // A picture takes its own place on the page and the text moves out of its
       // way. The image is never laid over the copy: a page where the text is
@@ -695,10 +696,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         requestedRole: design.visualAsset?.role,
       });
       const assetLayout = visualAsset && assetPlan.enabled && assetPlan.role
-        ? planVisualAssetLayout(assetPlan.role, contentBox)
+        ? planVisualAssetLayout(assetPlan.role, contentRegion)
         : undefined;
       // The text area shrinks to whatever the picture left behind.
-      const textBox = assetLayout ? assetLayout.text : contentBox;
+      const contentBox = assetLayout ? assetLayout.text : contentRegion;
+      // The same text area in the units the element frames use.
+      const contentAreaEmu = frame(contentBox.x, contentBox.y, contentBox.width, contentBox.height);
       // The intent of the page: which composition it is drawn in, which level of
       // the hierarchy carries the weight and how much white space it spends.
       // The composition is checked against the reviewed content, so an intent
@@ -739,6 +742,27 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       if (artworkTreatment === "local-scrim") {
         slide.elements.push(shape(frame(Math.max(0, contentBox.x - 0.02), Math.max(0, contentBox.y - 0.02), Math.min(1 - Math.max(0, contentBox.x - 0.02), contentBox.width + 0.04), Math.min(1 - Math.max(0, contentBox.y - 0.02), contentBox.height + 0.04)), scrimFill));
       }
+      // The picture goes on the page before the text, so the text stays on top of
+      // it wherever the two touch. The picture is cropped to fill its box: a
+      // stretched picture is the fastest way to make a generated deck look fake.
+      if (visualAsset && assetLayout) {
+        const imageFrame = frame(assetLayout.image.x, assetLayout.image.y, assetLayout.image.width, assetLayout.image.height);
+        const crop = coverCrop(
+          { width: visualAsset.naturalWidth, height: visualAsset.naturalHeight },
+          { width: assetLayout.image.width * pageWidth, height: assetLayout.image.height * pageHeight },
+        );
+        slide.elements.push({
+          id: crypto.randomUUID() as ElementId,
+          type: "image",
+          placement: "content",
+          frame: imageFrame,
+          rotationMilliDegree: 0,
+          locked: false,
+          source: { kind: "embedded", dataUrl: visualAsset.dataUrl, mimeType: visualAsset.mimeType },
+          altText: visualAsset.altText,
+          ...(crop ? { crop } : {}),
+        });
+      }
       const contentTextLuminance = artworkTreatment === "local-scrim" ? scrimLuminance : bodyLuminance;
       // A white card on a white page is invisible. Pick a surface that separates
       // the card from the page while keeping dark body ink readable.
@@ -764,20 +788,41 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const height = blockHeight(value, slot.width, fontSizePt) * 1.04;
         return frame(slot.x, slot.y + slot.height / 2 - height / 2, slot.width, height);
       };
+      /**
+       * 把一个文字框收进文字区。
+       *
+       * 封面和章节页的标题框来自模板占位或固定比例，不看内容区的宽窄。
+       * 页面右侧放了图之后，这些框会一直伸到图下面，标题就压在图上了。
+       * 收进文字区之后，标题停在图开始的地方。
+       */
+      const clipToTextArea = (box: RectEmu, area: RectEmu): RectEmu => {
+        const right = Math.min(box.x + box.width, area.x + area.width);
+        const bottom = Math.min(box.y + box.height, area.y + area.height);
+        const left = Math.max(box.x, area.x);
+        const top = Math.max(box.y, area.y);
+        // 完全在文字区之外的框保持原样：收成一个零宽的框会让文字消失。
+        if (right <= left || bottom <= top) return box;
+        return { x: left as Emu, y: top as Emu, width: (right - left) as Emu, height: (bottom - top) as Emu };
+      };
       if (design.layout === "cover" && !hasDeterministicBlock) {
         const coverTitle = safeFrame(recipeTitle, [0.10, 0.24, 0.78, 0.28], 0.25, 0.04);
         const coverBody = safeFrame(recipeContent, [0.10, 0.56, 0.72, 0.16], 0.25, 0.08);
+        // A picture on the cover takes the right side of the page, so the
+        // headline and the subtitle have to stop where the picture starts.
+        // Otherwise the title runs underneath the picture.
+        const clippedTitle = clipToTextArea(coverTitle, contentAreaEmu);
+        const clippedBody = clipToTextArea(coverBody, contentAreaEmu);
         if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.035, 1), design.accent), shape(frame(0.08, 0.70, 0.18, 0.018), design.accent));
-        slide.elements.push(text(content.title, coverTitle, templateTitleSize ?? 42, titleInk, true, "left", undefined, titleLuminance));
-        if (content.body.trim()) slide.elements.push(text(content.body, coverBody, templateBodySize ?? 19, bodyInk, false, "left", undefined, contentTextLuminance));
+        slide.elements.push(text(content.title, clippedTitle, templateTitleSize ?? 42, titleInk, true, "left", undefined, titleLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, clippedBody, templateBodySize ?? 19, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (design.layout === "section" && !hasDeterministicBlock) {
         const sectionTitle = safeFrame(recipeTitle, [0.39, 0.30, 0.50, 0.22], 0.25, 0.04);
         const sectionBody = safeFrame(recipeContent, [0.39, 0.56, 0.47, 0.20], 0.25, 0.08);
         // The template draws its own section number into the artwork, so PPTD must
         // not add a second one on top of it.
         if (!keepsArtwork) slide.elements.push(shape(frame(0, 0, 0.32, 1), design.accent), text(String(index + 1).padStart(2, "0"), frame(0.07, 0.17, 0.16, 0.18), 52, "#FFFFFF", true, "left", undefined, accentLuminance));
-        slide.elements.push(text(content.title, sectionTitle, templateTitleSize ?? 36, titleInk, true, "left", undefined, titleLuminance));
-        if (content.body.trim()) slide.elements.push(text(content.body, sectionBody, templateBodySize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
+        slide.elements.push(text(content.title, clipToTextArea(sectionTitle, contentAreaEmu), templateTitleSize ?? 36, titleInk, true, "left", undefined, titleLuminance));
+        if (content.body.trim()) slide.elements.push(text(content.body, clipToTextArea(sectionBody, contentAreaEmu), templateBodySize ?? 18, bodyInk, false, "left", undefined, contentTextLuminance));
       } else if (timelineBlock) {
         // Every reviewed step is drawn. A timeline that cut its last steps
         // would drop reviewed copy from the exported file, so the row narrows
