@@ -378,4 +378,17 @@ describe("PPTX export", () => {
     });
     await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
   });
+
+  it("writes tracking and leading of a text into the slide XML", async () => {
+    const document = createDocument();
+    const title = document.slides[0]!.elements[0]!;
+    if (title.type !== "text") throw new Error("expected a text element");
+    title.style.letterSpacingPt = 0.8;
+    title.style.lineHeight = 1.3;
+    const result = await buildPptx(document);
+    const files = unzipSync(result.bytes);
+    const xml = strFromU8(files["ppt/slides/slide1.xml"]!);
+    expect(xml).toContain('spc="80"');
+    expect(xml).toContain('spcPct val="130000"');
+  });
 });

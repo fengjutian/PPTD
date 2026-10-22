@@ -133,6 +133,8 @@ export interface VisualAssetIntent {
   enabled: boolean;
   prompt: string;
   role: AiVisualAssetRole;
+  /** 谁说的这段意图。人的决定压得住模型的建议。 */
+  source?: "model" | "user";
 }
 
 /**
@@ -157,7 +159,11 @@ export function planVisualAssets(input: {
   let granted = 0;
   input.designs.forEach((design, index) => {
     const intent = input.intents?.[index];
-    const requested = intent ? intent.enabled : Boolean(design.visualAsset?.enabled);
+    // 只有**人**在审核页说"这一页不配图"才算决定。模型说"不用配图"只是它
+    // 保守：实测一册四页的真实产出，模型只给封面配了图，其余三页都写
+    // enabled=false，而设计阶段本会给其中两页配图。按模型的话就把图全压没了。
+    const declinedByUser = intent?.source === "user" && !intent.enabled;
+    const requested = !declinedByUser && Boolean(intent?.enabled || design.visualAsset?.enabled);
     const requestedRole = intent?.enabled ? intent.role : design.visualAsset?.role;
     const description = intent?.enabled && intent.prompt.trim() ? intent.prompt : design.visualAsset?.prompt;
     const decision = resolveVisualAsset({

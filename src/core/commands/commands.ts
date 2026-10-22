@@ -2619,6 +2619,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // layouts (cards, timeline items, metrics) stay decorative because one
       // visual element cannot safely overwrite a multi-field content block.
       const bodyFontFamily = minorFont;
+      const titleToken = document.theme?.textStyles?.title;
+      const bodyToken = document.theme?.textStyles?.body;
       for (const element of slide.elements) {
         if (element.type !== "text") continue;
         if (element.text === content.title) element.contentRef = "title";
@@ -2627,6 +2629,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // Display type for the headline, text type for running copy. Using the
         // template major font for both made dense body copy look heavy.
         if (element.contentRef !== "title" && bodyFontFamily) element.style.fontFamily = bodyFontFamily;
+        // The type token may also carry tracking and leading. They are design
+        // state, so they live on the element like its size and colour.
+        const token = element.contentRef === "title" ? titleToken : element.contentRef === "body" ? bodyToken : undefined;
+        if (token?.letterSpacingPt !== undefined) element.style.letterSpacingPt = token.letterSpacingPt;
+        if (token?.lineHeight !== undefined) element.style.lineHeight = token.lineHeight;
       }
       // The typographic quote mark reads as two bars in many CJK UI fonts.
       // A serif glyph keeps the pull quote looking like a quotation instead of

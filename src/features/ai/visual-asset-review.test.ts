@@ -45,13 +45,13 @@ describe("配图意图的合规检查", () => {
   });
 
   it("配了图却没有画面描述时给出提示", () => {
-    const issues = visualAssetIssues(draftWith({ enabled: true, prompt: "   ", role: "side" }));
+    const issues = visualAssetIssues(draftWith({ enabled: true, prompt: "   ", role: "side", source: "model" }));
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({ slideIndex: 0, kind: "image-empty-prompt" });
   });
 
   it("页面已有结构化内容块时不再配图", () => {
-    const draft = draftWith({ enabled: true, prompt: "明亮的现代化数据中心", role: "side" }, [
+    const draft = draftWith({ enabled: true, prompt: "明亮的现代化数据中心", role: "side", source: "model" }, [
       { type: "timeline", items: [{ label: "一月", text: "启动" }] },
     ]);
     expect(hasStructuredBlock(draft.slides[0]!)).toBe(true);
@@ -69,7 +69,7 @@ describe("配图意图的合规检查", () => {
         conclusion: "结论",
         visualIntent: "image-story" as const,
         density: "medium" as const,
-        visualAsset: { enabled: true, prompt: "明亮的现代化数据中心", role: "side" as const },
+        visualAsset: { enabled: true, prompt: "明亮的现代化数据中心", role: "side" as const, source: "model" as const },
       },
       blocks: [],
     }));
@@ -79,7 +79,7 @@ describe("配图意图的合规检查", () => {
   });
 
   it("关掉配图的页面不产生任何问题", () => {
-    expect(visualAssetIssues(draftWith({ enabled: false, prompt: "", role: "side" }))).toEqual([]);
+    expect(visualAssetIssues(draftWith({ enabled: false, prompt: "", role: "side", source: "model" }))).toEqual([]);
   });
 
   it("没有配图意图的旧草稿不受影响", () => {

@@ -27,6 +27,8 @@ const textElement = base.extend({
     color: z.string(),
     bold: z.boolean(),
     align: z.enum(["left", "center", "right"]),
+    letterSpacingPt: z.number().min(-2).max(20).optional(),
+    lineHeight: z.number().min(0.8).max(3).optional(),
   }),
   runs: z
     .array(

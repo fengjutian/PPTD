@@ -327,7 +327,9 @@ async fn the_content_stage_really_produces_a_picture_intent() {
     );
     // 画面描述里不能要求出现文字：生成图里的文字几乎总是错的。
     for slide in &slides {
-        let prompt = slide["plan"]["visualAsset"]["prompt"].as_str().unwrap_or_default();
+        let prompt = slide["plan"]["visualAsset"]["prompt"]
+            .as_str()
+            .unwrap_or_default();
         assert!(
             !prompt.contains("文字") && !prompt.contains("标题"),
             "画面描述不该要求画面出现文字：{prompt}"

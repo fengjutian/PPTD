@@ -39,11 +39,25 @@ describe("配图计划", () => {
       itemCounts: [2],
       deterministicBlocks: [false],
       topic: "季度业务回顾",
-      intents: [{ enabled: false, prompt: "", role: "side" }],
+      intents: [{ enabled: false, prompt: "", role: "side", source: "user" }],
     });
 
     expect(decisions[0]).toMatchObject({ enabled: false });
     expect(prompts.has(0)).toBe(false);
+  });
+
+  it("模型说不用配图，不压住设计阶段的建议", () => {
+    // 实测一册四页的真实产出：模型只给封面配了图，其余三页都写 enabled=false，
+    // 而设计阶段本会给其中两页配图。按模型的话就把图全压没了。
+    const { decisions } = planVisualAssets({
+      designs: [design({ layout: "cover", visualAsset: { enabled: true, prompt: "设计阶段给的画面", role: "hero" } })],
+      itemCounts: [0],
+      deterministicBlocks: [false],
+      topic: "季度业务回顾",
+      intents: [{ enabled: false, prompt: "", role: "side", source: "model" }],
+    });
+
+    expect(decisions[0]).toMatchObject({ enabled: true, role: "hero" });
   });
 
   it("没有配图意图时用设计阶段的建议", () => {
@@ -68,5 +82,18 @@ describe("配图计划", () => {
     });
 
     expect(prompts.get(0)).toContain("设计阶段给的画面");
+  });
+
+  it("内容阶段主动要求配图时，模型给的描述进提示词", () => {
+    const { decisions, prompts } = planVisualAssets({
+      designs: [design()],
+      itemCounts: [2],
+      deterministicBlocks: [false],
+      topic: "季度业务回顾",
+      intents: [{ enabled: true, prompt: "一间明亮的现代化数据中心", role: "side" }],
+    });
+
+    expect(decisions[0]).toMatchObject({ enabled: true, role: "side" });
+    expect(prompts.get(0)).toContain("一间明亮的现代化数据中心");
   });
 });

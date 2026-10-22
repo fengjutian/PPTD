@@ -1203,6 +1203,7 @@ export function ContentReview({
                               onSlideVisualAssetChange(index, {
                                 ...slide.plan.visualAsset!,
                                 enabled: event.target.checked,
+                                source: "user",
                               })
                             }
                           />
@@ -1216,6 +1217,7 @@ export function ContentReview({
                             onSlideVisualAssetChange(index, {
                               ...slide.plan.visualAsset!,
                               role: event.target.value as AiVisualAssetIntent["role"],
+                              source: "user",
                             })
                           }
                         >
@@ -1235,7 +1237,11 @@ export function ContentReview({
                         disabled={!slide.plan.visualAsset.enabled}
                         value={slide.plan.visualAsset.prompt}
                         onChange={(event) =>
-                          onSlideVisualAssetChange(index, { ...slide.plan.visualAsset!, prompt: event.target.value })
+                          onSlideVisualAssetChange(index, {
+                            ...slide.plan.visualAsset!,
+                            prompt: event.target.value,
+                            source: "user",
+                          })
                         }
                       />
                       <p className="visual-asset-hint">

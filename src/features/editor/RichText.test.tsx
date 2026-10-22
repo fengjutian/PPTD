@@ -29,4 +29,12 @@ describe("rich text", () => {
     expect((markup.match(/<span/g) ?? []).length).toBe(1);
     expect(markup).toContain("普通文本");
   });
+
+  it("draws the tracking and leading of the text style", () => {
+    const element = textElement("标题");
+    element.style = { ...element.style, letterSpacingPt: 0.8, lineHeight: 1.3 };
+    const markup = renderToStaticMarkup(<RichText element={element} scale={1} />);
+    expect(markup).toContain("letter-spacing");
+    expect(markup).toContain("line-height:1.3");
+  });
 });

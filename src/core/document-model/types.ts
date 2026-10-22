@@ -60,6 +60,10 @@ export interface TextElementStyle {
   color: string;
   bold: boolean;
   align: TextAlign;
+  /** Tracking between characters, in points. Absent keeps the font's default. */
+  letterSpacingPt?: number;
+  /** Line height as a multiple of the font size. Absent keeps the renderer's default. */
+  lineHeight?: number;
 }
 
 /** Presentation-only styling of a vector shape. Never part of the content hash. */

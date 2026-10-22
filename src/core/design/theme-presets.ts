@@ -16,10 +16,10 @@ export interface ThemePreset {
   theme: DocumentTheme;
 }
 
-function scale(display: number, title: number, subtitle: number, body: number, caption: number): DocumentTextStyles {
+function scale(display: number, title: number, subtitle: number, body: number, caption: number, titleTracking = 0.4): DocumentTextStyles {
   return {
     display: { fontSizePt: display, bold: true },
-    title: { fontSizePt: title, bold: true },
+    title: { fontSizePt: title, bold: true, letterSpacingPt: titleTracking },
     subtitle: { fontSizePt: subtitle },
     body: { fontSizePt: body },
     caption: { fontSizePt: caption },
@@ -57,7 +57,7 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
         muted: "#6F7B85",
         surface: "#FBFAF7",
       },
-      scale(44, 30, 18, 16, 11),
+      scale(44, 30, 18, 16, 11, 0.8),
     ),
   },
   {
@@ -74,7 +74,7 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
         muted: "#5F6B76",
         surface: "#FFFFFF",
       },
-      scale(42, 30, 18, 17, 11),
+      scale(42, 30, 18, 17, 11, 0.6),
     ),
   },
   {
@@ -91,7 +91,7 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
         muted: "#5B6B7F",
         surface: "#FFFFFF",
       },
-      scale(40, 28, 17, 16, 11),
+      scale(40, 28, 17, 16, 11, 0),
     ),
   },
   {
@@ -108,7 +108,7 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
         muted: "#7A6A5A",
         surface: "#F7F3EC",
       },
-      scale(46, 32, 19, 17, 12),
+      scale(46, 32, 19, 17, 12, 0.8),
     ),
   },
 ];

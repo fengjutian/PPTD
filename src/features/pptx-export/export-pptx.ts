@@ -231,6 +231,8 @@ export async function buildPptx(
           color: color(element.style.color),
           bold: element.style.bold,
           align: element.style.align,
+          ...(element.style.letterSpacingPt === undefined ? {} : { charSpacing: element.style.letterSpacingPt }),
+          ...(element.style.lineHeight === undefined ? {} : { lineSpacingMultiple: element.style.lineHeight }),
           // The canvas draws text from the top of its frame; the export has to
           // agree or the file no longer looks like what the editor shows.
           valign: "top" as const,

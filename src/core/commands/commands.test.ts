@@ -2114,6 +2114,7 @@ describe("document commands", () => {
     expect(title.style.fontFamily).toBe("华文中宋");
     expect(body.style.fontFamily).toBe("微软雅黑");
     expect(title.style.color).toBe("#1E2A32");
+    expect(title.style.letterSpacingPt).toBe(0.8);
     expect(slide.elements.some((element) => element.type === "shape" && element.style.fill === "#2F6B5F")).toBe(true);
     expect(contrastRatio(body.style.color, slide.background)).toBeGreaterThanOrEqual(4.5);
   });

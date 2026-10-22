@@ -69,6 +69,14 @@ const visualAssetIntentSchema = z.object({
   prompt: z.string().max(300).default(""),
   /** 图在页面上的角色。 */
   role: z.enum(["hero", "side", "band"]).default("side"),
+  /**
+   * 这段意图是谁说的。
+   *
+   * "model" 是模型在生成时给的，"user" 是人在审核页改的。区别很要紧：
+   * 模型说"这一页不用配图"只是它保守，人说"这一页不用配图"才是决定。
+   * 只有人的决定才压得住设计阶段的建议。
+   */
+  source: z.enum(["model", "user"]).default("model"),
 });
 export type AiVisualAssetIntent = z.infer<typeof visualAssetIntentSchema>;
 

@@ -339,7 +339,7 @@ describe("table grid editing", () => {
           ...draft.slides[0]!,
           plan: {
             ...draft.slides[0]!.plan,
-            visualAsset: { enabled: true, prompt: "一间明亮的现代化数据中心", role: "side" },
+            visualAsset: { enabled: true, prompt: "一间明亮的现代化数据中心", role: "side", source: "model" },
           },
         },
       ],
@@ -360,7 +360,7 @@ describe("table grid editing", () => {
           ...draft.slides[0]!,
           plan: {
             ...draft.slides[0]!.plan,
-            visualAsset: { enabled: true, prompt: "一块写着「季度增长」的指示牌", role: "side" },
+            visualAsset: { enabled: true, prompt: "一块写着「季度增长」的指示牌", role: "side", source: "model" },
           },
         },
       ],
@@ -476,6 +476,19 @@ describe("content review layout", () => {
     expect(markup).toContain("恢复 AI 原稿");
     expect(markup).toContain("撤销");
     expect(markup).toContain("重做");
+  });
+
+  it("keeps the current draft readable while the whole draft is regenerated", () => {
+    const draft = withSlideIds(createDraft());
+    const markup = renderReview(draft, 0, draft, { label: "正在生成正文（已写 4 页）", percent: 42 });
+    // 重新生成期间旧草稿仍是屏幕上的内容：不能先清空再看结果。
+    expect(markup).toContain(`value="${draft.slides[0]!.title}"`);
+    expect(markup).toContain("draft-regenerate-progress");
+    expect(markup).toContain("正在生成正文（已写 4 页）");
+    expect(markup).toContain("可以用撤销回到这一版");
+    // 进度条反映的是这次重新生成，不是某个已完成的任务。
+    expect(markup).toContain('aria-valuenow="42"');
+    expect(renderReview(draft, 0, draft)).not.toContain("draft-regenerate-progress");
   });
 
   it("shows persisted review progress and the unified content block entry", () => {
