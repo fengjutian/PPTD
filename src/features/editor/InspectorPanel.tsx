@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Trash2, Unlink } from "lucide-react";
+import { AlignCenterHorizontal, AlignCenterVertical, AlignEndVertical, AlignLeft, AlignRight, AlignStartVertical, ArrowDown, ArrowUp, Bold, BringToFront, CircleAlert, Copy, Layers3, Link2, Lock, LockOpen, MousePointer2, RotateCcw, SendToBack, Square, Trash2, Type, Unlink } from "lucide-react";
 import { type ChartKind, type Emu, type ImageCrop, type ShapeElementStyle, type SlideElement, type SlideId, type TextElementStyle, resolveFragmentStyle, textFragments } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 import { colorLuminance, contrastRatio, isLargeText, readableTextColor, requiredContrast } from "../../core/rendering/contrast";
@@ -169,7 +169,10 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
   const overflows = element.type === "text" && textLikelyOverflows(element);
 
   return (
+    <>
     <div className="property-form">
+      <PageProperties slideId={slideId} background={background} pageSize={pageSize} unit={unit} onCommand={onCommand} />
+
       {element.type === "text" && <section className="inspector-section">
         <h4>内容</h4>
         <label className="field">
@@ -422,7 +425,7 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
 
       <section className="inspector-section">
         <h4>排列</h4>
-        <div className="element-actions">
+        <div className="element-actions arrange">
           <button disabled={locked || elementIndex >= elementCount - 1}
             onClick={() => onCommand({ type: "reorder-element", slideId, elementId: element.id, toIndex: elementIndex + 1 })}>
             <ArrowUp />上移一层
@@ -439,28 +442,28 @@ export function InspectorPanelView({ element, slideId, elementIndex, elementCoun
             onClick={() => onCommand({ type: "reorder-element", slideId, elementId: element.id, toIndex: 0 })}>
             <SendToBack />置于底层
           </button>
-          <button onClick={() => onCommand({ type: "set-element-lock", slideId, elementId: element.id, locked: !locked })}>
-            {locked ? <LockOpen /> : <Lock />}{locked ? "解锁" : "锁定"}
-          </button>
         </div>
       </section>
-
-      <section className="inspector-section">
-        <h4>操作</h4>
-        <div className="element-actions">
-          <button disabled={locked}
-            onClick={() => onCommand({ type: "duplicate-element", slideId, elementId: element.id })}>
-            <Copy />复制
-          </button>
-          <button className="danger" disabled={locked}
-            onClick={() => onCommand({ type: "delete-element", slideId, elementId: element.id })}>
-            <Trash2 />删除
-          </button>
-        </div>
-      </section>
-
-      <PageProperties slideId={slideId} background={background} pageSize={pageSize} unit={unit} onCommand={onCommand} />
     </div>
+    {/*
+      The actions of the selected object stay in sight: the panel of a text
+      object is longer than the window, so the actions at the bottom of it
+      would be out of reach.
+    */}
+    <div className="inspector-actions">
+      <button type="button" disabled={locked}
+        onClick={() => onCommand({ type: "duplicate-element", slideId, elementId: element.id })}>
+        <Copy />复制
+      </button>
+      <button type="button" onClick={() => onCommand({ type: "set-element-lock", slideId, elementId: element.id, locked: !locked })}>
+        {locked ? <LockOpen /> : <Lock />}{locked ? "解锁" : "锁定"}
+      </button>
+      <button type="button" className="danger" disabled={locked}
+        onClick={() => onCommand({ type: "delete-element", slideId, elementId: element.id })}>
+        <Trash2 />删除
+      </button>
+    </div>
+    </>
   );
 }
 
@@ -474,14 +477,14 @@ interface PagePropertiesProps {
 
 function PageProperties({ slideId, background, pageSize, unit, onCommand }: PagePropertiesProps) {
   return (
-    <section className="inspector-section">
+    <section className="inspector-section page-section">
       <h4>页面</h4>
-      <label className="field">
+      <div className="field">
         <span className="field-label">幻灯片尺寸</span>
-        <span className="field-control">
-          <input value={`${emuToUnit(pageSize.width, unit).toFixed(2)} × ${emuToUnit(pageSize.height, unit).toFixed(2)} ${unitLabel(unit)}`} readOnly disabled />
-        </span>
-      </label>
+        {/* The size of the page is a property of the document, so it is read
+            and not edited here. */}
+        <span className="field-readonly">{`${emuToUnit(pageSize.width, unit).toFixed(2)} × ${emuToUnit(pageSize.height, unit).toFixed(2)} ${unitLabel(unit)}`}</span>
+      </div>
       <ColorField label="背景色" value={background} wide
         onCommit={(next) => onCommand({ type: "set-slide-background", slideId, background: next })} />
     </section>
@@ -522,8 +525,16 @@ export const InspectorPanel = memo(function InspectorPanel() {
           onCommand={execute}
         />
         : <div className="property-form">
+          <div className="empty-inspector">
+            <span className="empty-inspector-mark"><MousePointer2 /></span>
+            <strong>未选中对象</strong>
+            <p>选择画布中的对象，这里会显示它的全部属性。</p>
+            <div className="empty-inspector-actions">
+              <button type="button" onClick={() => execute({ type: "add-text", slideId: slide.id })}><Type />文本</button>
+              <button type="button" onClick={() => execute({ type: "add-shape", slideId: slide.id, shape: "rectangle" })}><Square />矩形</button>
+            </div>
+          </div>
           <PageProperties slideId={slide.id} background={slide.background} pageSize={document.pageSize} unit={unit} onCommand={execute} />
-          <div className="empty-inspector"><MousePointer2 /><p>选择画布中的对象<br />查看并编辑属性</p></div>
         </div>}
     </aside>
   );

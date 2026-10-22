@@ -6,6 +6,8 @@
   --ppt-accent: #d35230;
   --ppt-accent-hover: #e56847;
   --ppt-accent-soft: #6f3023;
+  --panel-surface: #17181b;
+  --panel-border: #2c2e33;
   --scrollbar-thumb: #4b4e55;
   --scrollbar-thumb-hover: #676a72;
   --scrollbar-track: #191a1e;
@@ -359,12 +361,9 @@ button { color: inherit; }
 .thumbnail-row.active { color: var(--ppt-accent-hover); }
 .thumbnail { aspect-ratio: 16 / 9; position: relative; overflow: hidden; background: #f8f8f6; border: 2px solid transparent; border-radius: 4px; color: #141519; text-align: left; }
 .thumbnail-row.active .thumbnail { border-color: var(--ppt-accent); }
-.thumbnail-scene { position: absolute; inset: 0; overflow: hidden; background: #fff; }
-.thumbnail-element { position: absolute; overflow: hidden; transform-origin: center; pointer-events: none; }
-.thumbnail-text { line-height: 1.15; white-space: pre-wrap; overflow-wrap: break-word; }
-.thumbnail-image-frame { overflow: hidden; }
-.thumbnail-image { position: absolute; object-fit: fill; }
-.thumbnail-shape { border-style: solid; }
+.thumbnail-scene { position: absolute; inset: 0; overflow: hidden; background: #fff; -webkit-font-smoothing: antialiased; }
+/* 缩略图是缩小后的画布：元素的位置、文字和描边都由同一份代码按比例画出。 */
+.thumbnail-scene .slide-element { cursor: default; pointer-events: none; }
 .thumbnail-fallback-title { position: absolute; top: 12%; left: 9%; right: 9%; overflow: hidden; font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .thumbnail-actions { position: absolute; right: 5px; bottom: 2px; display: flex; gap: 4px; }
 .thumbnail-actions button { width: 25px; height: 25px; display: grid; place-items: center; padding: 0; border: 1px solid #3a3c42; border-radius: 6px; background: #292b30; color: #b8bbc2; cursor: pointer; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
@@ -407,13 +406,12 @@ button { color: inherit; }
 .chart-axis { display: flex; justify-content: space-between; gap: 2px; }
 .chart-axis-item { display: flex; flex-direction: column; align-items: center; }
 .chart-missing { align-items: center; justify-content: center; color: #8a94a6; }
-.thumbnail-chart .chart-view { font-size: 4px; }
 .slide-element.table { overflow: hidden; }
 .table-view { width: 100%; height: 100%; border-collapse: collapse; table-layout: fixed; pointer-events: none; }
-.table-view th, .table-view td { border: 1px solid; padding: 2px 4px; text-align: left; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 表格的行高与边框跟随字号，缩略图里的表格才和画布里的表格一样小。 */
+.table-view th, .table-view td { border: .08em solid; padding: .17em .33em; text-align: left; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table-view th { font-weight: 700; }
 .table-missing { display: flex; align-items: center; justify-content: center; color: #8a94a6; }
-.thumbnail-table .table-view { font-size: 4px; }
 .slide-element.selected::after { content: ""; position: absolute; inset: -4px; border: 2px solid var(--ppt-accent); pointer-events: none; }
 .element-handle { position: absolute; z-index: 3; width: 9px; height: 9px; padding: 0; border: 2px solid var(--ppt-accent); border-radius: 2px; background: #fff; }
 .element-handle.nw { left: -6px; top: -6px; cursor: nwse-resize; }
@@ -444,14 +442,29 @@ button { color: inherit; }
 .align-actions button:hover:not(:disabled) { border-color: var(--ppt-accent); }
 .align-actions button:disabled { opacity: .4; cursor: default; }
 .element-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 6px; }
+.element-actions.arrange { grid-template-columns: repeat(2, 1fr); }
 .element-actions button { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 7px 4px; border: 1px solid #3b3d44; border-radius: 6px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; }
 .element-actions button:hover:not(:disabled) { border-color: var(--ppt-accent); }
 .element-actions button.danger:hover:not(:disabled) { border-color: #c95b66; color: #ff8d98; }
 .element-actions button:disabled { opacity: .4; cursor: default; }
 .element-actions svg { width: 13px; height: 13px; }
-.empty-inspector { display: grid; justify-items: center; gap: 8px; padding: 30px 0 12px; color: #656972; text-align: center; font-size: 12px; line-height: 1.7; }
-.empty-inspector svg { width: 26px; height: 26px; opacity: .7; }
+/* 常驻在面板底部的对象操作，属性再长也不用滚到底才能点到。 */
+.inspector-actions { flex: 0 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 10px 16px 14px; border-top: 1px solid var(--panel-border, #2c2e33); background: var(--panel-surface, #17181b); }
+.inspector-actions button { display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; padding: 8px 4px; border: 1px solid #3b3d44; border-radius: 7px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
+.inspector-actions button:hover:not(:disabled) { border-color: var(--ppt-accent); color: #fff; background: var(--ppt-accent); }
+.inspector-actions button.danger:hover:not(:disabled) { border-color: #c95b66; color: #fff; background: #c95b66; }
+.inspector-actions button:disabled { opacity: .4; cursor: default; }
+.inspector-actions svg { width: 13px; height: 13px; }
+.property-form .field-readonly { display: block; padding: 8px 9px; border: 1px dashed #3b3d44; border-radius: 7px; color: #9a9ea6; background: #1c1e22; font-size: 12px; }
+.empty-inspector { display: grid; justify-items: center; gap: 9px; padding: 24px 6px 20px; color: #656972; text-align: center; font-size: 12px; line-height: 1.7; }
+.empty-inspector-mark { display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid #34363d; border-radius: 14px; color: #9a9ea6; background: #222429; }
+.empty-inspector-mark svg { width: 19px; height: 19px; }
+.empty-inspector strong { color: #c9cbd0; font-size: 13px; font-weight: 600; }
 .empty-inspector p { margin: 0; }
+.empty-inspector-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 5px; }
+.empty-inspector-actions button { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border: 1px solid #3b3d44; border-radius: 7px; background: #292b30; color: #c9cbd0; font-size: 11px; cursor: pointer; transition: border-color .15s ease, color .15s ease, background-color .15s ease; }
+.empty-inspector-actions button:hover { border-color: var(--ppt-accent); color: #fff; background: var(--ppt-accent); }
+.empty-inspector-actions svg { width: 13px; height: 13px; }
 
 .panel-tabs { display: flex; gap: 4px; }
 .panel-heading .panel-tab { width: auto; height: 28px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: #8f939b; font-size: 12px; font-weight: 500; }
@@ -474,6 +487,7 @@ button { color: inherit; }
 .inspector-warning button { margin-top: 7px; padding: 4px 9px; border: 1px solid #8a6631; border-radius: 5px; background: #3a2e1b; color: #f0cf9a; font-size: 11px; cursor: pointer; }
 .inspector-warning button:hover:not(:disabled) { border-color: var(--ppt-accent); background: var(--ppt-accent); color: #fff; }
 .inspector-warning button:disabled { opacity: .45; cursor: default; }
+.inspector-hint { margin: 10px 0 0; color: #7f838c; font-size: 11px; line-height: 1.6; }
 
 .inspector-section { padding: 14px 0; border-bottom: 1px solid #2c2e33; }
 .inspector-section:last-child { border-bottom: none; }
@@ -602,7 +616,7 @@ button { color: inherit; }
 .settings-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 14px 0; background: linear-gradient(transparent, #191a1e 22%); }
 .settings-actions .primary-action { min-width: 140px; }
 
-:root[data-theme="light"] { color: #22252a; background: #eef0f3; --scrollbar-track: #e4e6e9; --scrollbar-thumb: #a8acb3; --scrollbar-thumb-hover: #858a93; }
+:root[data-theme="light"] { color: #22252a; background: #eef0f3; --panel-surface: #f4f5f7; --panel-border: #d9dce1; --scrollbar-track: #e4e6e9; --scrollbar-thumb: #a8acb3; --scrollbar-thumb-hover: #858a93; }
 :root[data-theme="light"] .app-shell { background: #eceef1; } :root[data-theme="light"] .topbar, :root[data-theme="light"] .statusbar { background: #f9fafb; border-color: #d6d9de; color: #5b6068; }
 :root[data-theme="light"] .page-message { color: #343940; background: #fff; border-color: #cfd3d9; } :root[data-theme="light"] .page-message.success { color: #526f2f; background: #f1f7e9; border-color: #a8be8c; } :root[data-theme="light"] .page-message.error { color: #9f3541; background: #fff1f2; border-color: #e2a8ae; }
 :root[data-theme="light"] .nav-rail { background: #f7f8fa; border-color: #d6d9de; } :root[data-theme="light"] .nav-rail button:hover:not(:disabled) { color: #25282d; background: #e5e7eb; }
@@ -630,6 +644,11 @@ button { color: inherit; }
 :root[data-theme="light"] .inspector-warning { border-color: #d8b98a; background: rgba(214, 158, 74, .16); color: #7a5520; }
 :root[data-theme="light"] .inspector-warning strong { color: #6b4a1c; }
 :root[data-theme="light"] .inspector-warning button { border-color: #c2a678; background: #fff; color: #6b4a1c; }
+:root[data-theme="light"] .inspector-hint { color: #6d727b; }
+:root[data-theme="light"] .inspector-actions button, :root[data-theme="light"] .empty-inspector-actions button { color: #454a52; background: #fff; border-color: #cfd3d9; }
+:root[data-theme="light"] .empty-inspector-mark { color: #5f646d; background: #fff; border-color: #dfe2e6; }
+:root[data-theme="light"] .empty-inspector strong { color: #343940; }
+:root[data-theme="light"] .property-form .field-readonly { color: #5f646d; background: #f7f8fa; border-color: #d4d7dc; }
 :root[data-theme="light"] .feature-workspace { background: #eef0f3; } :root[data-theme="light"] .feature-header { background: #f8f9fb; border-color: #d6d9de; }
 :root[data-theme="light"] .ai-compose-card, :root[data-theme="light"] .draft-slide-card, :root[data-theme="light"] .presentation-themes > button { color: #24272c; background: #fff; border-color: #d4d7dc; }
 :root[data-theme="light"] .workflow-steps span.active, :root[data-theme="light"] .section-kicker { color: #a33b24; }
@@ -688,7 +707,7 @@ button { color: inherit; }
 :root[data-theme="light"] .settings-actions { background: linear-gradient(transparent, #eef0f3 22%); }
 
 /* 橙黄主题：暖米底色 + 橙色强调色，结构覆盖与浅色主题一一对应。 */
-:root[data-theme="amber"] { color: #3a3229; background: #f0e7d8; --ppt-accent: #c2660f; --ppt-accent-hover: #d97b16; --ppt-accent-soft: #f0c88c; --scrollbar-track: #ece0cc; --scrollbar-thumb: #c3b39a; --scrollbar-thumb-hover: #a89578; }
+:root[data-theme="amber"] { color: #3a3229; background: #f0e7d8; --ppt-accent: #c2660f; --ppt-accent-hover: #d97b16; --ppt-accent-soft: #f0c88c; --panel-surface: #faf4e8; --panel-border: #e3d6c0; --scrollbar-track: #ece0cc; --scrollbar-thumb: #c3b39a; --scrollbar-thumb-hover: #a89578; }
 :root[data-theme="amber"] .app-shell { background: #f0e7d8; } :root[data-theme="amber"] .topbar, :root[data-theme="amber"] .statusbar { background: #fdf8ef; border-color: #e3d6c0; color: #6b6153; }
 :root[data-theme="amber"] .page-message { color: #3d342a; background: #fffdf8; border-color: #ded1bb; } :root[data-theme="amber"] .page-message.success { color: #4f6b28; background: #f3f8e8; border-color: #b6cd8e; } :root[data-theme="amber"] .page-message.error { color: #9a3b32; background: #fdf0ec; border-color: #e0b0a4; }
 :root[data-theme="amber"] .nav-rail { background: #f7f0e2; border-color: #e3d6c0; } :root[data-theme="amber"] .nav-rail button { color: #6b6153; } :root[data-theme="amber"] .nav-rail button:hover:not(:disabled) { color: #2f2820; background: #ece0cc; } :root[data-theme="amber"] .nav-rail button.active { color: #6b3f0a; background: #f6d9ac; }
@@ -708,6 +727,14 @@ button { color: inherit; }
 :root[data-theme="amber"] .align-actions button, :root[data-theme="amber"] .element-actions button, :root[data-theme="amber"] .toggle-button, :root[data-theme="amber"] .segmented button, :root[data-theme="amber"] .field-stepper, :root[data-theme="amber"] .icon-button { color: #4a4136; background: #fffdf8; border-color: #ded1bb; }
 :root[data-theme="amber"] .segmented button { border-right-color: #ded1bb; }
 :root[data-theme="amber"] .type-chip { color: #8a4f0e; background: rgba(217, 131, 36, .16); border-color: #e0b06a; }
+:root[data-theme="amber"] .inspector-warning { border-color: #d8b98a; background: rgba(214, 158, 74, .16); color: #7a5520; }
+:root[data-theme="amber"] .inspector-warning strong { color: #6b4a1c; }
+:root[data-theme="amber"] .inspector-warning button { border-color: #c2a678; background: #fffdf8; color: #6b4a1c; }
+:root[data-theme="amber"] .inspector-hint { color: #6d6558; }
+:root[data-theme="amber"] .inspector-actions button, :root[data-theme="amber"] .empty-inspector-actions button { color: #4a4136; background: #fffdf8; border-color: #ded1bb; }
+:root[data-theme="amber"] .empty-inspector-mark { color: #6b6153; background: #fffdf8; border-color: #ded1bb; }
+:root[data-theme="amber"] .empty-inspector strong { color: #322b22; }
+:root[data-theme="amber"] .property-form .field-readonly { color: #5f5344; background: #fffdf8; border-color: #ded1bb; }
 :root[data-theme="amber"] .feature-workspace { background: #f0e7d8; } :root[data-theme="amber"] .feature-header { background: #fdf8ef; border-color: #e3d6c0; } :root[data-theme="amber"] .feature-header p { color: #7d7263; }
 :root[data-theme="amber"] .ai-compose-card, :root[data-theme="amber"] .draft-slide-card, :root[data-theme="amber"] .presentation-themes > button { color: #322b22; background: #fffdf8; border-color: #ded1bb; }
 :root[data-theme="amber"] .workflow-steps span.active, :root[data-theme="amber"] .section-kicker { color: #8a4f0e; }
@@ -756,7 +783,7 @@ button { color: inherit; }
 :root[data-theme="amber"] .settings-actions { background: linear-gradient(transparent, #f0e7d8 22%); }
 
 /* 绿色主题：贴近 Excel 的中性灰白 + Office 绿(#217346)，顶栏用 Excel 标题栏绿。 */
-:root[data-theme="green"] { color: #323130; background: #f3f2f1; --ppt-accent: #217346; --ppt-accent-hover: #107c41; --ppt-accent-soft: #d6e9de; --scrollbar-track: #f3f2f1; --scrollbar-thumb: #c8c6c4; --scrollbar-thumb-hover: #a19f9d; }
+:root[data-theme="green"] { color: #323130; background: #f3f2f1; --ppt-accent: #217346; --ppt-accent-hover: #107c41; --ppt-accent-soft: #d6e9de; --panel-surface: #fff; --panel-border: #e1dfdd; --scrollbar-track: #f3f2f1; --scrollbar-thumb: #c8c6c4; --scrollbar-thumb-hover: #a19f9d; }
 :root[data-theme="green"] .app-shell { background: #f3f2f1; }
 :root[data-theme="green"] .topbar { background: #217346; border-color: #1b6239; color: #fff; }
 :root[data-theme="green"] .brand-mark { background: #fff; color: #107c41; }
@@ -799,6 +826,14 @@ button { color: inherit; }
 :root[data-theme="green"] .segmented button { border-right-color: #d2d0ce; }
 :root[data-theme="green"] .type-chip { color: #107c41; background: rgba(33, 115, 70, .12); border-color: #a9c9b8; }
 :root[data-theme="green"] .empty-inspector { color: #605e5c; }
+:root[data-theme="green"] .inspector-warning { border-color: #d8b98a; background: rgba(214, 158, 74, .16); color: #7a5520; }
+:root[data-theme="green"] .inspector-warning strong { color: #6b4a1c; }
+:root[data-theme="green"] .inspector-warning button { border-color: #c2a678; background: #fff; color: #6b4a1c; }
+:root[data-theme="green"] .inspector-hint { color: #6d727b; }
+:root[data-theme="green"] .inspector-actions button, :root[data-theme="green"] .empty-inspector-actions button { color: #323130; background: #fff; border-color: #d2d0ce; }
+:root[data-theme="green"] .empty-inspector-mark { color: #605e5c; background: #f3f2f1; border-color: #d2d0ce; }
+:root[data-theme="green"] .empty-inspector strong { color: #323130; }
+:root[data-theme="green"] .property-form .field-readonly { color: #484644; background: #faf9f8; border-color: #d2d0ce; }
 :root[data-theme="green"] .feature-workspace { background: #f3f2f1; }
 :root[data-theme="green"] .feature-header { background: #fff; border-color: #e1dfdd; }
 :root[data-theme="green"] .feature-header p { color: #605e5c; }
@@ -867,7 +902,7 @@ button { color: inherit; }
 :root[data-theme="green"] .settings-actions { background: linear-gradient(transparent, #f3f2f1 22%); }
 
 /* 蓝色主题：贴近 Word 的中性灰白 + Word 蓝(#2B579A)，顶栏用 Word 标题栏蓝。 */
-:root[data-theme="blue"] { color: #323130; background: #f3f2f1; --ppt-accent: #2b579a; --ppt-accent-hover: #1f4c8b; --ppt-accent-soft: #cbd8ea; --scrollbar-track: #f3f2f1; --scrollbar-thumb: #c8c6c4; --scrollbar-thumb-hover: #a19f9d; }
+:root[data-theme="blue"] { color: #323130; background: #f3f2f1; --ppt-accent: #2b579a; --ppt-accent-hover: #1f4c8b; --ppt-accent-soft: #cbd8ea; --panel-surface: #fff; --panel-border: #e1dfdd; --scrollbar-track: #f3f2f1; --scrollbar-thumb: #c8c6c4; --scrollbar-thumb-hover: #a19f9d; }
 :root[data-theme="blue"] .app-shell { background: #f3f2f1; }
 :root[data-theme="blue"] .topbar { background: #2b579a; border-color: #244a80; color: #fff; }
 :root[data-theme="blue"] .brand-mark { background: #fff; color: #1f4c8b; }
@@ -906,10 +941,18 @@ button { color: inherit; }
 :root[data-theme="blue"] .property-form .field-unit, :root[data-theme="blue"] .align-group-label { color: #605e5c; }
 :root[data-theme="blue"] .property-form .field-error { color: #a4262c; }
 :root[data-theme="blue"] .inspector-section { border-color: #e1dfdd; }
-:root[data-theme="blue"] .align-actions button, :root[data-theme="blue"] .element-actions button, :root[data-theme="blue"] .toggle-button, :root[data-theme="blue"] .segmented button { color: #323130; background: #fff; border-color: #d2d0ce; }
+:root[data-theme="blue"] .align-actions button, :root[data-theme="blue"] .element-actions button, :root[data-theme="blue"] .toggle-button, :root[data-theme="blue"] .segmented button, :root[data-theme="blue"] .field-stepper, :root[data-theme="blue"] .icon-button { color: #323130; background: #fff; border-color: #d2d0ce; }
 :root[data-theme="blue"] .segmented button { border-right-color: #d2d0ce; }
 :root[data-theme="blue"] .type-chip { color: #1f4c8b; background: rgba(43, 87, 154, .12); border-color: #b4c7e7; }
 :root[data-theme="blue"] .empty-inspector { color: #605e5c; }
+:root[data-theme="blue"] .inspector-warning { border-color: #d8b98a; background: rgba(214, 158, 74, .16); color: #7a5520; }
+:root[data-theme="blue"] .inspector-warning strong { color: #6b4a1c; }
+:root[data-theme="blue"] .inspector-warning button { border-color: #c2a678; background: #fff; color: #6b4a1c; }
+:root[data-theme="blue"] .inspector-hint { color: #6d727b; }
+:root[data-theme="blue"] .inspector-actions button, :root[data-theme="blue"] .empty-inspector-actions button { color: #323130; background: #fff; border-color: #d2d0ce; }
+:root[data-theme="blue"] .empty-inspector-mark { color: #605e5c; background: #f3f2f1; border-color: #d2d0ce; }
+:root[data-theme="blue"] .empty-inspector strong { color: #323130; }
+:root[data-theme="blue"] .property-form .field-readonly { color: #484644; background: #faf9f8; border-color: #d2d0ce; }
 :root[data-theme="blue"] .feature-workspace { background: #f3f2f1; }
 :root[data-theme="blue"] .feature-header { background: #fff; border-color: #e1dfdd; }
 :root[data-theme="blue"] .feature-header p { color: #605e5c; }

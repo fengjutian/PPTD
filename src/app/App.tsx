@@ -5,12 +5,11 @@ import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/
 import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
-import { CroppedImage } from "../features/editor/CroppedImage";
-import { ChartView } from "../features/editor/ChartView";
-import { RichText } from "../features/editor/RichText";
-import { TableView } from "../features/editor/TableView";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { LayerList } from "../features/editor/LayerList";
+import { SlideElementContent, SlideElementFrame } from "../features/editor/SlideScene";
+import { sceneScale } from "../features/editor/scene-metrics";
+import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
 import { draftMetrics, reviewIssues, withSlideIds, type AiDraftSaveState } from "../features/ai/content-review";
 import { bodyFromBlocks } from "../services/ai-draft-content";
@@ -188,31 +187,42 @@ const ElementView = memo(function ElementView({ element, slide, scale, selected 
   };
 
   return (
-    <div ref={rootRef} className={`slide-element ${selected ? "selected" : ""} ${element.locked ? "locked" : ""} ${element.type}`} style={style} onPointerDown={(event) => begin("move", event)} onPointerMove={pointerMove} onPointerUp={(event) => finish(event)} onPointerCancel={(event) => finish(event, true)}>
-      {element.type === "text" ? <RichText element={element} scale={scale} /> : element.type === "shape" ? <div className={`shape-fill ${element.shape}`} style={{ background: element.style.fill, borderColor: element.style.stroke, borderWidth: element.style.strokeWidthPt, borderRadius: element.shape === "ellipse" ? "50%" : element.style.radiusPt }} /> : element.type === "image" ? <CroppedImage element={element} className="image-fill" /> : element.type === "chart" ? <ChartView element={element} slide={slide} scale={scale} /> : <TableView element={element} slide={slide} scale={scale} />}
+    <SlideElementFrame
+      ref={rootRef}
+      element={element}
+      scale={scale}
+      className={`${selected ? "selected" : ""} ${element.locked ? "locked" : ""}`}
+      style={style}
+      onPointerDown={(event) => begin("move", event)}
+      onPointerMove={pointerMove}
+      onPointerUp={(event) => finish(event)}
+      onPointerCancel={(event) => finish(event, true)}
+    >
+      <SlideElementContent element={element} slide={slide} scale={scale} />
       {selected && !element.locked && <>
         {RESIZE_HANDLES.map(([direction, label]) => <button key={direction} type="button" aria-label={`从${label}缩放`} className={`element-handle ${direction}`} onPointerDown={(event) => begin("resize", event, direction)} />)}
         <button type="button" aria-label="旋转对象" className="element-rotate-handle" onPointerDown={(event) => begin("rotate", event)} />
       </>}
-    </div>
+    </SlideElementFrame>
   );
 });
 
 const SlideThumbnail = memo(function SlideThumbnail({ slide, pageWidth, pageHeight }: { slide: Slide; pageWidth: number; pageHeight: number }) {
-  return <div className="thumbnail-scene">{slide.elements.map((element) => {
-    const style: React.CSSProperties = {
-      left: `${element.frame.x / pageWidth * 100}%`,
-      top: `${element.frame.y / pageHeight * 100}%`,
-      width: `${element.frame.width / pageWidth * 100}%`,
-      height: `${element.frame.height / pageHeight * 100}%`,
-      transform: `rotate(${element.rotationMilliDegree / 1000}deg)`,
-    };
-    if (element.type === "text") return <div className="thumbnail-element thumbnail-text" key={element.id} style={style}><RichText element={element} scale={0.18} /></div>;
-    if (element.type === "image") return <div className="thumbnail-element thumbnail-image-frame" key={element.id} style={style}><CroppedImage element={element} className="thumbnail-image" alt="" /></div>;
-    if (element.type === "chart") return <div className="thumbnail-element thumbnail-chart" key={element.id} style={style}><ChartView element={element} slide={slide} scale={0.18} compact /></div>;
-    if (element.type === "table") return <div className="thumbnail-element thumbnail-table" key={element.id} style={style}><TableView element={element} slide={slide} scale={0.18} compact /></div>;
-    return <div className={`thumbnail-element thumbnail-shape ${element.shape}`} key={element.id} style={{ ...style, background: element.style.fill, borderColor: element.style.stroke, borderWidth: Math.max(1, element.style.strokeWidthPt * 0.3), borderRadius: element.shape === "ellipse" ? "50%" : Math.max(0, element.style.radiusPt * 0.3) }} />;
-  })}{slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}</div>;
+  // The thumbnail is the canvas drawn smaller, so it needs the size of its own
+  // box: the text of a page is only the same text when it is drawn with the
+  // scale of the box it is drawn in.
+  const { ref, width } = useMeasuredWidth<HTMLDivElement>();
+  const scale = sceneScale(width, pageWidth);
+  return <div className="thumbnail" ref={ref} style={{ aspectRatio: `${pageWidth} / ${pageHeight}` }}>
+    <div className="thumbnail-scene" style={{ background: slide.background }}>
+      {slide.elements.map((element) => (
+        <SlideElementFrame key={element.id} element={element} scale={scale}>
+          <SlideElementContent element={element} slide={slide} scale={scale} imageAlt="" />
+        </SlideElementFrame>
+      ))}
+      {slide.elements.length === 0 && <div className="thumbnail-fallback-title">{slide.content.title}</div>}
+    </div>
+  </div>;
 });
 
 export function App() {
@@ -995,7 +1005,7 @@ export function App() {
         </div>
         {leftTab === "slides" ? <div className="slide-list">
           {document.slides.map((slide, index) => <div key={slide.id} className={`thumbnail-row ${slide.id === activeSlide.id ? "active" : ""}`}>
-            <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><div className="thumbnail"><SlideThumbnail slide={slide} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} /></div></button>
+            <button className="thumbnail-select" onClick={() => selectSlide(slide.id)}><span>{index + 1}</span><SlideThumbnail slide={slide} pageWidth={document.pageSize.width} pageHeight={document.pageSize.height} /></button>
             {slide.id === activeSlide.id && <div className="thumbnail-actions">
               <button aria-label="上移页面" title="上移页面" disabled={index === 0} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index - 1 })}><ArrowUp /></button>
               <button aria-label="下移页面" title="下移页面" disabled={index === document.slides.length - 1} onClick={() => execute({ type: "move-slide", slideId: slide.id, toIndex: index + 1 })}><ArrowDown /></button>
