@@ -53,10 +53,14 @@ interface ElementBase {
   zIndex: number;
   locked: boolean;
   sourceContentId?: ContentId;
+  /** generated = 版式生成器创建；user = 用户手工创建。旧文档可缺省。 */
+  origin?: "generated" | "user";
 }
 ```
 
 每个联合成员拥有自己的 `style` 和数据结构，不使用无约束的 `Record<string, unknown>`。颜色、线型、字体、裁剪、对齐等均定义为可校验值对象。
+
+`origin` 只用于设计层重排，不参与内容哈希。缺少该字段的旧文档按保守规则推断来源；无法证明属于生成构图的对象必须保留。设计层重排复用已审核的 `slide.content`，不改变内容 revision，也不能覆盖用户添加的图片或文本。详见 [0007 内容感知的版式选择](decisions/0007-content-aware-layout-selection.md)。
 
 ## 4. 命令与不变量
 
@@ -65,7 +69,7 @@ interface ElementBase {
 - `CreateSlide`、`DeleteSlide`、`MoveSlide`
 - `AddElement`、`DeleteElements`、`DuplicateElements`
 - `TransformElements`、`ReorderElements`、`SetElementLock`
-- `EditText`、`SetTextStyle`、`SetTextEmphasis`、`ClearTextEmphasis`、`SetShapeStyle`、`SetImageCrop`
+- `EditText`、`SetTextStyle`、`FitText`、`SetTextEmphasis`、`ClearTextEmphasis`、`SetShapeStyle`、`SetImageCrop`
 - `SetPageSize`、`ApplyThemeTokens`
 - `ApproveSlideContent`、`ReopenSlideContent`
 
@@ -188,3 +192,20 @@ interface TextElement extends ElementBase {
 导出把有片段的文本写成原生 run，导出前检查不阻止导出——片段是装饰，缺了片段只是少一处强调，不会让文件不可用。
 
 新增片段使持久化格式升到第 8 版，`7 → 8` 迁移与固定样例见 `src/core/document-model/__fixtures__/v7-document.json`。详见 [0013 文字片段级样式](decisions/0013-styled-text-fragments.md)。
+
+## 12. 文字度量与适配（V0.1 已实现）
+
+核心层不测量字体，只声明一个端口，由运行中的应用注入实现：
+
+```ts
+interface TextMeasurer {
+  /** The width of the text in em, relative to the font size. */
+  widthEm(text: string, fontFamily: string): number;
+}
+```
+
+宽度用 em 表示，与字号解耦：同一段文字测一次即可用于所有候选字号。应用层提供基于 canvas 的适配器（`src/services/text-metrics-canvas.ts`），在 100px 下测量后换算为 em，并按 `字体 + 文本` 缓存。没有注册 measurer 时，度量回退到固定启发式（CJK 1 em、拉丁 0.55 em），无头工具与测试因此不受影响。
+
+`fit-text` 命令把溢出文本的字号逐档下调到 8pt，只改 `style.fontSizePt`，属于设计态：不改文字、数字、来源与备注，内容哈希与审核状态不变，可撤销。它使用的溢出阈值与质量门完全一致，因此修复后质量门的溢出报告会真的消失。
+
+已知边界：canvas 只能量到浏览器**实际渲染**的字体，字体未安装时浏览器静默回退且无法被检出；度量解决宽度，不解决与 PowerPoint 之间的断行差异。详见 [0016 真实字体度量与文字适配](decisions/0016-real-text-metrics-port.md)。

@@ -386,7 +386,7 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
     return;
   }
   const existingLayout = document.layouts?.find((layout) => layout.name === generatedLayout.name
-    && layout.backgroundColor.toUpperCase() === generatedLayout.backgroundColor.toUpperCase());
+    && (layout.backgroundColor ?? "").toUpperCase() === (generatedLayout.backgroundColor ?? "").toUpperCase());
   if (existingLayout) {
     slide.layoutId = existingLayout.id;
     return;

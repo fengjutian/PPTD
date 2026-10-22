@@ -130,6 +130,15 @@ describe("inspector panel", () => {
     expect(buttonDisabled(markup, "清除全部强调")).toBe(false);
   });
 
+  it("warns when the text does not fit and offers to fit it", () => {
+    const element = textElement();
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.text = "一段很长的标题需要放进同一个文本框里所以它必须换行很多次才能放下";
+    const markup = renderView(element);
+    expect(markup).toContain("文字超出文本框");
+    expect(markup).toContain("适配文字");
+  });
+
   it("keeps the geometry section and the layer actions", () => {
     const markup = renderView(textElement());
     expect(markup).toContain("位置与尺寸");

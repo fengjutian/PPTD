@@ -26,7 +26,7 @@ PPTD 使用厂商无关的 `PresentationVisualGoal` 定义整套演示的风格�
 
 当前 AI 提供商或模型不支持图片输入时，不得宣称执行了视觉评审。系统只能报告“结构与确定性布局校验”，并跳过视觉循环。未来的视觉模型通过独立端口接入，不得把厂商名称写入领域模型或服务文件名。
 
-降级不得阻断 PPT 生成：视觉评审、像素对比度检查和确定性质量门的失败一律降级并记录原因，文档照常产出。详见 [`0011-visual-qa-failure-must-not-block-generation.md`](0011-visual-qa-failure-must-not-block-generation.md)。
+降级不得阻断 PPT 生成：视觉评审、像素对比度检查和确定性质量门的失败一律降级并记录原因，文档照常产出。详见 [`0015-visual-qa-failure-must-not-block-generation.md`](0015-visual-qa-failure-must-not-block-generation.md)。
 
 ## 结果
 
