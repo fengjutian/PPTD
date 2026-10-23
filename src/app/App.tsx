@@ -5590,7 +5590,10 @@ export function App() {
         <ImportModeDialog
           fileName={importChoice.name}
           busy={importBusy}
-          onClose={() => setImportChoice(undefined)}
+          onClose={() => {
+            setImportChoice(undefined);
+            setTaskStatus("已取消打开");
+          }}
           onImportContent={() => void handleImportContent()}
           onExtractTemplate={() => void handleExtractTemplate()}
         />

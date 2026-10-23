@@ -122,9 +122,7 @@ describe("importedDeckToDocument", () => {
   it("clamps impossible crop values instead of producing an invalid image", () => {
     const source = deck();
     source.slides[0]!.elements = source.slides[0]!.elements.map((element) =>
-      element.type === "image"
-        ? { ...element, crop: { top: 1.4, bottom: -1, left: 2, right: 0 } }
-        : element,
+      element.type === "image" ? { ...element, crop: { top: 1.4, bottom: -1, left: 2, right: 0 } } : element,
     );
     const document = importedDeckToDocument(source);
     const image = document.slides[0]!.elements.find((element) => element.type === "image");

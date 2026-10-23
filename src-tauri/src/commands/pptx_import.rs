@@ -829,11 +829,25 @@ fn parse_shape(
     let key = placeholder(shape);
     let frame = parse_frame(shape)
         .or_else(|| key.as_ref().and_then(|key| layout_frames.get(key).copied()))
-        .unwrap_or(ImportedFrame {
-            x: 457_200,
-            y: 457_200,
-            width: 3_657_600,
-            height: 914_400,
+        .unwrap_or_else(|| {
+            // Placeholders often inherit their geometry from a layout we could
+            // not read. These page-relative defaults keep the text visible and
+            // ordered instead of stacking every inherited box at 0,0.
+            if key.as_ref().map(is_title_placeholder).unwrap_or(false) {
+                ImportedFrame {
+                    x: 914_400,
+                    y: 609_600,
+                    width: 10_972_800,
+                    height: 1_371_600,
+                }
+            } else {
+                ImportedFrame {
+                    x: 914_400,
+                    y: 2_286_000,
+                    width: 10_972_800,
+                    height: 3_657_600,
+                }
+            }
         });
     let rotation = rotation_milli_degree(shape);
     let text = parse_text_body(
@@ -1547,19 +1561,6 @@ mod tests {
             validate_archive(&mut archive),
             Err("PPTX_ARCHIVE_ENTRY_PATH_INVALID".into())
         );
-    }
-
-    #[test]
-    #[ignore]
-    fn probes_a_generated_export() {
-        let path = std::env::var("PPTD_IMPORT_SAMPLE")
-            .unwrap_or_else(|_| "../../.tmp/out/recipe-data.pptx".to_string());
-        if !Path::new(&path).exists() {
-            return;
-        }
-        let imported = import_sync(Path::new(&path)).expect("import sample");
-        println!("slides={} report={:?}", imported.slides.len(), imported.report);
-        assert!(!imported.slides.is_empty());
     }
 
     #[test]

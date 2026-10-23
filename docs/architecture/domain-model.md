@@ -367,3 +367,17 @@ interface Slide {
 PptxGenJS 没有分组 API，导出把成员写成独立原生对象，preflight 逐页给出 `group-not-exported` 提示；原生 `<p:grpSp>` 导出属于 TASK-GROUP-002。
 
 新增可选 `groups` 使持久化格式升到第 17 版；`16 → 17` 迁移不伪造分组，固定样例见 `v17-document.json`。详见 [0051 编辑期选择组与导出展平](decisions/0051-editor-selection-groups.md)。
+
+## 22. PPTX 内容导入（V0.3 Level A 首版）
+
+导入不是持久化格式变化：Rust 读取器把 `.pptx` 解析成中性 `ImportedDeck`，TypeScript 纯函数 `importedDeckToDocument` 再生成当前 `schemaVersion` 的 `PresentationDocument`。项目文件始终是 PPTD 自己的文档，不存在“直接编辑 PPTX”的第二种持久化模型。
+
+Level A 映射：
+
+- 页面尺寸与顺序来自 `p:sldSz`、`p:sldIdLst`。
+- 文本段落 → 换行，run 样式 → `TextElementStyle`/`TextRun`；标题/正文占位符绑定 `contentRef`。
+- 图片 → `ImageElement`（data URL、crop、alt）；基础形状 → `ShapeElement`/`LineElement`；基础表格 → `table-data` 内容块 + `TableElement`。
+- 主题色/字体写入 `document.theme`；演讲备注写入 `content.speakerNotes`。
+- 导入页 `content.status = "review"`，保证导出预检提示未审核；导入后是未保存的新项目，必须另存为 `.pptd`。
+
+不支持的对象（图表、组合、SmartArt、OLE、媒体、动画、切换）不进入文档，只进入 `ImportReport`；合并单元格、超过 8 列/30 行的表格降级或截断并报告。母版/版式只用于补齐占位符几何，不做视觉重建。详见 [0052 PPTX Level A 内容导入](decisions/0052-pptx-level-a-import.md)。
