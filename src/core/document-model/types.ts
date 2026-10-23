@@ -335,15 +335,7 @@ export type SlideElement =
   TextElement | ShapeElement | LineElement | IconElement | ImageElement | ChartElement | TableElement;
 
 export type AnimationEffect =
-  | "appear"
-  | "fade"
-  | "fly-in"
-  | "float-in"
-  | "split"
-  | "wipe"
-  | "zoom"
-  | "pulse"
-  | "disappear";
+  "appear" | "fade" | "fly-in" | "float-in" | "split" | "wipe" | "zoom" | "pulse" | "disappear";
 export type AnimationPhase = "entrance" | "emphasis" | "exit";
 export type AnimationStart = "on-click" | "with-previous" | "after-previous";
 export type AnimationDirection = "none" | "left" | "right" | "top" | "bottom";

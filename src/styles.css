@@ -850,6 +850,45 @@ button {
   width: 13px;
   height: 13px;
 }
+/* 动画效果选择器：九种效果按进入/强调/退出分组，和计时控件同一行。 */
+.animation-effect-picker {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.animation-effect-picker select {
+  width: 108px;
+  height: 25px;
+  padding: 0 5px;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 5px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+}
+.animation-effect-picker select option,
+.animation-effect-picker select optgroup {
+  color: #111;
+  background: #fff;
+}
+.animation-effect-picker > button {
+  height: 25px;
+  padding: 0 9px;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 5px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+  cursor: pointer;
+}
+.animation-effect-picker > button:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+}
+.animation-effect-picker > button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 .animation-pane {
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr) auto;
@@ -1025,6 +1064,84 @@ button {
   to {
     opacity: 1;
     translate: 0 0;
+  }
+}
+.animation-preview.animation-float-in {
+  animation-name: pptd-float-in;
+}
+.animation-preview.animation-split {
+  animation-name: pptd-split;
+}
+.animation-preview.animation-wipe {
+  animation-name: pptd-wipe;
+}
+.animation-preview.animation-zoom {
+  animation-name: pptd-zoom;
+}
+.animation-preview.animation-pulse {
+  animation-name: pptd-pulse;
+  animation-timing-function: ease-in-out;
+}
+.animation-preview.animation-disappear {
+  animation-name: pptd-disappear;
+}
+@keyframes pptd-float-in {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes pptd-split {
+  from {
+    opacity: 0;
+    clip-path: inset(50% 0 50% 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes pptd-wipe {
+  from {
+    opacity: 1;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes pptd-zoom {
+  from {
+    opacity: 0;
+    scale: 0.82;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@keyframes pptd-pulse {
+  0% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.08;
+  }
+  100% {
+    scale: 1;
+  }
+}
+@keyframes pptd-disappear {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 .tool-button:hover:not(:disabled) {

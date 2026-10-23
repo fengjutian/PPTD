@@ -1,0 +1,45 @@
+{
+  "id": "aaaaaaaa-aaaa-9aaa-8aaa-aaaaaaaaaaaa",
+  "schemaVersion": 16,
+  "title": "V16 fixture",
+  "pageSize": { "width": 12191695, "height": 6858000 },
+  "revisions": { "document": 6, "content": 1, "design": 5 },
+  "slides": [
+    {
+      "id": "cccccccc-cccc-9ccc-8ccc-cccccccccccc",
+      "background": "#ffffff",
+      "content": { "title": "Fixture", "body": "Body", "speakerNotes": "", "status": "approved" },
+      "elements": [
+        {
+          "id": "dddddddd-dddd-9ddd-8ddd-dddddddddddd",
+          "type": "text",
+          "text": "Fixture",
+          "contentRef": "title",
+          "frame": { "x": 0, "y": 0, "width": 1219169, "height": 685800 },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fontFamily": "Microsoft YaHei",
+            "fontSizePt": 28,
+            "color": "#17181c",
+            "bold": true,
+            "align": "left"
+          }
+        }
+      ],
+      "animations": [
+        {
+          "id": "eeeeeeee-eeee-9eee-8eee-eeeeeeeeeeee",
+          "elementId": "dddddddd-dddd-9ddd-8ddd-dddddddddddd",
+          "effect": "pulse",
+          "phase": "emphasis",
+          "start": "with-previous",
+          "durationMs": 700,
+          "delayMs": 0,
+          "direction": "none"
+        }
+      ]
+    }
+  ]
+}

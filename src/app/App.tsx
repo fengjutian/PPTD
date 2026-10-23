@@ -2800,8 +2800,7 @@ export function App() {
   const drawerThemeMetadata = drawerThemePreset ? themePresetMetadata(drawerThemePreset.id) : undefined;
   const drawerThemeAiPrompt = drawerThemePreset ? themePresetAiPrompt(drawerThemePreset) : undefined;
   /** 生成中且预览的不是已选主题：详情可看，但不能在这里切换。 */
-  const themePreviewLocked =
-    designBusy && drawerThemePreset !== undefined && drawerThemePreset.id !== themePresetId;
+  const themePreviewLocked = designBusy && drawerThemePreset !== undefined && drawerThemePreset.id !== themePresetId;
   const closeThemeDrawer = () => {
     setThemeDrawerOpen(false);
     setThemePreviewPresetId("");
@@ -3444,38 +3443,50 @@ export function App() {
               <Square />
             </ToolButton>
             <span className="separator" />
-            {(
-              [
-                ["appear", "出现"],
-                ["fade", "淡化"],
-                ["fly-in", "飞入"],
-              ] as const
-            ).map(([effect, label]) => (
-              <ToolButton
-                key={effect}
-                label={`添加${label}动画`}
-                caption={label}
+            <div className="animation-effect-picker">
+              <select
+                aria-label="动画效果"
+                title="选择动画效果"
+                value={newAnimationEffect}
+                disabled={!selected || selected.locked}
+                onChange={(event) => setNewAnimationEffect(event.target.value as AnimationEffect)}
+              >
+                {(["entrance", "emphasis", "exit"] as const).map((phase) => (
+                  <optgroup key={phase} label={ANIMATION_PHASE_LABELS[phase]}>
+                    {ANIMATION_EFFECT_OPTIONS.filter((option) => option.phase === phase).map((option) => (
+                      <option key={option.effect} value={option.effect}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <button
+                type="button"
                 disabled={!selected || selected.locked}
                 onClick={() => {
                   if (!selected) return;
+                  const option =
+                    ANIMATION_EFFECT_OPTIONS.find((candidate) => candidate.effect === newAnimationEffect) ??
+                    ANIMATION_EFFECT_OPTIONS[1]!;
                   setSelectedAnimationId(undefined);
                   execute({
                     type: "add-animation",
                     slideId: activeSlide.id,
                     elementId: selected.id,
                     animation: {
-                      effect,
+                      effect: option.effect,
                       start: "on-click",
-                      durationMs: effect === "appear" ? 300 : 600,
+                      durationMs: option.durationMs,
                       delayMs: 0,
-                      direction: effect === "fly-in" ? "bottom" : "none",
+                      direction: option.effect === "fly-in" ? "bottom" : "none",
                     },
                   });
                 }}
               >
-                <Sparkles />
-              </ToolButton>
-            ))}
+                添加
+              </button>
+            </div>
             <span className="separator" />
             <ToolButton
               label="删除所选对象的最后一个动画"
@@ -3493,6 +3504,21 @@ export function App() {
               }}
             >
               <Trash2 />
+            </ToolButton>
+            <ToolButton
+              label="复制所选动画"
+              caption="复制动画"
+              disabled={!selectedAnimation}
+              onClick={() => {
+                if (!selectedAnimation) return;
+                execute({
+                  type: "duplicate-animation",
+                  slideId: activeSlide.id,
+                  animationId: selectedAnimation.id,
+                });
+              }}
+            >
+              <Copy />
             </ToolButton>
             {selectedAnimation && (
               <div className="animation-timing-controls" aria-label="动画计时与顺序">
@@ -3954,7 +3980,7 @@ export function App() {
                   <div className="animation-pane-empty">
                     <Sparkles />
                     <strong>本页还没有动画</strong>
-                    <p>选择画布对象，然后在上方添加出现、淡化或飞入效果。</p>
+                    <p>选择画布对象，然后在上方选择进入、强调或退出效果。</p>
                   </div>
                 ) : (
                   <ol className="animation-sequence-list">
@@ -3974,8 +4000,7 @@ export function App() {
                                   : target?.type === "icon"
                                     ? "图标"
                                     : "形状";
-                      const effectName =
-                        animation.effect === "appear" ? "出现" : animation.effect === "fade" ? "淡化" : "飞入";
+                      const effectName = ANIMATION_EFFECT_LABELS[animation.effect];
                       const startName =
                         animation.start === "on-click"
                           ? "单击时"
@@ -3998,7 +4023,8 @@ export function App() {
                                 {effectName} · {targetName}
                               </strong>
                               <small>
-                                {startName} · {(animation.durationMs / 1000).toFixed(1)} 秒
+                                {ANIMATION_PHASE_LABELS[animation.phase]} · {startName} ·{" "}
+                                {(animation.durationMs / 1000).toFixed(1)} 秒
                                 {animation.delayMs ? ` · 延迟 ${(animation.delayMs / 1000).toFixed(1)} 秒` : ""}
                               </small>
                             </span>
@@ -4359,8 +4385,7 @@ export function App() {
                           ?.value,
                         "--theme-accent": drawerThemePreset.theme.colors.find((color) => color.name === "accent")
                           ?.value,
-                        "--theme-muted": drawerThemePreset.theme.colors.find((color) => color.name === "muted")
-                          ?.value,
+                        "--theme-muted": drawerThemePreset.theme.colors.find((color) => color.name === "muted")?.value,
                         "--theme-surface": drawerThemePreset.theme.colors.find((color) => color.name === "surface")
                           ?.value,
                         "--theme-major-font": drawerThemePreset.theme.majorFont,

@@ -13,6 +13,7 @@ import versionTwelveFixture from "./__fixtures__/v12-document.json";
 import versionThirteenFixture from "./__fixtures__/v13-document.json";
 import versionFourteenFixture from "./__fixtures__/v14-document.json";
 import versionFifteenFixture from "./__fixtures__/v15-document.json";
+import versionSixteenFixture from "./__fixtures__/v16-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -155,6 +156,40 @@ describe("presentation document schema", () => {
       lineHeight: 1.5,
     });
     expect(versionFifteenFixture.schemaVersion).toBe(15);
+  });
+
+  it("migrates the fixed version 15 fixture without inventing an animation timeline", () => {
+    const migrated = parsePresentationDocument(versionFifteenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.animations).toBeUndefined();
+  });
+
+  it("keeps an emphasis animation from a version 16 fixture", () => {
+    const parsed = parsePresentationDocument(versionSixteenFixture);
+    expect(parsed.slides[0]!.animations?.[0]).toMatchObject({ effect: "pulse", phase: "emphasis" });
+    expect(versionSixteenFixture.schemaVersion).toBe(16);
+  });
+
+  it("accepts the new effects and rejects a phase that contradicts the effect", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.animations = [
+      {
+        id: crypto.randomUUID(),
+        elementId: slide.elements[0]!.id,
+        effect: "wipe",
+        phase: "entrance",
+        start: "on-click",
+        durationMs: 500,
+        delayMs: 0,
+        direction: "none",
+      },
+    ];
+    expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
+
+    const broken = structuredClone(document);
+    broken.slides[0]!.animations![0]!.phase = "exit";
+    expect(() => presentationDocumentSchema.parse(broken)).toThrow();
   });
 
   it("accepts character and paragraph formatting and rejects an impossible indent", () => {
