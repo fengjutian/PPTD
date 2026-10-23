@@ -5856,7 +5856,7 @@ export function App() {
           fileName={importChoice.name}
           busy={importBusy}
           progress={importProgress}
-          onCancelImport={() => void handleCancelImport()}
+          onCancelImport={importProgress ? () => void handleCancelImport() : undefined}
           onClose={() => {
             setImportChoice(undefined);
             setTaskStatus("已取消打开");
