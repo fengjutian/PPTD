@@ -290,4 +290,4 @@ interface TextMeasurer {
 
 `restore-content-version` 是内容域命令，只恢复标题、正文、内容块、演讲备注和页序。恢复保留当前内容块 id，并重映射仍指向旧 id 的卡片、图表和表格引用；不重建元素、样式、背景或版式。页面集合与当前文稿不一致，或内容块数量和类型无法一一对应时，命令分别返回 `CONTENT_VERSION_PAGE_SET_MISMATCH` 和 `CONTENT_VERSION_BLOCKS_INCOMPATIBLE`，只允许查看差异。恢复后的页面进入 `changed`，需要用户重新确认。
 
-`contentVersions` 是 Schema 14 新增的可选字段。迁移不伪造历史；旧文档在第一次确认时生成第一个版本。已经全部确认的旧文档不会在打开时自动补历史，需要先退回审核再重新确认一页来建立基线。详见 [0042 内容版本快照、差异与恢复](decisions/0042-content-version-history.md)。
+`contentVersions` 是 Schema 14 新增的可选字段。迁移不伪造历史；旧文档在第一次确认时生成第一个版本。已经全部确认的旧文档不会在打开时自动补历史，需要先退回审核再重新确认一页来建立基线。详见 [0043 内容版本快照、差异与恢复](decisions/0043-content-version-history.md)。

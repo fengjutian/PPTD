@@ -35,7 +35,11 @@ describe("AI structured outputs", () => {
 
     expect(outline.presentationBrief.objective).toBe("分析销售表现");
     expect(outline.presentationBrief.narrativeStrategy).toBe("general");
-    expect(batch.slides[0]).toMatchObject({ title: "", speakerNotes: "", body: "核心业务保持增长，区域表现存在差异。" });
+    expect(batch.slides[0]).toMatchObject({
+      title: "",
+      speakerNotes: "",
+      body: "核心业务保持增长，区域表现存在差异。",
+    });
   });
 
   it("accepts drafts with more than twenty pages", () => {
@@ -579,7 +583,8 @@ describe("多页草稿的分批编排", () => {
     );
   });
 
-  it("页数不多时保持一次请求，不额外调用大纲", async () => {    vi.mocked(invoke).mockImplementation(async (command) => {
+  it("页数不多时保持一次请求，不额外调用大纲", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "generate_presentation") {
         return {
           title: "短稿",
