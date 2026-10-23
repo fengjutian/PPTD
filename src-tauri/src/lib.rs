@@ -30,6 +30,7 @@ pub fn run() {
             commands::storage::save_app_settings,
             commands::storage::load_ai_draft_history,
             commands::storage::upsert_ai_draft_history,
+            commands::storage::remove_ai_draft_history,
             commands::storage::load_recent_projects,
             commands::storage::upsert_recent_project,
             commands::storage::remove_recent_project,

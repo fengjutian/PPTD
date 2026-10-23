@@ -13,6 +13,7 @@ import {
   compositionFactsFromDraft,
   constrainDesignToTemplate,
   describeAiError,
+  extractSourceFacts,
   generatePresentationDraft,
   mergeStreamProgress,
   polishPresentationTopic,
@@ -763,6 +764,75 @@ describe("多页草稿的分批编排", () => {
     expect(call?.[1]).toMatchObject({ request: { taskId: 9, streamProgress: true } });
   });
 
+  it("有素材时把事实清单带给后端，并挂到草稿上", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "generate_presentation") {
+        return {
+          title: "百度年报",
+          slides: Array.from({ length: 3 }, (_, index) => ({
+            title: `第 ${index + 1} 页`,
+            body: "正文",
+            speakerNotes: "",
+          })),
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const facts = [
+      { id: "F1", statement: "2024 年智能云收入 320 亿元", figure: "320 亿元" },
+      { id: "F2", statement: "2024 年在线营销收入 730 亿元" },
+    ];
+
+    const draft = await generatePresentationDraft("百度年报", 3, { facts });
+
+    const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "generate_presentation");
+    expect(call?.[1]).toMatchObject({ request: { facts } });
+    // 事实跟着草稿走：审核页据此显示每页引用了什么。
+    expect(draft.sourceFacts).toEqual(facts);
+  });
+
+  it("没有素材时不带事实字段，也不改变草稿", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "generate_presentation") {
+        return {
+          title: "短稿",
+          slides: Array.from({ length: 3 }, (_, index) => ({
+            title: `第 ${index + 1} 页`,
+            body: "正文",
+            speakerNotes: "",
+          })),
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const draft = await generatePresentationDraft("主题", 3);
+
+    const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "generate_presentation");
+    expect((call?.[1] as { request: Record<string, unknown> }).request.facts).toBeUndefined();
+    expect(draft.sourceFacts).toBeUndefined();
+  });
+
+  it("抽取素材事实时重新编号并去掉重复条目", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "extract_source_facts") {
+        return {
+          facts: [
+            { id: "F7", statement: "2024 年智能云收入 320 亿元", figure: "320 亿元", period: "2024 年" },
+            { statement: "2024 年在线营销收入 730 亿元" },
+            { statement: "2024 年在线营销收入 730 亿元" },
+          ],
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const facts = await extractSourceFacts("百度年报", "素材原文");
+
+    expect(facts.map((fact) => fact.id)).toEqual(["F1", "F2"]);
+    expect(facts[0]).toMatchObject({ statement: "2024 年智能云收入 320 亿元", figure: "320 亿元" });
+  });
+
   it("润色主题时只替换输入文字，不启动草稿生成", async () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "polish_presentation_topic")
@@ -818,6 +888,45 @@ describe("多页草稿的分批编排", () => {
     };
     expect(request.request).toMatchObject({ slideIndex: 1, instruction: "更精炼", taskId: 7 });
     expect(request.request).toMatchObject({ model: expect.any(String), provider: expect.any(String) });
+  });
+
+  it("重写时带着素材事实，并把新的引用带回来", async () => {
+    const facts = [{ id: "F1", statement: "2024 年智能云收入 320 亿元", figure: "320 亿元" }];
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "rewrite_presentation_slide") {
+        return {
+          slide: {
+            body: "2024 年智能云收入 320 亿元",
+            speakerNotes: "",
+            blocks: [{ type: "bullet-list", items: ["2024 年智能云收入 320 亿元"] }],
+            factRefs: ["F1"],
+          },
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const suggestion = await rewritePresentationSlide({
+      topic: "百度年报",
+      deckTitle: "百度年报",
+      outline: ["封面", "智能云成为第二增长曲线"],
+      slideIndex: 1,
+      slide: {
+        title: "智能云成为第二增长曲线",
+        body: "旧正文",
+        speakerNotes: "",
+        plan: { purpose: "说明云业务", conclusion: "云是第二曲线", visualIntent: "structured-text", density: "medium" },
+        blocks: [{ type: "paragraph", text: "旧正文" }],
+      },
+      facts,
+    });
+
+    const request = vi.mocked(invoke).mock.calls.find((call) => call[0] === "rewrite_presentation_slide")?.[1] as {
+      request: Record<string, unknown>;
+    };
+    expect(request.request).toMatchObject({ facts });
+    // 新版本自己给出引用，替换这一页时才会跟着更新，而不是沿用旧引用。
+    expect(suggestion.factRefs).toEqual(["F1"]);
   });
 
   it("模型只给内容块时，正文按块重算", async () => {

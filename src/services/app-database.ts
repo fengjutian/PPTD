@@ -61,6 +61,11 @@ export async function saveStoredAiHistory(entry: StoredAiHistoryEntry): Promise<
   return invoke<StoredAiHistoryEntry[]>("upsert_ai_draft_history", { entry });
 }
 
+export async function removeStoredAiHistory(id: string): Promise<StoredAiHistoryEntry[]> {
+  requireDesktopRuntime();
+  return invoke<StoredAiHistoryEntry[]>("remove_ai_draft_history", { id });
+}
+
 export async function loadRecentProjects(): Promise<RecentProjectEntry[]> {
   if (!isTauri()) return [];
   return invoke<RecentProjectEntry[]>("load_recent_projects");

@@ -4,6 +4,7 @@ import { bodyFromBlocks, sanitizeBlocks, sanitizeDraftForSave } from "../../serv
 import { aiDraftSchema, chooseSlideLayout, type AiDraft } from "../../services/ai-service";
 import { ContentReview, type ImagePromptAssist } from "./ContentReview";
 import {
+  citationIssues,
   countCharacters,
   densityLabels,
   draftMetrics,
@@ -837,7 +838,10 @@ describe("素材事实引用", () => {
     },
   ];
 
-  function citationDraft(slides: Array<{ title: string; body: string; factRefs?: string[] }>, withFacts = true): AiDraft {
+  function citationDraft(
+    slides: Array<{ title: string; body: string; factRefs?: string[] }>,
+    withFacts = true,
+  ): AiDraft {
     return aiDraftSchema.parse({
       title: "百度年报",
       presentationBrief: createDraft().presentationBrief,
@@ -878,5 +882,20 @@ describe("素材事实引用", () => {
   it("stays silent for drafts that never had source material", () => {
     const draft = citationDraft([{ title: "百度年报", body: "随便写" }], false);
     expect(citationIssues(draft)).toEqual([]);
+  });
+
+  it("surfaces the fact list and the citations of the open page", () => {
+    const draft = withSlideIds(
+      citationDraft([
+        { title: "百度年报", body: "2024 年报解读" },
+        { title: "智能云成为第二增长曲线", body: "2024 年智能云收入 320 亿元，同比增长 12%", factRefs: ["F1"] },
+      ]),
+    );
+    const markup = renderReview(draft, 1);
+    expect(markup).toContain("2 条素材事实");
+    expect(markup).toContain("1 条被引用");
+    expect(markup).toContain("查看素材事实");
+    expect(markup).toContain("引用 F1");
+    expect(markup).toContain("2024 年智能云收入 320 亿元，同比增长 12%");
   });
 });

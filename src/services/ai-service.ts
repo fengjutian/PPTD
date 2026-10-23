@@ -983,6 +983,7 @@ const slideRewriteSchema = z.object({
   body: z.string().max(4000).default(""),
   speakerNotes: z.string().max(4000).default(""),
   blocks: z.array(contentBlockSchema).max(20).default([]),
+  factRefs: z.array(z.string().max(20)).max(8).optional(),
 });
 const slideRewriteResponseSchema = z.object({ slide: slideRewriteSchema });
 
@@ -1009,12 +1010,15 @@ export interface SlideRewriteInput extends SlideAiContext {
   instruction?: string;
   /** 排版预检的结论；有告警时重写要把页面压回容量内。 */
   capacityNotes?: string[];
+  /** 本稿的素材事实；重写只能用这些事实，并重新给出引用。 */
+  facts?: readonly SourceFact[];
 }
 
 export interface SlideRewriteSuggestion {
   body: string;
   speakerNotes: string;
   blocks: ContentBlock[];
+  factRefs?: string[];
 }
 
 /**
@@ -1041,7 +1045,12 @@ function normalizeSlideRewrite(slide: z.output<typeof slideRewriteSchema>): Slid
   }
   // body 是块的纯文本投影：两者必须一起重写，否则审核页的计数和渲染结果
   // 会各说各话。
-  return { body: bodyFromBlocks(blocks), speakerNotes: slide.speakerNotes.trim(), blocks };
+  return {
+    body: bodyFromBlocks(blocks),
+    speakerNotes: slide.speakerNotes.trim(),
+    blocks,
+    ...(slide.factRefs ? { factRefs: slide.factRefs } : {}),
+  };
 }
 
 /**

@@ -14,15 +14,21 @@ const store = vi.hoisted(() => {
       else rows.push(entry);
       return [...rows];
     }),
+    removeStoredAiHistory: vi.fn(async (id: string) => {
+      const index = rows.findIndex((row) => (row as { id: string }).id === id);
+      if (index >= 0) rows.splice(index, 1);
+      return [...rows];
+    }),
   };
 });
 
 vi.mock("./app-database", () => ({
   loadStoredAiHistory: store.loadStoredAiHistory,
   saveStoredAiHistory: store.saveStoredAiHistory,
+  removeStoredAiHistory: store.removeStoredAiHistory,
 }));
 
-const { loadAiHistory, saveAiHistory } = await import("./ai-history");
+const { deleteAiHistoryEntry, loadAiHistory, saveAiHistory } = await import("./ai-history");
 
 const draft = (): AiDraft => ({
   title: "季度经营复盘",
@@ -92,6 +98,15 @@ describe("AI draft history", () => {
     const saved = store.rows[0] as { draft: { title: string; generatedPresentation?: unknown } };
     expect(saved.draft.title).toBe("季度经营复盘（修订）");
     expect(saved.draft.generatedPresentation).toEqual({ ...versionFifteenFixture, schemaVersion: 999 });
+  });
+
+  it("deletes a draft together with its generated presentation", async () => {
+    store.rows.push(historyRow(versionFifteenFixture));
+
+    const history = await deleteAiHistoryEntry("6a1f5d3e-3c1f-4f47-9a2f-1f4f2d7f0c11");
+
+    expect(history).toHaveLength(0);
+    expect(store.rows).toHaveLength(0);
   });
 
   it("loads a draft that was never generated into a presentation", async () => {

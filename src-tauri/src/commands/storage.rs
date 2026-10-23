@@ -32,6 +32,14 @@ pub fn upsert_ai_draft_history(
 }
 
 #[tauri::command]
+pub fn remove_ai_draft_history(
+    database: State<'_, Database>,
+    id: String,
+) -> Result<Vec<StoredAiHistoryEntry>, String> {
+    database.remove_ai_history(&id)
+}
+
+#[tauri::command]
 pub fn load_recent_projects(
     database: State<'_, Database>,
 ) -> Result<Vec<RecentProjectEntry>, String> {

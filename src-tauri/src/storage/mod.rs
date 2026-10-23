@@ -256,6 +256,18 @@ impl Database {
         self.load_ai_history()
     }
 
+    /// 删除一条历史草稿。草稿和它生成的文稿在同一个 JSON 列里，删掉这一行
+    /// 就是用户看到的“删除这份演示文稿”。
+    pub fn remove_ai_history(&self, id: &str) -> Result<Vec<StoredAiHistoryEntry>, String> {
+        validate_history_id(id)?;
+        let connection = self.lock()?;
+        connection
+            .execute("DELETE FROM ai_draft_history WHERE id = ?1", [id])
+            .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        drop(connection);
+        self.load_ai_history()
+    }
+
     pub fn load_recent_projects(&self) -> Result<Vec<RecentProjectEntry>, String> {
         let connection = self.lock()?;
         let mut statement = connection
@@ -426,10 +438,15 @@ fn validate_settings(settings: &StoredAppSettings) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_history_entry(entry: &StoredAiHistoryEntry) -> Result<(), String> {
-    if entry.id.trim().is_empty() || entry.id.chars().count() > 64 {
+fn validate_history_id(id: &str) -> Result<(), String> {
+    if id.trim().is_empty() || id.chars().count() > 64 {
         return Err("AI_HISTORY_ID_INVALID".into());
     }
+    Ok(())
+}
+
+fn validate_history_entry(entry: &StoredAiHistoryEntry) -> Result<(), String> {
+    validate_history_id(&entry.id)?;
     if entry.topic.chars().count() > MAX_TOPIC_CHARS {
         return Err("AI_HISTORY_TOPIC_TOO_LONG".into());
     }
@@ -680,6 +697,27 @@ mod tests {
         assert_eq!(entries.len(), 20);
         assert_eq!(entries[0].id, "entry-24");
         assert_eq!(entries[19].id, "entry-5");
+    }
+
+    #[test]
+    fn removing_a_history_entry_deletes_only_that_draft() {
+        let database = Database::open_in_memory().expect("database");
+        database
+            .save_ai_history(&history_entry("keep", "2026-01-01T00:00:00.000Z"))
+            .expect("save keep");
+        database
+            .save_ai_history(&history_entry("drop", "2026-01-02T00:00:00.000Z"))
+            .expect("save drop");
+
+        let entries = database.remove_ai_history("drop").expect("remove");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, "keep");
+        // 重复删除是幂等的：前端重试或双击都不该报错。
+        assert_eq!(database.remove_ai_history("drop").expect("remove again").len(), 1);
+        assert_eq!(
+            database.remove_ai_history("  ").unwrap_err(),
+            "AI_HISTORY_ID_INVALID"
+        );
     }
 
     #[test]

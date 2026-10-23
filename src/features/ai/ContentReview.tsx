@@ -853,6 +853,16 @@ export function ContentReview({
 
   const metrics = draftMetrics(draft);
   const issues = useMemo(() => reviewIssues(draft), [draft]);
+  // 素材事实：这一稿的引用表。按事实统计被哪几页引用，审核时能直接看出
+  // "哪条数据只用了一次、哪条一次都没用"。
+  const facts = draft.sourceFacts ?? [];
+  const factUsage = useMemo(() => {
+    const usage = new Map<string, number[]>();
+    draft.slides.forEach((slide, index) => {
+      (slide.factRefs ?? []).forEach((id) => usage.set(id, [...(usage.get(id) ?? []), index]));
+    });
+    return usage;
+  }, [draft.slides]);
   // Both the outline and the cards show the same numbers; computing them once
   // per draft keeps a ten page review from re-splitting every body on each keypress.
   const slideStats = useMemo(() => draft.slides.map((slide) => slideMetrics(slide)), [draft]);
@@ -1018,10 +1028,41 @@ export function ContentReview({
               <span className="draft-reviewed-summary">
                 {reviewedIndexes.length}/{draft.slides.length} 页已审核
               </span>
+              {facts.length > 0 && (
+                <span className="draft-facts-summary">
+                  {facts.length} 条素材事实 · {factUsage.size} 条被引用
+                </span>
+              )}
               <span className={`draft-save-state ${saveState}`} role="status">
                 {saveState === "saving" ? "保存中…" : "已自动保存"}
               </span>
             </p>
+            {facts.length > 0 && (
+              <details className="draft-facts">
+                <summary>
+                  查看素材事实（{facts.length} 条，{facts.length - factUsage.size} 条未引用）
+                </summary>
+                <ol>
+                  {facts.map((fact) => {
+                    const pages = factUsage.get(fact.id) ?? [];
+                    return (
+                      <li key={fact.id}>
+                        <span className="draft-fact-id">{fact.id}</span>
+                        <span className="draft-fact-statement">{fact.statement}</span>
+                        <span className="draft-fact-meta">
+                          {[
+                            [fact.period, fact.source].filter(Boolean).join(" · "),
+                            pages.length > 0 ? `第 ${pages.map((index) => index + 1).join("、")} 页` : "未引用",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </details>
+            )}
           </div>
           <div className="draft-heading-actions">
             <div className="draft-history-actions" role="group" aria-label="内容编辑历史">
@@ -1160,6 +1201,11 @@ export function ContentReview({
             const canUndoRestore = Boolean(slide.id && restoreUndoSlideIds.includes(slide.id));
             const confirmingDelete = Boolean(slide.id && pendingPageDelete === slide.id);
             const unverified = unverifiedCheckCount(slide);
+            const citationTitle = (slide.factRefs ?? [])
+              .map((id) => facts.find((fact) => fact.id === id))
+              .filter((fact): fact is NonNullable<typeof fact> => Boolean(fact))
+              .map((fact) => `${fact.id}：${fact.statement}`)
+              .join("\n");
             return (
               <article
                 id={`draft-slide-${index}`}
@@ -1201,6 +1247,11 @@ export function ContentReview({
                   <div className="draft-slide-tools">
                     <span className="draft-slide-status-line">
                       {slideStat.characters} 字 · {slideStat.points} 条要点
+                      {(slide.factRefs ?? []).length > 0 && (
+                        <b className="draft-citation-badge" title={citationTitle}>
+                          引用 {(slide.factRefs ?? []).join("、")}
+                        </b>
+                      )}
                       {unverified > 0 && <b className="draft-unverified-badge">{unverified} 处待核实</b>}
                       {edited && <b className="draft-edited-badge">已修改</b>}
                     </span>

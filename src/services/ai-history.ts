@@ -2,7 +2,12 @@ import { z } from "zod";
 import { parsePresentationDocument, type PresentationDocument } from "../core/document-model";
 import { sanitizeDraftForSave } from "./ai-draft-content";
 import { aiDraftSchema, type AiDraft } from "./ai-service";
-import { loadStoredAiHistory, saveStoredAiHistory, type StoredAiHistoryEntry } from "./app-database";
+import {
+  loadStoredAiHistory,
+  removeStoredAiHistory,
+  saveStoredAiHistory,
+  type StoredAiHistoryEntry,
+} from "./app-database";
 
 const storedDraftSchema = aiDraftSchema.extend({
   // 生成后的文稿会长期留在历史里，可能停留在旧 schema 版本。这里保存原值、
@@ -88,6 +93,10 @@ export async function saveAiHistory(entry: {
     updatedAt: new Date().toISOString(),
   };
   return parseHistory(await saveStoredAiHistory(next));
+}
+
+export async function deleteAiHistoryEntry(id: string): Promise<AiHistoryEntry[]> {
+  return parseHistory(await removeStoredAiHistory(id));
 }
 
 export async function saveAiPresentation(id: string, presentation: PresentationDocument): Promise<AiHistoryEntry[]> {

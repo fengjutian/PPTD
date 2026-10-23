@@ -41,6 +41,7 @@ import {
   Trash2,
   Type,
   Undo2,
+  Upload,
   Wand2,
   X,
 } from "lucide-react";
@@ -108,6 +109,8 @@ import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview, type ImagePromptAssist } from "../features/ai/ContentReview";
 import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
+import { FactPicker } from "../features/ai/FactPicker";
+import { selectedFacts } from "../features/ai/facts";
 import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
 import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
 import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
@@ -130,7 +133,13 @@ import { InsertTableDialog } from "../features/editor/InsertTableDialog";
 import { InsertChartDialog } from "../features/editor/InsertChartDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
-import { loadAiHistory, saveAiHistory, saveAiPresentation, type AiHistoryEntry } from "../services/ai-history";
+import {
+  deleteAiHistoryEntry,
+  loadAiHistory,
+  saveAiHistory,
+  saveAiPresentation,
+  type AiHistoryEntry,
+} from "../services/ai-history";
 import { loadRecentProjects, removeRecentProject, type RecentProjectEntry } from "../services/app-database";
 import {
   briefsFromDraft,
@@ -138,6 +147,7 @@ import {
   compositionFactsFromDraft,
   describeAiError,
   endAiGeneration,
+  extractSourceFacts,
   generateDeckConcepts,
   generatePresentationDesign,
   generatePresentationDraft,
@@ -156,6 +166,7 @@ import {
   type ContentCheck,
   type DeckReviewIssue,
   type SlideRewriteSuggestion,
+  type SourceFact,
   type SplitSlidePage,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
@@ -797,6 +808,18 @@ export function App() {
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("zh");
   const t = useMemo(() => createTranslator(uiLanguage), [uiLanguage]);
   const [aiTopic, setAiTopic] = useState("");
+  /**
+   * 用户粘贴的参考素材（年报、报告、会议纪要）。
+   *
+   * 素材只在本机内存里用于抽取事实，不随主题历史保存：它往往比主题长得多，
+   * 也可能含内部数据，存进生成历史会让"重来一次"变成一次数据留存。
+   */
+  const [aiMaterial, setAiMaterial] = useState("");
+  /** 从素材里抽出的事实；undefined 表示还没抽过。 */
+  const [aiFacts, setAiFacts] = useState<SourceFact[]>();
+  /** 不参与本次生成的事实编号。默认全部参与，勾掉才是例外。 */
+  const [aiExcludedFacts, setAiExcludedFacts] = useState<ReadonlySet<string>>(new Set());
+  const [aiExtracting, setAiExtracting] = useState(false);
   const [aiSlideCount, setAiSlideCount] = useState<number | "">(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
   const [activeDraftSlideIndex, setActiveDraftSlideIndex] = useState(0);
@@ -1645,6 +1668,51 @@ export function App() {
     setTaskStatus("已生成配图并插入当前页");
   };
 
+  /**
+   * 素材换了，事实清单就作废。
+   *
+   * 清单描述的是上一段原文：留着旧事实去生成，会把上一份材料的数字写进
+   * 这一次的稿子，而且每一页都"有引用"，审核页反而看不出来。
+   */
+  const resetAiFacts = () => {
+    setAiFacts(undefined);
+    setAiExcludedFacts(new Set());
+  };
+
+  const handleMaterialFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (!/\.(txt|md)$/i.test(file.name) || file.size > 2 * 1024 * 1024) {
+      setTaskStatus("素材只支持 2 MB 以内的 .txt / .md 文件；其他格式请直接粘贴正文");
+      return;
+    }
+    try {
+      const text = await file.text();
+      setAiMaterial(text.slice(0, 40000));
+      resetAiFacts();
+      setTaskStatus(`已导入素材 ${file.name}（${text.length} 字），可先抽取事实再生成`);
+    } catch {
+      setTaskStatus("素材文件读取失败");
+    }
+  };
+
+  /** 只抽事实，不生成草稿：让人先看见、勾选、删掉不该进稿的条目。 */
+  const handleExtractFacts = async () => {
+    const material = aiMaterial.trim();
+    if (!material || aiExtracting) return;
+    setAiExtracting(true);
+    setTaskStatus("AI 正在从素材中抽取事实…");
+    try {
+      const facts = await extractSourceFacts(aiTopic.trim() || "演示文稿", material, { taskId: aiTaskId.current });
+      setAiFacts(facts);
+      setAiExcludedFacts(new Set());
+      setTaskStatus(facts.length > 0 ? `已抽取 ${facts.length} 条事实，可勾选后生成` : "素材里没有找到可核对的事实");
+    } catch (error) {
+      setTaskStatus(`事实抽取失败：${describeAiError(error)}`);
+    } finally {
+      setAiExtracting(false);
+    }
+  };
+
   const handleAiGenerate = async () => {
     if (aiBusy) {
       aiRequestId.current += 1;
@@ -1660,6 +1728,8 @@ export function App() {
       setTaskStatus("页数必须是大于 0 的整数");
       return;
     }
+    // 抽取还在跑时再发一次生成，会让同一份素材抽出两份清单。
+    if (aiExtracting) return;
     const requestedSlideCount = aiSlideCount;
     const requestId = aiRequestId.current + 1;
     aiRequestId.current = requestId;
@@ -1683,9 +1753,28 @@ export function App() {
         if (requestId !== aiRequestId.current || progress.taskId !== taskId) return;
         setAiStreamProgress(mergeStreamProgress(totals, progress));
       }).catch(() => undefined);
+      // 素材先变成事实清单，再开始写稿：模型手里没有事实时，凭空写的数字最像真的。
+      let facts: SourceFact[] = [];
+      const material = aiMaterial.trim();
+      let available = aiFacts;
+      if (material && !available) {
+        // 用户没有先点"抽取事实"：按一键生成的预期自动抽一次，结果仍然回填到清单里。
+        setAiProgress({ stage: "outline", completed: 0, total: 1, label: "正在抽取素材事实…" });
+        available = await extractSourceFacts(aiTopic.trim() || "演示文稿", material, { taskId });
+        if (requestId !== aiRequestId.current) return;
+        setAiFacts(available);
+        setAiExcludedFacts(new Set());
+      }
+      if (available) {
+        facts = selectedFacts(available, aiExcludedFacts);
+        if (facts.length === 0 && available.length > 0) {
+          setTaskStatus("所有素材事实都被排除，本次按无素材生成");
+        }
+      }
       setAgentWorkflow((state) => transitionAgentWorkflow(state, "generating-content"));
       const draft = withSlideIds(
         await generatePresentationDraft(aiTopic, requestedSlideCount, {
+          facts,
           onProgress: (progress) => {
             if (requestId === aiRequestId.current) setAiProgress(progress);
           },
@@ -1775,6 +1864,8 @@ export function App() {
       }).catch(() => undefined);
       const regenerated = withSlideIds(
         await generatePresentationDraft(topic, slideCount, {
+          // 重新生成沿用这一稿已经抽取的事实：素材不随历史保存，重抽会丢依据。
+          facts: current.sourceFacts ?? [],
           onProgress: (progress) => {
             if (requestId === aiRequestId.current) setAiProgress(progress);
           },
@@ -1883,6 +1974,7 @@ export function App() {
         },
         instruction: instruction.trim() || undefined,
         capacityNotes: capacityNoteMessages(index),
+        facts: draft.sourceFacts ?? [],
         taskId,
       });
       if (requestId !== slideRewriteRequestId.current) return;
@@ -1954,6 +2046,8 @@ export function App() {
                 blocks: proposal.blocks,
                 body: proposal.body,
                 speakerNotes: proposal.speakerNotes,
+                // 重写后的正文换了，引用也要跟着换成新版本给出的。
+                factRefs: proposal.factRefs,
                 // 正文换了，挂在旧内容上的核实标记不再成立。
                 checks: undefined,
                 reviewed: false,
@@ -2374,6 +2468,29 @@ export function App() {
     setActiveView("editor");
     setEditorSurface("canvas");
     setTaskStatus("AI 生成的 PPT 已打开，可继续编辑");
+  };
+
+  const removeAiHistoryEntry = (entry: AiHistoryEntry) => {
+    if (designBusy && generatingHistoryId === entry.id) {
+      setTaskStatus("这份草稿正在生成 PPT，完成后再删除");
+      return;
+    }
+    if (!window.confirm(`删除“${entry.draft.title}”的草稿和已生成的 PPT？删除后无法恢复。`)) return;
+    // 删除前先作废未落盘的自动保存：否则 500ms 后的 upsert 会把刚删掉的
+    // 草稿写回历史，用户看到“删了又回来”。
+    aiSaveTokenRef.current += 1;
+    aiUnsavedRef.current = false;
+    void deleteAiHistoryEntry(entry.id)
+      .then((history) => {
+        setAiHistory(history);
+        if (activeHistoryId === entry.id) {
+          setAiDraft(undefined);
+          setActiveHistoryId(undefined);
+          setAiTopic("");
+        }
+        setTaskStatus(`已删除“${entry.draft.title}”`);
+      })
+      .catch((error: unknown) => setTaskStatus(`删除失败：${error instanceof Error ? error.message : String(error)}`));
   };
 
   const selectAiDraftSlide = (index: number) => {
@@ -3701,11 +3818,7 @@ export function App() {
   };
 
   const restoreContentVersionWithDesign = (versionId: string) => {
-    if (
-      !window.confirm(
-        "恢复这个版本会同时覆盖当前文稿的内容和版式（对象、背景、动画、切换、页面尺寸）。是否继续？",
-      )
-    )
+    if (!window.confirm("恢复这个版本会同时覆盖当前文稿的内容和版式（对象、背景、动画、切换、页面尺寸）。是否继续？"))
       return;
     try {
       execute({ type: "restore-content-version", versionId, includeDesign: true });
@@ -4453,6 +4566,20 @@ export function App() {
                               </small>
                             </span>
                           </button>
+                          <button
+                            type="button"
+                            className="project-card-remove"
+                            aria-label={`删除 ${entry.draft.title}`}
+                            title={
+                              designBusy && generatingHistoryId === entry.id
+                                ? "正在生成 PPT，完成后再删除"
+                                : "删除草稿和已生成的 PPT"
+                            }
+                            disabled={designBusy && generatingHistoryId === entry.id}
+                            onClick={() => removeAiHistoryEntry(entry)}
+                          >
+                            <Trash2 />
+                          </button>
                         </article>
                       );
                     }
@@ -4864,6 +4991,69 @@ export function App() {
                       placeholder="例如：为管理层制作一份产品战略汇报，突出增长机会和下一季度行动"
                     />
                   </label>
+                  <label>
+                    <span className="topic-field-heading">
+                      <span>参考素材（可选）</span>
+                      <span className="material-hint">粘贴原文，生成时逐页引用</span>
+                    </span>
+                    <textarea
+                      className="material-input"
+                      value={aiMaterial}
+                      onChange={(event) => {
+                        setAiMaterial(event.target.value);
+                        resetAiFacts();
+                      }}
+                      maxLength={40000}
+                      rows={5}
+                      placeholder="粘贴年报、研报或会议纪要原文。AI 会先抽出可核对的事实，再按事实写稿；没有素材时不编造数字。"
+                    />
+                  </label>
+                  <div className="material-tools">
+                    <label className="link-action material-import">
+                      <Upload />
+                      导入 .txt / .md
+                      <input
+                        type="file"
+                        accept=".txt,.md,text/plain,text/markdown"
+                        hidden
+                        onChange={(event) => {
+                          void handleMaterialFile(event.target.files?.[0]);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="link-action"
+                      disabled={!aiMaterial.trim() || aiExtracting || aiBusy}
+                      onClick={() => void handleExtractFacts()}
+                    >
+                      <Wand2 />
+                      {aiExtracting ? "抽取中…" : aiFacts ? "重新抽取事实" : "抽取事实"}
+                    </button>
+                  </div>
+                  {aiFacts && (
+                    <FactPicker
+                      facts={aiFacts}
+                      excluded={aiExcludedFacts}
+                      onToggle={(id) =>
+                        setAiExcludedFacts((current) => {
+                          const next = new Set(current);
+                          if (next.has(id)) next.delete(id);
+                          else next.add(id);
+                          return next;
+                        })
+                      }
+                      onRemove={(id) => {
+                        setAiFacts((current) => current?.filter((fact) => fact.id !== id));
+                        setAiExcludedFacts((current) => {
+                          const next = new Set(current);
+                          next.delete(id);
+                          return next;
+                        });
+                      }}
+                    />
+                  )}
                   <label className="slide-count-field">
                     页数
                     <input
@@ -4882,7 +5072,7 @@ export function App() {
                   </label>
                   <button
                     className="primary-action"
-                    disabled={!aiTopic.trim() || aiPolishing || aiSlideCount === ""}
+                    disabled={!aiTopic.trim() || aiPolishing || aiSlideCount === "" || aiExtracting}
                     onClick={handleAiGenerate}
                   >
                     {aiBusy ? "取消生成" : "生成 PPT 草稿"}
