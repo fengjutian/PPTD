@@ -459,6 +459,8 @@ describe("content review layout", () => {
     expect(markup).toContain(`value="${draft.slides[1]!.title}`);
     expect(markup).not.toContain(`value="${draft.slides[0]!.title}`);
     expect(markup).toContain("标题不能为空");
+    // 没有标题就没有重写依据，入口保持禁用。
+    expect(markup).toContain("先补全页面标题");
   });
 
   it("keeps the outline as a single tab stop with arrow-key movement", () => {

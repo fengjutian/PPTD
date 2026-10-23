@@ -1153,8 +1153,12 @@ export function ContentReview({
                     <button
                       type="button"
                       className="link-action"
-                      disabled={regenerating}
-                      title="让 AI 按本页标题和页面计划重写正文与演讲备注；对照后确认才替换，替换可撤销"
+                      disabled={missing || regenerating}
+                      title={
+                        missing
+                          ? "先补全页面标题：标题是这一页重写的依据"
+                          : "让 AI 按本页标题和页面计划重写正文与演讲备注；对照后确认才替换，替换可撤销"
+                      }
                       onClick={() => onRewriteSlide(index)}
                     >
                       <Wand2 />

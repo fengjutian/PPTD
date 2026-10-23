@@ -52,6 +52,7 @@ import {
   type ElementId,
   type DocumentId,
   type AnimationEffect,
+  type PresentationDocument,
   type RectEmu,
   type Slide,
   type SlideAnimation,
@@ -61,7 +62,13 @@ import {
   nextTextSize,
   normalizeTextFormat,
 } from "../core/document-model";
-import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
+import {
+  applyCommand,
+  importedDeckToDocument,
+  type AiSlideDesign,
+  type DocumentCommand,
+  type ImportReport,
+} from "../core/commands";
 import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../core/design/deck-concept";
 import {
   auditThemeDirection,
@@ -77,6 +84,7 @@ import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 import { FindReplaceBar } from "../features/editor/FindReplaceBar";
 import { PageSizeControls } from "../features/editor/PageSizeControls";
 import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
+import { ImportModeDialog, ImportReportDialog } from "../features/editor/PptxImportDialogs";
 import {
   ANIMATION_EFFECT_LABELS,
   ANIMATION_EFFECT_OPTIONS,
@@ -157,9 +165,11 @@ import {
   saveProject,
   autoSave,
   writePptx,
+  type PresentationFileSelection,
   type TemplateAnalysis,
   type TemplateRecord,
 } from "../services/project-files";
+import { importPptxContent } from "../services/pptx-import";
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
@@ -732,6 +742,13 @@ export function App() {
   const [exportReport, setExportReport] = useState<ExportReport>();
   const [exportPreflightOpen, setExportPreflightOpen] = useState(false);
   const [contentHistoryOpen, setContentHistoryOpen] = useState(false);
+  const [importChoice, setImportChoice] = useState<PresentationFileSelection>();
+  const [importBusy, setImportBusy] = useState(false);
+  const [importPreview, setImportPreview] = useState<{
+    fileName: string;
+    document: PresentationDocument;
+    report: ImportReport;
+  }>();
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
   const setTaskStatus = (text?: string) =>
     setMessage(
@@ -1215,6 +1232,18 @@ export function App() {
         void refreshRecentProjects();
         return;
       }
+      setTaskStatus("请选择打开方式…");
+      setImportChoice(selection);
+    } catch (error) {
+      setTaskStatus(`打开或导入失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleExtractTemplate = async () => {
+    const selection = importChoice;
+    if (!selection) return;
+    setImportBusy(true);
+    try {
       setTaskStatus(selection.format === "ppt" ? "正在安全转换旧版 PPT…" : "正在分析 PPTX…");
       const pptxPath = selection.format === "ppt" ? await convertLegacyPpt(selection.path) : selection.path;
       const imported = await importPptxTemplate(pptxPath);
@@ -1224,8 +1253,45 @@ export function App() {
       setTemplatePickerOpen(true);
       setTaskStatus(`${selection.format.toUpperCase()} 已安全导入并完成结构分析：${selection.name}`);
     } catch (error) {
-      setTaskStatus(`打开或导入失败：${error instanceof Error ? error.message : String(error)}`);
+      setTaskStatus(`模板导入失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setImportBusy(false);
+      setImportChoice(undefined);
     }
+  };
+
+  const handleImportContent = async () => {
+    const selection = importChoice;
+    if (!selection) return;
+    setImportBusy(true);
+    setTaskStatus("正在解析 PPTX 内容…");
+    try {
+      const pptxPath = selection.format === "ppt" ? await convertLegacyPpt(selection.path) : selection.path;
+      const imported = await importPptxContent(pptxPath);
+      const document = importedDeckToDocument(imported);
+      setImportPreview({ fileName: selection.name, document, report: imported.report });
+      setImportChoice(undefined);
+      setTaskStatus(`已解析 ${imported.report.slideCount} 页，请确认导入报告`);
+    } catch (error) {
+      setImportChoice(undefined);
+      setTaskStatus(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    const preview = importPreview;
+    if (!preview) return;
+    await clearRecovery().catch(() => undefined);
+    loadDocument(preview.document);
+    setImageProjectPath(undefined);
+    setProjectPath(undefined);
+    setProjectMtime(undefined);
+    setSavedRevision(-1);
+    setEditorSurface("canvas");
+    setImportPreview(undefined);
+    setTaskStatus(`已导入 ${preview.fileName}；内容为待审核状态，请另存为新的 PPTD 项目`);
   };
 
   const handleOpenRecent = async (entry: RecentProjectEntry) => {
@@ -1690,7 +1756,13 @@ export function App() {
    * 花这一次调用。
    */
   const openSlideRewrite = (index: number) => {
-    if (!aiDraftRef.current || aiRegenerating) return;
+    const slide = aiDraftRef.current?.slides[index];
+    if (!slide || aiRegenerating) return;
+    // 标题是重写的依据：没有标题就不知道该重写成什么，先让用户补标题。
+    if (!slide.title.trim()) {
+      setTaskStatus("先补全这一页的标题，AI 才能按标题重写正文");
+      return;
+    }
     setSlideRewrite({ index, status: "editing" });
   };
 
@@ -5512,6 +5584,28 @@ export function App() {
             </div>
           </section>
         </div>
+      )}
+
+      {importChoice && (
+        <ImportModeDialog
+          fileName={importChoice.name}
+          busy={importBusy}
+          onClose={() => setImportChoice(undefined)}
+          onImportContent={() => void handleImportContent()}
+          onExtractTemplate={() => void handleExtractTemplate()}
+        />
+      )}
+
+      {importPreview && (
+        <ImportReportDialog
+          fileName={importPreview.fileName}
+          report={importPreview.report}
+          onCancel={() => {
+            setImportPreview(undefined);
+            setTaskStatus("已取消导入，当前项目未改变");
+          }}
+          onConfirm={() => void handleConfirmImport()}
+        />
       )}
 
       {contentHistoryOpen && (

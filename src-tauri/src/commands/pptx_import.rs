@@ -105,7 +105,11 @@ pub struct ImportedCrop {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ImportedElement {
     Text {
         frame: ImportedFrame,
@@ -267,8 +271,8 @@ fn import_sync(source: &Path) -> Result<ImportedDeck, String> {
         ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
     validate_archive(&mut archive)?;
 
-    let presentation_xml = read_xml(&mut archive, "ppt/presentation.xml")?
-        .ok_or("PPTX_PRESENTATION_MISSING")?;
+    let presentation_xml =
+        read_xml(&mut archive, "ppt/presentation.xml")?.ok_or("PPTX_PRESENTATION_MISSING")?;
     let presentation_rels = read_relationships(&mut archive, "ppt/presentation.xml");
     let (page_size, slide_relations) = parse_presentation(&presentation_xml)?;
     if slide_relations.is_empty() {
@@ -353,8 +357,10 @@ fn validate_source(source: &Path) -> Result<PathBuf, String> {
     if extension != "pptx" {
         return Err("PPTX_IMPORT_EXTENSION_INVALID".into());
     }
-    let canonical = fs::canonicalize(source).map_err(|error| format!("PPTX_IMPORT_PATH_INVALID: {error}"))?;
-    let metadata = fs::metadata(&canonical).map_err(|error| format!("PPTX_IMPORT_METADATA_FAILED: {error}"))?;
+    let canonical =
+        fs::canonicalize(source).map_err(|error| format!("PPTX_IMPORT_PATH_INVALID: {error}"))?;
+    let metadata = fs::metadata(&canonical)
+        .map_err(|error| format!("PPTX_IMPORT_METADATA_FAILED: {error}"))?;
     if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_FILE_BYTES {
         return Err("PPTX_IMPORT_SIZE_INVALID".into());
     }
@@ -401,7 +407,11 @@ fn validate_archive(archive: &mut ZipArchive<File>) -> Result<(), String> {
     Ok(())
 }
 
-fn read_entry(archive: &mut ZipArchive<File>, name: &str, limit: u64) -> Result<Option<Vec<u8>>, String> {
+fn read_entry(
+    archive: &mut ZipArchive<File>,
+    name: &str,
+    limit: u64,
+) -> Result<Option<Vec<u8>>, String> {
     let Ok(entry) = archive.by_name(name) else {
         return Ok(None);
     };
@@ -436,8 +446,12 @@ fn parse_presentation(xml: &str) -> Result<(ImportedSize, Vec<String>), String> 
         height: DEFAULT_PAGE_HEIGHT,
     };
     if let Some(size) = root.descendants().find(|node| node.has_tag_name("sldSz")) {
-        let width = size.attribute("cx").and_then(|value| value.parse::<i64>().ok());
-        let height = size.attribute("cy").and_then(|value| value.parse::<i64>().ok());
+        let width = size
+            .attribute("cx")
+            .and_then(|value| value.parse::<i64>().ok());
+        let height = size
+            .attribute("cy")
+            .and_then(|value| value.parse::<i64>().ok());
         if let (Some(width), Some(height)) = (width, height) {
             if width > 0 && height > 0 {
                 page_size = ImportedSize { width, height };
@@ -474,7 +488,8 @@ fn descendant<'a, 'input>(node: Node<'a, 'input>, name: &str) -> Option<Node<'a,
 }
 
 fn parse_i64(node: Node<'_, '_>, name: &str) -> Option<i64> {
-    node.attribute(name).and_then(|value| value.parse::<i64>().ok())
+    node.attribute(name)
+        .and_then(|value| value.parse::<i64>().ok())
 }
 
 fn relationships_path(part: &str) -> String {
@@ -597,10 +612,14 @@ fn theme_color(theme: &Option<ImportedTheme>, name: &str) -> Option<String> {
 fn parse_color(node: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option<String> {
     let fill = descendant(node, "solidFill")?;
     if let Some(node) = descendant(fill, "srgbClr") {
-        return node.attribute("val").map(|value| format!("#{}", value.to_ascii_uppercase()));
+        return node
+            .attribute("val")
+            .map(|value| format!("#{}", value.to_ascii_uppercase()));
     }
     if let Some(node) = descendant(fill, "schemeClr") {
-        return node.attribute("val").and_then(|name| theme_color(theme, name));
+        return node
+            .attribute("val")
+            .and_then(|name| theme_color(theme, name));
     }
     None
 }
@@ -647,14 +666,24 @@ fn placeholder_content_ref(key: &PlaceholderKey) -> Option<String> {
     }
 }
 
-fn parse_layout_frames(archive: &mut ZipArchive<File>, layout_target: &str) -> HashMap<PlaceholderKey, ImportedFrame> {
+fn is_title_placeholder(key: &PlaceholderKey) -> bool {
+    matches!(key.ph_type.as_str(), "title" | "ctrTitle")
+}
+
+fn parse_layout_frames(
+    archive: &mut ZipArchive<File>,
+    layout_target: &str,
+) -> HashMap<PlaceholderKey, ImportedFrame> {
     let mut frames = HashMap::new();
     let Some(xml) = read_xml(archive, layout_target).ok().flatten() else {
         return frames;
     };
     collect_placeholder_frames(&xml, &mut frames);
     let layout_rels = read_relationships(archive, layout_target);
-    if let Some(master) = layout_rels.values().find(|rel| rel.kind.ends_with("/slideMaster")) {
+    if let Some(master) = layout_rels
+        .values()
+        .find(|rel| rel.kind.ends_with("/slideMaster"))
+    {
         let target = resolve_target(layout_target, &master.target);
         if let Some(master_xml) = read_xml(archive, &target).ok().flatten() {
             let mut master_frames = HashMap::new();
@@ -671,7 +700,11 @@ fn collect_placeholder_frames(xml: &str, frames: &mut HashMap<PlaceholderKey, Im
     let Ok(document) = Document::parse(xml) else {
         return;
     };
-    for shape in document.root_element().descendants().filter(|node| node.has_tag_name("sp")) {
+    for shape in document
+        .root_element()
+        .descendants()
+        .filter(|node| node.has_tag_name("sp"))
+    {
         let Some(key) = placeholder(shape) else {
             continue;
         };
@@ -722,13 +755,18 @@ fn parse_slide(
         match node.tag_name().name() {
             "sp" => {
                 if let Some(element) = parse_shape(index, node, &layout_frames, theme, report) {
-                    report.counts.text += usize::from(matches!(element, ImportedElement::Text { .. }));
-                    report.counts.shape += usize::from(matches!(element, ImportedElement::Shape { .. }));
+                    report.counts.text +=
+                        usize::from(matches!(element, ImportedElement::Text { .. }));
+                    report.counts.shape +=
+                        usize::from(matches!(element, ImportedElement::Shape { .. }));
                     if let Some(value) = text_content(&element) {
-                        if slide.title.is_none() && content_ref(&element).as_deref() == Some("title") {
+                        if slide.title.is_none()
+                            && content_ref(&element).as_deref() == Some("title")
+                        {
                             slide.title = Some(value.clone());
                         }
-                        if slide.body.is_none() && content_ref(&element).as_deref() == Some("body") {
+                        if slide.body.is_none() && content_ref(&element).as_deref() == Some("body")
+                        {
                             slide.body = Some(value);
                         }
                     }
@@ -736,7 +774,9 @@ fn parse_slide(
                 }
             }
             "pic" => {
-                if let Some(element) = parse_picture(index, node, part, &rels, archive, media_cache, report)? {
+                if let Some(element) =
+                    parse_picture(index, node, part, &rels, archive, media_cache, report)?
+                {
                     report.counts.image += 1;
                     slide.elements.push(element);
                 }
@@ -795,7 +835,11 @@ fn parse_shape(
             height: 914_400,
         });
     let rotation = rotation_milli_degree(shape);
-    let text = parse_text_body(shape, theme);
+    let text = parse_text_body(
+        shape,
+        theme,
+        key.as_ref().map(is_title_placeholder).unwrap_or(false),
+    );
     if let Some(text) = text {
         return Some(ImportedElement::Text {
             frame,
@@ -900,7 +944,11 @@ fn parse_connector(
     })
 }
 
-fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option<TextBody> {
+fn parse_text_body(
+    shape: Node<'_, '_>,
+    theme: &Option<ImportedTheme>,
+    is_title: bool,
+) -> Option<TextBody> {
     let body = descendant(shape, "txBody")?;
     let mut text = String::new();
     let mut style: Option<ImportedTextStyle> = None;
@@ -908,7 +956,10 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
     let mut bullet = "none".to_string();
     let mut line_height = None;
     let mut paragraph_align: Option<String> = None;
-    let paragraphs: Vec<Node<'_, '_>> = body.children().filter(|node| node.has_tag_name("p")).collect();
+    let paragraphs: Vec<Node<'_, '_>> = body
+        .children()
+        .filter(|node| node.has_tag_name("p"))
+        .collect();
     for (paragraph_index, paragraph) in paragraphs.iter().enumerate() {
         if paragraph_index > 0 {
             text.push('\n');
@@ -931,7 +982,10 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
                 bullet = "dot".into();
             }
             if let Some(spacing) = descendant(props, "spcPct") {
-                if let Some(value) = spacing.attribute("val").and_then(|value| value.parse::<f64>().ok()) {
+                if let Some(value) = spacing
+                    .attribute("val")
+                    .and_then(|value| value.parse::<f64>().ok())
+                {
                     line_height = Some(value / 100_000.0);
                 }
             }
@@ -939,14 +993,16 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
         for child_node in paragraph.children().filter(Node::is_element) {
             match child_node.tag_name().name() {
                 "r" | "fld" => {
-                    let Some(run_text) = descendant(child_node, "t").and_then(|node| node.text()) else {
+                    let Some(run_text) = descendant(child_node, "t").and_then(|node| node.text())
+                    else {
                         continue;
                     };
                     let start = text.encode_utf16().count();
                     text.push_str(run_text);
                     let end = text.encode_utf16().count();
-                    let run_style = child(child_node, "rPr").map(|props| parse_run_style(props, theme));
-                    let current = style.get_or_insert_with(|| default_text_style(theme, false));
+                    let run_style =
+                        child(child_node, "rPr").map(|props| parse_run_style(props, theme));
+                    let current = style.get_or_insert_with(|| default_text_style(theme, is_title));
                     if let Some(run_style) = run_style {
                         let run_color = run_style
                             .color
@@ -995,7 +1051,7 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
     if text.trim().is_empty() {
         return None;
     }
-    let mut style = style.unwrap_or_else(|| default_text_style(theme, false));
+    let mut style = style.unwrap_or_else(|| default_text_style(theme, is_title));
     if let Some(align) = paragraph_align {
         style.align = align;
     }
@@ -1051,9 +1107,15 @@ fn default_text_style(theme: &Option<ImportedTheme>, title: bool) -> ImportedTex
             .as_ref()
             .and_then(|theme| {
                 if title {
-                    theme.major_font.clone().or_else(|| theme.minor_font.clone())
+                    theme
+                        .major_font
+                        .clone()
+                        .or_else(|| theme.minor_font.clone())
                 } else {
-                    theme.minor_font.clone().or_else(|| theme.major_font.clone())
+                    theme
+                        .minor_font
+                        .clone()
+                        .or_else(|| theme.major_font.clone())
                 }
             })
             .unwrap_or_else(|| "Microsoft YaHei".into()),
@@ -1152,10 +1214,22 @@ fn parse_picture(
         .descendants()
         .find(|node| node.has_tag_name("srcRect"))
         .and_then(|node| {
-            let left = node.attribute("l").and_then(|value| value.parse::<f64>().ok()).unwrap_or(0.0);
-            let top = node.attribute("t").and_then(|value| value.parse::<f64>().ok()).unwrap_or(0.0);
-            let right = node.attribute("r").and_then(|value| value.parse::<f64>().ok()).unwrap_or(0.0);
-            let bottom = node.attribute("b").and_then(|value| value.parse::<f64>().ok()).unwrap_or(0.0);
+            let left = node
+                .attribute("l")
+                .and_then(|value| value.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let top = node
+                .attribute("t")
+                .and_then(|value| value.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let right = node
+                .attribute("r")
+                .and_then(|value| value.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let bottom = node
+                .attribute("b")
+                .and_then(|value| value.parse::<f64>().ok())
+                .unwrap_or(0.0);
             if left + right >= 100_000.0 || top + bottom >= 100_000.0 {
                 return None;
             }
@@ -1182,7 +1256,16 @@ fn parse_graphic_frame(
     frame_node: Node<'_, '_>,
     report: &mut DeckReport,
 ) -> Option<ImportedElement> {
-    let table = descendant(frame_node, "tbl")?;
+    let Some(table) = descendant(frame_node, "tbl") else {
+        let kind = if descendant(frame_node, "chart").is_some() {
+            "chart"
+        } else {
+            "graphicFrame"
+        };
+        report.unsupported(index, kind, "图表或嵌入图形未导入");
+        return None;
+    };
+    report.warning(format!("第 {} 页表格按默认表格样式导入", index + 1));
     let frame = parse_frame(frame_node).unwrap_or(ImportedFrame {
         x: 914_400,
         y: 914_400,
@@ -1244,12 +1327,18 @@ fn cell_text(cell: Node<'_, '_>) -> String {
         return String::new();
     };
     let mut text = String::new();
-    let paragraphs: Vec<Node<'_, '_>> = body.children().filter(|node| node.has_tag_name("p")).collect();
+    let paragraphs: Vec<Node<'_, '_>> = body
+        .children()
+        .filter(|node| node.has_tag_name("p"))
+        .collect();
     for (index, paragraph) in paragraphs.iter().enumerate() {
         if index > 0 {
             text.push('\n');
         }
-        for node in paragraph.descendants().filter(|node| node.has_tag_name("t")) {
+        for node in paragraph
+            .descendants()
+            .filter(|node| node.has_tag_name("t"))
+        {
             if let Some(value) = node.text() {
                 text.push_str(value);
             }
@@ -1275,14 +1364,18 @@ fn notes_for_slide(
     };
     let document = Document::parse(&xml).map_err(|_| "PPTX_NOTES_XML_INVALID")?;
     let mut text = String::new();
-    for shape in document.root_element().descendants().filter(|node| node.has_tag_name("sp")) {
+    for shape in document
+        .root_element()
+        .descendants()
+        .filter(|node| node.has_tag_name("sp"))
+    {
         let Some(key) = placeholder(shape) else {
             continue;
         };
         if key.ph_type != "body" {
             continue;
         }
-        if let Some(body) = parse_text_body(shape, &None) {
+        if let Some(body) = parse_text_body(shape, &None, false) {
             if !body.text.trim().is_empty() {
                 if !text.is_empty() {
                     text.push('\n');
@@ -1372,7 +1465,10 @@ mod tests {
         for (name, contents) in [
             ("[Content_Types].xml", content_types.as_bytes()),
             ("ppt/presentation.xml", presentation.as_bytes()),
-            ("ppt/_rels/presentation.xml.rels", presentation_rels.as_bytes()),
+            (
+                "ppt/_rels/presentation.xml.rels",
+                presentation_rels.as_bytes(),
+            ),
             ("ppt/slides/slide1.xml", slide.as_bytes()),
             ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
             ("ppt/theme/theme1.xml", theme.as_bytes()),
@@ -1394,7 +1490,13 @@ mod tests {
         assert_eq!(imported.report.counts.table, 1);
         assert!(slide.elements.iter().any(|element| matches!(element, ImportedElement::Image { data_url, .. } if data_url.starts_with("data:image/png;base64,"))));
         assert!(slide.elements.iter().any(|element| matches!(element, ImportedElement::Table { header, rows, .. } if header == &["项目", "数值"] && rows[0][1] == "38万")));
-        assert_eq!(imported.theme.as_ref().and_then(|theme| theme.major_font.as_deref()), Some("Aptos Display"));
+        assert_eq!(
+            imported
+                .theme
+                .as_ref()
+                .and_then(|theme| theme.major_font.as_deref()),
+            Some("Aptos Display")
+        );
     }
 
     #[test]
@@ -1447,7 +1549,7 @@ mod tests {
             </p:sp>
         "#;
         let document = Document::parse(xml).expect("xml");
-        let body = parse_text_body(document.root_element(), &None).expect("text");
+        let body = parse_text_body(document.root_element(), &None, false).expect("text");
         assert_eq!(body.text, "标题\n第二行");
         assert_eq!(body.style.align, "center");
         assert_eq!(body.style.font_size_pt, 24.0);

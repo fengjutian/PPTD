@@ -156,9 +156,7 @@ export function ImportReportDialog({
             </ul>
           </div>
         )}
-        <p className="import-report-note">
-          导入内容是未审核状态；源文件不会被修改。确认后请另存为新的 .pptd 项目。
-        </p>
+        <p className="import-report-note">导入内容是未审核状态；源文件不会被修改。确认后请另存为新的 .pptd 项目。</p>
         <div className="upload-dialog-actions">
           <button type="button" className="secondary-action" onClick={onCancel}>
             取消
