@@ -1,7 +1,11 @@
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { importedDeckToDocument, type ImportedDeck } from "../../core/commands";
-import { parsePresentationDocument, presentationDocumentSchema, type PresentationDocument } from "../../core/document-model";
+import {
+  parsePresentationDocument,
+  presentationDocumentSchema,
+  type PresentationDocument,
+} from "../../core/document-model";
 import fixture from "../../core/commands/__fixtures__/imported-deck-level-a.json";
 import { buildPptx } from "./export-pptx";
 
@@ -30,6 +34,9 @@ describe("imported deck round trip", () => {
     const firstSlide = strFromU8(files["ppt/slides/slide1.xml"]!);
     expect(firstSlide).toContain("导入往返样例");
     expect(firstSlide).toContain("<a:tbl>");
+    const secondSlide = strFromU8(files["ppt/slides/slide2.xml"]!);
+    expect(secondSlide).toContain("<c:chart");
+    expect(Object.keys(files).some((name) => name.startsWith("ppt/charts/chart"))).toBe(true);
     expect(Object.keys(files).some((name) => name.startsWith("ppt/media/"))).toBe(true);
     expect(result.report.issues.some((issue) => issue.code === "content-not-approved")).toBe(true);
     expect(result.report.issues.some((issue) => issue.severity === "error")).toBe(false);

@@ -29,7 +29,7 @@ const zh = {
   "settings.model.model": "模型",
   "settings.model.visionReview": "允许视觉评审",
   "settings.model.visionReviewHelp":
-    "生成时把页面渲染图发送给当前模型服务检查排版。关闭后不再上传任何渲染图，只做确定性排版校验，视觉评分与建议将不可用。",
+    "生成时把页面渲染图发送给当前模型服务检查排版。关闭后不再上传任何渲染图，只做确定性排版校验，视觉评分与建议将不可用。首次生成前会发一张小图探测模型是否支持图片输入；不支持时本次自动跳过。",
   "settings.model.apiBaseUrl": "API 地址",
   "settings.model.apiKey": "API Key",
   "settings.model.configured": "已安全配置",
@@ -114,7 +114,7 @@ const en: Record<UiMessageKey, string> = {
   "settings.model.model": "Model",
   "settings.model.visionReview": "Allow visual review",
   "settings.model.visionReviewHelp":
-    "Send slide renders to the current model service during generation so it can check layout. When disabled, no renders are uploaded and only deterministic layout validation runs; visual scores and suggestions become unavailable.",
+    "Send slide renders to the current model service during generation so it can check layout. When disabled, no renders are uploaded and only deterministic layout validation runs; visual scores and suggestions become unavailable. Before the first run a small image probes whether the model accepts image input; if it does not, visual review is skipped for this run.",
   "settings.model.apiBaseUrl": "API endpoint",
   "settings.model.apiKey": "API Key",
   "settings.model.configured": "Configured securely",

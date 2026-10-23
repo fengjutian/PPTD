@@ -403,6 +403,22 @@ button {
 .page-size-apply:hover {
   border-color: var(--ppt-accent);
 }
+.transition-controls {
+  display: grid;
+  gap: 8px;
+}
+.page-size-scale {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #8f939b;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.page-size-scale input {
+  margin: 0;
+  accent-color: var(--ppt-accent);
+}
 .page-size-warning {
   color: #e0b45a;
   white-space: nowrap;
@@ -956,6 +972,46 @@ button {
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.shape-picker {
+  position: relative;
+}
+.shape-menu {
+  position: absolute;
+  top: 52px;
+  left: 0;
+  z-index: 40;
+  width: 210px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 8px;
+  background: #23252b;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 35%);
+}
+.shape-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 5px;
+  color: #d8dae0;
+  background: transparent;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.shape-menu button:hover {
+  background: rgb(255 255 255 / 10%);
+}
+.shape-menu svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
 }
 .animation-timing-controls {
   height: 48px;
@@ -3551,6 +3607,54 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 14px;
 }
+/* 模板库右键菜单：删除/重命名不占卡片布局，也不嵌套在卡片按钮里。 */
+.template-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+.template-context-menu {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 6px;
+  border: 1px solid #41434a;
+  border-radius: 9px;
+  background: #24262b;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 38%);
+}
+.template-context-menu strong {
+  overflow: hidden;
+  padding: 5px 8px 7px;
+  border-bottom: 1px solid #34363c;
+  color: #9b9fa7;
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.template-context-menu button {
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #e8e9ec;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.template-context-menu button:hover {
+  background: #303238;
+}
+.template-context-menu button.danger {
+  color: #f0a39b;
+}
+.template-context-menu button.danger:hover {
+  background: rgb(211 82 48 / 16%);
+}
 .theme-card {
   min-width: 0;
   display: flex;
@@ -5616,6 +5720,12 @@ button {
   width: 100%;
   height: 100%;
   border-style: solid;
+}
+.slide-element.shape .shape-vector {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 /* 线条本身很细，按不中。命中区由 SVG 里的一条加宽透明描边负责，
    这里只保证 SVG 不裁掉箭头。 */

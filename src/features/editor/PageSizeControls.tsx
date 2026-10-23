@@ -25,14 +25,16 @@ function inchesLabel(value: number): string {
 /**
  * The page-size controls of the “设计” ribbon.
  *
- * Changing the page does not rescale the objects: coordinates keep their
- * absolute value, exactly like changing the slide size in PowerPoint while
- * choosing not to scale. Objects that no longer fit are counted next to the
- * inputs and the export preflight warns about them as well.
+ * Changing the page does not rescale the objects by default: coordinates keep
+ * their absolute value, exactly like changing the slide size in PowerPoint
+ * while choosing not to scale. Ticking “缩放对象” makes the same command scale
+ * frames, type and strokes with the page; it is still one design transaction
+ * and one undo step.
  */
 export function PageSizeControls({ pageSize, elements, execute }: PageSizeControlsProps) {
   const [widthDraft, setWidthDraft] = useState(() => inchesLabel(pageSize.width / EMU_PER_INCH));
   const [heightDraft, setHeightDraft] = useState(() => inchesLabel(pageSize.height / EMU_PER_INCH));
+  const [scaleObjects, setScaleObjects] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export function PageSizeControls({ pageSize, elements, execute }: PageSizeContro
   const applyPreset = (preset: (typeof PAGE_SIZE_PRESETS)[number]) => {
     if (matched?.id === preset.id) return;
     const size = pageSizeFromInches(preset.widthIn, preset.heightIn);
-    if (size) execute({ type: "set-page-size", pageSize: size });
+    if (size) execute({ type: "set-page-size", pageSize: size, scaleObjects });
   };
 
   const applyDraft = () => {
@@ -64,7 +66,7 @@ export function PageSizeControls({ pageSize, elements, execute }: PageSizeContro
     }
     setError(undefined);
     if (size.width === pageSize.width && size.height === pageSize.height) return;
-    execute({ type: "set-page-size", pageSize: size });
+    execute({ type: "set-page-size", pageSize: size, scaleObjects });
   };
 
   const resetDraft = () => {
@@ -124,8 +126,16 @@ export function PageSizeControls({ pageSize, elements, execute }: PageSizeContro
       <button type="button" className="page-size-apply" onClick={applyDraft}>
         应用
       </button>
-      {outside > 0 && (
-        <span className="page-size-warning" title="对象不会随页面尺寸缩放；导出前预检会再次提示">
+      <label className="page-size-scale" title="按新旧页面比例缩放对象坐标、尺寸、字号和线宽">
+        <input
+          type="checkbox"
+          checked={scaleObjects}
+          onChange={(event) => setScaleObjects(event.target.checked)}
+        />
+        缩放对象
+      </label>
+      {outside > 0 && !scaleObjects && (
+        <span className="page-size-warning" title="对象不会随页面尺寸缩放；勾选“缩放对象”或导出前预检会再次提示">
           ⚠ {outside} 个对象在页面外
         </span>
       )}

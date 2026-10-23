@@ -2122,6 +2122,54 @@ pub async fn test_ai_connection(provider_id: String, model: String) -> Result<St
     Ok(format!("{} {} 连接成功", provider.display_name(), model))
 }
 
+/// A 64×64 white PNG. Small enough to be cheap, large enough that providers
+/// which reject tiny images do not mistake the probe for a capability failure.
+const VISION_PROBE_IMAGE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAACFSURBVHhe7dAhAQAADITA719681SAk0h2cmOwaQCDTQMYbBrAYNMABpsGMNg0gMGmAQw2DWCwaQCDTQMYbBrAYNMABpsGMNg0gMGmAQw2DWCwaQCDTQMYbBrAYNMABpsGMNg0gMGmAQw2DWCwaQCDTQMYbBrAYNMABpsGMNg0gMGmAQw2D0bQw7Koj1gSAAAAAElFTkSuQmCC";
+
+fn is_vision_capability_rejection(error: &str) -> bool {
+    let lower = error.to_ascii_lowercase();
+    error.contains("AI_VISION_UNSUPPORTED")
+        || (error.contains("AI_PROVIDER_HTTP_ERROR:400")
+            && (lower.contains("image")
+                || lower.contains("vision")
+                || lower.contains("multimodal")
+                || error.contains("不支持")))
+}
+
+/// Checks whether the selected model accepts image input.
+///
+/// The provider trait only declares vendor-level vision support, not per-model
+/// support. This sends one tiny image before a generation starts, so a model
+/// without vision is discovered before the user pays for a whole design run
+/// and only sees a silent fallback. `Ok(false)` means the model rejected the
+/// image; an `Err` means the probe itself could not complete (network/key), and
+/// the caller should not turn visual review off for the session.
+#[tauri::command]
+pub async fn probe_vision_capability(provider_id: String, model: String) -> Result<bool, String> {
+    let provider = ai::resolve(Some(provider_id.as_str()))?;
+    let api_key = ai::read_api_key(provider)?;
+    let model = ai::resolve_model(provider, Some(model))?;
+    let cancel = ai::CancelToken::new();
+    let result = ai::vision_chat(
+        provider,
+        &api_key,
+        &VisionRequest {
+            model,
+            prompt: "这是一张纯白测试图。请仅回复 OK。".into(),
+            image_data_urls: vec![VISION_PROBE_IMAGE.into()],
+            temperature: 0.0,
+        },
+        Duration::from_secs(30),
+        &cancel,
+    )
+    .await;
+    match result {
+        Ok(_) => Ok(true),
+        Err(error) if is_vision_capability_rejection(&error) => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 /// 取消一个生成任务：中断该任务下所有在途请求。
 #[tauri::command]
 pub fn cancel_ai_generation(task_id: u64, registry: tauri::State<'_, CancelRegistry>) -> bool {
@@ -2165,6 +2213,23 @@ mod tests {
         assert_eq!(strip_code_fence("```json\n{\"a\":1}\n```"), "{\"a\":1}");
         assert_eq!(strip_code_fence("```\n{\"a\":1}\n```"), "{\"a\":1}");
         assert_eq!(strip_code_fence("{\"a\":1}"), "{\"a\":1}");
+    }
+
+    #[test]
+    fn classifies_only_vision_rejections_as_missing_capability() {
+        assert!(is_vision_capability_rejection(
+            "AI_VISION_UNSUPPORTED:minimax"
+        ));
+        assert!(is_vision_capability_rejection(
+            "AI_PROVIDER_HTTP_ERROR:400{\"error\":\"model does not support image input\"}"
+        ));
+        // A network failure is not evidence that the model lacks vision.
+        assert!(!is_vision_capability_rejection(
+            "AI_VISION_REQUEST_FAILED: connection reset"
+        ));
+        assert!(!is_vision_capability_rejection(
+            "AI_PROVIDER_HTTP_ERROR:500 upstream unavailable"
+        ));
     }
 
     #[test]

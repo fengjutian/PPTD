@@ -70,7 +70,7 @@ describe("PPTX export", () => {
     expect(result.report.warnings.some((warning) => warning.includes("尚未完成审核"))).toBe(true);
   });
 
-  it("reports animations that the static PPTX cannot carry", async () => {
+  it("writes a supported object animation into a native timing tree", async () => {
     const document = createDocument();
     const slide = document.slides[0]!;
     applyCommand(document, {
@@ -81,9 +81,101 @@ describe("PPTX export", () => {
     });
 
     const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+
+    expect(slideXml).toContain("<p:timing>");
+    expect(slideXml).toContain('<p:animEffect transition="in" filter="fade">');
+    expect(slideXml).toContain("<p:bldLst>");
+    expect(result.report.nativeAnimationCount).toBe(1);
+    expect(result.report.nativeAnimationSkipped).toBe(0);
+    expect(result.report.issues.some((issue) => issue.code === "animation-not-exported")).toBe(false);
+  });
+
+  it("reports effects that have no native timing node", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, {
+      type: "add-animation",
+      slideId: slide.id,
+      elementId: slide.elements[0]!.id,
+      animation: { effect: "pulse", start: "on-click", durationMs: 500, delayMs: 0, direction: "none" },
+    });
+
+    const result = await buildPptx(document);
 
     expect(result.report.issues.some((issue) => issue.code === "animation-not-exported")).toBe(true);
-    expect(result.report.warnings.some((warning) => warning.includes("不写入原生动画"))).toBe(true);
+    expect(result.report.warnings.some((warning) => warning.includes("没有原生导出"))).toBe(true);
+    expect(result.report.nativeAnimationCount).toBe(0);
+  });
+
+  it("writes merged table cells as native grid spans", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-table", slideId: slide.id, columns: 3, rows: 2 });
+    const block = slide.content.blocks!.find((candidate) => candidate.type === "table-data");
+    if (block?.type !== "table-data") throw new Error("expected table block");
+    block.merges = [{ section: "body", row: 0, column: 0, rowSpan: 1, columnSpan: 2 }];
+    block.rows[0]![0] = "合并";
+    block.rows[0]![1] = "";
+
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toMatch(/gridSpan="2"/);
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("writes a preset shape as native PowerPoint geometry", async () => {
+    const document = createDocument();
+    applyCommand(document, { type: "add-shape", slideId: document.slides[0]!.id, shape: "triangle" });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain('prst="triangle"');
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("writes a page transition as a native PowerPoint transition", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, {
+      type: "set-slide-transition",
+      slideId: slide.id,
+      transition: { kind: "push", speed: "medium", direction: "left" },
+    });
+
+    const result = await buildPptx(document);
+    const files = unzipSync(result.bytes);
+    const slideXml = strFromU8(files["ppt/slides/slide1.xml"]!);
+
+    expect(slideXml).toContain('<p:transition spd="med"><p:push dir="l"/></p:transition>');
+    expect(result.report.nativeTransitionCount).toBe(1);
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("links object colors to theme slots so a theme edit recolors them", async () => {
+    const document = createDocument();
+    document.theme = {
+      name: "品牌主题",
+      majorFont: "Arial",
+      minorFont: "Arial",
+      colors: [{ name: "accent", value: "#C04A32" }],
+    };
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-shape", slideId: slide.id, shape: "rectangle" });
+    const shape = slide.elements.find((element) => element.type === "shape");
+    if (shape?.type !== "shape") throw new Error("expected shape");
+    shape.style.fill = "#C04A32";
+    shape.style.stroke = "#C04A32";
+
+    const result = await buildPptx(document);
+    const files = unzipSync(result.bytes);
+    const slideXml = strFromU8(files["ppt/slides/slide1.xml"]!);
+    const themeXml = strFromU8(files["ppt/theme/theme1.xml"]!);
+
+    expect(slideXml).toContain('<a:schemeClr val="accent1"/>');
+    expect(slideXml).not.toContain("C04A32");
+    expect(themeXml).toContain("C04A32");
+    expect(result.report.themeColors).toContain("accent1");
+    expect(result.report.themeColorReferences).toBeGreaterThanOrEqual(2);
   });
 
   it("honors an already-aborted export signal before building the package", async () => {
@@ -349,7 +441,7 @@ describe("PPTX export", () => {
     expect(chartXml).toContain("38");
     expect(chartXml).toContain("12");
     // The value keeps the unit of the reviewed number.
-    expect(chartXml).toContain('formatCode="#,##0.##&quot;万&quot;"');
+    expect(chartXml).toContain('formatCode="#,##0&quot;万&quot;"');
     expect(result.report.nativeObjectCount).toBe(2);
   });
 

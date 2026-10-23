@@ -110,7 +110,7 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
         <input
           autoFocus
           value={query}
-          placeholder="在当前文稿的所有文本中查找"
+          placeholder="在文本、表格、图表、备注和标题中查找"
           onChange={(event) => {
             setQuery(event.target.value);
             setIndex(0);
@@ -181,14 +181,14 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
       {matches.length > 0 && (
         <ol className="find-results">
           {matches.slice(0, 50).map((match, matchIndex) => (
-            <li key={`${match.slideId}-${match.elementId}-${match.start}`}>
+            <li key={`${matchKey(match)}-${match.start}`}>
               <button
                 type="button"
                 className={matchIndex === index ? "active" : undefined}
                 aria-current={matchIndex === index ? "true" : undefined}
                 onClick={() => jumpTo(matchIndex)}
               >
-                <span className="find-result-page">第 {match.slideIndex + 1} 页</span>
+                <span className="find-result-page">{targetLabel(match)}</span>
                 <MatchSnippet match={match} />
               </button>
             </li>
@@ -197,6 +197,22 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
       )}
     </section>
   );
+}
+
+/** Where the match lives, shown in the result list. */
+function targetLabel(match: TextMatch): string {
+  if (match.kind === "document-title") return "文档标题";
+  const page = `第 ${match.slideIndex + 1} 页`;
+  switch (match.kind) {
+    case "speaker-notes":
+      return `${page} · 备注`;
+    case "table-cell":
+      return `${page} · 表格`;
+    case "metric":
+      return `${page} · 图表`;
+    case "text":
+      return `${page} · 文本`;
+  }
 }
 
 function MatchSnippet({ match }: { match: TextMatch }) {

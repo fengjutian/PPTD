@@ -13,6 +13,7 @@ import type {
   PresentationDocument,
   RectEmu,
   ShapeElementStyle,
+  ShapeKind,
   SlideAnimation,
   Slide,
   SlideElement,
@@ -21,6 +22,7 @@ import type {
   SupportedImageMimeType,
   IconElementStyle,
   TableElementStyle,
+  SlideTransition,
   TextElement,
   TextElementStyle,
 } from "../document-model";
@@ -37,6 +39,7 @@ import {
   MIN_PAGE_SIZE_IN,
   parseMetricValue,
   phaseForEffect,
+  SHAPE_KINDS,
   stableStringify,
   TABLE_MAX_COLUMNS,
   TABLE_MAX_ROWS,
@@ -326,6 +329,50 @@ function markContentChanged(slide: Slide): void {
 }
 
 /**
+ * Scales one object with the page when the user explicitly asks for it.
+ *
+ * Frames follow the page's two ratios. Type and stroke sizes follow the
+ * smaller ratio: a non-uniform page change (16:9 → 4:3) must not stretch
+ * glyphs, and keeping the larger ratio would overflow the narrower dimension.
+ * Content — titles, table cells, metric values, notes — is never touched.
+ */
+function scaleElementForPage(element: SlideElement, scaleX: number, scaleY: number): void {
+  const frame = element.frame;
+  element.frame = {
+    x: emu(Math.round(frame.x * scaleX)),
+    y: emu(Math.round(frame.y * scaleY)),
+    width: emu(Math.max(1, Math.round(frame.width * scaleX))),
+    height: emu(Math.max(1, Math.round(frame.height * scaleY))),
+  };
+  const typeScale = Math.min(scaleX, scaleY);
+  const point = (value: number) => Math.min(400, Math.max(4, Math.round(value * typeScale * 100) / 100));
+  const length = (value: number) => Math.max(0, Math.round(value * typeScale * 100) / 100);
+  switch (element.type) {
+    case "text":
+      element.style.fontSizePt = point(element.style.fontSizePt);
+      if (element.style.letterSpacingPt !== undefined) {
+        element.style.letterSpacingPt = length(element.style.letterSpacingPt);
+      }
+      break;
+    case "shape":
+      element.style.strokeWidthPt = length(element.style.strokeWidthPt);
+      element.style.radiusPt = length(element.style.radiusPt);
+      break;
+    case "line":
+      element.style.strokeWidthPt = length(element.style.strokeWidthPt);
+      break;
+    case "table":
+      element.style.fontSizePt = point(element.style.fontSizePt);
+      if (element.style.cellPaddingPt !== undefined) element.style.cellPaddingPt = length(element.style.cellPaddingPt);
+      if (element.style.borderWidthPt !== undefined) element.style.borderWidthPt = length(element.style.borderWidthPt);
+      break;
+    case "chart":
+      element.style.fontSizePt = point(element.style.fontSizePt);
+      break;
+  }
+}
+
+/**
  * Drops groups whose members no longer all exist.
  *
  * A group is a selection helper, not a container: deleting one member leaves
@@ -576,7 +623,12 @@ function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | unde
         rightItems: [...block.rightItems],
       };
     if (block.type === "table-data")
-      return { type: "table-data", header: [...block.header], rows: block.rows.map((row) => [...row]) };
+      return {
+        type: "table-data",
+        header: [...block.header],
+        rows: block.rows.map((row) => [...row]),
+        ...(block.merges ? { merges: block.merges.map((merge) => ({ ...merge })) } : {}),
+      };
     return { type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
@@ -606,7 +658,18 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "rename-document"; title: string }
-  | { type: "set-page-size"; pageSize: { width: Emu; height: Emu } }
+  | {
+      type: "set-page-size";
+      pageSize: { width: Emu; height: Emu };
+      /**
+       * Explicit opt-in: scale every object with the page.
+       *
+       * Absent keeps the default of ADR 0048 — change the paper, leave the
+       * composition alone. The user asks for this by ticking "缩放对象" rather
+       * than the command deciding for them.
+       */
+      scaleObjects?: boolean;
+    }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
   | {
       type: "apply-ai-designed-draft";
@@ -653,7 +716,7 @@ export type DocumentCommand =
       naturalHeight?: number;
       role?: AiVisualAssetRole;
     }
-  | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
+  | { type: "add-shape"; slideId: SlideId; shape: ShapeKind }
   | { type: "add-line"; slideId: SlideId; direction: LineDirection }
   | { type: "add-icon"; slideId: SlideId; name: BuiltinIconName }
   | { type: "add-table"; slideId: SlideId; columns: number; rows: number }
@@ -737,6 +800,7 @@ export type DocumentCommand =
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string }
   | { type: "replace-text-edits"; edits: TextReplaceEdit[] }
   | { type: "set-speaker-notes"; slideId: SlideId; notes: string }
+  | { type: "set-slide-transition"; slideId: SlideId; transition: SlideTransition | null }
   | { type: "set-metric"; slideId: SlideId; blockId: string; field: "label" | "value"; value: string }
   | {
       type: "set-table-cell";
@@ -1146,6 +1210,10 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     }
     case "set-speaker-notes":
       return "content";
+    case "set-slide-transition":
+      // A transition changes what the audience sees between pages, not the
+      // reviewed copy. It is the same design domain as an object animation.
+      return "design";
     case "set-metric": {
       if (!document) return "content";
       const slide = document.slides.find((item) => item.id === command.slideId);
@@ -1390,7 +1458,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       height > inches(MAX_PAGE_SIZE_IN)
     )
       throw new Error("INVALID_PAGE_SIZE");
+    const previous = document.pageSize;
     document.pageSize = { width, height };
+    if (command.scaleObjects && (previous.width !== width || previous.height !== height)) {
+      const scaleX = width / previous.width;
+      const scaleY = height / previous.height;
+      for (const slide of document.slides) {
+        for (const element of slide.elements) scaleElementForPage(element, scaleX, scaleY);
+      }
+    }
     return;
   }
   if (command.type === "replace-text-edits") {
@@ -4108,6 +4184,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
   if (command.type === "add-shape") {
+    if (!SHAPE_KINDS.includes(command.shape)) throw new Error("INVALID_SHAPE_KIND");
     slide.elements.push({
       id: crypto.randomUUID() as ElementId,
       type: "shape",
@@ -4352,6 +4429,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // 演讲备注是内容：它进 PPTX 的备注页，也进内容哈希。
     slide.content.speakerNotes = command.notes;
     markContentChanged(slide);
+    return;
+  }
+
+  if (command.type === "set-slide-transition") {
+    if (command.transition === null) {
+      delete slide.transition;
+      return;
+    }
+    const { kind, speed, direction } = command.transition;
+    if (!["fade", "push", "wipe", "split"].includes(kind) || !["fast", "medium", "slow"].includes(speed)) {
+      throw new Error("INVALID_SLIDE_TRANSITION");
+    }
+    if (direction !== undefined && !["left", "right", "up", "down"].includes(direction)) {
+      throw new Error("INVALID_SLIDE_TRANSITION");
+    }
+    // Split has an orientation rather than a side; the direction still picks
+    // which half opens first, so it is kept for every directional kind.
+    slide.transition = { kind, speed, ...(direction ? { direction } : {}) };
     return;
   }
 

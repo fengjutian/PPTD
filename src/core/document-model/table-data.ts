@@ -1,4 +1,4 @@
-import type { Slide, TableElement } from "./types";
+import type { Slide, TableElement, TableMerge } from "./types";
 
 /**
  * Table data of a slide.
@@ -12,6 +12,7 @@ import type { Slide, TableElement } from "./types";
 export interface ResolvedTableData {
   header: string[];
   rows: string[][];
+  merges: TableMerge[];
 }
 
 /**
@@ -19,8 +20,8 @@ export interface ResolvedTableData {
  * screen can stop a writer from building a table the project file cannot store,
  * instead of failing validation at save or export time.
  */
-export const TABLE_MAX_COLUMNS = 8;
-export const TABLE_MAX_ROWS = 30;
+export const TABLE_MAX_COLUMNS = 12;
+export const TABLE_MAX_ROWS = 50;
 
 /** Whether a reviewed table block fits what the document model can persist. */
 export function tableFitsDocumentLimits(header: readonly string[], rows: readonly (readonly string[])[]): boolean {
@@ -41,7 +42,11 @@ export function resolveTableData(slide: Slide, element: TableElement): ResolvedT
   const block = blocks.find((candidate) => candidate.id === element.contentBlockId);
   if (!block || block.type !== "table-data") return undefined;
   if (block.header.length === 0 || block.rows.length === 0) return undefined;
-  return { header: [...block.header], rows: block.rows.map((row) => [...row]) };
+  return {
+    header: [...block.header],
+    rows: block.rows.map((row) => [...row]),
+    merges: block.merges ?? [],
+  };
 }
 
 /** A cell that reads as a number, a percentage or a grouped number. */

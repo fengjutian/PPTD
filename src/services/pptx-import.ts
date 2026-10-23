@@ -17,9 +17,13 @@ export interface PptxImportProgress {
  * turns the result into a new in-memory document and must save it as a new
  * project.
  */
-export async function importPptxContent(path: string, requestId: string): Promise<ImportedDeck> {
+export async function importPptxContent(
+  path: string,
+  requestId: string,
+  sourceFormat?: "pptx" | "ppt",
+): Promise<ImportedDeck> {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
-  return invoke<ImportedDeck>("import_pptx_content", { path, requestId });
+  return invoke<ImportedDeck>("import_pptx_content", { path, requestId, sourceFormat });
 }
 
 export async function cancelPptxImport(requestId: string): Promise<void> {

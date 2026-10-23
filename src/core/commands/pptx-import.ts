@@ -7,6 +7,7 @@ import {
   type ImageCrop,
   type PresentationDocument,
   type ShapeElement,
+  type TableMerge,
   type Slide,
   type SlideElement,
   type SlideGroup,
@@ -69,7 +70,7 @@ export type ImportedElement =
       type: "shape";
       frame: ImportedFrame;
       rotationMilliDegree: number;
-      shape: "rectangle" | "ellipse" | "roundRect";
+      shape: ShapeElement["shape"];
       fill: string;
       stroke: string;
       strokeWidthPt: number;
@@ -92,6 +93,13 @@ export type ImportedElement =
       rotationMilliDegree: number;
       header: string[];
       rows: string[][];
+      merges?: Array<{
+        section: "header" | "body";
+        row: number;
+        column: number;
+        rowSpan: number;
+        columnSpan: number;
+      }>;
     }
   | {
       type: "chart";
@@ -185,11 +193,21 @@ function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): 
   const blocks: NonNullable<Slide["content"]["blocks"]> = [];
   const elements: SlideElement[] = slide.elements.map((element) => {
     if (element.type === "table") {
+      const merges: TableMerge[] = (element.merges ?? [])
+        .filter((merge) => merge.columnSpan > 1 || merge.rowSpan > 1)
+        .map((merge) => ({
+          section: merge.section,
+          row: merge.row,
+          column: merge.column,
+          rowSpan: merge.rowSpan,
+          columnSpan: merge.columnSpan,
+        }));
       const block = {
         id: crypto.randomUUID(),
         type: "table-data" as const,
         header: [...element.header],
         rows: element.rows.map((row) => [...row]),
+        ...(merges.length > 0 ? { merges } : {}),
       };
       blocks.push(block);
       return {
@@ -399,7 +417,7 @@ function clampFraction(value: number): number {
 }
 
 function shapeOf(element: Extract<ImportedElement, { type: "shape" }>): ShapeElement["shape"] {
-  // The editor model only has rectangles and ellipses; a rounded rectangle
-  // keeps its radius on a rectangle rather than inventing a third shape type.
-  return element.shape === "ellipse" ? "ellipse" : "rectangle";
+  // The Rust reader already normalized unknown presets to "rectangle" and
+  // rounded rectangles to a rectangle with a radius; the value is trusted.
+  return element.shape;
 }

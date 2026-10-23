@@ -54,6 +54,7 @@ pub fn run() {
             commands::ai::delete_ai_api_key,
             commands::ai::ai_api_key_configured,
             commands::ai::test_ai_connection,
+            commands::ai::probe_vision_capability,
             commands::image::generate_presentation_image,
             commands::project_file::save_project,
             commands::project_file::open_project,
@@ -71,6 +72,8 @@ pub fn run() {
             commands::pptx_import::import_pptx_content,
             commands::pptx_import::cancel_pptx_import,
             commands::project_file::list_pptx_templates,
+            commands::project_file::rename_pptx_template,
+            commands::project_file::delete_pptx_template,
             commands::project_file::get_pptx_template_preview,
             commands::project_file::render_pptx_template_layouts,
             commands::project_file::analyze_pptx_template

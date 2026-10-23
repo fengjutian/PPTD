@@ -12,9 +12,7 @@ type MetricBlock = Extract<ContentBlock, { type: "metric" }>;
 type TableBlock = Extract<ContentBlock, { type: "table-data" }>;
 
 /** A cell address inside a reviewed table block. */
-export type TableCellAddress =
-  | { section: "header"; column: number }
-  | { section: "body"; row: number; column: number };
+export type TableCellAddress = { section: "header"; column: number } | { section: "body"; row: number; column: number };
 
 interface MatchBase {
   /** Page index, or -1 for the document title. */
@@ -68,12 +66,7 @@ export interface DocumentTitleMatch extends MatchBase {
  * chart labels through `set-metric`, and notes through `set-speaker-notes`.
  * A single match type would hide that difference from the replacement command.
  */
-export type TextMatch =
-  | TextElementMatch
-  | TableCellMatch
-  | MetricMatch
-  | SpeakerNotesMatch
-  | DocumentTitleMatch;
+export type TextMatch = TextElementMatch | TableCellMatch | MetricMatch | SpeakerNotesMatch | DocumentTitleMatch;
 
 export interface TextSearchOptions {
   matchCase?: boolean;
@@ -136,11 +129,7 @@ function slideById(document: PresentationDocument, slideId: SlideId): Slide | un
   return document.slides.find((slide) => slide.id === slideId);
 }
 
-function elementById(
-  document: PresentationDocument,
-  slideId: SlideId,
-  elementId: ElementId,
-): SlideElement | undefined {
+function elementById(document: PresentationDocument, slideId: SlideId, elementId: ElementId): SlideElement | undefined {
   return slideById(document, slideId)?.elements.find((element) => element.id === elementId);
 }
 
@@ -161,9 +150,7 @@ export function matchKey(match: TextMatch): string {
 }
 
 function cellKey(cell: TableCellAddress): string {
-  return cell.section === "header"
-    ? `header:${cell.column}`
-    : `body:${cell.row}:${cell.column}`;
+  return cell.section === "header" ? `header:${cell.column}` : `body:${cell.row}:${cell.column}`;
 }
 
 /** The stable identity of an edit, used to count what "replace all" changed. */

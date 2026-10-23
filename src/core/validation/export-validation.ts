@@ -1,5 +1,6 @@
 import {
   EMU_PER_INCH,
+  animationExportsNatively,
   resolveChartData,
   resolveTableData,
   type PresentationDocument,
@@ -78,15 +79,20 @@ export async function validatePresentationForExport(
       });
     }
     if (slide.animations && slide.animations.length > 0) {
-      // The exporter writes static slides. Silently dropping the timeline would
-      // make the deck look broken in front of an audience, so the report has to
-      // say it page by page instead of leaving the user to discover it.
-      issues.push({
-        code: "animation-not-exported",
-        severity: "warning",
-        message: `第 ${slideIndex + 1} 页有 ${slide.animations.length} 个动画，当前导出不写入原生动画，放映时会直接显示最终画面`,
-        slideIndex,
-      });
+      // Only the effects without a native node are a problem now. Saying "no
+      // animations are exported" when five of them are would be as misleading
+      // as staying silent about the rest.
+      const unsupported = slide.animations.filter((animation) => !animationExportsNatively(animation.effect));
+      if (unsupported.length > 0) {
+        issues.push({
+          code: "animation-not-exported",
+          severity: "warning",
+          message: `第 ${slideIndex + 1} 页有 ${unsupported.length} 个动画（${unsupported
+            .map((animation) => animation.effect)
+            .join("、")}）没有原生导出，放映时会直接显示最终画面`,
+          slideIndex,
+        });
+      }
     }
 
     if (slide.groups && slide.groups.length > 0) {

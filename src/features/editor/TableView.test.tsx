@@ -43,6 +43,26 @@ describe("table view", () => {
     expect(markup).toContain("38万");
   });
 
+  it("draws a merged region once with its span", () => {
+    const document = createDocument();
+    const block = {
+      id: crypto.randomUUID(),
+      type: "table-data" as const,
+      header: ["项目", "金额"],
+      rows: [
+        ["合并", ""],
+        ["甲", "1,200"],
+      ],
+      merges: [{ section: "body" as const, row: 0, column: 0, rowSpan: 1, columnSpan: 2 }],
+    };
+    document.slides[0]!.content.blocks = [block];
+    const markup = renderToStaticMarkup(
+      <TableView element={tableElement(block.id)} slide={document.slides[0]!} scale={1} />,
+    );
+    expect(markup).toMatch(/colspan="2"/i);
+    expect(markup.match(/>合并</g)).toHaveLength(1);
+  });
+
   it("tells the user when the cells are gone instead of drawing an empty grid", () => {
     const document = createDocument();
     const markup = renderToStaticMarkup(

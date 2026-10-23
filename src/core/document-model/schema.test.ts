@@ -15,6 +15,8 @@ import versionFourteenFixture from "./__fixtures__/v14-document.json";
 import versionFifteenFixture from "./__fixtures__/v15-document.json";
 import versionSixteenFixture from "./__fixtures__/v16-document.json";
 import versionSeventeenFixture from "./__fixtures__/v17-document.json";
+import versionEighteenFixture from "./__fixtures__/v18-document.json";
+import versionNineteenFixture from "./__fixtures__/v19-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
@@ -183,6 +185,62 @@ describe("presentation document schema", () => {
     expect(parsed.slides[0]!.groups).toHaveLength(1);
     expect(parsed.slides[0]!.groups![0]!.elementIds).toHaveLength(2);
     expect(versionSeventeenFixture.schemaVersion).toBe(17);
+  });
+
+  it("keeps a page transition from a version 18 fixture", () => {
+    const parsed = parsePresentationDocument(versionEighteenFixture);
+    expect(parsed.slides[0]!.transition).toEqual({ kind: "push", speed: "medium", direction: "left" });
+    expect(versionEighteenFixture.schemaVersion).toBe(18);
+  });
+
+  it("migrates the fixed version 17 fixture without inventing a transition", () => {
+    const migrated = parsePresentationDocument(versionSeventeenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.transition).toBeUndefined();
+  });
+
+  it("keeps a preset shape from a version 19 fixture", () => {
+    const parsed = parsePresentationDocument(versionNineteenFixture);
+    expect(parsed.slides[0]!.elements[1]).toMatchObject({ type: "shape", shape: "triangle" });
+    expect(versionNineteenFixture.schemaVersion).toBe(19);
+  });
+
+  it("migrates the fixed version 18 fixture without changing its shapes", () => {
+    const migrated = parsePresentationDocument(versionEighteenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.elements[1]).toMatchObject({ type: "shape", shape: "rectangle" });
+  });
+
+  it("rejects table merges that leave the grid or overlap", () => {
+    const outside = createDocument();
+    outside.slides[0]!.content.blocks = [
+      {
+        id: crypto.randomUUID(),
+        type: "table-data",
+        header: ["a", "b"],
+        rows: [["1", "2"]],
+        merges: [{ section: "body", row: 0, column: 1, rowSpan: 1, columnSpan: 2 }],
+      },
+    ];
+    expect(() => presentationDocumentSchema.parse(outside)).toThrow();
+
+    const overlap = createDocument();
+    overlap.slides[0]!.content.blocks = [
+      {
+        id: crypto.randomUUID(),
+        type: "table-data",
+        header: ["a", "b"],
+        rows: [
+          ["1", "2"],
+          ["3", "4"],
+        ],
+        merges: [
+          { section: "body", row: 0, column: 0, rowSpan: 2, columnSpan: 1 },
+          { section: "body", row: 1, column: 0, rowSpan: 1, columnSpan: 2 },
+        ],
+      },
+    ];
+    expect(() => presentationDocumentSchema.parse(overlap)).toThrow();
   });
 
   it("rejects a group with a missing member, duplicate membership or a repeated id", () => {

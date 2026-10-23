@@ -37,8 +37,8 @@ describe("replace all in the editor store", () => {
     state.execute({
       type: "replace-text-edits",
       edits: [
-        { slideId: slide.id, elementId: title!.id, text: "新标题" },
-        { slideId: slide.id, elementId: decorative!.id, text: "新副标题" },
+        { kind: "text", slideId: slide.id, elementId: title!.id, text: "新标题" },
+        { kind: "text", slideId: slide.id, elementId: decorative!.id, text: "新副标题" },
       ],
     });
 

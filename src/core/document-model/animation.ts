@@ -26,3 +26,18 @@ export const ENTRANCE_EFFECTS: readonly AnimationEffect[] = [
 
 export const EMPHASIS_EFFECTS: readonly AnimationEffect[] = ["pulse"];
 export const EXIT_EFFECTS: readonly AnimationEffect[] = ["disappear"];
+
+/**
+ * Effects the exporter can write as a native PowerPoint timing node.
+ *
+ * The list is deliberately smaller than the editor's effect list. A native
+ * node has to match the DrawingML timing schema exactly; the remaining effects
+ * (split, float-in, pulse, disappear) stay previewable and persist in the
+ * project, but the export report says they were not written. Claiming a
+ * conversion we have not verified would be worse than an honest warning.
+ */
+export const NATIVE_ANIMATION_EFFECTS: readonly AnimationEffect[] = ["appear", "fade", "fly-in", "wipe", "zoom"];
+
+export function animationExportsNatively(effect: AnimationEffect): boolean {
+  return NATIVE_ANIMATION_EFFECTS.includes(effect);
+}

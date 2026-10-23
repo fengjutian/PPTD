@@ -18,7 +18,13 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { AiDraft, AiVisualAssetIntent, ContentBlock, ContentCheck, ContentCheckKind } from "../../services/ai-service";
+import type {
+  AiDraft,
+  AiVisualAssetIntent,
+  ContentBlock,
+  ContentCheck,
+  ContentCheckKind,
+} from "../../services/ai-service";
 import {
   blockTypeLabels,
   checkKindLabels,
@@ -519,7 +525,11 @@ function BlockEditor({
   blocks: ContentBlock[];
   checks: ContentCheck[];
   notes: readonly SlideCapacityNote[];
-  onChange: (blocks: ContentBlock[], separateHistory?: boolean, blockRemap?: (oldIndex: number) => number | undefined) => void;
+  onChange: (
+    blocks: ContentBlock[],
+    separateHistory?: boolean,
+    blockRemap?: (oldIndex: number) => number | undefined,
+  ) => void;
   onChecksChange: (checks: ContentCheck[]) => void;
 }) {
   const [pendingDelete, setPendingDelete] = useState<number | undefined>(undefined);
@@ -559,9 +569,7 @@ function BlockEditor({
   const toggleCheck = (check: ContentCheck) =>
     onChecksChange(
       checks.map((current) =>
-        current === check
-          ? { ...current, status: current.status === "verified" ? "unverified" : "verified" }
-          : current,
+        current === check ? { ...current, status: current.status === "verified" ? "unverified" : "verified" } : current,
       ),
     );
   const removeCheck = (check: ContentCheck) => onChecksChange(checks.filter((current) => current !== check));

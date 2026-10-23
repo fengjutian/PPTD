@@ -100,10 +100,20 @@ export function sanitizeDraftForSave(draft: AiDraft): AiDraft {
   return {
     ...draft,
     title: keepTitle(draft.title),
-    slides: draft.slides.map((slide) => ({
-      ...slide,
-      title: keepTitle(slide.title),
-      blocks: sanitizeBlocks(slide.blocks).map(keepTable),
-    })),
+    slides: draft.slides.map((slide) => {
+      const blocks = sanitizeBlocks(slide.blocks);
+      // 被清空的块会在保存时消失；它后面的块会前移，按块下标存的核实标记
+      // 就会指向另一段内容。与其悄悄指错，不如把这一页的块级标记一起丢掉。
+      const shifted = blocks.length !== slide.blocks.length;
+      const checks = slide.checks?.filter(
+        (check) => check.blockIndex === undefined || (!shifted && check.blockIndex < blocks.length),
+      );
+      return {
+        ...slide,
+        title: keepTitle(slide.title),
+        blocks: blocks.map(keepTable),
+        checks,
+      };
+    }),
   };
 }

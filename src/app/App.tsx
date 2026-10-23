@@ -83,6 +83,7 @@ import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 import { FindReplaceBar } from "../features/editor/FindReplaceBar";
 import { PageSizeControls } from "../features/editor/PageSizeControls";
+import { ShapePicker } from "../features/editor/ShapePicker";
 import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
 import { ImportModeDialog, ImportReportDialog } from "../features/editor/PptxImportDialogs";
 import {
@@ -158,6 +159,7 @@ import {
   type SplitSlidePage,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
+import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
 import {
@@ -167,6 +169,7 @@ import {
   choosePptxPath,
   choosePptxTemplate,
   clearRecovery,
+  deletePptxTemplate,
   getPptxTemplatePreview,
   importPptxTemplate,
   isDesktopRuntime,
@@ -176,6 +179,7 @@ import {
   projectModifiedAt,
   recoveryProjectPath,
   renderPptxTemplateLayouts,
+  renamePptxTemplate,
   saveProject,
   autoSave,
   writePptx,
@@ -876,6 +880,7 @@ export function App() {
   const [templatePreviewBusy, setTemplatePreviewBusy] = useState(false);
   const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templateMenu, setTemplateMenu] = useState<{ template: TemplateRecord; x: number; y: number }>();
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [themePresetId, setThemePresetId] = useState("");
   /**
@@ -1324,7 +1329,7 @@ export function App() {
         // Progress is optional; the import still works if the event bridge is unavailable.
       }
       const pptxPath = selection.format === "ppt" ? await convertLegacyPpt(selection.path) : selection.path;
-      const imported = await importPptxContent(pptxPath, requestId);
+      const imported = await importPptxContent(pptxPath, requestId, selection.format === "ppt" ? "ppt" : "pptx");
       const document = importedDeckToDocument(imported);
       setImportPreview({ fileName: selection.name, document, report: imported.report });
       setImportChoice(undefined);
@@ -1949,6 +1954,8 @@ export function App() {
                 blocks: proposal.blocks,
                 body: proposal.body,
                 speakerNotes: proposal.speakerNotes,
+                // 正文换了，挂在旧内容上的核实标记不再成立。
+                checks: undefined,
                 reviewed: false,
               }
             : slide,
@@ -2157,6 +2164,8 @@ export function App() {
             ...source,
             ...firstPage,
             plan: { ...firstPage.plan, visualAsset: source.plan.visualAsset },
+            // 内容重新分配之后，原来的核实标记已经不对应任何一段文字了。
+            checks: undefined,
             reviewed: false,
           },
           {
@@ -2980,6 +2989,16 @@ export function App() {
       };
       // 视觉评审、像素对比度和质量门都只做判断与修复。任何一步出错都只降级，
       // 不会把已经生成的 PPT 一起丢掉。
+      const qualitySettings = await loadSettings().catch(() => defaultSettings());
+      // 厂商声明的是“这家服务支持视觉”，不是“所选模型支持视觉”。先发一张
+      // 小图探测；模型拒绝图片时本次直接跳过视觉评审，而不是等到整轮评审
+      // 请求失败后才悄悄降级。
+      const visionAvailable = qualitySettings.visionReviewEnabled
+        ? await probeVisionCapability(qualitySettings.aiProviderId, qualitySettings.aiModel)
+        : false;
+      if (qualitySettings.visionReviewEnabled && !visionAvailable) {
+        setTaskStatus("当前模型未通过图片输入探测，本次跳过视觉评审，只做确定性校验");
+      }
       const stage = await runDesignQualityStage({
         initialDesigns: design.slides,
         buildDocument: buildFinalDocument,
@@ -2988,10 +3007,8 @@ export function App() {
         // 始终是同一份生成时草稿，内容隔离守卫在生产里从未生效。
         contentFingerprint: (designs) => documentContentFingerprint(buildFinalDocument(designs)),
         // 视觉评审会把页面渲染图发送给模型服务。用户可以在设置里关闭这项
-        // 上传；关闭后只做确定性校验，并在报告里说明。
-        vision: (await loadSettings().catch(() => defaultSettings())).visionReviewEnabled
-          ? new TauriVisionReviewPort()
-          : new DisabledVisionReviewPort(),
+        // 上传；关闭后或模型不支持图片时只做确定性校验，并在报告里说明。
+        vision: visionAvailable ? new TauriVisionReviewPort() : new DisabledVisionReviewPort(),
         taskId,
         isCancelled: () => designCancelRef.current,
         onProgress: (label, percent) => {
@@ -3166,6 +3183,40 @@ export function App() {
       setTaskStatus(`模板预览读取失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setTemplatePreviewBusy(false);
+    }
+  };
+
+  const handleRenameTemplate = async (template: TemplateRecord) => {
+    setTemplateMenu(undefined);
+    const suggested = template.name.replace(/\.pptx$/i, "");
+    const name = window.prompt("重命名模板", suggested);
+    if (!name?.trim()) return;
+    try {
+      const renamed = await renamePptxTemplate(template.id, name);
+      setTemplateLibrary(await listPptxTemplates());
+      if (selectedTemplate?.id === template.id) setSelectedTemplate(renamed);
+      setTaskStatus(`模板已重命名为“${renamed.name}”`);
+    } catch (error) {
+      setTaskStatus(`重命名失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleDeleteTemplate = async (template: TemplateRecord) => {
+    setTemplateMenu(undefined);
+    if (!window.confirm(`删除模板“${template.name}”？这不会影响已经应用该模板的当前文档。`)) return;
+    try {
+      await deletePptxTemplate(template.id);
+      setTemplateLibrary(await listPptxTemplates());
+      if (selectedTemplate?.id === template.id) {
+        setSelectedTemplate(undefined);
+        setTemplatePreview(undefined);
+        setTemplateAnalysis(undefined);
+        setTemplateLayoutRenders([]);
+        setThemeDrawerOpen(false);
+      }
+      setTaskStatus(`已删除模板“${template.name}”`);
+    } catch (error) {
+      setTaskStatus(`删除失败：${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -3823,6 +3874,7 @@ export function App() {
             >
               <Circle />
             </ToolButton>
+            <ShapePicker onPick={(shape) => execute({ type: "add-shape", slideId: activeSlide.id, shape })} />
             <ToolButton
               label="直线"
               onClick={() => execute({ type: "add-line", slideId: activeSlide.id, direction: "horizontal" })}
@@ -4914,7 +4966,7 @@ export function App() {
                   <strong>从 PPT 抽取的主题</strong>
                   <span>{templateLibrary.length} 套</span>
                 </div>
-                <p>保留来源文件的设计语言，并展示可解析范围</p>
+                <p>保留来源文件的设计语言，并展示可解析范围；右键卡片可重命名或删除</p>
               </div>
               <div className="theme-card-grid extracted-theme-grid">
                 {templateLibrary.map((template) => (
@@ -4923,6 +4975,11 @@ export function App() {
                     className={`theme-card extracted${selectedTemplate?.id === template.id ? " active" : ""}`}
                     key={template.id}
                     onClick={() => void handleSelectTemplate(template)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setTemplateMenu({ template, x: event.clientX, y: event.clientY });
+                    }}
+                    title="右键可重命名或删除"
                   >
                     <span className="theme-card-art extracted-art">
                       <FileUp />
@@ -5937,7 +5994,16 @@ export function App() {
                     {exportReport.masters.length > 0
                       ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）`
                       : ""}
-                    {exportReport.themeColors.length > 0 ? ` · 主题色 ${exportReport.themeColors.join("、")}` : ""}
+                    {exportReport.themeColors.length > 0
+                      ? ` · 主题色 ${exportReport.themeColors.join("、")}（${exportReport.themeColorReferences} 处对象引用）`
+                      : ""}
+                    {exportReport.nativeAnimationCount > 0 ? ` · ${exportReport.nativeAnimationCount} 个原生动画` : ""}
+                    {exportReport.nativeAnimationSkipped > 0
+                      ? ` · ${exportReport.nativeAnimationSkipped} 个动画未写入`
+                      : ""}
+                    {exportReport.nativeTransitionCount > 0
+                      ? ` · ${exportReport.nativeTransitionCount} 页原生切换`
+                      : ""}
                   </p>
                 </div>
               </div>
@@ -5968,6 +6034,38 @@ export function App() {
               </button>
             </div>
           </section>
+        </div>
+      )}
+
+      {templateMenu && (
+        <div
+          className="template-menu-backdrop"
+          role="presentation"
+          onMouseDown={() => setTemplateMenu(undefined)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setTemplateMenu(undefined);
+          }}
+        >
+          <div
+            className="template-context-menu"
+            role="menu"
+            style={{ left: templateMenu.x, top: templateMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <strong>{templateMenu.template.name}</strong>
+            <button type="button" role="menuitem" onClick={() => void handleRenameTemplate(templateMenu.template)}>
+              重命名
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="danger"
+              onClick={() => void handleDeleteTemplate(templateMenu.template)}
+            >
+              删除
+            </button>
+          </div>
         </div>
       )}
 

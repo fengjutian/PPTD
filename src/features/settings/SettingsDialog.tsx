@@ -2,6 +2,7 @@ import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "luci
 import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
+import { clearVisionCapabilityCache } from "../../services/ai-vision";
 import {
   createTranslator,
   translate,
@@ -86,7 +87,11 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
   const save = async () => {
     setBusy(true);
     try {
-      if (apiKey.trim()) await saveAiKey(settings.aiProviderId, apiKey);
+      if (apiKey.trim()) {
+        await saveAiKey(settings.aiProviderId, apiKey);
+        // A new key can belong to an account with different model access.
+        clearVisionCapabilityCache();
+      }
       await saveSettings(settings);
       setApiKey("");
       setConfigured(configured || Boolean(apiKey.trim()));
@@ -109,6 +114,7 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
     setBusy(true);
     try {
       await deleteAiKey(settings.aiProviderId);
+      clearVisionCapabilityCache();
       setConfigured(false);
       onMessage(t("settings.message.keyDeleted", { provider: providerLabel }));
     } finally {
@@ -121,6 +127,7 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
     try {
       if (apiKey.trim()) {
         await saveAiKey(settings.aiProviderId, apiKey);
+        clearVisionCapabilityCache();
         setConfigured(true);
       }
       const message = await testAiConnection(settings.aiProviderId, settings.aiModel);

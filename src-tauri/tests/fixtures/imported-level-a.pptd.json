@@ -1,0 +1,263 @@
+{
+  "id": "77bb0567-adac-4218-9bcf-ce502be53b7a",
+  "schemaVersion": 19,
+  "title": "导入往返样例",
+  "pageSize": {
+    "width": 12192000,
+    "height": 6858000
+  },
+  "revisions": {
+    "document": 0,
+    "content": 0,
+    "design": 0
+  },
+  "slides": [
+    {
+      "id": "562bce5d-d70e-45fe-b11d-7eb2b0ac7265",
+      "background": "#FFFFFF",
+      "content": {
+        "title": "导入往返样例",
+        "body": "文本、图片与表格都应保持可编辑",
+        "blocks": [
+          {
+            "id": "1abc3b17-74cc-48bd-b69c-3777e0ee2e50",
+            "type": "table-data",
+            "header": [
+              "项目",
+              "数值"
+            ],
+            "rows": [
+              [
+                "样本量",
+                "38万"
+              ]
+            ]
+          }
+        ],
+        "speakerNotes": "第一页备注",
+        "status": "review",
+        "contentHash": "d4ca5103bfe68ced"
+      },
+      "elements": [
+        {
+          "id": "cbc7af97-de7c-44c1-bd1e-2e40d8541023",
+          "type": "text",
+          "text": "导入往返样例",
+          "contentRef": "title",
+          "frame": {
+            "x": 914400,
+            "y": 457200,
+            "width": 7315200,
+            "height": 914400
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fontFamily": "Aptos Display",
+            "fontSizePt": 40,
+            "color": "#111111",
+            "bold": true,
+            "align": "left",
+            "italic": false,
+            "underline": false,
+            "strikethrough": false,
+            "verticalAlign": "top",
+            "bullet": "none",
+            "indentLevel": 0
+          }
+        },
+        {
+          "id": "dd10f3de-16b2-4f83-bb6b-3f51ed8d11d3",
+          "type": "text",
+          "text": "文本、图片与表格都应保持可编辑",
+          "contentRef": "body",
+          "frame": {
+            "x": 914400,
+            "y": 1600200,
+            "width": 5486400,
+            "height": 1371600
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fontFamily": "Aptos",
+            "fontSizePt": 20,
+            "color": "#333333",
+            "bold": false,
+            "align": "left",
+            "italic": false,
+            "underline": false,
+            "strikethrough": false,
+            "verticalAlign": "top",
+            "lineHeight": 1.2,
+            "bullet": "none",
+            "indentLevel": 0
+          }
+        },
+        {
+          "id": "9c573cdd-fa36-41df-b258-a4fe2415e80f",
+          "type": "image",
+          "source": {
+            "kind": "embedded",
+            "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=",
+            "mimeType": "image/png"
+          },
+          "frame": {
+            "x": 6858000,
+            "y": 1600200,
+            "width": 1828800,
+            "height": 1828800
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "altText": "一像素样例"
+        },
+        {
+          "id": "22a919b8-ba6f-4787-b7f6-a8850b1770ca",
+          "type": "table",
+          "contentBlockId": "1abc3b17-74cc-48bd-b69c-3777e0ee2e50",
+          "frame": {
+            "x": 914400,
+            "y": 3657600,
+            "width": 5486400,
+            "height": 1371600
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fontFamily": "Aptos",
+            "fontSizePt": 14,
+            "headerFill": "#3366CC",
+            "headerTextColor": "#FFFFFF",
+            "bodyTextColor": "#17181c",
+            "borderColor": "#D9DEE5",
+            "firstColumnBold": true,
+            "headerBold": true,
+            "bandingFill": "#F5F7FA",
+            "cellPaddingPt": 5,
+            "borderWidthPt": 0.75
+          }
+        }
+      ]
+    },
+    {
+      "id": "cfc0a35d-b6e6-4c4e-84b2-626839a87d9e",
+      "background": "#FFFFFF",
+      "content": {
+        "title": "第二页",
+        "body": "",
+        "blocks": [
+          {
+            "id": "3e21dd93-4b9d-4829-8ff8-688b42a0c21d",
+            "type": "metric",
+            "label": "Q1",
+            "value": "10"
+          },
+          {
+            "id": "cba3e2af-7f50-45e0-9a7a-4434cb1cee96",
+            "type": "metric",
+            "label": "Q2",
+            "value": "20"
+          }
+        ],
+        "speakerNotes": "",
+        "status": "review",
+        "contentHash": "48ec3d7a88012040"
+      },
+      "elements": [
+        {
+          "id": "69275bef-4332-4a75-9d3c-93d19a20c57c",
+          "type": "shape",
+          "shape": "rectangle",
+          "frame": {
+            "x": 914400,
+            "y": 914400,
+            "width": 3657600,
+            "height": 1828800
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fill": "#E8F0FE",
+            "stroke": "#3366CC",
+            "strokeWidthPt": 1.5,
+            "radiusPt": 0
+          }
+        },
+        {
+          "id": "26763ab6-f0ce-4c16-b5c1-333becd65860",
+          "type": "line",
+          "direction": "horizontal",
+          "frame": {
+            "x": 914400,
+            "y": 3200400,
+            "width": 4572000,
+            "height": 1
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "stroke": "#3366CC",
+            "strokeWidthPt": 1,
+            "dashed": false,
+            "startArrow": "none",
+            "endArrow": "arrow"
+          }
+        },
+        {
+          "id": "d8460601-9f90-4199-9b76-b8eee5fb8bb3",
+          "type": "chart",
+          "contentBlockIds": [
+            "3e21dd93-4b9d-4829-8ff8-688b42a0c21d",
+            "cba3e2af-7f50-45e0-9a7a-4434cb1cee96"
+          ],
+          "kind": "column",
+          "frame": {
+            "x": 5943600,
+            "y": 914400,
+            "width": 4572000,
+            "height": 2743200
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fontFamily": "Aptos",
+            "fontSizePt": 12,
+            "textColor": "#17181c",
+            "seriesColors": [
+              "#3366CC"
+            ],
+            "showLegend": false,
+            "showValueLabels": true
+          }
+        }
+      ]
+    }
+  ],
+  "theme": {
+    "name": "导入主题",
+    "majorFont": "Aptos Display",
+    "minorFont": "Aptos",
+    "colors": [
+      {
+        "name": "dk1",
+        "value": "#111111"
+      },
+      {
+        "name": "lt1",
+        "value": "#FFFFFF"
+      },
+      {
+        "name": "accent1",
+        "value": "#3366CC"
+      }
+    ]
+  }
+}

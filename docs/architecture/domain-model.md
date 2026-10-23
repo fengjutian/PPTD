@@ -337,7 +337,7 @@ interface SlideAnimation {
 
 `duplicate-animation` 复制一条动画（新 id、相同效果/计时/开始方式/方向）并插到源动画之后，一次撤销；锁定元素拒绝复制。预览通过 `animation-${effect}` 类与 CSS 关键帧实现，属于临时 UI 状态，不改变 revision、保存状态或撤销栈。
 
-效果枚举从 3 种扩到 9 种、阶段扩为三值，使持久化格式升到第 16 版；`15 → 16` 迁移只改版本号，旧动画（全部为进入）保持有效，固定样例见 `v16-document.json`。PPTX 仍不写入原生动画，导出报告逐页说明。详见 [0050 动画阶段由效果派生](decisions/0050-animation-phase-from-effect.md)。
+效果枚举从 3 种扩到 9 种、阶段扩为三值，使持久化格式升到第 16 版；`15 → 16` 迁移只改版本号，旧动画（全部为进入）保持有效，固定样例见 `v16-document.json`。导出对出现、淡化、飞入、擦除和缩放写入原生 `<p:timing>`；其余四种只预览，报告逐页说明。详见 [0050 动画阶段由效果派生](decisions/0050-animation-phase-from-effect.md) 与 [0057 原生对象动画导出](decisions/0057-native-animation-export.md)。
 
 ## 21. 编辑期选择组（V0.2 已实现）
 
@@ -376,10 +376,29 @@ Level A 映射：
 
 - 页面尺寸与顺序来自 `p:sldSz`、`p:sldIdLst`。
 - 文本段落 → 换行，run 样式 → `TextElementStyle`/`TextRun`；标题/正文占位符绑定 `contentRef`。
-- 图片 → `ImageElement`（data URL、crop、alt）；基础形状 → `ShapeElement`/`LineElement`；基础表格 → `table-data` 内容块 + `TableElement`。
-- 顶层组合 → 按 `chOff`/`chExt` 展平成员坐标，并生成 `SlideGroup`；嵌套组合、组合旋转/翻转不保留。
+- 图片 → `ImageElement`（data URL、crop、alt）；基础形状与常见预设形状 → `ShapeElement`（11 种 `ShapeKind`）/`LineElement`；基础表格 → `table-data` 内容块 + `TableElement`，`gridSpan`/`rowSpan` 写入 `merges`。
+- 组合（含嵌套）→ 递归组合 `chOff`/`chExt` 变换，展平成员坐标并生成一个 `SlideGroup`；组合旋转按仿射变换写入成员坐标和旋转，组合翻转不保留并报告。
 - 单序列图表 → `ChartElement` + 每个分类一个 `metric` 内容块；多序列只取第一个，其他图表类型报告后跳过。
 - 主题色/字体写入 `document.theme`；演讲备注写入 `content.speakerNotes`。
 - 导入页 `content.status = "review"`，保证导出预检提示未审核；导入后是未保存的新项目，必须另存为 `.pptd`。
 
 不支持的对象（图表、组合、SmartArt、OLE、媒体、动画、切换）不进入文档，只进入 `ImportReport`；合并单元格、超过 8 列/30 行的表格降级或截断并报告。母版/版式只用于补齐占位符几何，不做视觉重建。详见 [0052 PPTX Level A 内容导入](decisions/0052-pptx-level-a-import.md)。
+
+## 23. 页面切换（V0.2 已实现）
+
+页面切换是设计态，挂在页面的 `transition` 上，与对象动画分开：
+
+```ts
+type SlideTransitionKind = "fade" | "push" | "wipe" | "split";
+type SlideTransitionSpeed = "fast" | "medium" | "slow";
+
+interface SlideTransition {
+  kind: SlideTransitionKind;
+  speed: SlideTransitionSpeed;
+  direction?: "left" | "right" | "up" | "down";
+}
+```
+
+缺少 `transition` 表示无切换，不存 `"none"`。`set-slide-transition` 只改设计 revision，一次设置/清除一个撤销项；方向只对 `push`/`wipe`/`split` 生效。导出在 `<p:clrMapOvr>` 之后写入原生 `<p:transition>`，报告用 `nativeTransitionCount` 记录实际写入页数。
+
+新增可选字段使持久化格式升到第 18 版；`17 → 18` 迁移不伪造切换，固定样例见 `src/core/document-model/__fixtures__/v18-document.json`。详见 [0056 页面切换效果与原生导出](decisions/0056-slide-transition-export.md)。

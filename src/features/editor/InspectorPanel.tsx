@@ -48,6 +48,7 @@ import {
   type Slide,
   type SlideElement,
   type SlideId,
+  type SlideTransition,
   type SupportedImageMimeType,
   type TextElementStyle,
   resolveFragmentStyle,
@@ -73,6 +74,7 @@ import { unionFrame } from "../../core/commands/arrange";
 import { ElementPreview } from "./ElementPreview";
 import { paletteSwatches } from "./inspector-palette";
 import { FONT_OPTIONS } from "./font-options";
+import { TransitionControls } from "./TransitionControls";
 
 const ROTATION_PRESETS = [0, 90, 180, 270] as const;
 
@@ -89,7 +91,20 @@ function elementTypeLabel(element: SlideElement): string {
   if (element.type === "table") return "表格";
   if (element.type === "line") return "线条";
   if (element.type === "icon") return "图标";
-  return element.shape === "ellipse" ? "椭圆" : "矩形";
+  const shapeLabels = {
+    rectangle: "矩形",
+    ellipse: "椭圆",
+    triangle: "三角形",
+    diamond: "菱形",
+    pentagon: "五边形",
+    hexagon: "六边形",
+    chevron: "V 形",
+    arrow: "箭头",
+    star: "星形",
+    parallelogram: "平行四边形",
+    trapezoid: "梯形",
+  } as const;
+  return shapeLabels[element.shape];
 }
 
 export interface InspectorPanelViewProps {
@@ -105,6 +120,8 @@ export interface InspectorPanelViewProps {
   blocks?: ContentBlock[];
   /** The speaker notes of this page. */
   speakerNotes: string;
+  /** Native transition into this page. Absent means no transition. */
+  transition?: SlideTransition;
   backgroundImage?: boolean;
   /** Unit the position and size fields are shown in. */
   unit: LengthUnit;
@@ -158,6 +175,7 @@ export function InspectorPanelView({
   pageSize,
   blocks,
   speakerNotes,
+  transition,
   backgroundImage = false,
   unit,
   onUnitChange,
@@ -332,6 +350,7 @@ export function InspectorPanelView({
           background={background}
           pageSize={pageSize}
           speakerNotes={speakerNotes}
+          transition={transition}
           backgroundImage={backgroundImage}
           unit={unit}
           palette={palette}
@@ -1315,6 +1334,8 @@ interface PagePropertiesProps {
   pageSize: { width: Emu; height: Emu };
   /** The speaker notes of this page. */
   speakerNotes: string;
+  /** Native transition into this page. Absent means no transition. */
+  transition?: SlideTransition;
   unit: LengthUnit;
   palette?: readonly string[];
   onCommand: (command: DocumentCommand) => void;
@@ -1326,6 +1347,7 @@ function PageProperties({
   background,
   pageSize,
   speakerNotes,
+  transition,
   backgroundImage,
   unit,
   palette,
@@ -1391,6 +1413,9 @@ function PageProperties({
             )}
           </div>
         </div>
+      </InspectorSection>
+      <InspectorSection title="切换">
+        <TransitionControls slideId={slideId} transition={transition} onCommand={onCommand} />
       </InspectorSection>
       <InspectorSection title="演讲备注">
         <TextAreaField
@@ -1479,6 +1504,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
               pageSize={document.pageSize}
               blocks={slide.content.blocks}
               speakerNotes={slide.content.speakerNotes}
+              transition={slide.transition}
               backgroundImage={slide.elements.some(
                 (element) => element.type === "image" && element.placement === "slide-background",
               )}
@@ -1516,6 +1542,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
                 background={slide.background}
                 pageSize={document.pageSize}
                 speakerNotes={slide.content.speakerNotes}
+                transition={slide.transition}
                 backgroundImage={slide.elements.some(
                   (element) => element.type === "image" && element.placement === "slide-background",
                 )}

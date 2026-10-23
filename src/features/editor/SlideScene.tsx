@@ -6,7 +6,8 @@ import { LineView } from "./LineView";
 import { IconView } from "./IconView";
 import { RichText } from "./RichText";
 import { TableView } from "./TableView";
-import { ptToPx, type SceneScale } from "./scene-metrics";
+import { ShapeView } from "./ShapeView";
+import { type SceneScale } from "./scene-metrics";
 
 export interface SlideElementContentProps {
   element: SlideElement;
@@ -26,19 +27,7 @@ export interface SlideElementContentProps {
  */
 export function SlideElementContent({ element, slide, scale, imageAlt }: SlideElementContentProps) {
   if (element.type === "text") return <RichText element={element} scale={scale} />;
-  if (element.type === "shape") {
-    return (
-      <div
-        className={`shape-fill ${element.shape}`}
-        style={{
-          background: element.style.fill,
-          borderColor: element.style.stroke,
-          borderWidth: ptToPx(element.style.strokeWidthPt, scale),
-          borderRadius: element.shape === "ellipse" ? "50%" : ptToPx(element.style.radiusPt, scale),
-        }}
-      />
-    );
-  }
+  if (element.type === "shape") return <ShapeView element={element} scale={scale} />;
   if (element.type === "line") return <LineView element={element} scale={scale} />;
   if (element.type === "icon") return <IconView element={element} />;
   if (element.type === "image") return <CroppedImage element={element} className="image-fill" alt={imageAlt} />;  if (element.type === "chart") return <ChartView element={element} slide={slide} scale={scale} />;

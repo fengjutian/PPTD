@@ -22,9 +22,11 @@ import {
   type ExportIssue,
 } from "../../core/validation/export-validation";
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
-import { patchThemeColors } from "./theme-xml";
+import { linkThemeColors, normalizeThemeColors, patchThemeColors } from "./theme-xml";
 import { normalizePackagePartNames } from "./package-parts";
 import { patchImageCrops } from "./image-crop-xml";
+import { patchSlideTransitions } from "./transition-xml";
+import { patchSlideAnimations } from "./native-animation";
 
 const inch = (value: number) => value / EMU_PER_INCH;
 const color = (value: string) => value.replace(/^#/, "");
@@ -50,6 +52,14 @@ export interface ExportReport {
   themeFonts?: { major: string; minor: string };
   /** Theme color slots written into the theme part. */
   themeColors: string[];
+  /** Object colors rewritten as references to those slots. */
+  themeColorReferences: number;
+  /** Pages that got a native `<p:transition>`. */
+  nativeTransitionCount: number;
+  /** Object animations written into a native timing tree. */
+  nativeAnimationCount: number;
+  /** Animations whose effect or target has no native representation. */
+  nativeAnimationSkipped: number;
   warnings: string[];
   issues: ExportIssue[];
   package: PptxPackageValidation;
@@ -145,6 +155,15 @@ function throwIfCancelled(signal: AbortSignal | undefined): void {
 
 function shapeType(pptx: PptxGenJS, element: ShapeElement) {
   if (element.shape === "ellipse") return pptx.ShapeType.ellipse;
+  if (element.shape === "triangle") return pptx.ShapeType.triangle;
+  if (element.shape === "diamond") return pptx.ShapeType.diamond;
+  if (element.shape === "pentagon") return pptx.ShapeType.pentagon;
+  if (element.shape === "hexagon") return pptx.ShapeType.hexagon;
+  if (element.shape === "chevron") return pptx.ShapeType.chevron;
+  if (element.shape === "arrow") return pptx.ShapeType.rightArrow;
+  if (element.shape === "star") return pptx.ShapeType.star5;
+  if (element.shape === "parallelogram") return pptx.ShapeType.parallelogram;
+  if (element.shape === "trapezoid") return pptx.ShapeType.trapezoid;
   if (element.style.radiusPt > 0) return pptx.ShapeType.roundRect;
   return pptx.ShapeType.rect;
 }
@@ -188,6 +207,7 @@ export async function buildPptx(
   // fonts of the deck are the fonts PowerPoint offers when the user picks a
   // new one in the design panel.
   const theme = document.theme;
+  const themeSlots = theme ? normalizeThemeColors(theme.colors) : [];
   if (theme) {
     pptx.theme = { headFontFace: theme.majorFont, bodyFontFace: theme.minorFont };
   }
@@ -242,6 +262,9 @@ export async function buildPptx(
         const hasRuns = Boolean(element.runs && element.runs.length > 0);
         const textOptions = {
           ...position,
+          // The stable element id is written as the object name so the native
+          // animation timeline can address this shape by id later.
+          objectName: element.id,
           fontFace: element.style.fontFamily,
           fontSize: element.style.fontSizePt,
           color: color(element.style.color),
@@ -292,6 +315,7 @@ export async function buildPptx(
         const type = shapeType(pptx, element);
         slide.addShape(type, {
           ...position,
+          objectName: element.id,
           fill: { color: color(element.style.fill) },
           line: { color: color(element.style.stroke), width: element.style.strokeWidthPt },
           ...(type === pptx.ShapeType.roundRect
@@ -303,6 +327,7 @@ export async function buildPptx(
         // pattern have to stay editable in PowerPoint.
         slide.addShape(pptx.ShapeType.line, {
           ...position,
+          objectName: element.id,
           fill: { type: "none" },
           line: {
             color: color(element.style.stroke),
@@ -326,8 +351,10 @@ export async function buildPptx(
               )
             : [color(element.style.seriesColors[0]!)];
         // The unit of the reviewed numbers belongs to the labels, so a value
-        // reads "38万" in the deck and not "380000".
-        const valueFormat = resolved.unit ? `#,##0.##"${resolved.unit}"` : "#,##0.##";
+        // reads "38万" in the deck and not "380000". Integer data uses an integer
+        // format: PowerPoint renders "#,##0.##" as "10." for whole numbers.
+        const numberFormat = resolved.data.some((datum) => !Number.isInteger(datum.value)) ? "#,##0.##" : "#,##0";
+        const valueFormat = resolved.unit ? `${numberFormat}"${resolved.unit}"` : numberFormat;
         slide.addChart(chartType(pptx, element.kind), [{ name: resolved.unit || "数值", labels, values }], {
           ...position,
           ...(element.kind === "column" || element.kind === "bar"
@@ -371,31 +398,59 @@ export async function buildPptx(
         };
         const alignsRight = (column: number) => tableColumnAlignsRight(resolved.rows, column);
         const headerBold = element.style.headerBold ?? true;
-        const header = resolved.header.map((cell, index) => ({
-          text: cell,
-          options: {
-            bold: headerBold,
-            color: color(element.style.headerTextColor),
-            fill: { color: color(element.style.headerFill) },
-            align: alignsRight(index) ? ("right" as const) : ("left" as const),
-            border,
-          },
-        }));
+        // PptxGenJS expects the covered cells to be absent from the row and the
+        // top-left cell to carry colspan/rowspan; keeping the covered cells
+        // would make it allocate extra columns.
+        const mergeStarts = new Map<string, { rowSpan: number; columnSpan: number }>();
+        const covered = new Set<string>();
+        for (const merge of resolved.merges) {
+          mergeStarts.set(`${merge.section}:${merge.row}:${merge.column}`, merge);
+          for (let row = merge.row; row < merge.row + merge.rowSpan; row += 1) {
+            for (let column = merge.column; column < merge.column + merge.columnSpan; column += 1) {
+              if (row === merge.row && column === merge.column) continue;
+              covered.add(`${merge.section}:${row}:${column}`);
+            }
+          }
+        }
+        const header = resolved.header.flatMap((cell, index) => {
+          if (covered.has(`header:0:${index}`)) return [];
+          const merge = mergeStarts.get(`header:0:${index}`);
+          return [
+            {
+              text: cell,
+              options: {
+                bold: headerBold,
+                color: color(element.style.headerTextColor),
+                fill: { color: color(element.style.headerFill) },
+                align: alignsRight(index) ? ("right" as const) : ("left" as const),
+                border,
+                ...(merge ? { colspan: merge.columnSpan, rowspan: merge.rowSpan } : {}),
+              },
+            },
+          ];
+        });
         const body = resolved.rows.map((row, rowIndex) => {
           const cells = row.slice(0, columnCount);
           while (cells.length < columnCount) cells.push("");
-          return cells.map((cell, cellIndex) => ({
-            text: cell,
-            options: {
-              color: color(element.style.bodyTextColor),
-              bold: element.style.firstColumnBold && cellIndex === 0,
-              ...(rowIndex % 2 === 1 && element.style.bandingFill
-                ? { fill: { color: color(element.style.bandingFill) } }
-                : {}),
-              align: alignsRight(cellIndex) ? ("right" as const) : ("left" as const),
-              border,
-            },
-          }));
+          return cells.flatMap((cell, cellIndex) => {
+            if (covered.has(`body:${rowIndex}:${cellIndex}`)) return [];
+            const merge = mergeStarts.get(`body:${rowIndex}:${cellIndex}`);
+            return [
+              {
+                text: cell,
+                options: {
+                  color: color(element.style.bodyTextColor),
+                  bold: element.style.firstColumnBold && cellIndex === 0,
+                  ...(rowIndex % 2 === 1 && element.style.bandingFill
+                    ? { fill: { color: color(element.style.bandingFill) } }
+                    : {}),
+                  align: alignsRight(cellIndex) ? ("right" as const) : ("left" as const),
+                  border,
+                  ...(merge ? { colspan: merge.columnSpan, rowspan: merge.rowSpan } : {}),
+                },
+              },
+            ];
+          });
         });
         const rows = [header, ...body];
         // The rows fill the frame exactly; a fixed 0.2–0.6in clamp made a
@@ -403,6 +458,7 @@ export async function buildPptx(
         const rowHeight = position.h / rows.length;
         slide.addTable(rows, {
           ...position,
+          objectName: element.id,
           h: position.h,
           rowH: rowHeight,
           fontFace: element.style.fontFamily,
@@ -425,11 +481,17 @@ export async function buildPptx(
         const strokeWidthPt = ((element.style.strokeWidth ?? 2) * position.w * 72) / ICON_GRID;
         slide.addShape(CUSTOM_GEOMETRY, {
           ...position,
+          objectName: element.id,
           line: { color: color(element.style.color), width: strokeWidthPt },
           points: iconOutline(element.name, position.w, position.h),
         });
       } else {
-        slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });
+        slide.addImage({
+          data: element.source.dataUrl,
+          ...position,
+          objectName: element.id,
+          altText: element.altText,
+        });
         slideCrops.push(element.crop);
         if (element.crop) croppedImageCount += 1;
       }
@@ -449,8 +511,18 @@ export async function buildPptx(
   // when they are not possible: a failure there must not cost the deck its
   // fonts and its masters.
   const entries = unzipSync(written);
-  const themeApplied = theme?.colors.length ? patchThemeColors(entries, theme.colors) : false;
+  const themeApplied = themeSlots.length > 0 ? patchThemeColors(entries, themeSlots) : false;
   normalizePackagePartNames(entries);
+  // After the scheme carries the deck palette, objects painted with an exact
+  // slot value can point at the slot instead of at a literal color. That is
+  // what lets a later theme edit in PowerPoint recolor the deck.
+  const themeColorReferences = themeSlots.length > 0 ? linkThemeColors(entries, themeSlots) : 0;
+  const nativeTransitionCount = patchSlideTransitions(entries, document.slides);
+  const animationResult = patchSlideAnimations(entries, document.slides);
+  const animationWarnings =
+    animationResult.skipped > 0 && !issues.some((issue) => issue.code === "animation-not-exported")
+      ? [`${animationResult.skipped} 个动画缺少原生目标或效果不支持，未写入 PPTX`]
+      : [];
   const _cropsApplied = patchImageCrops(entries, cropsBySlide);
   const bytes = zipSync(entries, { level: 6 });
   const packageValidation = validatePptxPackage(bytes);
@@ -468,8 +540,12 @@ export async function buildPptx(
       nativeTableCount,
       masters: [...masters.values()].map((plan) => plan.title),
       ...(theme ? { themeFonts: { major: theme.majorFont, minor: theme.minorFont } } : {}),
-      themeColors: themeApplied ? theme!.colors.map((slot) => slot.name) : [],
-      warnings: issues.map((issue) => issue.message),
+      themeColors: themeApplied ? themeSlots.map((slot) => slot.name) : [],
+      themeColorReferences,
+      nativeTransitionCount,
+      nativeAnimationCount: animationResult.written,
+      nativeAnimationSkipped: animationResult.skipped,
+      warnings: [...issues.map((issue) => issue.message), ...animationWarnings],
       issues,
       package: packageValidation,
     },

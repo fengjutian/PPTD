@@ -3,7 +3,7 @@ import { phaseForEffect } from "./animation";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 
-export const CURRENT_SCHEMA_VERSION = 17 as const;
+export const CURRENT_SCHEMA_VERSION = 19 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -60,7 +60,19 @@ const textElement = base.extend({
 
 const shapeElement = base.extend({
   type: z.literal("shape"),
-  shape: z.enum(["rectangle", "ellipse"]),
+  shape: z.enum([
+    "rectangle",
+    "ellipse",
+    "triangle",
+    "diamond",
+    "pentagon",
+    "hexagon",
+    "chevron",
+    "arrow",
+    "star",
+    "parallelogram",
+    "trapezoid",
+  ]),
   style: z.object({
     fill: z.string(),
     stroke: z.string(),
@@ -238,6 +250,18 @@ const contentBlockSchema = z.discriminatedUnion("type", [
       .array(z.array(z.string().max(500)).min(1).max(TABLE_MAX_COLUMNS))
       .min(1)
       .max(TABLE_MAX_ROWS),
+    merges: z
+      .array(
+        z.object({
+          section: z.enum(["header", "body"]),
+          row: z.number().int().nonnegative(),
+          column: z.number().int().nonnegative(),
+          rowSpan: z.number().int().min(1).max(TABLE_MAX_ROWS),
+          columnSpan: z.number().int().min(1).max(TABLE_MAX_COLUMNS),
+        }),
+      )
+      .max(200)
+      .optional(),
   }),
 ]);
 
@@ -295,6 +319,13 @@ const slideSchema = z.object({
       }),
     )
     .max(500)
+    .optional(),
+  transition: z
+    .object({
+      kind: z.enum(["fade", "push", "wipe", "split"]),
+      speed: z.enum(["fast", "medium", "slow"]),
+      direction: z.enum(["left", "right", "up", "down"]).optional(),
+    })
     .optional(),
   groups: z
     .array(
@@ -419,8 +450,57 @@ function validateLayoutReferences(document: DocumentShape, context: z.Refinement
   }
 }
 
+function validateTableMerges(document: DocumentShape, context: z.RefinementCtx): void {
+  document.slides.forEach((slide, slideIndex) => {
+    (slide.content.blocks ?? []).forEach((block, blockIndex) => {
+      if (block.type !== "table-data" || !block.merges?.length) return;
+      const covered = new Set<string>();
+      const path = ["slides", slideIndex, "content", "blocks", blockIndex, "merges"];
+      for (const merge of block.merges) {
+        const rowCount = merge.section === "header" ? 1 : block.rows.length;
+        if (merge.row >= rowCount || merge.column >= block.header.length) {
+          context.addIssue({ code: z.ZodIssueCode.custom, path, message: "TABLE_MERGE_OUT_OF_RANGE" });
+          continue;
+        }
+        if (merge.section === "header" && merge.rowSpan !== 1) {
+          // A merge that crosses the header/body boundary has no stable
+          // section; the importer reports it and keeps the header one row.
+          context.addIssue({ code: z.ZodIssueCode.custom, path, message: "TABLE_MERGE_HEADER_ROWSPAN" });
+          continue;
+        }
+        if (merge.column + merge.columnSpan > block.header.length || merge.row + merge.rowSpan > rowCount) {
+          context.addIssue({ code: z.ZodIssueCode.custom, path, message: "TABLE_MERGE_OUT_OF_RANGE" });
+          continue;
+        }
+        let overlapping = false;
+        for (let row = merge.row; row < merge.row + merge.rowSpan; row += 1) {
+          for (let column = merge.column; column < merge.column + merge.columnSpan; column += 1) {
+            const key = `${merge.section}:${row}:${column}`;
+            if (covered.has(key)) overlapping = true;
+            covered.add(key);
+          }
+        }
+        if (overlapping) {
+          context.addIssue({ code: z.ZodIssueCode.custom, path, message: "TABLE_MERGE_OVERLAP" });
+        }
+      }
+    });
+  });
+}
+
 export const presentationDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(CURRENT_SCHEMA_VERSION) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences)
+  .superRefine(validateTableMerges);
+
+const versionEighteenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(18) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionSeventeenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(17) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
@@ -552,6 +632,14 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 17 adds editor-side selection groups. A version 16 document has no
   // groups, so every page keeps its objects and simply has no grouping.
   16: (document) => ({ ...versionSixteenDocumentSchema.parse(document), schemaVersion: 17 }),
+  // Version 18 adds a design-only page transition. The field is optional, so a
+  // version 17 document keeps every page and simply has no transition.
+  17: (document) => ({ ...versionSeventeenDocumentSchema.parse(document), schemaVersion: 18 }),
+  // Version 19 widens the shape enum to the preset geometries and adds the
+  // optional merges of a table block. Older documents only contain
+  // rectangle/ellipse and unmerged tables, which are still valid, so nothing
+  // has to be rewritten.
+  18: (document) => ({ ...versionEighteenDocumentSchema.parse(document), schemaVersion: 19 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

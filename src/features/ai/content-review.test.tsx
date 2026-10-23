@@ -778,9 +778,7 @@ describe("核实标记", () => {
       { blockIndex: 0, kind: "number", status: "unverified" },
       { blockIndex: undefined, kind: "fact", status: "verified" },
     ]);
-    expect(remapChecks(checks, () => undefined)).toEqual([
-      { blockIndex: undefined, kind: "fact", status: "verified" },
-    ]);
+    expect(remapChecks(checks, () => undefined)).toEqual([{ blockIndex: undefined, kind: "fact", status: "verified" }]);
   });
 
   it("待核实作为非阻塞提醒出现在问题清单里", () => {
@@ -788,7 +786,9 @@ describe("核实标记", () => {
     const checked: AiDraft = {
       ...draft,
       slides: draft.slides.map((slide, index) =>
-        index === 0 ? { ...slide, checks: [{ blockIndex: 0, kind: "number" as const, status: "unverified" as const }] } : slide,
+        index === 0
+          ? { ...slide, checks: [{ blockIndex: 0, kind: "number" as const, status: "unverified" as const }] }
+          : slide,
       ),
     };
 
@@ -814,6 +814,8 @@ describe("核实标记", () => {
 
     expect(markup).toContain("数字 · 待核实");
     expect(markup).toContain("1 处待核实");
-    expect(markup).toContain("标记第 1 页的要点列表待核实");
+    expect(markup).toContain("删除第 1 页的要点列表核实标记");
+    // 没有标记的块提供添加入口。
+    expect(renderReview(draft)).toContain("标记第 1 页的要点列表待核实");
   });
 });

@@ -24,6 +24,54 @@ describe("set-page-size", () => {
     expect(commandDomain({ type: "set-page-size", pageSize: pageSizeFromInches(10, 7.5)! })).toBe("design");
   });
 
+  it("scales frames, type and strokes only when the caller opts in", () => {
+    const source = createDocument();
+    const title = source.slides[0]!.elements[0]!;
+    if (title.type !== "text") throw new Error("expected text");
+    title.style.fontSizePt = 28;
+    title.style.letterSpacingPt = 1;
+    const contentBefore = JSON.stringify(source.slides[0]!.content);
+    const target = pageSizeFromInches(10, 7.5)!;
+    const scaleX = target.width / source.pageSize.width;
+    const scaleY = target.height / source.pageSize.height;
+    const typeScale = Math.min(scaleX, scaleY);
+
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "set-page-size", pageSize: target, scaleObjects: true }),
+    );
+    const scaled = result.slides[0]!.elements[0]!;
+    expect(scaled.frame.x).toBe(emu(Math.round(inches(0.75) * scaleX)));
+    expect(scaled.frame.y).toBe(emu(Math.round(inches(0.65) * scaleY)));
+    expect(scaled.frame.width).toBe(emu(Math.round(inches(7.5) * scaleX)));
+    expect(scaled.frame.height).toBe(emu(Math.round(inches(0.8) * scaleY)));
+    expect(scaled.type === "text" ? scaled.style.fontSizePt : 0).toBeCloseTo(28 * typeScale, 2);
+    expect(scaled.type === "text" ? scaled.style.letterSpacingPt : 0).toBeCloseTo(1 * typeScale, 2);
+    expect(JSON.stringify(result.slides[0]!.content)).toBe(contentBefore);
+    expect(commandDomain({ type: "set-page-size", pageSize: target, scaleObjects: true })).toBe("design");
+  });
+
+  it("scales table typography with the page but leaves the cells alone", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    applyCommand(source, { type: "add-table", slideId: slide.id, columns: 2, rows: 1 });
+    const table = slide.elements.find((element) => element.type === "table");
+    if (table?.type !== "table") throw new Error("expected table");
+    table.style.fontSizePt = 14;
+    const block = slide.content.blocks!.find((candidate) => candidate.id === table.contentBlockId);
+    if (block?.type !== "table-data") throw new Error("expected table block");
+    block.header[0] = "原样保留";
+    const contentBefore = JSON.stringify(slide.content);
+
+    const target = pageSizeFromInches(10, 7.5)!;
+    const typeScale = Math.min(target.width / source.pageSize.width, target.height / source.pageSize.height);
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "set-page-size", pageSize: target, scaleObjects: true }),
+    );
+    const scaled = result.slides[0]!.elements.find((element) => element.type === "table");
+    expect(scaled?.type === "table" ? scaled.style.fontSizePt : 0).toBeCloseTo(14 * typeScale, 2);
+    expect(JSON.stringify(result.slides[0]!.content)).toBe(contentBefore);
+  });
+
   it("rejects sizes PowerPoint could not open", () => {
     const source = createDocument();
     for (const pageSize of [

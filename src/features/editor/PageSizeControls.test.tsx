@@ -16,6 +16,7 @@ describe("page size controls", () => {
     expect(markup).toContain('aria-pressed="true"');
     expect(markup).toContain("13.33");
     expect(markup).toContain("7.5");
+    expect(markup).toContain("缩放对象");
   });
 
   it("counts objects that no longer fit the page", () => {

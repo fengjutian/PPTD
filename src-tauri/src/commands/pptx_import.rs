@@ -223,6 +223,7 @@ pub enum ImportedElement {
         rotation_milli_degree: i64,
         header: Vec<String>,
         rows: Vec<Vec<String>>,
+        merges: Vec<ImportedTableMerge>,
     },
     Chart {
         frame: ImportedFrame,
@@ -234,6 +235,16 @@ pub enum ImportedElement {
         show_legend: bool,
         show_values: bool,
     },
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedTableMerge {
+    pub section: String,
+    pub row: usize,
+    pub column: usize,
+    pub row_span: usize,
+    pub column_span: usize,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -346,6 +357,7 @@ pub async fn import_pptx_content(
     cancellation: State<'_, ImportCancellation>,
     path: String,
     request_id: String,
+    source_format: Option<String>,
 ) -> Result<ImportedDeck, String> {
     let cancellation = cancellation.inner().clone();
     let session_registry = cancellation.clone();
@@ -356,7 +368,18 @@ pub async fn import_pptx_content(
             request_id: session_id,
             cancellation: session_registry,
         };
-        import_sync(Path::new(&path), Some(&session))
+        let mut deck = import_sync(Path::new(&path), Some(&session))?;
+        // A `.ppt` is converted to a temporary `.pptx` before parsing. The
+        // report must say that the user opened the legacy format, not hide the
+        // conversion behind a file that happens to be called `.pptx` here.
+        if source_format.as_deref() == Some("ppt") {
+            deck.report.format = "ppt".into();
+            deck.report.warnings.push(
+                "旧版 .ppt 已通过本机 PowerPoint 转换为 .pptx 后导入；转换失败时不会回退到其他转换器"
+                    .into(),
+            );
+        }
+        Ok::<ImportedDeck, String>(deck)
     })
     .await;
     cancellation.release(&request_id);
@@ -430,6 +453,7 @@ fn import_sync(source: &Path, session: Option<&ImportSession>) -> Result<Importe
             &mut media_cache,
             &theme,
             &mut report,
+            session,
         )?;
         slides.push(slide);
         if let Some(session) = session {
@@ -681,8 +705,38 @@ fn resolve_target(part: &str, target: &str) -> String {
     components.join("/")
 }
 
+/// Finds the theme part through the slide master that references it.
+///
+/// `ppt/theme/theme1.xml` is the conventional location, but the relationship
+/// is the authority: a template may carry several themes and number them in
+/// any order. Reading the master's `.rels` avoids importing the wrong palette
+/// from a file whose first theme belongs to a different master.
+fn theme_part_path(archive: &mut ZipArchive<File>) -> Option<String> {
+    let presentation_rels = read_relationships(archive, "ppt/presentation.xml");
+    let mut masters: Vec<String> = presentation_rels
+        .values()
+        .filter(|rel| !rel.external && rel.kind.ends_with("/slideMaster"))
+        .map(|rel| resolve_target("ppt/presentation.xml", &rel.target))
+        .collect();
+    // The first master is the deck's primary theme; sorting keeps the choice
+    // stable regardless of how the relationship map happens to iterate.
+    masters.sort();
+    for master in masters {
+        let rels = read_relationships(archive, &master);
+        if let Some(theme) = rels
+            .values()
+            .find(|rel| !rel.external && rel.kind.ends_with("/theme"))
+        {
+            return Some(resolve_target(&master, &theme.target));
+        }
+    }
+    None
+}
+
 fn read_theme(archive: &mut ZipArchive<File>) -> Option<ImportedTheme> {
-    let xml = read_xml(archive, "ppt/theme/theme1.xml").ok().flatten()?;
+    let xml = theme_part_path(archive)
+        .and_then(|path| read_xml(archive, &path).ok().flatten())
+        .or_else(|| read_xml(archive, "ppt/theme/theme1.xml").ok().flatten())?;
     let document = Document::parse(&xml).ok()?;
     let root = document.root_element();
     let mut theme = ImportedTheme::default();
@@ -748,13 +802,43 @@ fn parse_color(node: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option<Stri
     None
 }
 
+/// A 2D affine transform of the group's child coordinate space.
+///
+/// Rotation is part of the matrix rather than a separate flag: a group can be
+/// rotated, scaled and nested, and composing two "scale then translate" pairs
+/// cannot express a rotated child. The matrix also keeps the child's centre
+/// correct, which is what makes a rotated group look like one object.
 #[derive(Clone, Copy)]
 struct GroupTransform {
-    scale_x: f64,
-    scale_y: f64,
-    translate_x: f64,
-    translate_y: f64,
-    rotated: bool,
+    a: f64,
+    b: f64,
+    c: f64,
+    d: f64,
+    e: f64,
+    f: f64,
+    /// Rotation in the document's milli-degree unit (1/1000 degree).
+    rotation_milli_degree: i64,
+    /// The model has no flip flag, so a flipped group is reported, not faked.
+    flipped: bool,
+}
+
+impl GroupTransform {
+    fn apply(&self, x: f64, y: f64) -> (f64, f64) {
+        (
+            self.a * x + self.c * y + self.e,
+            self.b * x + self.d * y + self.f,
+        )
+    }
+
+    /// Length of the transformed x axis, used for width and type scaling.
+    fn scale_x(&self) -> f64 {
+        self.a.hypot(self.b)
+    }
+
+    /// Length of the transformed y axis, used for height and type scaling.
+    fn scale_y(&self) -> f64 {
+        self.c.hypot(self.d)
+    }
 }
 
 fn group_transform(group: Node<'_, '_>) -> Option<GroupTransform> {
@@ -775,39 +859,96 @@ fn group_transform(group: Node<'_, '_>) -> Option<GroupTransform> {
     if child_width.abs() < 1.0 || child_height.abs() < 1.0 {
         return None;
     }
-    let scale_x = width / child_width;
-    let scale_y = height / child_height;
+    let flip_h = transform.attribute("flipH") == Some("1");
+    let flip_v = transform.attribute("flipV") == Some("1");
+    // The sign flip mirrors around the child centre; the rotation below then
+    // applies to the mirrored geometry, in the same order as DrawingML.
+    let scale_x = width / child_width * if flip_h { -1.0 } else { 1.0 };
+    let scale_y = height / child_height * if flip_v { -1.0 } else { 1.0 };
+    let rotation = parse_i64(transform, "rot").unwrap_or(0);
+    let theta = (rotation as f64 / 60_000.0).to_radians();
+    let (sin, cos) = theta.sin_cos();
+    let center_x = child_x + child_width / 2.0;
+    let center_y = child_y + child_height / 2.0;
+    let group_center_x = x + width / 2.0;
+    let group_center_y = y + height / 2.0;
+    let a = cos * scale_x;
+    let b = sin * scale_x;
+    let c = -sin * scale_y;
+    let d = cos * scale_y;
     Some(GroupTransform {
-        scale_x,
-        scale_y,
-        translate_x: x - child_x * scale_x,
-        translate_y: y - child_y * scale_y,
-        rotated: parse_i64(transform, "rot").unwrap_or(0) != 0
-            || transform.attribute("flipH") == Some("1")
-            || transform.attribute("flipV") == Some("1"),
+        a,
+        b,
+        c,
+        d,
+        e: group_center_x - (a * center_x + c * center_y),
+        f: group_center_y - (b * center_x + d * center_y),
+        rotation_milli_degree: rotation / 60,
+        flipped: flip_h || flip_v,
     })
 }
 
 fn apply_group_transform(element: &mut ImportedElement, transform: GroupTransform) {
-    let scale_x = transform.scale_x.abs().max(0.01);
-    let scale_y = transform.scale_y.abs().max(0.01);
-    let frame = match element {
-        ImportedElement::Text { frame, style, .. } => {
+    let type_scale = transform.scale_x().min(transform.scale_y()).max(0.01);
+    let (frame, rotation) = match element {
+        ImportedElement::Text {
+            frame,
+            rotation_milli_degree,
+            style,
+            ..
+        } => {
             // Group scaling also scales the type; keeping the original point size
             // would make text spill out of a shrunk group.
-            style.font_size_pt = (style.font_size_pt * scale_x.min(scale_y)).clamp(1.0, 400.0);
-            frame
+            style.font_size_pt = (style.font_size_pt * type_scale).clamp(1.0, 400.0);
+            (frame, rotation_milli_degree)
         }
-        ImportedElement::Image { frame, .. }
-        | ImportedElement::Shape { frame, .. }
-        | ImportedElement::Line { frame, .. }
-        | ImportedElement::Table { frame, .. }
-        | ImportedElement::Chart { frame, .. } => frame,
+        ImportedElement::Image {
+            frame,
+            rotation_milli_degree,
+            ..
+        }
+        | ImportedElement::Table {
+            frame,
+            rotation_milli_degree,
+            ..
+        }
+        | ImportedElement::Chart {
+            frame,
+            rotation_milli_degree,
+            ..
+        } => (frame, rotation_milli_degree),
+        ImportedElement::Shape {
+            frame,
+            rotation_milli_degree,
+            stroke_width_pt,
+            radius_pt,
+            ..
+        } => {
+            *stroke_width_pt = (*stroke_width_pt * type_scale).max(0.0);
+            *radius_pt = (*radius_pt * type_scale).max(0.0);
+            (frame, rotation_milli_degree)
+        }
+        ImportedElement::Line {
+            frame,
+            rotation_milli_degree,
+            stroke_width_pt,
+            ..
+        } => {
+            *stroke_width_pt = (*stroke_width_pt * type_scale).max(0.0);
+            (frame, rotation_milli_degree)
+        }
     };
-    frame.x = (frame.x as f64 * transform.scale_x + transform.translate_x).round() as i64;
-    frame.y = (frame.y as f64 * transform.scale_y + transform.translate_y).round() as i64;
-    frame.width = ((frame.width as f64 * scale_x).round() as i64).max(1);
-    frame.height = ((frame.height as f64 * scale_y).round() as i64).max(1);
+    let center_x = frame.x as f64 + frame.width as f64 / 2.0;
+    let center_y = frame.y as f64 + frame.height as f64 / 2.0;
+    let (next_center_x, next_center_y) = transform.apply(center_x, center_y);
+    let width = (frame.width as f64 * transform.scale_x()).abs().max(1.0);
+    let height = (frame.height as f64 * transform.scale_y()).abs().max(1.0);
+    frame.width = width.round() as i64;
+    frame.height = height.round() as i64;
+    frame.x = (next_center_x - width / 2.0).round() as i64;
+    frame.y = (next_center_y - height / 2.0).round() as i64;
+    // The group's rotation composes with the child's own rotation.
+    *rotation += transform.rotation_milli_degree;
 }
 
 fn parse_frame(shape: Node<'_, '_>) -> Option<ImportedFrame> {
@@ -900,6 +1041,10 @@ fn collect_placeholder_frames(xml: &str, frames: &mut HashMap<PlaceholderKey, Im
     }
 }
 
+// The parser needs the archive, the shared report, the media cache, the theme
+// and the cancellation session. Bundling them in a temporary struct would only
+// move the same borrows behind a name, so the explicit parameters are clearer.
+#[allow(clippy::too_many_arguments)]
 fn parse_slide(
     index: usize,
     xml: &str,
@@ -908,6 +1053,7 @@ fn parse_slide(
     media_cache: &mut HashMap<String, (String, String)>,
     theme: &Option<ImportedTheme>,
     report: &mut DeckReport,
+    session: Option<&ImportSession>,
 ) -> Result<ImportedSlide, String> {
     let document = Document::parse(xml).map_err(|_| "PPTX_SLIDE_XML_INVALID")?;
     let rels = read_relationships(archive, part);
@@ -934,6 +1080,12 @@ fn parse_slide(
     };
 
     for node in tree.children().filter(Node::is_element) {
+        // Checking inside the page, not only between pages, makes "cancel"
+        // responsive on a slide with hundreds of objects or large pictures.
+        // The check is cheap relative to parsing a shape or decoding media.
+        if let Some(session) = session {
+            session.check()?;
+        }
         if slide.elements.len() >= MAX_ELEMENTS_PER_SLIDE {
             report.unsupported(index, "slide", "单页对象超过上限");
             break;
@@ -964,48 +1116,16 @@ fn parse_slide(
                 }
             }
             "grpSp" => {
-                let transform = group_transform(node);
-                if transform.map(|value| value.rotated).unwrap_or(false) {
-                    report.unsupported(index, "group-rotation", "组合旋转/翻转未保留");
-                }
                 let start = slide.elements.len();
-                for child_node in node.children().filter(Node::is_element) {
-                    if slide.elements.len() >= MAX_ELEMENTS_PER_SLIDE {
-                        report.unsupported(index, "slide", "单页对象超过上限");
-                        break;
-                    }
-                    let element = match child_node.tag_name().name() {
-                        "sp" => parse_shape(index, child_node, &layout_frames, theme, report),
-                        "pic" => parse_picture(
-                            index,
-                            child_node,
-                            part,
-                            &rels,
-                            archive,
-                            media_cache,
-                            report,
-                        )?,
-                        "graphicFrame" => {
-                            parse_graphic_frame(index, child_node, part, &rels, archive, report)
-                        }
-                        "cxnSp" => parse_connector(child_node, &layout_frames, theme),
-                        "grpSp" => {
-                            report.unsupported(index, "group-nested", "嵌套组合未导入");
-                            None
-                        }
-                        "nvGrpSpPr" | "grpSpPr" | "extLst" => None,
-                        other => {
-                            report.unsupported(index, other, "组合内未支持的对象类型");
-                            None
-                        }
-                    };
-                    if let Some(mut element) = element {
-                        if let Some(transform) = transform {
-                            apply_group_transform(&mut element, transform);
-                        }
-                        push_element(&mut slide, element, report);
-                    }
-                }
+                let parser = GroupParser {
+                    index,
+                    part,
+                    rels: &rels,
+                    layout_frames: &layout_frames,
+                    theme,
+                    session,
+                };
+                parser.parse_children(node, None, &mut slide, archive, media_cache, report)?;
                 if slide.elements.len().saturating_sub(start) >= 2 {
                     slide.groups.push((start..slide.elements.len()).collect());
                 }
@@ -1019,6 +1139,120 @@ fn parse_slide(
         slide.speaker_notes = notes;
     }
     Ok(slide)
+}
+
+fn compose_transforms(
+    parent: Option<GroupTransform>,
+    child: Option<GroupTransform>,
+) -> Option<GroupTransform> {
+    match (parent, child) {
+        (None, None) => None,
+        (Some(parent), None) => Some(parent),
+        (None, Some(child)) => Some(child),
+        (Some(parent), Some(child)) => Some(GroupTransform {
+            // Parent ∘ child: the child maps into the parent's child space,
+            // then the parent maps that space onto the page.
+            a: parent.a * child.a + parent.c * child.b,
+            c: parent.a * child.c + parent.c * child.d,
+            e: parent.a * child.e + parent.c * child.f + parent.e,
+            b: parent.b * child.a + parent.d * child.b,
+            d: parent.b * child.c + parent.d * child.d,
+            f: parent.b * child.e + parent.d * child.f + parent.f,
+            rotation_milli_degree: parent.rotation_milli_degree + child.rotation_milli_degree,
+            flipped: parent.flipped || child.flipped,
+        }),
+    }
+}
+
+struct GroupParser<'a> {
+    index: usize,
+    part: &'a str,
+    rels: &'a HashMap<String, Rel>,
+    layout_frames: &'a HashMap<PlaceholderKey, ImportedFrame>,
+    theme: &'a Option<ImportedTheme>,
+    session: Option<&'a ImportSession>,
+}
+
+impl GroupParser<'_> {
+    fn parse_children(
+        &self,
+        group: Node<'_, '_>,
+        parent: Option<GroupTransform>,
+        slide: &mut ImportedSlide,
+        archive: &mut ZipArchive<File>,
+        media_cache: &mut HashMap<String, (String, String)>,
+        report: &mut DeckReport,
+    ) -> Result<(), String> {
+        let own = group_transform(group);
+        let transform = compose_transforms(parent, own);
+        if transform
+            .map(|transform| transform.flipped)
+            .unwrap_or(false)
+        {
+            // A flip cannot be expressed by the element model: mirroring a text
+            // box would also mirror its glyphs. The geometry still follows the
+            // group, but the mirror is not silently turned into a rotation.
+            report.unsupported(
+                self.index,
+                "group-flip",
+                "组合翻转未保留，成员按未翻转几何导入",
+            );
+        }
+        for child_node in group.children().filter(Node::is_element) {
+            if let Some(session) = self.session {
+                session.check()?;
+            }
+            if slide.elements.len() >= MAX_ELEMENTS_PER_SLIDE {
+                report.unsupported(self.index, "slide", "单页对象超过上限");
+                break;
+            }
+            let element = match child_node.tag_name().name() {
+                "sp" => parse_shape(
+                    self.index,
+                    child_node,
+                    self.layout_frames,
+                    self.theme,
+                    report,
+                ),
+                "pic" => parse_picture(
+                    self.index,
+                    child_node,
+                    self.part,
+                    self.rels,
+                    archive,
+                    media_cache,
+                    report,
+                )?,
+                "graphicFrame" => parse_graphic_frame(
+                    self.index, child_node, self.part, self.rels, archive, report,
+                ),
+                "cxnSp" => parse_connector(child_node, self.layout_frames, self.theme),
+                "grpSp" => {
+                    self.parse_children(
+                        child_node,
+                        transform,
+                        slide,
+                        archive,
+                        media_cache,
+                        report,
+                    )?;
+                    None
+                }
+                "nvGrpSpPr" | "grpSpPr" | "extLst" => None,
+                other => {
+                    report.unsupported(self.index, other, "组合内未支持的对象类型");
+                    None
+                }
+            };
+            if let Some(mut element) = element {
+                if let Some(transform) = transform {
+                    apply_group_transform(&mut element, transform);
+                }
+                push_element(slide, element, report);
+            }
+        }
+        Ok(())
+    }
 }
 
 fn push_element(slide: &mut ImportedSlide, element: ImportedElement, report: &mut DeckReport) {
@@ -1134,8 +1368,17 @@ fn parse_shape(
         .unwrap_or_else(|| "#FFFFFF".into());
     let shape_type = match preset {
         "ellipse" => "ellipse",
-        "roundRect" => "roundRect",
-        "rect" => "rectangle",
+        // A rounded rectangle is a rectangle with a radius, not a third kind.
+        "roundRect" | "rect" => "rectangle",
+        "triangle" | "rtTriangle" => "triangle",
+        "diamond" => "diamond",
+        "pentagon" => "pentagon",
+        "hexagon" => "hexagon",
+        "chevron" => "chevron",
+        "rightArrow" => "arrow",
+        "star5" => "star",
+        "parallelogram" => "parallelogram",
+        "trapezoid" | "nonIsoscelesTrapezoid" => "trapezoid",
         other => {
             report.warning(format!("第 {} 页形状 {other} 按矩形导入", index + 1));
             "rectangle"
@@ -1535,24 +1778,63 @@ fn parse_graphic_frame(
         report.unsupported(index, "table", "表格没有列");
         return None;
     }
-    let columns = declared_columns.min(8);
-    if declared_columns > 8 {
-        report.unsupported(index, "table-size", "表格超过 8 列，超出部分未导入");
+    let columns = declared_columns.min(12);
+    if declared_columns > 12 {
+        report.unsupported(index, "table-size", "表格超过 12 列，超出部分未导入");
     }
     let mut rows: Vec<Vec<String>> = Vec::new();
-    let mut merged = false;
+    let mut merges: Vec<ImportedTableMerge> = Vec::new();
     let mut truncated = false;
-    for row in table.children().filter(|node| node.has_tag_name("tr")) {
-        if rows.len() >= 31 {
+    for (row_index, row) in table
+        .children()
+        .filter(|node| node.has_tag_name("tr"))
+        .enumerate()
+    {
+        if rows.len() >= 51 {
             truncated = true;
             break;
         }
-        let mut cells = Vec::new();
+        let mut cells: Vec<String> = Vec::new();
+        let mut column = 0usize;
         for cell in row.children().filter(|node| node.has_tag_name("tc")) {
-            if cell.attribute("gridSpan").is_some() || cell.attribute("rowSpan").is_some() {
-                merged = true;
+            let column_span = cell
+                .attribute("gridSpan")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(1)
+                .clamp(1, columns);
+            let row_span = cell
+                .attribute("rowSpan")
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(1)
+                .clamp(1, 50);
+            let covered =
+                cell.attribute("hMerge") == Some("1") || cell.attribute("vMerge") == Some("1");
+            if covered {
+                // A covered cell carries no copy of its own; the top-left cell
+                // of the merge is the one the reviewer approved.
+                column += 1;
+                continue;
+            }
+            while cells.len() < column {
+                cells.push(String::new());
             }
             cells.push(truncate_chars(cell_text(cell), 500));
+            for _ in 1..column_span {
+                cells.push(String::new());
+            }
+            if column_span > 1 || row_span > 1 {
+                let section = if row_index == 0 { "header" } else { "body" };
+                // A merge cannot cross the one-row header in this model.
+                let row_span = if section == "header" { 1 } else { row_span };
+                merges.push(ImportedTableMerge {
+                    section: section.into(),
+                    row: row_index.saturating_sub(1),
+                    column,
+                    row_span,
+                    column_span,
+                });
+            }
+            column += column_span;
         }
         while cells.len() < columns {
             cells.push(String::new());
@@ -1560,11 +1842,8 @@ fn parse_graphic_frame(
         cells.truncate(columns);
         rows.push(cells);
     }
-    if merged {
-        report.unsupported(index, "table-merge", "合并单元格已按普通单元格导入");
-    }
     if truncated {
-        report.unsupported(index, "table-size", "表格超过 30 行，超出部分未导入");
+        report.unsupported(index, "table-size", "表格超过 50 行，超出部分未导入");
     }
     if rows.is_empty() {
         return None;
@@ -1584,12 +1863,13 @@ fn parse_graphic_frame(
     if rows.is_empty() {
         rows.push(vec![String::new(); columns]);
     }
-    rows.truncate(30);
+    rows.truncate(50);
     Some(ImportedElement::Table {
         frame,
         rotation_milli_degree: 0,
         header,
         rows,
+        merges,
     })
 }
 
@@ -1849,6 +2129,74 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reads_the_theme_referenced_by_the_slide_master() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("themed.pptx");
+        let presentation = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>"#;
+        let presentation_rels = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster2.xml"/>
+        </Relationships>"#;
+        let master = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>"#;
+        let master_rels = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme2.xml"/>
+        </Relationships>"#;
+        let theme = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Theme">
+            <a:themeElements>
+                <a:clrScheme name="Theme">
+                    <a:dk1><a:srgbClr val="111111"/></a:dk1>
+                    <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+                    <a:accent1><a:srgbClr val="AABBCC"/></a:accent1>
+                </a:clrScheme>
+                <a:fontScheme name="Theme">
+                    <a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont>
+                    <a:minorFont><a:latin typeface="Aptos"/></a:minorFont>
+                </a:fontScheme>
+            </a:themeElements>
+        </a:theme>"#;
+
+        let file = File::create(&path).expect("create");
+        let mut zip = zip::ZipWriter::new(file);
+        let options = SimpleFileOptions::default();
+        for (name, contents) in [
+            ("ppt/presentation.xml", presentation.as_bytes()),
+            (
+                "ppt/_rels/presentation.xml.rels",
+                presentation_rels.as_bytes(),
+            ),
+            ("ppt/slideMasters/slideMaster2.xml", master.as_bytes()),
+            (
+                "ppt/slideMasters/_rels/slideMaster2.xml.rels",
+                master_rels.as_bytes(),
+            ),
+            ("ppt/theme/theme2.xml", theme.as_bytes()),
+        ] {
+            zip.start_file(name, options).expect("start file");
+            zip.write_all(contents).expect("write file");
+        }
+        zip.finish().expect("finish");
+
+        let file = File::open(&path).expect("open");
+        let mut archive = ZipArchive::new(file).expect("archive");
+        let theme = read_theme(&mut archive).expect("theme");
+        assert_eq!(
+            theme
+                .colors
+                .iter()
+                .find(|color| color.name == "accent1")
+                .map(|color| color.value.as_str()),
+            Some("#AABBCC")
+        );
+    }
+
+    #[test]
     fn imports_a_minimal_level_a_deck() {
         use std::io::Write;
         use zip::write::SimpleFileOptions;
@@ -1933,10 +2281,10 @@ mod tests {
                             <c:idx val="0"/>
                             <c:spPr><a:solidFill><a:srgbClr val="3366CC"/></a:solidFill></c:spPr>
                             <c:dLbls><c:showVal val="1"/></c:dLbls>
-                            <c:cat><c:strRef><c:strCache>
-                                <c:pt idx="0"><c:v>一月</c:v></c:pt>
-                                <c:pt idx="1"><c:v>二月</c:v></c:pt>
-                            </c:strCache></c:strRef></c:cat>
+                            <c:cat><c:multiLvlStrRef><c:multiLvlStrCache>
+                                <c:lvl><c:pt idx="0"><c:v>一月</c:v></c:pt>
+                                <c:pt idx="1"><c:v>二月</c:v></c:pt></c:lvl>
+                            </c:multiLvlStrCache></c:multiLvlStrRef></c:cat>
                             <c:val><c:numRef><c:numCache>
                                 <c:pt idx="0"><c:v>12</c:v></c:pt>
                                 <c:pt idx="1"><c:v>18</c:v></c:pt>
@@ -2096,6 +2444,7 @@ mod tests {
             rotation_milli_degree: 0,
             header: vec!["a".into()],
             rows: vec![vec!["b".into()]],
+            merges: vec![],
         };
         let value = serde_json::to_value(table).expect("json");
         assert_eq!(value["type"], "table");
@@ -2160,6 +2509,136 @@ mod tests {
                 assert_eq!(frame.y, 2040);
                 assert_eq!(frame.width, 200);
                 assert_eq!(frame.height, 400);
+            }
+            _ => panic!("shape expected"),
+        }
+    }
+
+    #[test]
+    fn composes_nested_group_transforms() {
+        let transform = compose_transforms(
+            Some(GroupTransform {
+                a: 2.0,
+                b: 0.0,
+                c: 0.0,
+                d: 2.0,
+                e: 1000.0,
+                f: 2000.0,
+                rotation_milli_degree: 0,
+                flipped: false,
+            }),
+            Some(GroupTransform {
+                a: 1.0,
+                b: 0.0,
+                c: 0.0,
+                d: 1.0,
+                e: 100.0,
+                f: 100.0,
+                rotation_milli_degree: 0,
+                flipped: false,
+            }),
+        )
+        .expect("composed");
+        let mut element = ImportedElement::Shape {
+            frame: ImportedFrame {
+                x: 10,
+                y: 10,
+                width: 100,
+                height: 200,
+            },
+            rotation_milli_degree: 0,
+            shape: "rectangle".into(),
+            fill: "#FFFFFF".into(),
+            stroke: "#000000".into(),
+            stroke_width_pt: 1.0,
+            radius_pt: 0.0,
+        };
+        apply_group_transform(&mut element, transform);
+        match element {
+            ImportedElement::Shape { frame, .. } => {
+                assert_eq!(frame.x, 1220);
+                assert_eq!(frame.y, 2220);
+                assert_eq!(frame.width, 200);
+                assert_eq!(frame.height, 400);
+            }
+            _ => panic!("shape expected"),
+        }
+    }
+
+    #[test]
+    fn keeps_a_preset_shape_instead_of_degrading_it_to_a_rectangle() {
+        let xml = r#"
+            <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <p:spPr>
+                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></a:xfrm>
+                    <a:prstGeom prst="triangle"/>
+                </p:spPr>
+            </p:sp>
+        "#;
+        let document = Document::parse(xml).expect("xml");
+        let mut report = DeckReport::default();
+        let element = parse_shape(
+            0,
+            document.root_element(),
+            &HashMap::new(),
+            &Option::<ImportedTheme>::None,
+            &mut report,
+        )
+        .expect("shape");
+        match element {
+            ImportedElement::Shape { shape, .. } => assert_eq!(shape, "triangle"),
+            _ => panic!("shape expected"),
+        }
+        assert!(report.warnings.is_empty());
+    }
+
+    #[test]
+    fn keeps_a_rotated_group_as_a_rotated_child() {
+        let xml = r#"
+            <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <p:grpSpPr>
+                    <a:xfrm rot="5400000">
+                        <a:off x="1000" y="2000"/><a:ext cx="200" cy="200"/>
+                        <a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/>
+                    </a:xfrm>
+                </p:grpSpPr>
+            </p:grpSp>
+        "#;
+        let document = Document::parse(xml).expect("xml");
+        let transform = group_transform(document.root_element()).expect("transform");
+        assert_eq!(transform.rotation_milli_degree, 90_000);
+        let mut element = ImportedElement::Shape {
+            frame: ImportedFrame {
+                x: 0,
+                y: 0,
+                width: 20,
+                height: 20,
+            },
+            rotation_milli_degree: 0,
+            shape: "rectangle".into(),
+            fill: "#FFFFFF".into(),
+            stroke: "#000000".into(),
+            stroke_width_pt: 1.0,
+            radius_pt: 0.0,
+        };
+        apply_group_transform(&mut element, transform);
+        match element {
+            ImportedElement::Shape {
+                frame,
+                rotation_milli_degree,
+                ..
+            } => {
+                // The child centre (10,10) is offset (-40,-40) from the child
+                // space centre (50,50). After scaling by 2 and rotating 90°
+                // clockwise the offset becomes (80,-80), so the frame moves
+                // around the group centre (1100,2100) to (1180,2020).
+                assert_eq!(frame.x, 1160);
+                assert_eq!(frame.y, 2000);
+                assert_eq!(frame.width, 40);
+                assert_eq!(frame.height, 40);
+                assert_eq!(rotation_milli_degree, 90_000);
             }
             _ => panic!("shape expected"),
         }

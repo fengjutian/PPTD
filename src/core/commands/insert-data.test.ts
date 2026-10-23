@@ -39,9 +39,9 @@ describe("manual table insertion", () => {
     const slide = document.slides[0]!;
     for (const [columns, rows] of [
       [1, 3],
-      [9, 3],
+      [13, 3],
       [3, 0],
-      [3, 31],
+      [3, 51],
       [2.5, 3],
       [3, 2.5],
     ]) {

@@ -1364,6 +1364,102 @@ pub fn list_pptx_templates(app: tauri::AppHandle) -> Result<Vec<TemplateRecord>,
 }
 
 #[tauri::command]
+pub fn rename_pptx_template(
+    app: tauri::AppHandle,
+    template_id: String,
+    name: String,
+) -> Result<TemplateRecord, String> {
+    let root = template_root(&app)?;
+    rename_template_at(&root, &template_id, &name)
+}
+
+#[tauri::command]
+pub fn delete_pptx_template(app: tauri::AppHandle, template_id: String) -> Result<(), String> {
+    let root = template_root(&app)?;
+    delete_template_at(&root, &template_id)
+}
+
+fn parse_template_id(template_id: &str) -> Result<(u64, String), String> {
+    if template_id.is_empty()
+        || template_id.contains('/')
+        || template_id.contains('\\')
+        || template_id.contains('\0')
+        || template_id == "."
+        || template_id == ".."
+    {
+        return Err("TEMPLATE_ID_INVALID".into());
+    }
+    let (timestamp, name) = template_id.split_once('-').ok_or("TEMPLATE_ID_INVALID")?;
+    let imported_at = timestamp
+        .parse::<u64>()
+        .map_err(|_| "TEMPLATE_ID_INVALID")?;
+    if name.is_empty() {
+        return Err("TEMPLATE_ID_INVALID".into());
+    }
+    Ok((imported_at, name.to_string()))
+}
+
+fn template_path_at(root: &Path, template_id: &str) -> Result<PathBuf, String> {
+    parse_template_id(template_id)?;
+    let path = root.join(template_id);
+    if !path.starts_with(root) || !path.is_file() {
+        return Err("TEMPLATE_NOT_FOUND".into());
+    }
+    Ok(path)
+}
+
+fn rename_template_at(
+    root: &Path,
+    template_id: &str,
+    name: &str,
+) -> Result<TemplateRecord, String> {
+    let (imported_at, _) = parse_template_id(template_id)?;
+    let source = template_path_at(root, template_id)?;
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("TEMPLATE_NAME_INVALID".into());
+    }
+    if trimmed.chars().count() > 100 {
+        return Err("TEMPLATE_NAME_TOO_LONG".into());
+    }
+    let mut file_name = safe_template_name(trimmed);
+    if !file_name.to_ascii_lowercase().ends_with(".pptx") {
+        file_name.push_str(".pptx");
+    }
+    let new_id = format!("{imported_at}-{file_name}");
+    if new_id == template_id {
+        let size = fs::metadata(&source)
+            .map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?
+            .len();
+        return Ok(TemplateRecord {
+            id: new_id,
+            name: file_name,
+            size,
+            imported_at,
+        });
+    }
+    let target = root.join(&new_id);
+    if target.exists() {
+        return Err("TEMPLATE_NAME_EXISTS".into());
+    }
+    fs::rename(&source, &target).map_err(|error| format!("TEMPLATE_RENAME_FAILED: {error}"))?;
+    let size = fs::metadata(&target)
+        .map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?
+        .len();
+    Ok(TemplateRecord {
+        id: new_id,
+        name: file_name,
+        size,
+        imported_at,
+    })
+}
+
+fn delete_template_at(root: &Path, template_id: &str) -> Result<(), String> {
+    let path = template_path_at(root, template_id)?;
+    fs::remove_file(path).map_err(|error| format!("TEMPLATE_DELETE_FAILED: {error}"))
+}
+
+#[tauri::command]
 pub async fn get_pptx_template_preview(
     app: tauri::AppHandle,
     template_id: String,
@@ -2210,6 +2306,47 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn renames_and_deletes_templates_without_leaving_the_root() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("templates");
+        fs::create_dir_all(&root).unwrap();
+        let old_id = "1700000000000-old.pptx";
+        fs::write(root.join(old_id), b"PK").unwrap();
+
+        let renamed = rename_template_at(&root, old_id, "季度模板").unwrap();
+        assert_eq!(renamed.name, "季度模板.pptx");
+        assert!(root.join(&renamed.id).is_file());
+        assert!(!root.join(old_id).exists());
+
+        let same = rename_template_at(&root, &renamed.id, "季度模板.pptx").unwrap();
+        assert_eq!(same.id, renamed.id);
+
+        delete_template_at(&root, &same.id).unwrap();
+        assert!(!root.join(&same.id).exists());
+        assert_eq!(
+            delete_template_at(&root, &same.id),
+            Err("TEMPLATE_NOT_FOUND".into())
+        );
+        match rename_template_at(&root, "../escape", "x") {
+            Err(error) => assert_eq!(error, "TEMPLATE_ID_INVALID"),
+            Ok(_) => panic!("path traversal must fail"),
+        }
+    }
+
+    #[test]
+    fn rejects_a_duplicate_template_name() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("templates");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("1700000000000-a.pptx"), b"PK").unwrap();
+        fs::write(root.join("1700000000000-b.pptx"), b"PK").unwrap();
+        match rename_template_at(&root, "1700000000000-a.pptx", "b") {
+            Err(error) => assert_eq!(error, "TEMPLATE_NAME_EXISTS"),
+            Ok(_) => panic!("duplicate name must fail"),
+        }
+    }
+
     #[tokio::test]
     async fn saves_and_opens_a_project() {
         let directory = tempfile::tempdir().unwrap();
@@ -2222,6 +2359,43 @@ mod tests {
                 .unwrap(),
             value
         );
+    }
+
+    /// The fixture is produced by the TypeScript importer from the Rust
+    /// `ImportedDeck` contract. Saving and reopening it exercises the cross-
+    /// language seam: imported status, notes, table/chart blocks and a data URL
+    /// image must all survive the project store unchanged.
+    #[tokio::test]
+    async fn round_trips_an_imported_level_a_document() {
+        let document: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/imported-level-a.pptd.json"
+        ))
+        .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("imported.pptd");
+        save_project_at(&path.to_string_lossy(), document.clone(), None, None).unwrap();
+
+        let opened = open_project(path.to_string_lossy().into_owned())
+            .await
+            .unwrap();
+        assert_eq!(opened["schemaVersion"], 19);
+        assert_eq!(opened["slides"].as_array().unwrap().len(), 2);
+        assert_eq!(opened["slides"][0]["content"]["status"], "review");
+        assert_eq!(opened["slides"][0]["content"]["speakerNotes"], "第一页备注");
+        // The image is externalized on save. Open keeps the content-addressed
+        // reference instead of inlining every picture; the front end reads it
+        // on demand, and that lazy path has to return a complete data URL.
+        let reference = opened["slides"][0]["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|element| element["type"] == "image")
+            .and_then(|element| element["source"]["dataUrl"].as_str())
+            .expect("imported image reference");
+        assert!(reference.starts_with("asset://"));
+        let data = read_image_asset_at(&path, reference, None).unwrap();
+        assert!(data.starts_with("data:image/png;base64,"));
+        assert_eq!(opened["id"], document["id"]);
     }
 
     #[tokio::test]

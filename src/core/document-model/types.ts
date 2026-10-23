@@ -30,7 +30,24 @@ export type ContentBlock =
   | { id: string; type: "timeline"; items: Array<{ label: string; text: string }> }
   | { id: string; type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
   | { id: string; type: "process"; items: Array<{ label: string; text: string }> }
-  | { id: string; type: "table-data"; header: string[]; rows: string[][] };
+  | {
+      id: string;
+      type: "table-data";
+      header: string[];
+      rows: string[][];
+      /** Spans of merged cells. A covered cell is not rendered or exported. */
+      merges?: TableMerge[];
+    };
+
+/** One merged region of a reviewed table. */
+export interface TableMerge {
+  section: "header" | "body";
+  /** Row inside the section; the header has exactly one row. */
+  row: number;
+  column: number;
+  rowSpan: number;
+  columnSpan: number;
+}
 
 export interface SlideContent {
   title: string;
@@ -201,9 +218,37 @@ export interface TextElement extends ElementBase {
   runs?: TextRun[];
 }
 
+/** The preset geometries the canvas, importer and exporter share. */
+export type ShapeKind =
+  | "rectangle"
+  | "ellipse"
+  | "triangle"
+  | "diamond"
+  | "pentagon"
+  | "hexagon"
+  | "chevron"
+  | "arrow"
+  | "star"
+  | "parallelogram"
+  | "trapezoid";
+
+export const SHAPE_KINDS: readonly ShapeKind[] = [
+  "rectangle",
+  "ellipse",
+  "triangle",
+  "diamond",
+  "pentagon",
+  "hexagon",
+  "chevron",
+  "arrow",
+  "star",
+  "parallelogram",
+  "trapezoid",
+];
+
 export interface ShapeElement extends ElementBase {
   type: "shape";
-  shape: "rectangle" | "ellipse";
+  shape: ShapeKind;
   style: ShapeElementStyle;
 }
 
@@ -352,6 +397,23 @@ export interface SlideAnimation {
   direction: AnimationDirection;
 }
 
+/**
+ * A page transition: what happens between two slides, not to an object.
+ *
+ * It is design state like an animation. The absence of the field means the page
+ * has no transition, so old projects need no migration value for "none".
+ */
+export type SlideTransitionKind = "fade" | "push" | "wipe" | "split";
+export type SlideTransitionDirection = "left" | "right" | "up" | "down";
+export type SlideTransitionSpeed = "fast" | "medium" | "slow";
+
+export interface SlideTransition {
+  kind: SlideTransitionKind;
+  speed: SlideTransitionSpeed;
+  /** Only meaningful for push, wipe and split. Absent means left. */
+  direction?: SlideTransitionDirection;
+}
+
 /** Presentation-only styling of a built-in icon. */
 export interface IconElementStyle {
   color: string;
@@ -392,6 +454,8 @@ export interface Slide {
   content: SlideContent;
   elements: SlideElement[];
   animations?: SlideAnimation[];
+  /** Transition into this page when presenting. */
+  transition?: SlideTransition;
   groups?: SlideGroup[];
   background: string;
   /** The template layout this slide was designed against. */

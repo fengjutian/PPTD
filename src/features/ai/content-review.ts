@@ -6,7 +6,14 @@ import {
 } from "../../core/commands/layout-capacity";
 import { describeTitleSkeleton, findRepeatedTitlePatterns, analyzeTitle } from "../../core/content/title-quality";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
-import { splitBodyItems, type AiDraft, type ContentBlock, type ContentCheck, type ContentCheckKind, type SlideBrief } from "../../services/ai-service";
+import {
+  splitBodyItems,
+  type AiDraft,
+  type ContentBlock,
+  type ContentCheck,
+  type ContentCheckKind,
+  type SlideBrief,
+} from "../../services/ai-service";
 import { visualAssetIssues } from "./visual-asset-review";
 
 export type DraftSlide = AiDraft["slides"][number];

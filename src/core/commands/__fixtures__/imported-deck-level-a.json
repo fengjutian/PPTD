@@ -14,7 +14,7 @@
     "format": "pptx",
     "compatibility": "A",
     "slideCount": 2,
-    "counts": { "text": 2, "image": 1, "shape": 1, "table": 1 },
+    "counts": { "text": 2, "image": 1, "shape": 1, "table": 1, "chart": 1 },
     "unsupported": [],
     "warnings": [],
     "assets": { "extracted": 1, "skipped": 0, "bytes": 68 }
@@ -111,6 +111,17 @@
           "dashed": false,
           "startArrow": false,
           "endArrow": true
+        },
+        {
+          "type": "chart",
+          "frame": { "x": 5943600, "y": 914400, "width": 4572000, "height": 2743200 },
+          "rotationMilliDegree": 0,
+          "kind": "column",
+          "categories": ["Q1", "Q2"],
+          "values": [10, 20],
+          "colors": ["#3366CC"],
+          "showLegend": false,
+          "showValues": true
         }
       ]
     }
