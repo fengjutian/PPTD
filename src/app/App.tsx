@@ -658,6 +658,7 @@ export function App() {
   const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
   const [editorRibbonTab, setEditorRibbonTab] = useState<"file" | "home" | "insert" | "design" | "arrange" | "animation" | "view">("home");
   const [animationPreview, setAnimationPreview] = useState<SlideAnimation>();
+  const [selectedAnimationId, setSelectedAnimationId] = useState<string>();
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
@@ -2401,10 +2402,15 @@ export function App() {
   const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
   const selectedAnimations = selected ? (activeSlide.animations ?? []).filter((animation) => animation.elementId === selected.id) : [];
-  const selectedAnimation = selectedAnimations.at(-1);
+  const selectedAnimation = selectedAnimations.find((animation) => animation.id === selectedAnimationId) ?? selectedAnimations.at(-1);
   const selectedAnimationIndex = selectedAnimation
     ? (activeSlide.animations ?? []).findIndex((animation) => animation.id === selectedAnimation.id)
     : -1;
+
+  useEffect(() => {
+    const nextId = selectedAnimation?.id;
+    if (selectedAnimationId !== nextId) setSelectedAnimationId(nextId);
+  }, [selectedAnimation?.id, selectedAnimationId]);
 
   const previewSelectedAnimation = () => {
     if (!selectedAnimation) return;
@@ -2679,18 +2685,22 @@ export function App() {
                 label={`添加${label}动画`}
                 caption={label}
                 disabled={!selected || selected.locked}
-                onClick={() => selected && execute({
-                  type: "add-animation",
-                  slideId: activeSlide.id,
-                  elementId: selected.id,
-                  animation: {
-                    effect,
-                    start: "on-click",
-                    durationMs: effect === "appear" ? 300 : 600,
-                    delayMs: 0,
-                    direction: effect === "fly-in" ? "bottom" : "none",
-                  },
-                })}
+                onClick={() => {
+                  if (!selected) return;
+                  setSelectedAnimationId(undefined);
+                  execute({
+                    type: "add-animation",
+                    slideId: activeSlide.id,
+                    elementId: selected.id,
+                    animation: {
+                      effect,
+                      start: "on-click",
+                      durationMs: effect === "appear" ? 300 : 600,
+                      delayMs: 0,
+                      direction: effect === "fly-in" ? "bottom" : "none",
+                    },
+                  });
+                }}
               >
                 <Sparkles />
               </ToolButton>
@@ -2949,7 +2959,75 @@ export function App() {
             onPointerDown={startInspectorResize}
           />
 
-          <InspectorPanel />
+          {editorRibbonTab === "animation" ? (
+            <aside className="right-panel animation-pane" aria-label="动画窗格">
+              <div className="inspector-title">
+                <span>动画窗格</span>
+                <strong>{activeSlide.animations?.length ?? 0}</strong>
+              </div>
+              <div className="animation-pane-body">
+                {(activeSlide.animations?.length ?? 0) === 0 ? (
+                  <div className="animation-pane-empty">
+                    <Sparkles />
+                    <strong>本页还没有动画</strong>
+                    <p>选择画布对象，然后在上方添加出现、淡化或飞入效果。</p>
+                  </div>
+                ) : (
+                  <ol className="animation-sequence-list">
+                    {activeSlide.animations!.map((animation, index) => {
+                      const target = activeSlide.elements.find((element) => element.id === animation.elementId);
+                      const targetName = target?.type === "text"
+                        ? target.text.trim().slice(0, 18) || "文本框"
+                        : target?.type === "image"
+                          ? "图片"
+                          : target?.type === "chart"
+                            ? "图表"
+                            : target?.type === "table"
+                              ? "表格"
+                              : target?.type === "line"
+                                ? "线条"
+                                : target?.type === "icon"
+                                  ? "图标"
+                                  : "形状";
+                      const effectName = animation.effect === "appear" ? "出现" : animation.effect === "fade" ? "淡化" : "飞入";
+                      const startName = animation.start === "on-click" ? "单击时" : animation.start === "with-previous" ? "与上一动画同时" : "上一动画之后";
+                      return (
+                        <li key={animation.id}>
+                          <button
+                            type="button"
+                            className={selectedAnimation?.id === animation.id ? "active" : ""}
+                            onClick={() => {
+                              setSelectedAnimationId(animation.id);
+                              selectElement(animation.elementId);
+                            }}
+                          >
+                            <span className="animation-order-badge">{index + 1}</span>
+                            <span className="animation-sequence-copy">
+                              <strong>{effectName} · {targetName}</strong>
+                              <small>{startName} · {(animation.durationMs / 1000).toFixed(1)} 秒{animation.delayMs ? ` · 延迟 ${(animation.delayMs / 1000).toFixed(1)} 秒` : ""}</small>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+              <div className="animation-pane-footer">
+                <button type="button" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>预览所选</button>
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={!(activeSlide.animations?.length)}
+                  onClick={() => execute({ type: "clear-slide-animations", slideId: activeSlide.id })}
+                >
+                  清除本页动画
+                </button>
+              </div>
+            </aside>
+          ) : (
+            <InspectorPanel />
+          )}
         </>
       )}
 

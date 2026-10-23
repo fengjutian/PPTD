@@ -21,6 +21,7 @@ import type {
   SupportedImageMimeType,
   IconElementStyle,
   TableElementStyle,
+  TextElement,
   TextElementStyle,
 } from "../document-model";
 import {
@@ -306,6 +307,37 @@ function markContentChanged(slide: Slide): void {
   if (slide.content.status === "approved") slide.content.status = "changed";
 }
 
+type MetricBlock = Extract<ContentBlock, { type: "metric" }>;
+type TableBlock = Extract<ContentBlock, { type: "table-data" }>;
+
+function findMetricBlock(slide: Slide | undefined, blockId: string): MetricBlock | undefined {
+  return slide?.content.blocks?.find(
+    (candidate): candidate is MetricBlock => candidate.id === blockId && candidate.type === "metric",
+  );
+}
+
+function findTableBlock(slide: Slide | undefined, blockId: string): TableBlock | undefined {
+  return slide?.content.blocks?.find(
+    (candidate): candidate is TableBlock => candidate.id === blockId && candidate.type === "table-data",
+  );
+}
+
+/**
+ * Keeps every card text that renders the same metric field in step with the
+ * block. A page may show one reviewed number twice; editing either copy must
+ * not leave the other one claiming an older value.
+ */
+function syncMetricText(slide: Slide, blockId: string, field: "label" | "value", value: string): void {
+  for (const element of slide.elements) {
+    if (element.type !== "text") continue;
+    if (element.contentBlockRef?.blockId !== blockId || element.contentBlockRef.field !== field) continue;
+    if (element.text === value) continue;
+    element.text = value;
+    // Fragment offsets address the old copy, so they no longer mean anything.
+    element.runs = undefined;
+  }
+}
+
 /** Plain deep copy of an element, safe to read from an Immer draft. */
 function cloneElement(element: SlideElement): SlideElement {
   if (element.type === "text")
@@ -439,6 +471,7 @@ export type DocumentCommand =
       animation: Omit<SlideAnimation, "id" | "elementId" | "phase">;
     }
   | { type: "remove-animation"; slideId: SlideId; animationId: string }
+  | { type: "clear-slide-animations"; slideId: SlideId }
   | { type: "move-animation"; slideId: SlideId; animationId: string; toIndex: number }
   | { type: "set-animation"; slideId: SlideId; animationId: string; changes: Partial<Omit<SlideAnimation, "id" | "elementId" | "phase">> }
   | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: AlignTarget }
@@ -475,6 +508,16 @@ export type DocumentCommand =
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string }
   | { type: "set-speaker-notes"; slideId: SlideId; notes: string }
+  | { type: "set-metric"; slideId: SlideId; blockId: string; field: "label" | "value"; value: string }
+  | {
+      type: "set-table-cell";
+      slideId: SlideId;
+      blockId: string;
+      cell:
+        | { section: "header"; column: number }
+        | { section: "body"; row: number; column: number };
+      value: string;
+    }
   | { type: "approve-slide-content"; slideId: SlideId }
   | { type: "reopen-slide-content"; slideId: SlideId };
 
@@ -778,6 +821,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-image-crop":
     case "add-animation":
     case "remove-animation":
+    case "clear-slide-animations":
     case "move-animation":
     case "set-animation":
       return "design";
@@ -798,11 +842,49 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "distribute-elements":
     case "move-elements":
       return "design";
-    case "edit-text":
+    case "edit-text": {
+      if (!document) return "content";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const element = slide?.elements.find((item) => item.id === command.elementId);
+      if (element?.type !== "text" || !slide) return "design";
+      const legacyTitle = !element.contentRef && slide.elements[0]?.id === element.id;
+      const metric = element.contentBlockRef ? findMetricBlock(slide, element.contentBlockRef.blockId) : undefined;
+      if (metric && element.contentBlockRef) {
+        const current = element.contentBlockRef.field === "value" ? metric.value : metric.label;
+        // Clicking into a card and leaving without typing must not add an undo
+        // step. Runs only change when the copy changes, so they count as work.
+        if (!element.runs && element.text === command.text && current === command.text) return null;
+      }
+      return element.contentRef === "title" || element.contentRef === "body" || legacyTitle || Boolean(metric)
+        ? "content"
+        : "design";
+    }
     case "set-speaker-notes":
+      return "content";
+    case "set-metric": {
+      if (!document) return "content";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const block = findMetricBlock(slide, command.blockId);
+      if (!block) return "content";
+      const current = command.field === "value" ? block.value : block.label;
+      return current === command.value ? null : "content";
+    }
+    case "set-table-cell": {
+      if (!document) return "content";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const block = findTableBlock(slide, command.blockId);
+      if (!block) return "content";
+      const { cell } = command;
+      // Out-of-range addresses are left to applyCommand so they fail loudly
+      // instead of being mistaken for a no-op.
+      if (!Number.isInteger(cell.column) || cell.column < 0 || cell.column >= block.header.length) return "content";
+      if (cell.section === "body" && (!Number.isInteger(cell.row) || cell.row < 0 || cell.row >= block.rows.length))
+        return "content";
+      const current = cell.section === "header" ? block.header[cell.column] : block.rows[cell.row]![cell.column];
+      return current === command.value ? null : "content";
+    }
     case "delete-element": {
-      if (!document) return command.type === "edit-text" || command.type === "set-speaker-notes" ? "content" : "design";
-      if (command.type === "set-speaker-notes") return "content";
+      if (!document) return "design";
       const slide = document.slides.find((item) => item.id === command.slideId);
       const element = slide?.elements.find((item) => item.id === command.elementId);
       const legacyTitle = element?.type === "text" && !element.contentRef && slide?.elements[0]?.id === element.id;
@@ -1118,7 +1200,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       contentRef?: "title" | "body" | "decorative",
       background?: BackgroundRange | number,
       minimumPt = 12,
-    ) => {
+    ): TextElement => {
       const fitted = fittedFontSize(value, box, fontSizePt, minimumPt);
       const range = typeof background === "number" ? { darkest: background, lightest: background } : background;
       const palette = ink(range ? range.darkest : 1);
@@ -1964,11 +2046,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // The metrics of a page are the reviewed numbers of the page. When they
         // are numbers of the same unit, they are drawn as a native chart: the
         // exported file keeps an editable chart instead of a picture of bars.
+        const metricContentBlocks = (contentBlocks ?? []).filter(
+          (block): block is MetricBlock => block.type === "metric",
+        );
         const chartMetrics = metrics
           .map((metric, metricIndex) => {
             const parsed = parseMetricValue(metric.value);
-            const block = contentBlocks?.filter((candidate) => candidate.type === "metric")[metricIndex];
-            return parsed && block?.type === "metric"
+            const block = metricContentBlocks[metricIndex];
+            return parsed && block
               ? { blockId: block.id, label: metric.label, value: parsed.value, unit: parsed.unit }
               : undefined;
           })
@@ -2022,6 +2107,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             const width = cellWidth - 0.025;
             const x = contentBox.x + column * cellWidth;
             const y = gridTop + row * (cardHeight + cardGap);
+            // The card text is a view of the reviewed metric, not a copy of it.
+            // The link is what makes editing the card edit the content.
+            const block = metricContentBlocks[metricIndex];
             slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
             // The number and its label share a card that grows shorter with
             // every extra row, so both are fitted to the card they sit in.
@@ -2036,9 +2124,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               valueSize,
               12,
             );
-            slide.elements.push(
-              text(metric.value, valueFrame, fittedValueSize, design.accent, true, "center", undefined, cardLuminance),
+            const valueText = text(
+              metric.value,
+              valueFrame,
+              fittedValueSize,
+              design.accent,
+              true,
+              "center",
+              undefined,
+              cardLuminance,
             );
+            if (block) valueText.contentBlockRef = { blockId: block.id, field: "value" };
+            slide.elements.push(valueText);
             const labelFrame = centeredBlock(
               metric.label,
               { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 },
@@ -2050,9 +2147,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               labelSize,
               9,
             );
-            slide.elements.push(
-              text(metric.label, labelFrame, fittedLabelSize, bodyInk, false, "center", undefined, cardLuminance),
+            const labelText = text(
+              metric.label,
+              labelFrame,
+              fittedLabelSize,
+              bodyInk,
+              false,
+              "center",
+              undefined,
+              cardLuminance,
             );
+            if (block) labelText.contentBlockRef = { blockId: block.id, field: "label" };
+            slide.elements.push(labelText);
           });
         }
       } else if (processBlock) {
@@ -3523,6 +3629,42 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
 
+  if (command.type === "set-metric") {
+    const block = findMetricBlock(slide, command.blockId);
+    if (!block) throw new Error("CONTENT_BLOCK_NOT_METRIC");
+    if (command.value.length > 1_000) throw new Error("CONTENT_TEXT_TOO_LONG");
+    if (command.field === "value") block.value = command.value;
+    else block.label = command.value;
+    syncMetricText(slide, block.id, command.field, command.value);
+    markContentChanged(slide);
+    return;
+  }
+
+  if (command.type === "set-table-cell") {
+    const block = findTableBlock(slide, command.blockId);
+    if (!block) throw new Error("CONTENT_BLOCK_NOT_TABLE");
+    const { cell } = command;
+    if (!Number.isInteger(cell.column) || cell.column < 0 || cell.column >= block.header.length) {
+      throw new Error("TABLE_CELL_OUT_OF_RANGE");
+    }
+    if (cell.section === "header") {
+      if (command.value.length > 200) throw new Error("CONTENT_TEXT_TOO_LONG");
+      block.header[cell.column] = command.value;
+    } else {
+      if (!Number.isInteger(cell.row) || cell.row < 0 || cell.row >= block.rows.length) {
+        throw new Error("TABLE_CELL_OUT_OF_RANGE");
+      }
+      if (command.value.length > 500) throw new Error("CONTENT_TEXT_TOO_LONG");
+      const row = block.rows[cell.row]!;
+      // Rows may be shorter than the header. Filling the gap with empty cells
+      // keeps the grid rectangular instead of writing a hole the schema rejects.
+      while (row.length <= cell.column) row.push("");
+      row[cell.column] = command.value;
+    }
+    markContentChanged(slide);
+    return;
+  }
+
   if (command.type === "approve-slide-content") {
     // 复核闭环的另一半：内容被改过（changed）或人工退回（review）之后，
     // 用户确认这一页仍然是审过的版本，导出前置检查才会放行。
@@ -3556,6 +3698,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const animation = slide.animations![index]!;
     if (slide.elements.find((item) => item.id === animation.elementId)?.locked) throw new Error("ELEMENT_LOCKED");
     slide.animations!.splice(index, 1);
+    return;
+  }
+
+  if (command.type === "clear-slide-animations") {
+    const animations = slide.animations ?? [];
+    if (animations.some((animation) => slide.elements.find((item) => item.id === animation.elementId)?.locked))
+      throw new Error("ELEMENT_LOCKED");
+    slide.animations = [];
     return;
   }
 
@@ -3784,6 +3934,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   }
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
+    const blockRef = element.contentBlockRef;
+    const metric = blockRef ? findMetricBlock(slide, blockRef.blockId) : undefined;
+    // The block schema caps a metric field at 1,000 characters. Refusing the
+    // edit is better than saving a document that fails validation later.
+    if (metric && command.text.length > 1_000) throw new Error("CONTENT_TEXT_TOO_LONG");
     element.text = command.text;
     // The fragments address ranges of the old copy, so they would point at the
     // wrong words once the copy changed. Dropping them keeps the emphasis
@@ -3792,6 +3947,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const contentBound =
       element.contentRef === "title" ||
       element.contentRef === "body" ||
+      Boolean(metric) ||
       (!element.contentRef && slide.elements[0]?.id === element.id);
     if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id))
       slide.content.title = command.text;
@@ -3800,6 +3956,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.content.blocks = command.text.trim()
         ? [{ id: slide.content.blocks?.[0]?.id ?? crypto.randomUUID(), type: "paragraph", text: command.text }]
         : [];
+    }
+    if (metric && blockRef) {
+      // A card is a view of the metric, not a second copy of it: typing in the
+      // card edits the reviewed number every other view reads.
+      if (blockRef.field === "value") metric.value = command.text;
+      else metric.label = command.text;
+      syncMetricText(slide, metric.id, blockRef.field, command.text);
     }
     if (contentBound) markContentChanged(slide);
   }

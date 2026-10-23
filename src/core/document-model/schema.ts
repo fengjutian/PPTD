@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 
-export const CURRENT_SCHEMA_VERSION = 12 as const;
+export const CURRENT_SCHEMA_VERSION = 13 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -21,6 +21,12 @@ const textElement = base.extend({
   type: z.literal("text"),
   text: z.string(),
   contentRef: z.enum(["title", "body", "decorative"]).optional(),
+  contentBlockRef: z
+    .object({
+      blockId: z.string().uuid(),
+      field: z.enum(["label", "value"]),
+    })
+    .optional(),
   style: z.object({
     fontFamily: z.string().min(1),
     fontSizePt: z.number().positive(),
@@ -351,6 +357,11 @@ const versionElevenDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwelveDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(12) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionNineDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(9) })
   .superRefine(validateUniqueIds)
@@ -426,6 +437,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 12 adds design-only page animations. Existing documents keep all
   // objects and simply have no animation timeline.
   11: (document) => ({ ...versionElevenDocumentSchema.parse(document), schemaVersion: 12 }),
+  // Version 13 links a generated card text to the metric block it reproduces.
+  // The link is optional, so older documents keep every card as plain text and
+  // simply cannot be edited through the structured metric fields.
+  12: (document) => ({ ...versionTwelveDocumentSchema.parse(document), schemaVersion: 13 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

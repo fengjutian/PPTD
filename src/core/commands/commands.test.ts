@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { produce } from "immer";
 import { applyCommand, commandDomain } from "./commands";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
-import { createDocument, inches, type TextElement } from "../document-model";
+import { createDocument, inches, type ElementId, type TextElement } from "../document-model";
 import { contrastRatio, contrastRatioAgainstLuminance } from "../rendering/contrast";
 import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 import { VISUAL_ASSET_REQUEST_SIZE } from "./visual-asset";
@@ -111,7 +111,7 @@ describe("document commands", () => {
     const slide = source.slides[0]!;
     const firstElement = slide.elements[0]!;
     const secondElement = structuredClone(firstElement);
-    secondElement.id = crypto.randomUUID();
+    secondElement.id = crypto.randomUUID() as ElementId;
     slide.elements.push(secondElement);
 
     const animated = produce(source, (draft) => {
@@ -146,6 +146,11 @@ describe("document commands", () => {
       applyCommand(draft, { type: "remove-animation", slideId: slide.id, animationId: firstAnimation.id }),
     );
     expect(removed.slides[0]!.animations).toHaveLength(1);
+
+    const cleared = produce(edited, (draft) =>
+      applyCommand(draft, { type: "clear-slide-animations", slideId: slide.id }),
+    );
+    expect(cleared.slides[0]!.animations).toEqual([]);
   });
 
   it("remaps animations when duplicating an element and removes them when deleting it", () => {

@@ -152,11 +152,25 @@ export interface TextRun {
   underline?: boolean;
 }
 
+/**
+ * The reviewed block a generated text renders, and which of its fields.
+ *
+ * A stat card draws a metric as two text boxes. Without this link the card is
+ * just two strings: editing the number would change the picture while the
+ * reviewed metric (and any chart that reads it) kept the old value.
+ */
+export interface TextBlockRef {
+  blockId: string;
+  field: "label" | "value";
+}
+
 export interface TextElement extends ElementBase {
   type: "text";
   text: string;
   /** Links this visual text back to the semantic content it renders. */
   contentRef?: TextContentRole;
+  /** Links a generated card text to the content block it reproduces. */
+  contentBlockRef?: TextBlockRef;
   style: TextElementStyle;
   /** Presentation-only fragments of the text. Absent means one uniform style. */
   runs?: TextRun[];

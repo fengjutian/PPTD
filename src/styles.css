@@ -259,6 +259,99 @@ button {
 }
 .animation-order-controls button:disabled { opacity: 0.35; }
 .animation-order-controls svg { width: 13px; height: 13px; }
+.animation-pane {
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr) auto;
+}
+.animation-pane .inspector-title strong {
+  min-width: 24px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #dff7e9;
+  background: rgb(35 126 78 / 28%);
+  font-size: 10px;
+  text-align: center;
+}
+.animation-pane-body {
+  min-height: 0;
+  padding: 10px;
+  overflow-y: auto;
+}
+.animation-pane-empty {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: #9298a3;
+  text-align: center;
+}
+.animation-pane-empty svg { width: 28px; height: 28px; color: var(--ppt-accent-hover); }
+.animation-pane-empty strong { color: #e8eaee; font-size: 12px; }
+.animation-pane-empty p { margin: 0; font-size: 10px; line-height: 1.6; }
+.animation-sequence-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.animation-sequence-list button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+  border: 1px solid #34373d;
+  border-radius: 8px;
+  color: #d9dce2;
+  background: #202227;
+  text-align: left;
+  cursor: pointer;
+}
+.animation-sequence-list button:hover { border-color: #5b626d; background: #25282e; }
+.animation-sequence-list button.active {
+  border-color: var(--ppt-accent-hover);
+  box-shadow: inset 3px 0 0 var(--ppt-accent-hover);
+  background: rgb(35 126 78 / 18%);
+}
+.animation-order-badge {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--ppt-accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+.animation-sequence-copy { min-width: 0; display: grid; gap: 3px; }
+.animation-sequence-copy strong,
+.animation-sequence-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.animation-sequence-copy strong { font-size: 11px; }
+.animation-sequence-copy small { color: #8f96a2; font-size: 9px; }
+.animation-pane-footer {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border-top: 1px solid #303136;
+}
+.animation-pane-footer button {
+  height: 32px;
+  border: 1px solid #41454d;
+  border-radius: 7px;
+  color: #e7e9ed;
+  background: #282b31;
+  font-size: 11px;
+  font-weight: 700;
+}
+.animation-pane-footer button:hover:not(:disabled) { border-color: var(--ppt-accent); }
+.animation-pane-footer button.danger:hover:not(:disabled) { border-color: #d46767; color: #ffb3b3; }
+.animation-pane-footer button:disabled { opacity: 0.4; }
 .animation-preview {
   animation-fill-mode: both;
   animation-timing-function: ease;
