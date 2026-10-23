@@ -54,18 +54,24 @@ export interface RecipePlan {
     blockIds: readonly string[];
   };
   conflicts: IntentConflict[];
+  /** A recipe may give the picture a different frame than the default layout. */
+  imageFrame?: NormalizedFrame;
+}
+
+export interface RecipeSupportOptions {
+  hasArtwork: boolean;
+  hasAsset: boolean;
+  /** The role the renderer gave the picture, when a page has one. */
+  assetRole?: "hero" | "side" | "band";
 }
 
 export interface LayoutRecipe {
   id: RecipeId;
-  supports(facts: CompositionFacts, concept: DeckConcept, options: { hasArtwork: boolean; hasAsset: boolean }): boolean;
+  supports(facts: CompositionFacts, concept: DeckConcept, options: RecipeSupportOptions): boolean;
   plan(ctx: RecipeContext): RecipePlan | { conflict: IntentConflict };
 }
 
-export interface RecipeSelectionOptions {
-  hasArtwork: boolean;
-  hasAsset: boolean;
-}
+export type RecipeSelectionOptions = RecipeSupportOptions;
 
 export interface RecipeSelection {
   recipe: LayoutRecipe;

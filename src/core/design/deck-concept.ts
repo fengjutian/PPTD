@@ -24,7 +24,7 @@ export type PageBeat = "statement" | "evidence" | "quiet" | "close";
  * The recipes implemented in this version. The union grows only when the
  * renderer grows: a value in the contract is a promise that a page can be drawn.
  */
-export type RecipeId = "cover-statement" | "editorial-index" | "asymmetric-split" | "data-story";
+export type RecipeId = "cover-statement" | "data-story" | "image-led" | "editorial-index" | "asymmetric-split";
 
 export interface AiDeckConcept {
   preset: ConceptPresetId;
@@ -58,7 +58,7 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
   editorial: {
     motif: "rules",
     surface: "rules",
-    recipes: ["cover-statement", "data-story", "editorial-index", "asymmetric-split"],
+    recipes: ["cover-statement", "data-story", "image-led", "editorial-index", "asymmetric-split"],
     imagery: "none",
     typeContrast: "strong",
   },

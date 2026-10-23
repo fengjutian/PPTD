@@ -36,6 +36,7 @@ describe("deck concept", () => {
     expect(resolved.concept.recipes).toEqual([
       "cover-statement",
       "data-story",
+      "image-led",
       "editorial-index",
       "asymmetric-split",
     ]);

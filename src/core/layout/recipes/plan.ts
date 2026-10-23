@@ -28,7 +28,8 @@ export function chooseRecipeId(
   concept: DeckConcept,
   options: RecipeSelectionOptions,
 ): RecipeId | undefined {
-  if (options.hasArtwork || options.hasAsset) return undefined;
+  if (options.hasArtwork) return undefined;
+  if (options.hasAsset) return concept.recipes.includes("image-led") ? "image-led" : undefined;
   if (facts.layout === "cover" && concept.recipes.includes("cover-statement")) return "cover-statement";
   if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return undefined;
   if (

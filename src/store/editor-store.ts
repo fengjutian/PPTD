@@ -107,7 +107,9 @@ export const useEditorStore = create<EditorState>((set) => ({
         command.type === "add-text" ||
         command.type === "add-shape" ||
         command.type === "add-image" ||
-        command.type === "add-line"
+        command.type === "add-line" ||
+        command.type === "add-table" ||
+        command.type === "add-chart"
       ) {
         selectedElementIds = [document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id];
       }

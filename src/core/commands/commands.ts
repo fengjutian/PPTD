@@ -30,12 +30,15 @@ import {
   createDocument,
   createSlide,
   diffContentVersion,
+  emu,
   iconForText,
   inches,
   MAX_PAGE_SIZE_IN,
   MIN_PAGE_SIZE_IN,
   parseMetricValue,
   stableStringify,
+  TABLE_MAX_COLUMNS,
+  TABLE_MAX_ROWS,
   applyTextRun,
   subtractTextRange,
   clearedTextStyle,
@@ -638,6 +641,8 @@ export type DocumentCommand =
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "add-line"; slideId: SlideId; direction: LineDirection }
   | { type: "add-icon"; slideId: SlideId; name: BuiltinIconName }
+  | { type: "add-table"; slideId: SlideId; columns: number; rows: number }
+  | { type: "add-chart"; slideId: SlideId; kind: ChartKind }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "duplicate-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
@@ -1170,6 +1175,11 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       return "design";
     case "add-image":
       return "design";
+    case "add-table":
+    case "add-chart":
+      // Inserting a table or a chart also creates the reviewed content block it
+      // reads, so both the content and the design revision move.
+      return "both";
     case "relayout-slide":
       return "design";
     case "add-slide":
@@ -2049,13 +2059,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           command.templateLayouts?.length || command.templateDecorations?.length || command.templateTheme,
         );
         if (!concept || keepsArtwork || hasTemplate) return undefined;
+        const hasActualAsset = Boolean(visualAsset && assetLayout);
         const selection = selectRecipe({
           facts: compositionFacts,
           concept,
           requested: design.recipe,
           options: {
             hasArtwork: keepsArtwork,
-            hasAsset: Boolean(visualAsset) || Boolean(design.visualAsset?.enabled),
+            hasAsset: hasActualAsset,
+            ...(hasActualAsset && assetPlan.role ? { assetRole: assetPlan.role } : {}),
           },
         });
         if (!selection.recipe) return undefined;
@@ -2096,6 +2108,28 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       })();
       if (recipePlan) {
         slide.elements.push(...recipePlan.elements);
+        if (recipePlan.imageFrame && visualAsset) {
+          // The picture was placed before the recipe with the default side/band
+          // geometry. A recipe that owns the picture may give it a larger frame;
+          // recomputing the crop keeps the image from stretching.
+          for (let imageIndex = slide.elements.length - 1; imageIndex >= 0; imageIndex -= 1) {
+            const candidate = slide.elements[imageIndex]!;
+            if (candidate.type !== "image" || candidate.placement !== "content") continue;
+            candidate.frame = frame(
+              recipePlan.imageFrame.x,
+              recipePlan.imageFrame.y,
+              recipePlan.imageFrame.width,
+              recipePlan.imageFrame.height,
+            );
+            const crop = coverCrop(
+              { width: visualAsset.naturalWidth, height: visualAsset.naturalHeight },
+              { width: candidate.frame.width, height: candidate.frame.height },
+            );
+            if (crop) candidate.crop = crop;
+            else delete candidate.crop;
+            break;
+          }
+        }
       } else if (design.layout === "cover" && !hasDeterministicBlock) {
         const coverTitle = safeFrame(recipeTitle, [0.1, 0.24, 0.78, 0.28], 0.25, 0.04);
         const coverBody = safeFrame(recipeContent, [0.1, 0.56, 0.72, 0.16], 0.25, 0.08);
@@ -3968,6 +4002,99 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       origin: "user",
       style: { color: "#d35230", strokeWidth: 2 },
     });
+    return;
+  }
+
+  if (command.type === "add-table") {
+    if (
+      !Number.isInteger(command.columns) ||
+      command.columns < 2 ||
+      command.columns > TABLE_MAX_COLUMNS ||
+      !Number.isInteger(command.rows) ||
+      command.rows < 1 ||
+      command.rows > TABLE_MAX_ROWS
+    )
+      throw new Error("INVALID_TABLE_SIZE");
+    const block = {
+      id: crypto.randomUUID(),
+      type: "table-data" as const,
+      header: Array.from({ length: command.columns }, (_, index) => `列 ${index + 1}`),
+      rows: Array.from({ length: command.rows }, () => Array.from({ length: command.columns }, () => "")),
+    };
+    slide.content.blocks = [...(slide.content.blocks ?? []), block];
+    const width = Math.round(document.pageSize.width * 0.62);
+    const height = Math.round(document.pageSize.height * 0.46);
+    const headerFill = document.theme?.colors.find((color) => color.name === "primary")?.value ?? "#3366CC";
+    slide.elements.push({
+      id: crypto.randomUUID() as ElementId,
+      type: "table",
+      contentBlockId: block.id,
+      frame: {
+        x: emu(Math.round((document.pageSize.width - width) / 2)),
+        y: emu(Math.round((document.pageSize.height - height) / 2)),
+        width: emu(width),
+        height: emu(height),
+      },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "user",
+      style: {
+        fontFamily: document.theme?.minorFont ?? "Microsoft YaHei",
+        fontSizePt: 14,
+        headerFill,
+        headerTextColor: "#FFFFFF",
+        bodyTextColor: "#17181c",
+        borderColor: "#D9DEE5",
+        firstColumnBold: true,
+        headerBold: true,
+        bandingFill: "#F5F7FA",
+        cellPaddingPt: 5,
+        borderWidthPt: 0.75,
+      },
+    });
+    markContentChanged(slide);
+    return;
+  }
+
+  if (command.type === "add-chart") {
+    if (command.kind !== "column" && command.kind !== "bar" && command.kind !== "line" && command.kind !== "pie")
+      throw new Error("INVALID_CHART_KIND");
+    // A chart reads reviewed metric blocks. Three placeholder values give the
+    // user a chart they can edit in the inspector instead of an empty frame
+    // that the exporter would reject.
+    const blocks = [
+      { label: "项目 A", value: "10" },
+      { label: "项目 B", value: "20" },
+      { label: "项目 C", value: "30" },
+    ].map((metric) => ({ id: crypto.randomUUID(), type: "metric" as const, ...metric }));
+    slide.content.blocks = [...(slide.content.blocks ?? []), ...blocks];
+    const width = Math.round(document.pageSize.width * 0.62);
+    const height = Math.round(document.pageSize.height * 0.5);
+    const accent = document.theme?.colors.find((color) => color.name === "accent")?.value ?? "#3366CC";
+    slide.elements.push({
+      id: crypto.randomUUID() as ElementId,
+      type: "chart",
+      contentBlockIds: blocks.map((block) => block.id),
+      kind: command.kind,
+      frame: {
+        x: emu(Math.round((document.pageSize.width - width) / 2)),
+        y: emu(Math.round((document.pageSize.height - height) / 2)),
+        width: emu(width),
+        height: emu(height),
+      },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "user",
+      style: {
+        fontFamily: document.theme?.minorFont ?? "Microsoft YaHei",
+        fontSizePt: 14,
+        textColor: "#17181c",
+        seriesColors: [accent, "#E27D60", "#5B8C5A", "#D6A84B"],
+        showLegend: command.kind === "pie",
+        showValueLabels: true,
+      },
+    });
+    markContentChanged(slide);
     return;
   }
 

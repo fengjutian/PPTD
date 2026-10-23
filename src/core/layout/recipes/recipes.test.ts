@@ -8,6 +8,7 @@ import { asymmetricSplit } from "./asymmetric-split";
 import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
+import { imageLed } from "./image-led";
 import { consumptionProblem } from "./plan";
 import type { RecipeContext, RecipePlan } from "./types";
 
@@ -164,6 +165,34 @@ describe("editorial-index recipe", () => {
     expect(signature(plan(editorialIndex, ctx))).toEqual(
       signature(plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 4 }) }))),
     );
+  });
+});
+
+describe("image-led recipe", () => {
+  it("lays copy into the text area the picture left behind", () => {
+    const pageContent = content(["品牌认知持续提升", "重点行业渗透加快", "客户续约保持稳定"]);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    ctx.frame.content = {
+      x: inches(0.93),
+      y: inches(1.2),
+      width: inches(6.2),
+      height: inches(5.2),
+    };
+    expect(imageLed.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: true, assetRole: "side" })).toBe(
+      true,
+    );
+    const result = plan(imageLed, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, pageContent)).toBeUndefined();
+    expect(result.imageFrame).toEqual({ x: 0.52, y: 0, width: 0.48, height: 1 });
+    const texts = result.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
+    expect(texts).toEqual(expect.arrayContaining(["品牌认知持续提升", "重点行业渗透加快", "客户续约保持稳定"]));
+  });
+
+  it("requires an actual picture", () => {
+    expect(imageLed.supports(facts(), concept(), { hasArtwork: false, hasAsset: false })).toBe(false);
   });
 });
 

@@ -44,6 +44,16 @@ describe("recipe planning", () => {
     expect(chooseRecipeId(facts({ hasRowBlock: true, hasMetric: true }), concept(), options)).toBe("data-story");
   });
 
+  it("chooses the image-led recipe when the page has a picture", () => {
+    expect(
+      chooseRecipeId(facts({ itemCount: 3 }), concept(), {
+        hasArtwork: false,
+        hasAsset: true,
+        assetRole: "side",
+      }),
+    ).toBe("image-led");
+  });
+
   it("leaves structured pages to the legacy renderer", () => {
     expect(chooseRecipeId(facts({ hasRowBlock: true }), concept(), options)).toBeUndefined();
     expect(chooseRecipeId(facts(), concept(), { hasArtwork: true, hasAsset: false })).toBeUndefined();

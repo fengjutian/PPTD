@@ -444,6 +444,21 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("exports a manually inserted table and chart as native objects", async () => {
+    const document = createDocument();
+    const slideId = document.slides[0]!.id;
+    applyCommand(document, { type: "add-table", slideId, columns: 3, rows: 2 });
+    applyCommand(document, { type: "add-chart", slideId, kind: "column" });
+    const result = await buildPptx(document);
+    const entries = unzipSync(result.bytes);
+    const slideXml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain("<a:tbl>");
+    expect(Object.keys(entries).filter((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name))).toHaveLength(1);
+    expect(result.report.nativeTableCount).toBe(1);
+    expect(result.report.nativeChartCount).toBe(1);
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("refuses a table whose row is wider than its header", async () => {
     const document = createDocument();
     document.slides[0]!.content.status = "approved";

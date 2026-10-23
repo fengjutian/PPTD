@@ -4,6 +4,7 @@ import {
   ArrowRight,
   ArrowUp,
   Check,
+  ChartColumn,
   Circle,
   CircleAlert,
   CircleCheck,
@@ -36,6 +37,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  Table2,
   Trash2,
   Type,
   Undo2,
@@ -96,6 +98,8 @@ import {
 import { generateDeckVisualAssets, planVisualAssets, requestVisualAsset } from "../services/ai-visual-asset";
 import type { AiVisualAssetRole } from "../core/commands/visual-asset";
 import { AiImageDialog } from "../features/editor/AiImageDialog";
+import { InsertTableDialog } from "../features/editor/InsertTableDialog";
+import { InsertChartDialog } from "../features/editor/InsertChartDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, saveAiPresentation, type AiHistoryEntry } from "../services/ai-history";
@@ -826,6 +830,9 @@ export function App() {
   }, [document.id]);
   /** The find-and-replace bar is a display mode, so it never enters the document. */
   const [findOpen, setFindOpen] = useState(false);
+  /** Table/chart insertion dialogs live outside the document until confirmed. */
+  const [insertTableOpen, setInsertTableOpen] = useState(false);
+  const [insertChartOpen, setInsertChartOpen] = useState(false);
   const gridEnabled = useCanvasGuidesStore((s) => s.gridEnabled);
   const gridSnapEnabled = useCanvasGuidesStore((s) => s.gridSnapEnabled);
   const snapEnabled = useCanvasGuidesStore((s) => s.snapEnabled);
@@ -3196,6 +3203,12 @@ export function App() {
             <ToolButton label="图标" onClick={() => setIconPickerOpen(true)}>
               <Sparkles />
             </ToolButton>
+            <ToolButton label="插入表格" caption="表格" onClick={() => setInsertTableOpen(true)}>
+              <Table2 />
+            </ToolButton>
+            <ToolButton label="插入图表" caption="图表" onClick={() => setInsertChartOpen(true)}>
+              <ChartColumn />
+            </ToolButton>
             <ToolButton
               label="AI 配图"
               onClick={() => {
@@ -4522,6 +4535,28 @@ export function App() {
             <SettingsWorkspace onMessage={setTaskStatus} />
           </div>
         </main>
+      )}
+
+      {insertTableOpen && (
+        <InsertTableDialog
+          onClose={() => setInsertTableOpen(false)}
+          onInsert={(columns, rows) => {
+            execute({ type: "add-table", slideId: activeSlide.id, columns, rows });
+            setInsertTableOpen(false);
+            setTaskStatus(`已插入 ${rows + 1} 行 × ${columns} 列表格`);
+          }}
+        />
+      )}
+
+      {insertChartOpen && (
+        <InsertChartDialog
+          onClose={() => setInsertChartOpen(false)}
+          onInsert={(kind) => {
+            execute({ type: "add-chart", slideId: activeSlide.id, kind });
+            setInsertChartOpen(false);
+            setTaskStatus("已插入图表；可在属性面板修改示例指标");
+          }}
+        />
       )}
 
       {aiImageOpen && (

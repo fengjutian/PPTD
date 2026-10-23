@@ -54,7 +54,7 @@ P1 成功后，用同一份 10 页内容做前后对比：
 | 缺口                                                               | 计划  |
 | ------------------------------------------------------------------ | ----- |
 | 设计方向选择器、缩略图预览、换一批                                 | P2    |
-| `image-led`、`process-rail`、`comparison`、`quote-field`           | P2    |
+| `process-rail`、`comparison`、`quote-field`                        | P2    |
 | `conceptFitScore`、`distinctivenessScore`、`changeRecipe` 修复动作 | P2    |
 | 概念持久化、重新设计、跨项目复用                                   | P3    |
 | 模板版式内的配方适配                                               | P2/P3 |
@@ -608,7 +608,7 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 
 ## 9. P2/P3 预留
 
-- **P2a（进行中）**：`cover-statement`、`data-story` 已实现；`image-led` 与设计方向选择器待做。
+- **P2a（进行中）**：`cover-statement`、`data-story`、`image-led` 已实现；设计方向选择器待做。
 - **P2b**：`conceptFitScore`、`distinctivenessScore`、`generic-layout`、`changeRecipe`；评审锚点“等权卡片阵列 ≤69”。
 - **P2c**：模板页配方适配（安全区、背景图、Logo 避让）。
 - **P3**：概念持久化、重新设计、跨项目复用；概念与用户手动编辑的冲突策略。
@@ -655,7 +655,8 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 - 5 条较长要点的非对称分栏页已渲染：左标题栏、右正文栏、无卡片。
 - 封面页已用 PowerPoint 渲染：大标题、副标题、几何强调块。
 - 3 个指标的 data-story 页已渲染：大数字、标签、每条指标绑定 `contentBlockRef`，可直接编辑数值。
-- 全量 `vitest run` 889 项通过；`tsc --noEmit`、`npm run build` 通过。
+- image-led 页已渲染：图片占右半页，文字收在左侧；配方返回 `imageFrame`，命令层重设图片框并重算裁剪。
+- 全量 `vitest run` 903 项通过；`tsc --noEmit`、`npm run build` 通过。
 
 实现时的两处合同细化：
 
@@ -663,4 +664,4 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 - `DesignTokens` 增加 `fonts.heading/body`，配方不直接读主题字体。
 - `asymmetric-split` 支持 2–5 条（样张第 2/4/6/8 页实际有 4/5/4/4 条）。
 
-未完成：真实 AI 接口的 10 页端到端复核、设计方向选择器、`image-led` 等其余配方、评审新评分与 `changeRecipe`、概念持久化。
+未完成：真实 AI 接口的 10 页端到端复核、设计方向选择器、`process-rail` 等其余配方、评审新评分与 `changeRecipe`、概念持久化。

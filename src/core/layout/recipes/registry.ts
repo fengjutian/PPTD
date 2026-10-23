@@ -3,6 +3,7 @@ import { asymmetricSplit } from "./asymmetric-split";
 import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
+import { imageLed } from "./image-led";
 import type { LayoutRecipe } from "./types";
 
 const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
@@ -10,6 +11,7 @@ const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
   "data-story": dataStory,
   "editorial-index": editorialIndex,
   "asymmetric-split": asymmetricSplit,
+  "image-led": imageLed,
 };
 
 export function findRecipe(id: RecipeId): LayoutRecipe | undefined {
