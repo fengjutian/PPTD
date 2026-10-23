@@ -79,9 +79,8 @@ export async function validatePresentationForExport(
       });
     }
     if (slide.animations && slide.animations.length > 0) {
-      // Only the effects without a native node are a problem now. Saying "no
-      // animations are exported" when five of them are would be as misleading
-      // as staying silent about the rest.
+      // Every current effect has a native node; this guard stays for future
+      // effects so a new enum value cannot silently disappear at export.
       const unsupported = slide.animations.filter((animation) => !animationExportsNatively(animation.effect));
       if (unsupported.length > 0) {
         issues.push({

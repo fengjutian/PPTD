@@ -1690,14 +1690,16 @@ describe("document commands", () => {
     );
     expect(result.slides[0]!.background).toBe("#F5F1E8");
     const bodies = result.slides[0]!.elements.filter(
-      (element) => element.type === "text" && element.text !== content.title,
+      (element): element is TextElement =>
+        element.type === "text" && element.text !== content.title && element.text !== "•",
     );
-    // The copy is inset inside the column card, so it starts just right of the
-    // slot edge rather than exactly on it.
-    expect(bodies[0]!.frame.x).toBeGreaterThanOrEqual(Math.round(source.pageSize.width * 0.08));
-    expect(bodies[0]!.frame.x).toBeLessThan(Math.round(source.pageSize.width * 0.12));
-    expect(bodies[1]!.frame.x).toBeGreaterThanOrEqual(Math.round(source.pageSize.width * 0.56));
-    expect(bodies[1]!.frame.x).toBeLessThan(Math.round(source.pageSize.width * 0.6));
+    expect(bodies).toHaveLength(2);
+    // The copy is inset inside the column card, past the marker gutter, so it
+    // starts just right of the slot edge rather than exactly on it.
+    expect(bodies[0]!.frame.x).toBeGreaterThanOrEqual(Math.round(source.pageSize.width * 0.11));
+    expect(bodies[0]!.frame.x).toBeLessThan(Math.round(source.pageSize.width * 0.16));
+    expect(bodies[1]!.frame.x).toBeGreaterThanOrEqual(Math.round(source.pageSize.width * 0.59));
+    expect(bodies[1]!.frame.x).toBeLessThan(Math.round(source.pageSize.width * 0.64));
   });
 
   it("places a rendered complex template layout behind editable content", () => {
@@ -2795,6 +2797,62 @@ describe("document commands", () => {
     expect(result.slides[0]!.content.body).toBe(body);
   });
 
+  it("sets the two columns on one baseline with a hanging indent per point", () => {
+    const source = createDocument();
+    const items = [
+      "近年多次进行组织架构调整，AI相关业务被独立或前置",
+      "高管汇报关系与考核权重明显向智能云、大模型、自动驾驶倾斜",
+      "销售与商业化资源在内部预算分配中逐步让位于AI基础设施建设",
+      "人员招聘与人才激励的重点明显向AI研发岗位集中",
+      "组织层面的优先级重排是判断战略转型真实性的关键信号",
+    ];
+    const content = { title: "组织架构调整", body: items.join("\n"), speakerNotes: "" };
+    const design = {
+      layout: "split" as const,
+      composition: "columns" as const,
+      background: "#FFFFFF",
+      accent: "#B08A2E",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+    };
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "apply-ai-designed-draft", title: "组织", slides: [content], designs: [design] }),
+    );
+    const texts = result.slides[0]!.elements.filter((element): element is TextElement => element.type === "text");
+    const markers = texts.filter((element) => element.text === "•");
+    const copies = texts.filter((element) => element.text !== content.title && element.text !== "•");
+    expect(markers).toHaveLength(items.length);
+    expect(copies).toHaveLength(items.length);
+    // The cut is chosen to balance the two columns by height, so both columns
+    // carry points and their first rows sit on one baseline.
+    const columns = [
+      copies.filter((element) => element.frame.x + element.frame.width / 2 < source.pageSize.width / 2),
+      copies.filter((element) => element.frame.x + element.frame.width / 2 >= source.pageSize.width / 2),
+    ];
+    expect(columns[0]!.length).toBeGreaterThan(0);
+    expect(columns[1]!.length).toBeGreaterThan(0);
+    expect(columns[0]![0]!.frame.y).toBe(columns[1]![0]!.frame.y);
+    // 悬挂缩进：文字从标记右侧开始，换行后不会再退回标记下面。
+    expect(columns[0]![0]!.frame.x).toBeGreaterThan(markers[0]!.frame.x);
+    // 行距均匀：相邻两行的间距不因原来的空行而翻倍。
+    const longest = columns[0]!.length >= columns[1]!.length ? columns[0]! : columns[1]!;
+    expect(longest.length).toBeGreaterThanOrEqual(3);
+    const firstGap = longest[1]!.frame.y - (longest[0]!.frame.y + longest[0]!.frame.height);
+    const secondGap = longest[2]!.frame.y - (longest[1]!.frame.y + longest[1]!.frame.height);
+    expect(firstGap).toBeGreaterThan(0);
+    expect(Math.abs(firstGap - secondGap)).toBeLessThanOrEqual(2000);
+    // 中缝不再立一根比卡片还高的装饰线。
+    const divider = result.slides[0]!.elements.find(
+      (element) =>
+        element.type === "shape" &&
+        element.frame.width < source.pageSize.width * 0.02 &&
+        element.frame.height > source.pageSize.height * 0.4 &&
+        element.frame.x > source.pageSize.width * 0.45 &&
+        element.frame.x < source.pageSize.width * 0.55,
+    );
+    expect(divider).toBeUndefined();
+  });
+
   it("keeps an explicitly requested split layout instead of forcing numbered text into cards", () => {
     const source = createDocument();
     const longItem =
@@ -2816,10 +2874,16 @@ describe("document commands", () => {
     );
     const bodies = result.slides[0]!.elements.filter(
       (element): element is Extract<typeof element, { type: "text" }> =>
-        element.type === "text" && element.text !== content.title && !/^\d+$/.test(element.text),
+        element.type === "text" &&
+        element.text !== content.title &&
+        element.text !== "•" &&
+        !/^\d+$/.test(element.text),
     );
-    expect(bodies).toHaveLength(2);
-    expect(bodies.every((element) => element.style.fontSizePt < 20 && element.style.fontSizePt >= 12)).toBe(true);
+    // Two columns, four points: every point is its own text frame so a wrapped
+    // point keeps its hanging indent instead of running back under the marker.
+    expect(bodies).toHaveLength(4);
+    // The copy may grow into the room the column has, but never to display size.
+    expect(bodies.every((element) => element.style.fontSizePt <= 26 && element.style.fontSizePt >= 12)).toBe(true);
     for (const [bodyIndex, body] of bodies.entries()) {
       expect(
         bodies

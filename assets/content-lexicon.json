@@ -87,6 +87,79 @@
     ],
     "repeatedPatternThreshold": 3
   },
+  "argumentRules": {
+    "description": "论证形式规则。每页先判断自己承担哪种论证，再选与它匹配的内容块；把变化写成并列要点，是生成稿空泛的最常见原因。提示端与检测端共用这一份表。",
+    "forms": [
+      {
+        "id": "change",
+        "label": "变化 / 趋势",
+        "block": "comparison（前 → 后两栏）或 timeline，不要写成 bullet-list",
+        "markers": [
+          "逐步",
+          "近年",
+          "此前",
+          "如今",
+          "转向",
+          "让位于",
+          "先后",
+          "首次",
+          "不再",
+          "已经",
+          "越来越",
+          "已高于",
+          "已超过",
+          "已成为"
+        ]
+      },
+      {
+        "id": "comparison",
+        "label": "对比 / 选型",
+        "block": "comparison",
+        "markers": ["相比", "对比", "相较", "前者", "后者", "优于", "不及", "一侧", "另一侧"]
+      },
+      {
+        "id": "sequence",
+        "label": "步骤 / 流程",
+        "block": "process",
+        "markers": ["首先", "其次", "然后", "最后", "第一步", "第二步", "下一步"]
+      },
+      {
+        "id": "metric",
+        "label": "指标 / 构成",
+        "block": "metric 或 table-data",
+        "markers": ["占比", "总额", "同比", "环比", "达到", "增长", "下降", "翻倍"]
+      },
+      {
+        "id": "list",
+        "label": "并列维度",
+        "block": "bullet-list",
+        "markers": []
+      },
+      {
+        "id": "judgment",
+        "label": "单一判断",
+        "block": "paragraph",
+        "markers": []
+      }
+    ],
+    "vagueIntensifiers": [
+      "明显",
+      "显著",
+      "持续",
+      "大幅",
+      "进一步",
+      "不断",
+      "高度",
+      "全面",
+      "加快",
+      "加速",
+      "有效",
+      "充分",
+      "切实",
+      "深入",
+      "日益"
+    ]
+  },
   "punctuation": {
     "description": "中文标点规则。模型写中文时经常混用半角标点（, ; : ! ?），在半角逗号出现在中文里，整页看上去像机器排的。提示要求模型用全角，检测端按同一份表判断，两者不会各说各话。",
     "halfWidthToFullWidth": {

@@ -159,28 +159,44 @@ export function validatePresentationVisualQuality(
     }
     // A split page with two tall columns can still look empty when the copy is
     // short: the frames reserve the full column but the painted text stops in
-    // the upper half. Detect that composition instead of accepting it because
-    // every individual text box fits.
-    const splitColumns = texts.filter(
+    // the upper half. Each point is its own frame now, so the check looks at the
+    // painted extent of a whole column (the frames that share an x band), not at
+    // one frame per column.
+    const splitTexts = texts.filter(
       (element) =>
-        element.contentRef !== "title" &&
         element.style.fontSizePt >= 14 &&
         element.frame.width >= document.pageSize.width * 0.18 &&
-        element.frame.width <= document.pageSize.width * 0.45 &&
-        element.frame.height >= document.pageSize.height * 0.08,
+        element.frame.width <= document.pageSize.width * 0.45,
     );
-    if (design?.layout === "split" && splitColumns.length === 2) {
-      const textHeights = splitColumns.map((element) => renderedTextHeight(element, document.pageSize.height));
-      const maxBottom = Math.max(
-        ...splitColumns.map((element, index) => element.frame.y / document.pageSize.height + textHeights[index]!),
-      );
-      if (maxBottom < 0.64 && Math.max(...textHeights) < 0.18) {
-        issues.push({
-          slideIndex,
-          elementIds: splitColumns.map((element) => element.id),
-          issue: "underfilled-columns",
-          message: "双栏正文只占页面上半部，下方连续空白超过三分之一",
+    if (design?.layout === "split" && splitTexts.length >= 2) {
+      const middle = document.pageSize.width / 2;
+      const bands = [
+        splitTexts.filter((element) => element.frame.x + element.frame.width / 2 < middle),
+        splitTexts.filter((element) => element.frame.x + element.frame.width / 2 >= middle),
+      ];
+      if (bands.every((band) => band.length > 0)) {
+        const painted = bands.map((band) => {
+          const bottom = Math.max(
+            ...band.map(
+              (element) =>
+                element.frame.y / document.pageSize.height + renderedTextHeight(element, document.pageSize.height),
+            ),
+          );
+          // How much copy a column actually paints, not how far apart its last
+          // frame sits: points are their own frames now, so the distance from
+          // the first frame to the last says nothing about how full the column is.
+          const amount = band.reduce((sum, element) => sum + renderedTextHeight(element, document.pageSize.height), 0);
+          return { bottom, amount };
         });
+        const maxBottom = Math.max(...painted.map((column) => column.bottom));
+        if (maxBottom < 0.64 && Math.max(...painted.map((column) => column.amount)) < 0.18) {
+          issues.push({
+            slideIndex,
+            elementIds: bands.flat().map((element) => element.id),
+            issue: "underfilled-columns",
+            message: "双栏正文只占页面上半部，下方连续空白超过三分之一",
+          });
+        }
       }
     }
   });

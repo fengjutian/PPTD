@@ -100,7 +100,8 @@ describe("presentation visual quality gate", () => {
         element.frame.width <= document.pageSize.width * 0.45 &&
         element.frame.height >= document.pageSize.height * 0.08,
     );
-    expect(columns).toHaveLength(2);
+    // Every point is its own frame: four points, two columns, four frames.
+    expect(columns).toHaveLength(4);
     // Simulate legacy or manually shortened copy: the column frames are still
     // tall, but the painted text no longer reaches the lower part of the page.
     columns.forEach((element, index) => {

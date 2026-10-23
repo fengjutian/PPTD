@@ -1,4 +1,5 @@
 import { estimateTextLines } from "../rendering/text-fit";
+import { assessArgument } from "../content/argument-quality";
 
 /**
  * The capacity rules that decide how much reviewed copy a page can carry.
@@ -406,6 +407,26 @@ export function assessLayoutCapacity(input: LayoutCapacityInput, options: Capaci
         scope: "comparison",
         blockIndex: comparison.index,
         message: `${side} ${longer.length} 条要排到 ${fit.fittedFontSizePt}pt 才排得下`,
+      });
+    }
+  }
+
+  // 论证形式是内容的问题，不是容量的问题，但它和容量一样在页面建出来之前
+  // 就该被看见：一条"排得下"的要点仍然可能什么都没证明。携带结构化内容块的
+  // 页面由块自己决定形式，要点不是它的版面单位，不在这里评价。
+  if (!comparison && rowBlocks.length === 0) {
+    for (const issue of assessArgument({
+      title: input.title,
+      items: points,
+      hasComparison: Boolean(comparison),
+      hasTimeline: blocks.some((block) => block.type === "timeline"),
+      hasProcess: blocks.some((block) => block.type === "process"),
+    })) {
+      notes.push({
+        severity: issue.severity,
+        scope: "items",
+        blockIndex: input.itemBlockIndex,
+        message: issue.message,
       });
     }
   }

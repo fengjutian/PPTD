@@ -340,7 +340,7 @@ interface SlideAnimation {
 
 `duplicate-animation` 复制一条动画（新 id、相同效果/计时/开始方式/方向）并插到源动画之后，一次撤销；锁定元素拒绝复制。预览通过 `animation-${effect}` 类与 CSS 关键帧实现，属于临时 UI 状态，不改变 revision、保存状态或撤销栈。
 
-效果枚举从 3 种扩到 9 种、阶段扩为三值，使持久化格式升到第 16 版；`15 → 16` 迁移只改版本号，旧动画（全部为进入）保持有效，固定样例见 `v16-document.json`。导出对出现、淡化、飞入、擦除和缩放写入原生 `<p:timing>`；其余四种只预览，报告逐页说明。详见 [0050 动画阶段由效果派生](decisions/0050-animation-phase-from-effect.md) 与 [0057 原生对象动画导出](decisions/0057-native-animation-export.md)。
+效果枚举从 3 种扩到 9 种、阶段扩为三值，使持久化格式升到第 16 版；`15 → 16` 迁移只改版本号，旧动画（全部为进入）保持有效，固定样例见 `v16-document.json`。九种效果都写入原生 `<p:timing>`；图表因没有稳定对象名而跳过并报告。详见 [0050 动画阶段由效果派生](decisions/0050-animation-phase-from-effect.md) 与 [0057 原生对象动画导出](decisions/0057-native-animation-export.md)。
 
 ## 21. 编辑期选择组（V0.2 已实现）
 

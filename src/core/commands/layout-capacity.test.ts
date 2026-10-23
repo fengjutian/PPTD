@@ -126,6 +126,22 @@ describe("layout capacity rules", () => {
     const notes = assessLayoutCapacity({ index: 1, title: "对比", items: points(7), bodyLength: 0, blocks });
     expect(notes.every((note) => note.scope === "comparison")).toBe(true);
   });
+
+  it("names the argument gap of a change page written as a flat list", () => {
+    const notes = assessLayoutCapacity({
+      index: 1,
+      title: "组织架构调整与资源倾斜显示AI业务优先级已高于传统搜索",
+      items: [
+        "近年多次进行组织架构调整，AI相关业务被独立或前置",
+        "高管汇报关系与考核权重明显向智能云、大模型、自动驾驶倾斜",
+        "销售与商业化资源在内部预算分配中逐步让位于AI基础设施建设",
+      ],
+      bodyLength: 0,
+    });
+    const argument = notes.find((note) => note.message.includes("讲变化"));
+    expect(argument).toMatchObject({ severity: "warning", scope: "items" });
+    expect(argument!.message).toContain("前后两栏对比");
+  });
 });
 
 describe("comparison column fit", () => {

@@ -819,3 +819,64 @@ describe("核实标记", () => {
     expect(renderReview(draft)).toContain("标记第 1 页的要点列表待核实");
   });
 });
+
+describe("素材事实引用", () => {
+  const facts = [
+    {
+      id: "F1",
+      statement: "2024 年智能云收入 320 亿元，同比增长 12%",
+      figure: "320 亿元",
+      period: "2024 年",
+      source: "2024 年报",
+    },
+    {
+      id: "F2",
+      statement: "2024 年在线营销收入 730 亿元，同比下降 3%",
+      figure: "730 亿元",
+      period: "2024 年",
+    },
+  ];
+
+  function citationDraft(slides: Array<{ title: string; body: string; factRefs?: string[] }>, withFacts = true): AiDraft {
+    return aiDraftSchema.parse({
+      title: "百度年报",
+      presentationBrief: createDraft().presentationBrief,
+      ...(withFacts ? { sourceFacts: facts } : {}),
+      slides: slides.map((slide) => ({ ...slide, speakerNotes: "", plan, blocks: [] })),
+    });
+  }
+
+  it("does not complain when every page cites facts that carry its numbers", () => {
+    const draft = citationDraft([
+      { title: "百度年报", body: "2024 年报解读" },
+      { title: "智能云成为第二增长曲线", body: "2024 年智能云收入 320 亿元，同比增长 12%", factRefs: ["F1"] },
+    ]);
+    expect(citationIssues(draft)).toEqual([]);
+  });
+
+  it("reports content pages that cite nothing", () => {
+    const draft = citationDraft([
+      { title: "百度年报", body: "2024 年报解读" },
+      { title: "智能云成为第二增长曲线", body: "智能云收入继续增长，利润率改善" },
+    ]);
+    const issue = citationIssues(draft).find((item) => item.kind === "uncited-page")!;
+    expect(issue.indexes).toEqual([1]);
+    expect(issue.message).toContain("第 2 页");
+  });
+
+  it("reports a figure the cited fact does not carry", () => {
+    const draft = citationDraft([
+      { title: "百度年报", body: "2024 年报解读" },
+      { title: "智能云成为第二增长曲线", body: "2024 年智能云收入 500 亿元", factRefs: ["F1"] },
+    ]);
+    const issue = citationIssues(draft).find((item) => item.kind === "unsupported-number")!;
+    expect(issue.indexes).toEqual([1]);
+    expect(issue.message).toContain("500 亿元");
+    expect(issue.blocking).toBe(false);
+  });
+
+  it("stays silent for drafts that never had source material", () => {
+    const draft = citationDraft([{ title: "百度年报", body: "随便写" }], false);
+    expect(citationIssues(draft)).toEqual([]);
+  });
+});

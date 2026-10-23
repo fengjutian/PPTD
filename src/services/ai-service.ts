@@ -144,9 +144,37 @@ export const contentCheckSchema = z.object({
 export type ContentCheck = z.infer<typeof contentCheckSchema>;
 export type ContentCheckKind = z.infer<typeof contentCheckKindSchema>;
 
+/**
+ * 一条素材事实。
+ *
+ * 事实只能从用户提供的素材里抽取：模型没有外部事实来源，让它凭主题"回忆"
+ * 数字，得到的是一份读起来很专业、却无法核对的稿子。编号由系统按顺序分配，
+ * 提示词、正文引用和审核页才对得上同一条事实。
+ */
+export const sourceFactSchema = z.object({
+  /** 本稿内稳定，形如 F1。 */
+  id: z.string().regex(/^F\d+$/),
+  /** 一句话事实，含主体、指标和口径。 */
+  statement: z.string().min(1).max(300),
+  /** 原文数字，如 "320 亿元"。 */
+  figure: z.string().max(80).optional(),
+  /** 时间，如 "2024 年"。 */
+  period: z.string().max(80).optional(),
+  /** 出处，如 "2024 年报"。 */
+  source: z.string().max(120).optional(),
+});
+export type SourceFact = z.infer<typeof sourceFactSchema>;
+
 export const aiDraftSchema = z.object({
   title: z.string().min(1).max(200),
   presentationBrief: presentationBriefSchema,
+  /**
+   * 从用户素材里抽取的事实。
+   *
+   * 没有素材时缺省；旧草稿没有这个字段也不需要迁移。事实只活在审核草稿里，
+   * 不进入演示文稿，也不随导出走。
+   */
+  sourceFacts: z.array(sourceFactSchema).max(24).optional(),
   slides: z
     .array(
       z.object({
@@ -157,6 +185,8 @@ export const aiDraftSchema = z.object({
         reviewed: z.boolean().optional(),
         plan: slidePlanSchema.default(legacySlidePlan),
         blocks: z.array(contentBlockSchema).max(20).default([]),
+        // 这一页引用了哪些素材事实。没有素材的草稿为空数组。
+        factRefs: z.array(z.string().max(20)).max(8).optional(),
         // 旧草稿没有这个字段：缺省即"这一页没有核实标记"。
         checks: z.array(contentCheckSchema).max(20).optional(),
       }),
@@ -193,11 +223,26 @@ export const aiSlideBatchSchema = z.object({
         speakerNotes: z.string().max(4000).default(""),
         plan: slidePlanSchema.default(legacySlidePlan),
         blocks: z.array(contentBlockSchema).max(20).default([]),
+        factRefs: z.array(z.string().max(20)).max(8).optional(),
       }),
     )
     .min(1),
 });
 export type AiSlideBatch = z.infer<typeof aiSlideBatchSchema>;
+
+/** 事实抽取的输出合同。编号由系统分配，模型只负责"从原文里挑"。 */
+const sourceFactsResponseSchema = z.object({
+  facts: z
+    .array(
+      z.object({
+        statement: z.string().min(1).max(300),
+        figure: z.string().max(80).optional(),
+        period: z.string().max(80).optional(),
+        source: z.string().max(120).optional(),
+      }),
+    )
+    .max(60),
+});
 export const slideBriefSchema = z.object({
   slideIndex: z.number().int().min(0),
   purpose: z.string().min(1).max(300),
@@ -738,6 +783,8 @@ export interface AiGenerationOptions {
   isCancelled?: () => boolean;
   /** 生成任务号。同一任务的所有请求共享它，取消时一并中断。 */
   taskId?: number;
+  /** 已抽取的素材事实。为空时生成行为与没有素材时完全一致。 */
+  facts?: readonly SourceFact[];
 }
 
 /** 一次请求能写完的页数上限。再少就没必要拆批。 */
@@ -771,16 +818,27 @@ export async function generatePresentationDraft(
   options: AiGenerationOptions = {},
 ): Promise<AiDraft> {
   const { provider, model } = await aiSelection();
+  const facts = [...(options.facts ?? [])];
+  // 没有素材时不往请求里塞空数组：提示词与改造前完全一致。
+  const factsRequest = facts.length > 0 ? { facts } : {};
   if (slideCount <= SINGLE_CALL_PAGE_LIMIT) {
     options.onProgress?.({ stage: "content", completed: 0, total: 1, label: "正在生成演示草稿…" });
     const raw = await invoke<unknown>("generate_presentation", {
-      request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true },
+      request: {
+        topic,
+        slideCount,
+        ...factsRequest,
+        model,
+        provider,
+        taskId: options.taskId,
+        streamProgress: true,
+      },
     });
     const draft = parseAiResponse(aiDraftSchema, raw, "完整草稿");
     if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
     options.onProgress?.({ stage: "content", completed: 1, total: 1, label: "草稿已生成" });
     // 标点在这里收拾：模型刚写完、用户还没看到的时候。
-    return normalizeDraftPunctuation(draft);
+    return withSourceFacts(normalizeDraftPunctuation(draft), facts);
   }
 
   options.onProgress?.({ stage: "outline", completed: 0, total: 1, label: "正在规划演示大纲…" });
@@ -818,6 +876,7 @@ export async function generatePresentationDraft(
             outline,
             startIndex: batch.startIndex,
             count: batch.count,
+            ...factsRequest,
             model,
             provider,
             taskId: options.taskId,
@@ -849,13 +908,63 @@ export async function generatePresentationDraft(
       speakerNotes: source?.speakerNotes ?? "",
       plan: source?.plan ?? legacySlidePlan,
       blocks: source?.blocks ?? [],
+      ...(source?.factRefs ? { factRefs: source.factRefs } : {}),
     };
   });
   const draft = aiDraftSchema.parse({ title: outline.title, presentationBrief: outline.presentationBrief, slides });
   if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
   options.onProgress?.({ stage: "content", completed: batches.length, total: batches.length, label: "草稿已生成" });
   // 标点在这里收拾：模型刚写完、用户还没看到的时候。
-  return normalizeDraftPunctuation(draft);
+  return withSourceFacts(normalizeDraftPunctuation(draft), facts);
+}
+
+/**
+ * 把本次抽取的素材事实挂到草稿上。
+ *
+ * 事实是这一稿的生成依据，跟着草稿走：审核页据此显示每页引用了什么，
+ * 重新生成和单页重写也要拿到同一份清单。没有素材时保持草稿原样。
+ */
+function withSourceFacts(draft: AiDraft, facts: readonly SourceFact[]): AiDraft {
+  return facts.length > 0 ? { ...draft, sourceFacts: facts.map((fact) => ({ ...fact })) } : draft;
+}
+
+/** 一次生成最多引用的素材事实数，和后端保持一致。 */
+const MAX_SOURCE_FACTS = 24;
+
+/**
+ * 从用户粘贴的素材里抽取事实清单。
+ *
+ * 这一步是"先有证据，再写稿"的分界线：抽取结果能被人看见、能被人删掉，
+ * 写稿阶段就只能引用这份清单里的内容。抽取本身不判断真假——判断真伪仍然是
+ * 人的动作，系统只负责让"这一页的数据从哪来"有据可查。
+ */
+export async function extractSourceFacts(
+  topic: string,
+  material: string,
+  options: { taskId?: number } = {},
+): Promise<SourceFact[]> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("extract_source_facts", {
+    request: { topic, material, model, provider, taskId: options.taskId },
+  });
+  const parsed = parseAiResponse(sourceFactsResponseSchema, raw, "素材事实");
+  const seen = new Set<string>();
+  const facts: SourceFact[] = [];
+  for (const fact of parsed.facts) {
+    const statement = fact.statement.trim();
+    // 同一句话重复出现只留一条：事实清单是引用表，不是摘抄本。
+    if (!statement || seen.has(statement)) continue;
+    seen.add(statement);
+    facts.push({
+      id: `F${facts.length + 1}`,
+      statement,
+      ...(fact.figure?.trim() ? { figure: fact.figure.trim() } : {}),
+      ...(fact.period?.trim() ? { period: fact.period.trim() } : {}),
+      ...(fact.source?.trim() ? { source: fact.source.trim() } : {}),
+    });
+    if (facts.length >= MAX_SOURCE_FACTS) break;
+  }
+  return facts;
 }
 
 export async function polishPresentationTopic(topic: string): Promise<string> {

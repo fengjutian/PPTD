@@ -3355,63 +3355,135 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             titleLuminance,
           ),
         );
-        if (!keepsArtwork) slide.elements.push(shape(frame(0.5, 0.25, 0.012, 0.6), design.accent));
-        const middle = Math.ceil(items.length / 2);
-        const columnCopy = (columnItems: string[]) => columnItems.map((item) => `• ${cleanPoint(item)}`).join("\n\n");
-        // A short comparison can carry larger type; a long one must shrink to stay
-        // inside its column.
-        const sparseColumns = items.length <= 4 && items.every((item) => item.trim().length <= 16);
-        const columnFont = templateColumnSize ?? (sparseColumns ? 20 : 18);
-        const leftSlot = hasSafeColumns
-          ? { x: leftRecipe!.x, y: leftRecipe!.y, width: leftRecipe!.width, height: leftRecipe!.height }
-          : { x: 0.08, y: 0.28, width: 0.36, height: 0.54 };
-        const rightSlot = hasSafeColumns
-          ? { x: rightRecipe!.x, y: rightRecipe!.y, width: rightRecipe!.width, height: rightRecipe!.height }
-          : { x: 0.57, y: 0.28, width: 0.35, height: 0.54 };
-        // Two bare bullet columns on a white page read as a page that was never
-        // finished: the copy floats with nothing holding it. The columns get the
-        // same card language as the rest of the deck, sized to their copy and
-        // centred in the slot, so a four-point page still has a body.
-        const leftCopy = columnCopy(items.slice(0, middle));
-        const rightCopy = columnCopy(items.slice(middle));
+        const cleanItems = items.map(cleanPoint).filter((item) => item.length > 0);
+        const slots: Array<{ x: number; y: number; width: number; height: number }> = hasSafeColumns
+          ? [
+              { x: leftRecipe!.x, y: leftRecipe!.y, width: leftRecipe!.width, height: leftRecipe!.height },
+              { x: rightRecipe!.x, y: rightRecipe!.y, width: rightRecipe!.width, height: rightRecipe!.height },
+            ]
+          : [
+              { x: 0.08, y: contentBox.y, width: 0.36, height: contentBox.height },
+              { x: 0.57, y: contentBox.y, width: 0.35, height: contentBox.height },
+            ];
         const padding = 0.035;
-        const leftTextWidth = leftSlot.width - padding * 2;
-        const rightTextWidth = rightSlot.width - padding * 2;
-        const leftHeight = blockHeight(leftCopy, leftTextWidth, columnFont, bodyLeading);
-        const rightHeight = blockHeight(rightCopy, rightTextWidth, columnFont, bodyLeading);
-        // Both cards share one height: two panels of different heights read as
-        // two unrelated blocks instead of one comparison.
-        const panelHeight = Math.min(
-          Math.min(leftSlot.height, rightSlot.height),
-          Math.max(contentBox.height * 0.6, Math.max(leftHeight, rightHeight) + padding * 2),
+        // The marker owns a gutter of its own, and wrapped lines start at the
+        // copy column instead of running back under the bullet. Concatenating
+        // "• item" into one paragraph produced a list whose second line started
+        // at the bullet, which reads as a typing accident rather than a list.
+        const markerGutter = 0.022;
+        const rowGap = 0.018 * density.gap;
+        const sparseColumns = items.length <= 4 && items.every((item) => item.trim().length <= 16);
+        const preferredSize = templateColumnSize ?? (sparseColumns ? 20 : 18);
+        const copyWidth = (slot: { width: number }) => slot.width - padding * 2 - markerGutter;
+        const measure = (column: string[], slot: { width: number }, size: number) => {
+          const width = copyWidth(slot);
+          const heights = column.map((item) => blockHeight(item, width, size, bodyLeading));
+          return {
+            heights,
+            total: heights.reduce((sum, height) => sum + height, 0) + rowGap * Math.max(0, heights.length - 1),
+          };
+        };
+        // Both columns share one type size and one top edge. Centring each panel
+        // on its own copy put the first line of the left column at a different
+        // height from the right one; the eye reads that as a misalignment even
+        // when each panel is internally centred.
+        const available = Math.min(slots[0]!.height, slots[1]!.height) - padding * 2;
+        // Grow the copy to the room the columns have before shrinking it: a pair
+        // of panels filled with 18pt copy on a 7.5in page leaves half the card
+        // empty and reads as a page that was never finished.
+        const maximumSize = Math.min(26, preferredSize + 8);
+        // A cut at the midpoint is not always the balanced one: five points of
+        // different lengths can put three short ones against two long ones and
+        // leave one card half empty. Try every cut and keep the one whose two
+        // columns need the same height.
+        const bestCut = (size: number) => {
+          let best:
+            | {
+                at: number;
+                left: ReturnType<typeof measure>;
+                right: ReturnType<typeof measure>;
+                difference: number;
+                needed: number;
+              }
+            | undefined;
+          for (let at = 1; at < cleanItems.length; at += 1) {
+            const left = measure(cleanItems.slice(0, at), slots[0]!, size);
+            const right = measure(cleanItems.slice(at), slots[1]!, size);
+            const difference = Math.abs(left.total - right.total);
+            if (!best || difference < best.difference) {
+              best = { at, left, right, difference, needed: Math.max(left.total, right.total) };
+            }
+          }
+          return best;
+        };
+        let cut = Math.max(1, Math.ceil(cleanItems.length / 2));
+        let columnSize = 12;
+        let measured = [
+          measure(cleanItems.slice(0, cut), slots[0]!, 12),
+          measure(cleanItems.slice(cut), slots[1]!, 12),
+        ] as const;
+        for (let size = maximumSize; size >= 12; size -= 1) {
+          const candidate = bestCut(size);
+          if (!candidate) break;
+          if (candidate.needed <= available || size === 12) {
+            cut = candidate.at;
+            columnSize = size;
+            measured = [candidate.left, candidate.right] as const;
+            break;
+          }
+        }
+        // The panels share one top edge and are each as tall as the copy they
+        // carry. Forcing a short column to the height of a long one left the
+        // shorter card half empty underneath its last point; two cards of
+        // different heights that start on the same line read as columns of one
+        // block, not as two unrelated objects.
+        const panelBlockHeight = Math.min(
+          slots[0]!.height,
+          slots[1]!.height,
+          Math.max(measured[0].total, measured[1].total) + padding * 2,
         );
-        const drawColumn = (
-          copy: string,
-          textWidth: number,
-          usedHeight: number,
-          slot: { x: number; y: number; width: number; height: number },
-        ) => {
-          const panelTop = slot.y + (slot.height - panelHeight) / 2;
-          const textTop = panelTop + (panelHeight - usedHeight) / 2;
+        [cleanItems.slice(0, cut), cleanItems.slice(cut)].forEach((column, columnIndex) => {
+          const slot = slots[columnIndex]!;
+          const authoredHeight = measured[columnIndex]!.total + padding * 2;
+          const panelHeight = Math.min(slot.height, authoredHeight);
+          const panelTop = slot.y + (slot.height - panelBlockHeight) / 2;
           slide.elements.push(
             shape(frame(slot.x, panelTop, slot.width, panelHeight), cardFill, "rectangle", cardStroke, 0.75),
+            shape(frame(slot.x, panelTop, slot.width, 0.008), design.accent),
           );
-          slide.elements.push(shape(frame(slot.x, panelTop, slot.width, 0.008), design.accent));
-          slide.elements.push(
-            text(
-              copy,
-              frame(slot.x + padding, textTop, textWidth, Math.max(0.04, usedHeight * 1.04 + 0.002)),
-              columnFont,
-              bodyInk,
-              false,
-              "left",
-              undefined,
-              contentTextLuminance,
-            ),
-          );
-        };
-        drawColumn(leftCopy, leftTextWidth, leftHeight, leftSlot);
-        drawColumn(rightCopy, rightTextWidth, rightHeight, rightSlot);
+          const width = copyWidth(slot);
+          let rowY = panelTop + padding;
+          column.forEach((item, itemIndex) => {
+            const itemHeight = measured[columnIndex]!.heights[itemIndex]!;
+            // The marker is its own element, so a wrapped point keeps its
+            // hanging indent and the list stays editable point by point.
+            slide.elements.push(
+              text(
+                "•",
+                frame(slot.x + padding, rowY, markerGutter, Math.max(0.02, itemHeight)),
+                columnSize,
+                design.accent,
+                false,
+                "left",
+                undefined,
+                cardLuminance,
+              ),
+            );
+            slide.elements.push(
+              text(
+                item,
+                frame(slot.x + padding + markerGutter, rowY, width, Math.max(0.02, itemHeight + 0.004)),
+                columnSize,
+                bodyInk,
+                false,
+                "left",
+                undefined,
+                cardLuminance,
+              ),
+            );
+            rowY += itemHeight + rowGap;
+          });
+        });
       } else if (
         composition === "stacked" &&
         (design.layout === "title-body" || design.layout === "summary") &&

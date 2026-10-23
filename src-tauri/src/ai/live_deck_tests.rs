@@ -294,7 +294,7 @@ async fn the_content_stage_really_produces_a_picture_intent() {
         }
     };
 
-    let prompt = crate::commands::ai::draft_prompt(4, TOPIC);
+    let prompt = crate::commands::ai::draft_prompt(4, TOPIC, &[]);
     let draft = ask(
         &api_key,
         "你是 PPTD 的演示文稿写作者。只输出严格 JSON。",

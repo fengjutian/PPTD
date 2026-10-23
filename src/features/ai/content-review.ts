@@ -250,6 +250,8 @@ export type ReviewIssueKind =
   | "templated-title"
   | "repeated-title-pattern"
   | "unverified-claims"
+  | "uncited-page"
+  | "unsupported-number"
   | "image-text-request"
   | "image-empty-prompt"
   | "image-on-structured-page"
@@ -262,6 +264,110 @@ export type ReviewIssue = {
   /** Blocking issues keep the draft from being confirmed into a template. */
   blocking: boolean;
 };
+
+/**
+ * A number a reader can check: a figure with a unit, a percentage, or a year.
+ *
+ * "2 条" or "第 3 页" are not evidence and are deliberately left out; flagging
+ * them would bury the real numbers in noise.
+ */
+const EVIDENCE_TOKEN = /(?:\d+(?:\.\d+)?\s*(?:%|％|亿元|万元|亿|万|倍))|(?:(?:19|20)\d{2}\s*年)/g;
+
+/** Every piece of reviewed text a page carries, without list markers. */
+function evidenceText(slide: DraftSlide): string {
+  const items = slide.blocks.flatMap((block): string[] => {
+    switch (block.type) {
+      case "bullet-list":
+        return block.items;
+      case "paragraph":
+      case "quote":
+        return [block.text];
+      case "metric":
+        return [`${block.label} ${block.value}`];
+      case "comparison":
+        return [...block.leftItems, ...block.rightItems];
+      case "timeline":
+      case "process":
+        return block.items.flatMap((item) => [item.label, item.text]);
+      case "table-data":
+        return block.rows.flat();
+      default:
+        return [];
+    }
+  });
+  return [slide.title, slide.body, ...items].join("\n");
+}
+
+/** Facts and copy are compared without spaces so "320 亿元" matches "320亿元". */
+function comparableEvidence(value: string): string {
+  return value.replace(/\s+/g, "").replace(/％/g, "%");
+}
+
+/**
+ * What the page claims versus what the facts it cites actually say.
+ *
+ * Two deterministic checks, both advisory:
+ * - a content page that cites nothing, when the deck has a fact list;
+ * - a figure that appears on the page but not in any fact it cites — the
+ *   page is claiming a number the source does not support.
+ *
+ * The check is deliberately literal. It is not a truth test: a number that
+ * matches the fact list still has to be verified by a person, and a number
+ * computed from facts (a growth rate, a share) is reported rather than
+ * silently accepted.
+ */
+export function citationIssues(draft: AiDraft): ReviewIssue[] {
+  const facts = draft.sourceFacts ?? [];
+  if (facts.length === 0) return [];
+  const byId = new Map(facts.map((fact) => [fact.id, fact] as const));
+  const uncited: number[] = [];
+  const unsupported = new Map<string, number[]>();
+  draft.slides.forEach((slide, index) => {
+    // The cover states the subject, not the evidence.
+    if (index === 0) return;
+    const cited = (slide.factRefs ?? []).filter((id) => byId.has(id));
+    if (cited.length === 0) {
+      if (slideHasContent(slide)) uncited.push(index);
+      return;
+    }
+    const corpus = comparableEvidence(
+      cited
+        .map((id) => {
+          const fact = byId.get(id)!;
+          return [fact.statement, fact.figure, fact.period].filter(Boolean).join(" ");
+        })
+        .join(" "),
+    );
+    for (const match of evidenceText(slide).matchAll(EVIDENCE_TOKEN)) {
+      const token = comparableEvidence(match[0]);
+      if (corpus.includes(token)) continue;
+      const shown = match[0].trim();
+      unsupported.set(shown, [...(unsupported.get(shown) ?? []), index]);
+    }
+  });
+  const issues: ReviewIssue[] = [];
+  if (uncited.length > 0) {
+    issues.push({
+      kind: "uncited-page",
+      indexes: uncited,
+      message: `有 ${uncited.length} 页没有引用素材事实（第 ${uncited.map((index) => index + 1).join("、")} 页）`,
+      blocking: false,
+    });
+  }
+  if (unsupported.size > 0) {
+    const entries = [...unsupported.entries()].slice(0, 5);
+    const detail = entries
+      .map(([token, pages]) => `第 ${[...new Set(pages)].map((index) => index + 1).join("、")} 页的「${token}」`)
+      .join("；");
+    issues.push({
+      kind: "unsupported-number",
+      indexes: [...new Set([...unsupported.values()].flat())].sort((left, right) => left - right),
+      message: `有数字不在这一页引用的事实里：${detail}${unsupported.size > 5 ? "…" : ""}`,
+      blocking: false,
+    });
+  }
+  return issues;
+}
 
 /**
  * Review problems are collected for the whole draft instead of only the first
@@ -378,6 +484,7 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
   }
   // 配图意图也在内容阶段就产出了，所以它的合规问题在这里一并报出来。
   // 配图的问题不阻塞审核：内容本身没有问题，图的事可以之后再定。
+  citationIssues(draft).forEach((issue) => issues.push(issue));
   visualAssetIssues(draft).forEach((issue) => {
     issues.push({ kind: issue.kind, indexes: [issue.slideIndex], message: issue.message, blocking: false });
   });

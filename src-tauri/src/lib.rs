@@ -34,6 +34,7 @@ pub fn run() {
             commands::storage::upsert_recent_project,
             commands::storage::remove_recent_project,
             commands::ai::generate_presentation,
+            commands::ai::extract_source_facts,
             commands::ai::generate_presentation_outline,
             commands::ai::generate_presentation_slides_batch,
             commands::ai::generate_slide_briefs,

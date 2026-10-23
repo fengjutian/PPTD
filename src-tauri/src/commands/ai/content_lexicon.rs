@@ -14,8 +14,31 @@ const LEXICON_JSON: &str = include_str!("../../../../assets/content-lexicon.json
 #[serde(rename_all = "camelCase")]
 struct LexiconFile {
     title_rules: TitleRules,
+    argument_rules: ArgumentRules,
     punctuation: Punctuation,
     image_prompt: ImagePromptRules,
+}
+
+/// 论证形式：这一页在做哪种论证，以及它应该落到哪种内容块。
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ArgumentForm {
+    /// 写进提示的中文名。
+    label: String,
+    /// 与这种论证匹配的内容块。
+    block: String,
+    /// 判断这种论证的词。列表形式没有标记词。
+    #[serde(default)]
+    markers: Vec<String>,
+}
+
+/// 论证形式规则。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ArgumentRules {
+    forms: Vec<ArgumentForm>,
+    /// 只有程度、没有事实的词：通篇都是它们，说明这一页还没有证据。
+    vague_intensifiers: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -65,6 +88,8 @@ pub struct TitleLexicon {
     pub image_text_request_words: Vec<String>,
     /// 整册配图的上限。
     pub max_images_per_deck: usize,
+    argument_forms: Vec<ArgumentForm>,
+    vague_intensifiers: Vec<String>,
 }
 
 impl TitleLexicon {
@@ -81,6 +106,8 @@ impl TitleLexicon {
             half_width_to_full_width: file.punctuation.half_width_to_full_width,
             image_text_request_words: file.image_prompt.text_request_words,
             max_images_per_deck: file.image_prompt.max_images_per_deck,
+            argument_forms: file.argument_rules.forms,
+            vague_intensifiers: file.argument_rules.vague_intensifiers,
         }
     }
 
@@ -145,8 +172,50 @@ impl TitleLexicon {
         )
     }
 
-    /// 用词表里的栏目名和后缀拼出反面例子。
+    /// 论证形式纪律，写进内容生成提示。
     ///
+    /// 生成稿最常见的失败不是句子不通，而是每页都写成几条并列短句：
+    /// 讲变化的页面没有"前"和"后"，讲对比的页面没有两侧。形式与内容块
+    /// 不匹配，页面就没有论证，只剩排版。规则里的词全部来自共享词表，
+    /// 前端检测读的是同一份。
+    pub fn argument_rules_prompt(&self) -> String {
+        let mut lines = vec![
+            "【论证形式】".to_string(),
+            "1. 写每一页之前，先判断它在做哪一种论证，再选与它匹配的内容块；形式与块不匹配，页面就会退化成没有信息量的并列短句。".to_string(),
+        ];
+        for (index, form) in self.argument_forms.iter().enumerate() {
+            let condition = if form.markers.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "标题或要点里出现{}时，按这一条处理。",
+                    join_or(&form.markers)
+                )
+            };
+            lines.push(format!(
+                "{}. {} → {}。{condition}",
+                index + 2,
+                form.label,
+                form.block
+            ));
+        }
+        let after_forms = self.argument_forms.len() + 2;
+        lines.push(format!(
+            "{after_forms}. bullet-list 的每一条必须是一个独立维度：任意两条互换位置后，读者读到的东西应当不同。"
+        ));
+        lines.push(format!(
+            "{}. 每条要点必须能被核对：要么带数字、时间、主体或具体动作，要么明确写成判断。没有数据时写清缺哪项数据，不得用{}这类程度词冒充事实。",
+            after_forms + 1,
+            join_or(&self.vague_intensifiers)
+        ));
+        lines.push(format!(
+            "{}. 自检：把一页要点的顺序打乱，如果读起来没有区别，说明它们在说同一件事，必须合并或拆页。",
+            after_forms + 2
+        ));
+        lines.join("\n")
+    }
+
+    /// 用词表里的栏目名和后缀拼出反面例子。
     /// "现状分析"这种写法看起来像标题，其实只是列头加后缀，
     /// 所以栏目名和后缀必须成对出现在提示里，模型才知道要避开的是组合而不是单个词。
     fn column_suffix_examples(&self) -> String {
@@ -240,5 +309,34 @@ mod tests {
         assert!(prompt.contains("文字"));
         assert!(prompt.contains(&lexicon.max_images_per_deck.to_string()));
         assert!(prompt.contains("画面"));
+    }
+
+    #[test]
+    fn builds_the_argument_rules_from_the_lexicon() {
+        let lexicon = TitleLexicon::load();
+        let prompt = lexicon.argument_rules_prompt();
+        assert!(prompt.contains("【论证形式】"));
+        // 每种形式都要在提示里出现，且带着它对应的内容块。
+        for form in &lexicon.argument_forms {
+            assert!(prompt.contains(form.label.as_str()));
+            assert!(prompt.contains(form.block.as_str()));
+        }
+        // 变化页不能写成并列要点：这是这套规则存在的原因。
+        assert!(prompt.contains("不要写成 bullet-list"));
+        // 程度词也来自词表，检测端读的是同一批。
+        assert!(prompt.contains("明显"));
+        assert!(prompt.contains("顺序打乱"));
+    }
+
+    #[test]
+    fn the_change_form_is_marked_by_change_words() {
+        let lexicon = TitleLexicon::load();
+        let change = lexicon
+            .argument_forms
+            .iter()
+            .find(|form| form.label.contains("变化"))
+            .expect("词表必须有变化形式");
+        assert!(change.markers.iter().any(|marker| marker == "逐步"));
+        assert!(change.markers.iter().any(|marker| marker == "已高于"));
     }
 }
