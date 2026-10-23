@@ -268,7 +268,7 @@ function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
 function copyElementForPaste(element: SlideElement, offset: number): SlideElement {
   const moved = { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu };
   if (element.type === "text") {
-    return {
+    const copy: TextElement = {
       ...element,
       id: crypto.randomUUID() as ElementId,
       contentRef: "decorative",
@@ -276,6 +276,10 @@ function copyElementForPaste(element: SlideElement, offset: number): SlideElemen
       style: { ...element.style },
       ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
     };
+    // The copy may land on another page, where the block it pointed at does not
+    // exist. A pasted card is user copy, not another view of the reviewed one.
+    delete copy.contentBlockRef;
+    return copy;
   }
   if (element.type === "shape")
     return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
@@ -345,6 +349,7 @@ function cloneElement(element: SlideElement): SlideElement {
       ...element,
       frame: { ...element.frame },
       style: { ...element.style },
+      ...(element.contentBlockRef ? { contentBlockRef: { ...element.contentBlockRef } } : {}),
       ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
     };
   if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
@@ -1026,6 +1031,15 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
       const id = mapBlockId(element.contentBlockId);
       if (!id) return [];
       element.contentBlockId = id;
+      return [element];
+    }
+    if (element.type === "text" && element.contentBlockRef) {
+      // A card rendered in the temporary document points at a temporary block.
+      // Without remapping, editing the relaid-out card would write into a block
+      // the page does not own and the reviewed number would stay behind.
+      const id = mapBlockId(element.contentBlockRef.blockId);
+      if (!id) delete element.contentBlockRef;
+      else element.contentBlockRef.blockId = id;
       return [element];
     }
     return [element];

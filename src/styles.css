@@ -318,6 +318,10 @@ button {
   box-shadow: inset 3px 0 0 var(--ppt-accent-hover);
   background: rgb(35 126 78 / 18%);
 }
+.animation-sequence-list button.playing {
+  border-color: #69d99a;
+  box-shadow: inset 3px 0 0 #69d99a, 0 0 0 1px rgb(105 217 154 / 15%);
+}
 .animation-order-badge {
   width: 24px;
   height: 24px;
@@ -339,6 +343,11 @@ button {
   gap: 7px;
   padding: 10px;
   border-top: 1px solid #303136;
+}
+.animation-preview-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.72fr;
+  gap: 5px;
 }
 .animation-pane-footer button {
   height: 32px;

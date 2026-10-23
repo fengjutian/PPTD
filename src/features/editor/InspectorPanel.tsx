@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import {
   type ChartKind,
+  type ContentBlock,
   type Emu,
   type ImageCrop,
   type LineDirection,
@@ -55,6 +56,7 @@ import { useEditorStore } from "../../store/editor-store";
 import { ColorField, NumberField, SelectField, TextAreaField, TextField } from "./inspector-fields";
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
 import { AlignGrid, type AlignCell } from "./AlignGrid";
+import { MetricFields, TableDataFields, type MetricFieldValue } from "./StructuredContentFields";
 import { MultiSelectionPanel } from "./MultiSelectionPanel";
 import { unionFrame } from "../../core/commands/arrange";
 import { ElementPreview } from "./ElementPreview";
@@ -101,6 +103,8 @@ export interface InspectorPanelViewProps {
   /** Page background, used to judge text readability and to offer a readable ink. */
   background: string;
   pageSize: { width: Emu; height: Emu };
+  /** Reviewed structured content of the page, for tables, charts and cards. */
+  blocks?: ContentBlock[];
   /** The speaker notes of this page. */
   speakerNotes: string;
   backgroundImage?: boolean;
@@ -154,6 +158,7 @@ export function InspectorPanelView({
   elementCount,
   background,
   pageSize,
+  blocks,
   speakerNotes,
   backgroundImage = false,
   unit,

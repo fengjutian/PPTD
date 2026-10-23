@@ -24,6 +24,7 @@ import {
   MoveVertical,
   MousePointer2,
   Palette,
+  Play,
   Plus,
   Redo2,
   RotateCcw,
@@ -657,8 +658,9 @@ export function App() {
   const [message, setMessage] = useState<PageMessage>();
   const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
   const [editorRibbonTab, setEditorRibbonTab] = useState<"file" | "home" | "insert" | "design" | "arrange" | "animation" | "view">("home");
-  const [animationPreview, setAnimationPreview] = useState<SlideAnimation>();
+  const [animationPreviews, setAnimationPreviews] = useState<SlideAnimation[]>([]);
   const [selectedAnimationId, setSelectedAnimationId] = useState<string>();
+  const animationPreviewTimers = useRef<number[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
@@ -2412,13 +2414,57 @@ export function App() {
     if (selectedAnimationId !== nextId) setSelectedAnimationId(nextId);
   }, [selectedAnimation?.id, selectedAnimationId]);
 
+  const stopAnimationPreview = useCallback(() => {
+    animationPreviewTimers.current.forEach((timer) => window.clearTimeout(timer));
+    animationPreviewTimers.current = [];
+    setAnimationPreviews([]);
+  }, []);
+
+  useEffect(() => stopAnimationPreview, [stopAnimationPreview]);
+
   const previewSelectedAnimation = () => {
     if (!selectedAnimation) return;
-    setAnimationPreview(undefined);
+    stopAnimationPreview();
     window.requestAnimationFrame(() => {
-      setAnimationPreview(selectedAnimation);
-      window.setTimeout(() => setAnimationPreview(undefined), selectedAnimation.durationMs + selectedAnimation.delayMs + 120);
+      setAnimationPreviews([selectedAnimation]);
+      animationPreviewTimers.current = [
+        window.setTimeout(() => setAnimationPreviews([]), selectedAnimation.durationMs + selectedAnimation.delayMs + 120),
+      ];
     });
+  };
+
+  const previewSlideAnimations = () => {
+    const animations = activeSlide.animations ?? [];
+    if (animations.length === 0) return;
+    stopAnimationPreview();
+    let previousStart = 0;
+    let previousEnd = 0;
+    animations.forEach((animation, index) => {
+      const sequenceStart = index === 0
+        ? 0
+        : animation.start === "with-previous"
+          ? previousStart
+          : animation.start === "after-previous"
+            ? previousEnd
+            : previousEnd + 250;
+      const visibleStart = sequenceStart;
+      const visibleEnd = sequenceStart + animation.delayMs + animation.durationMs + 80;
+      animationPreviewTimers.current.push(
+        window.setTimeout(() => {
+          setAnimationPreviews((current) => [...current.filter((item) => item.elementId !== animation.elementId), animation]);
+          setSelectedAnimationId(animation.id);
+        }, visibleStart),
+        window.setTimeout(() => {
+          setAnimationPreviews((current) => current.filter((item) => item.id !== animation.id));
+        }, visibleEnd),
+      );
+      previousStart = sequenceStart;
+      previousEnd = Math.max(previousEnd, sequenceStart + animation.delayMs + animation.durationMs);
+    });
+    animationPreviewTimers.current.push(window.setTimeout(() => {
+      animationPreviewTimers.current = [];
+      setAnimationPreviews([]);
+    }, previousEnd + 350));
   };
 
   return (
@@ -2674,6 +2720,12 @@ export function App() {
             <ToolButton label="预览当前动画" caption="预览" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>
               <MousePointer2 />
             </ToolButton>
+            <ToolButton label="按顺序预览本页动画" caption="播放全部" disabled={!(activeSlide.animations?.length)} onClick={previewSlideAnimations}>
+              <Play />
+            </ToolButton>
+            <ToolButton label="停止动画预览" caption="停止" disabled={!animationPreviews.length} onClick={stopAnimationPreview}>
+              <Square />
+            </ToolButton>
             <span className="separator" />
             {([
               ["appear", "出现"],
@@ -2927,7 +2979,7 @@ export function App() {
                   scale={scale}
                   selected={selectedElementIds.includes(element.id)}
                   snap={snapContext}
-                  previewAnimation={animationPreview?.elementId === element.id ? animationPreview : undefined}
+                  previewAnimation={animationPreviews.find((animation) => animation.elementId === element.id)}
                 />
               ))}
               <CanvasGuideLayer
@@ -2995,7 +3047,7 @@ export function App() {
                         <li key={animation.id}>
                           <button
                             type="button"
-                            className={selectedAnimation?.id === animation.id ? "active" : ""}
+                            className={`${selectedAnimation?.id === animation.id ? "active" : ""} ${animationPreviews.some((item) => item.id === animation.id) ? "playing" : ""}`}
                             onClick={() => {
                               setSelectedAnimationId(animation.id);
                               selectElement(animation.elementId);
@@ -3014,7 +3066,11 @@ export function App() {
                 )}
               </div>
               <div className="animation-pane-footer">
-                <button type="button" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>预览所选</button>
+                <div className="animation-preview-actions">
+                  <button type="button" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>预览所选</button>
+                  <button type="button" disabled={!(activeSlide.animations?.length)} onClick={previewSlideAnimations}>播放全部</button>
+                  <button type="button" disabled={!animationPreviews.length} onClick={stopAnimationPreview}>停止</button>
+                </div>
                 <button
                   type="button"
                   className="danger"
