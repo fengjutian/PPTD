@@ -12,6 +12,7 @@ const FIELD_LABELS: Record<ContentFieldChange["field"], string> = {
   body: "正文",
   speakerNotes: "演讲备注",
   block: "内容块",
+  blockOrder: "内容块顺序",
 };
 
 const STATUS_LABELS: Record<ContentSlideDiff["status"], string> = {
@@ -83,17 +84,29 @@ function SlideDiff({ diff }: { diff: ContentSlideDiff }) {
 }
 
 /**
- * 已确认内容版本的对比面板。
+ * 已确认内容版本的对比与恢复面板。
  *
- * 版本是确认动作的副产品，只读：这里不提供“恢复”按钮，避免用户以为点一下
- * 就能把设计、对象和版式一起回滚。改动仍然通过撤销或重新编辑完成。
+ * 恢复只回滚内容字段和页序，版式、对象和背景留在当前文稿里。页面集合
+ * 发生变化时只允许查看差异，避免用一次内容恢复悄悄删掉或重建页面。
  */
-export function ContentHistory({ document, onClose }: { document: PresentationDocument; onClose: () => void }) {
+export function ContentHistory({
+  document,
+  onClose,
+  onRestore,
+}: {
+  document: PresentationDocument;
+  onClose: () => void;
+  onRestore: (versionId: string) => void;
+}) {
   const versions = document.contentVersions ?? [];
   const latestId = versions.at(-1)?.id;
   const [selectedId, setSelectedId] = useState<string | undefined>(latestId);
   const selected = versions.find((version) => version.id === selectedId) ?? versions.at(-1);
   const diff = selected ? diffContentVersion(selected, document) : [];
+  const restorable =
+    selected !== undefined &&
+    selected.slides.length === document.slides.length &&
+    selected.slides.every((versionSlide) => document.slides.some((slide) => slide.id === versionSlide.slideId));
 
   return (
     <div
@@ -114,7 +127,7 @@ export function ContentHistory({ document, onClose }: { document: PresentationDo
             <History />
             <div>
               <h2 id="content-history-title">内容版本</h2>
-              <p>已确认内容的历史快照，只用于对比当前文稿，不会改动文字或版式。</p>
+              <p>已确认内容的历史快照，可逐页对比，也可只恢复内容而不改动版式。</p>
             </div>
           </div>
           <button type="button" aria-label="关闭内容版本窗口" onClick={onClose}>
@@ -153,9 +166,31 @@ export function ContentHistory({ document, onClose }: { document: PresentationDo
 
             <div className="content-history-diff">
               <div className="content-history-diff-heading">
-                <strong>与当前内容比较</strong>
-                <span>{diff.length === 0 ? "没有差异" : `${diff.length} 页有变化`}</span>
+                <div>
+                  <strong>与当前内容比较</strong>
+                  <span>{diff.length === 0 ? "没有差异" : `${diff.length} 页有变化`}</span>
+                </div>
+                {selected && diff.length > 0 && (
+                  <button
+                    type="button"
+                    className="content-history-restore"
+                    disabled={!restorable}
+                    title={
+                      restorable
+                        ? "只恢复标题、正文、内容块、备注和页序；版式、对象和背景不变"
+                        : "此版本与当前页面集合不同，无法只恢复内容"
+                    }
+                    onClick={() => onRestore(selected.id)}
+                  >
+                    恢复此版本内容
+                  </button>
+                )}
               </div>
+              {selected && diff.length > 0 && !restorable && (
+                <p className="content-history-hint">
+                  此版本与当前页面集合不同，只能查看差异。请用撤销或手动编辑回到这个内容。
+                </p>
+              )}
               {diff.length === 0 ? (
                 <p className="content-history-empty">当前内容与这个版本一致。</p>
               ) : (

@@ -2661,6 +2661,31 @@ export function App() {
     );
   };
 
+  const restoreContentVersion = (versionId: string) => {
+    if (
+      !window.confirm(
+        "恢复这个版本会覆盖当前文稿的标题、正文、内容块、演讲备注和页序；版式、对象和背景不会回滚。是否继续？",
+      )
+    )
+      return;
+    try {
+      execute({ type: "restore-content-version", versionId });
+      setContentHistoryOpen(false);
+      setTaskStatus("已恢复内容版本；版式、对象和背景未改动，请确认恢复后的页面内容。");
+    } catch (error) {
+      const code = error instanceof Error ? error.message : String(error);
+      setTaskStatus(
+        code === "CONTENT_VERSION_PAGE_SET_MISMATCH"
+          ? "恢复失败：此版本与当前页面集合不同，无法只恢复内容。"
+          : code === "CONTENT_VERSION_BLOCKS_INCOMPATIBLE"
+            ? "恢复失败：此版本的内容块与当前对象结构不同，无法安全恢复。"
+            : code === "CONTENT_VERSION_NOT_FOUND"
+              ? "恢复失败：版本不存在，可能已被撤销。"
+              : `恢复失败：${code}`,
+      );
+    }
+  };
+
   return (
     <div
       className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`}
@@ -4602,7 +4627,13 @@ export function App() {
         </div>
       )}
 
-      {contentHistoryOpen && <ContentHistory document={document} onClose={() => setContentHistoryOpen(false)} />}
+      {contentHistoryOpen && (
+        <ContentHistory
+          document={document}
+          onClose={() => setContentHistoryOpen(false)}
+          onRestore={restoreContentVersion}
+        />
+      )}
 
       {message && (
         <div className={`page-message ${message.kind}`} role="status" aria-live="polite">

@@ -380,28 +380,52 @@ function restoreSlideBlocks(slide: Slide, sourceBlocks: ContentBlock[] | undefin
     assignments.push({ source: block, target: target[index]! });
   }
 
-  let changed = false;
-  for (const assignment of assignments) {
+  const restored = assignments.map((assignment) => {
     const { id: _sourceId, ...fields } = assignment.source;
-    const next = { ...fields, id: assignment.target.id } as ContentBlock;
-    if (stableStringify(next) === stableStringify(assignment.target)) continue;
-    Object.assign(assignment.target, next);
-    changed = true;
+    return { ...fields, id: assignment.target.id } as ContentBlock;
+  });
+  const contentChanged = restored.some(
+    (block, index) => stableStringify(block) !== stableStringify(assignments[index]!.target),
+  );
+  const orderChanged = restored.some((block, index) => block.id !== target[index]?.id);
+  if (contentChanged || orderChanged) slide.content.blocks = restored;
+
+  // Bindings normally point at the current ids already. A design re-application
+  // can regenerate those ids while the snapshot still knows the old ones; map
+  // the references so a card, chart or table keeps following its restored data.
+  const idMap = new Map(assignments.map((assignment) => [assignment.source.id, assignment.target.id]));
+  let bindingsChanged = false;
+  for (const element of slide.elements) {
+    if (element.type === "text" && element.contentBlockRef) {
+      const mapped = idMap.get(element.contentBlockRef.blockId);
+      if (mapped && mapped !== element.contentBlockRef.blockId) {
+        element.contentBlockRef = { ...element.contentBlockRef, blockId: mapped };
+        bindingsChanged = true;
+      }
+    } else if (element.type === "chart") {
+      const mapped = element.contentBlockIds.map((id) => idMap.get(id) ?? id);
+      if (mapped.some((id, index) => id !== element.contentBlockIds[index])) {
+        element.contentBlockIds = mapped;
+        bindingsChanged = true;
+      }
+    } else if (element.type === "table") {
+      const mapped = idMap.get(element.contentBlockId);
+      if (mapped && mapped !== element.contentBlockId) {
+        element.contentBlockId = mapped;
+        bindingsChanged = true;
+      }
+    }
   }
-  const reordered = assignments.map((assignment) => assignment.target);
-  if (reordered.some((block, index) => target[index] !== block)) {
-    slide.content.blocks = reordered;
-    changed = true;
-  }
+
   // A metric card is a view of the block. Copying the block alone would leave
   // the visible card on the newer number while the chart and panel show the
   // restored one.
-  for (const assignment of assignments) {
-    if (assignment.target.type !== "metric") continue;
-    syncMetricText(slide, assignment.target.id, "label", assignment.target.label);
-    syncMetricText(slide, assignment.target.id, "value", assignment.target.value);
+  for (const block of restored) {
+    if (block.type !== "metric") continue;
+    syncMetricText(slide, block.id, "label", block.label);
+    syncMetricText(slide, block.id, "value", block.value);
   }
-  return changed;
+  return contentChanged || orderChanged || bindingsChanged;
 }
 
 /** Plain deep copy of an element, safe to read from an Immer draft. */
@@ -3460,6 +3484,38 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     document.slides.splice(command.toIndex, 0, slide!);
     return;
   }
+  if (command.type === "restore-content-version") {
+    // 版本恢复只回滚内容：标题、正文、内容块、备注和页序。版式、对象和背景
+    // 留在当前文稿里，不能借一次"内容恢复"把设计也静默回滚。
+    const version = document.contentVersions?.find((item) => item.id === command.versionId);
+    if (!version) throw new Error("CONTENT_VERSION_NOT_FOUND");
+    const currentIds = new Set(document.slides.map((item) => item.id));
+    if (
+      version.slides.length !== document.slides.length ||
+      version.slides.some((item) => !currentIds.has(item.slideId))
+    ) {
+      throw new Error("CONTENT_VERSION_PAGE_SET_MISMATCH");
+    }
+    const sourceById = new Map(version.slides.map((item) => [item.slideId, item]));
+    for (const page of document.slides) {
+      const source = sourceById.get(page.id)!;
+      const textChanged =
+        page.content.title !== source.title ||
+        page.content.body !== source.body ||
+        page.content.speakerNotes !== source.speakerNotes;
+      if (textChanged) {
+        page.content.title = source.title;
+        page.content.body = source.body;
+        page.content.speakerNotes = source.speakerNotes;
+      }
+      const blocksChanged = restoreSlideBlocks(page, source.blocks);
+      if (textChanged || blocksChanged) markContentChanged(page);
+    }
+    const order = new Map(version.slides.map((item, index) => [item.slideId, index]));
+    document.slides.sort((left, right) => order.get(left.id)! - order.get(right.id)!);
+    return;
+  }
+
   const slide = document.slides.find((item) => item.id === command.slideId);
   if (!slide) throw new Error("SLIDE_NOT_FOUND");
 
@@ -3770,38 +3826,6 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "reopen-slide-content") {
     // 退回审核，不是退回草稿：内容本身没变，只是这一页重新进入审核。
     slide.content.status = "review";
-    return;
-  }
-
-  if (command.type === "restore-content-version") {
-    // 版本恢复只回滚内容：标题、正文、内容块、备注和页序。版式、对象和背景
-    // 留在当前文稿里，不能借一次"内容恢复"把设计也静默回滚。
-    const version = document.contentVersions?.find((item) => item.id === command.versionId);
-    if (!version) throw new Error("CONTENT_VERSION_NOT_FOUND");
-    const currentIds = new Set(document.slides.map((item) => item.id));
-    if (
-      version.slides.length !== document.slides.length ||
-      version.slides.some((item) => !currentIds.has(item.slideId))
-    ) {
-      throw new Error("CONTENT_VERSION_PAGE_SET_MISMATCH");
-    }
-    const sourceById = new Map(version.slides.map((item) => [item.slideId, item]));
-    for (const page of document.slides) {
-      const source = sourceById.get(page.id)!;
-      const textChanged =
-        page.content.title !== source.title ||
-        page.content.body !== source.body ||
-        page.content.speakerNotes !== source.speakerNotes;
-      if (textChanged) {
-        page.content.title = source.title;
-        page.content.body = source.body;
-        page.content.speakerNotes = source.speakerNotes;
-      }
-      const blocksChanged = restoreSlideBlocks(page, source.blocks);
-      if (textChanged || blocksChanged) markContentChanged(page);
-    }
-    const order = new Map(version.slides.map((item, index) => [item.slideId, index]));
-    document.slides.sort((left, right) => order.get(left.id)! - order.get(right.id)!);
     return;
   }
 

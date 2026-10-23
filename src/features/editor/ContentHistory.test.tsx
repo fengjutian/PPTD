@@ -6,7 +6,9 @@ import { ContentHistory } from "./ContentHistory";
 
 describe("content history", () => {
   it("explains how the first version is created when there is no history", () => {
-    const markup = renderToStaticMarkup(<ContentHistory document={createDocument()} onClose={() => undefined} />);
+    const markup = renderToStaticMarkup(
+      <ContentHistory document={createDocument()} onClose={() => undefined} onRestore={() => undefined} />,
+    );
     expect(markup).toContain("内容版本");
     expect(markup).toContain("还没有已确认的内容版本");
     expect(markup).toContain("确认本页内容或应用 AI 内容后");
@@ -18,7 +20,9 @@ describe("content history", () => {
     captureContentVersion(document);
     document.slides[0]!.content.title = "新标题";
 
-    const markup = renderToStaticMarkup(<ContentHistory document={document} onClose={() => undefined} />);
+    const markup = renderToStaticMarkup(
+      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} />,
+    );
 
     expect(markup).toContain("内容 r1");
     expect(markup).toContain("文档 r1");
@@ -28,7 +32,8 @@ describe("content history", () => {
     expect(markup).toContain("旧标题");
     expect(markup).toContain("新标题");
     expect(markup).toContain("标题");
-    expect(markup).toContain("只用于对比当前文稿");
+    expect(markup).toContain("可逐页对比");
+    expect(markup).toContain("恢复此版本内容");
   });
 
   it("says so when the selected version already matches the current copy", () => {
@@ -36,9 +41,30 @@ describe("content history", () => {
     document.slides[0]!.content.title = "同名标题";
     captureContentVersion(document);
 
-    const markup = renderToStaticMarkup(<ContentHistory document={document} onClose={() => undefined} />);
+    const markup = renderToStaticMarkup(
+      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} />,
+    );
 
     expect(markup).toContain("没有差异");
     expect(markup).toContain("当前内容与这个版本一致");
+    expect(markup).not.toContain("恢复此版本内容");
+  });
+
+  it("only offers content restore when the page set still matches", () => {
+    const document = createDocument();
+    document.slides[0]!.content.title = "第一页";
+    captureContentVersion(document);
+    const added = createDocument().slides[0]!;
+    document.slides.push(added);
+    document.slides[1]!.content.title = "后来新增的页";
+
+    const markup = renderToStaticMarkup(
+      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} />,
+    );
+
+    expect(markup).toContain("新增页");
+    expect(markup).toContain("恢复此版本内容");
+    expect(markup).toContain("disabled");
+    expect(markup).toContain("此版本与当前页面集合不同");
   });
 });

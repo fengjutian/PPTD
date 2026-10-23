@@ -96,6 +96,35 @@ describe("content diff", () => {
     ]);
   });
 
+  it("reports a block reorder even when every block value is unchanged", () => {
+    const document = createDocument();
+    const first = metric(crypto.randomUUID(), "38万");
+    const second = metric(crypto.randomUUID(), "42万");
+    document.slides[0]!.content.blocks = [first, second];
+    const version = snapshot(document);
+
+    document.slides[0]!.content.blocks = [second, first];
+
+    expect(diffContentVersion(version, document)[0]!.changes).toEqual([
+      {
+        field: "blockOrder",
+        change: "changed",
+        before: "收入：38万；收入：42万",
+        after: "收入：42万；收入：38万",
+      },
+    ]);
+  });
+
+  it("does not report a difference when only block ids were regenerated", () => {
+    const document = createDocument();
+    document.slides[0]!.content.blocks = [metric(crypto.randomUUID(), "38万")];
+    const version = snapshot(document);
+
+    document.slides[0]!.content.blocks = [metric(crypto.randomUUID(), "38万")];
+
+    expect(diffContentVersion(version, document)).toEqual([]);
+  });
+
   it("reports added and removed pages", () => {
     const document = createDocument();
     document.slides.push(createSlide(2));

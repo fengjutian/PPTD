@@ -5334,6 +5334,36 @@ button {
   color: #92969e;
   font-size: 10px;
 }
+.content-history-diff-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.content-history-restore {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--ppt-accent);
+  border-radius: 5px;
+  color: var(--ppt-accent);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.content-history-restore:hover:not(:disabled) {
+  color: #fff;
+  background: var(--ppt-accent);
+}
+.content-history-restore:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.content-history-hint {
+  margin: 0 0 8px;
+  color: #d8a55f;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .content-history-empty {
   margin: 10px 0;
   color: #92969e;

@@ -1,6 +1,6 @@
 import type { ContentBlock, ContentVersion, ContentVersionSlide, PresentationDocument } from "./types";
 
-export type ContentChangeField = "title" | "body" | "speakerNotes" | "block";
+export type ContentChangeField = "title" | "body" | "speakerNotes" | "block" | "blockOrder";
 
 export interface ContentFieldChange {
   field: ContentChangeField;
@@ -53,8 +53,7 @@ function blockChanges(
   const beforeByAfter = new Map<ContentBlock, ContentBlock>();
   for (const afterBlock of afterBlocks) {
     const index = beforeBlocks.findIndex(
-      (block, blockIndex) =>
-        !used.has(blockIndex) && block.id === afterBlock.id && block.type === afterBlock.type,
+      (block, blockIndex) => !used.has(blockIndex) && block.id === afterBlock.id && block.type === afterBlock.type,
     );
     if (index < 0) continue;
     used.add(index);
@@ -71,6 +70,19 @@ function blockChanges(
   }
 
   const changes: ContentFieldChange[] = [];
+  // A pure reorder has no changed block values, so it needs its own line;
+  // otherwise the diff would claim the two copies are identical while the
+  // restored order would still be different.
+  const allPaired = beforeByAfter.size === afterBlocks.length && afterBlocks.length === beforeBlocks.length;
+  const pairedOrder = allPaired ? afterBlocks.map((block) => beforeBlocks.indexOf(beforeByAfter.get(block)!)) : [];
+  if (pairedOrder.some((index, position) => index !== position)) {
+    changes.push({
+      field: "blockOrder",
+      change: "changed",
+      before: beforeBlocks.map(summarizeContentBlock).join("；"),
+      after: afterBlocks.map(summarizeContentBlock).join("；"),
+    });
+  }
   for (const afterBlock of afterBlocks) {
     const old = beforeByAfter.get(afterBlock);
     if (!old) {
