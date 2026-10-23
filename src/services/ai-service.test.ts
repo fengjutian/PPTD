@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
 import {
   aiDraftSchema,
+  aiOutlineSchema,
   aiPresentationDesignSchema,
+  aiSlideBatchSchema,
   briefsFromDraft,
   cancelAiGeneration,
   chooseSlideLayout,
@@ -21,6 +23,21 @@ import { contrastRatio } from "../core/rendering/contrast";
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => false }));
 
 describe("AI structured outputs", () => {
+  it("fills non-content defaults when a model returns a partial outline or batch", () => {
+    const outline = aiOutlineSchema.parse({
+      title: "销售分析",
+      presentationBrief: { objective: "分析销售表现" },
+      pages: [{ index: 0, title: "销售表现保持增长", purpose: "说明总体趋势" }],
+    });
+    const batch = aiSlideBatchSchema.parse({
+      slides: [{ body: "核心业务保持增长，区域表现存在差异。" }],
+    });
+
+    expect(outline.presentationBrief.objective).toBe("分析销售表现");
+    expect(outline.presentationBrief.narrativeStrategy).toBe("general");
+    expect(batch.slides[0]).toMatchObject({ title: "", speakerNotes: "", body: "核心业务保持增长，区域表现存在差异。" });
+  });
+
   it("accepts drafts with more than twenty pages", () => {
     const draft = aiDraftSchema.parse({
       title: "长篇演示",

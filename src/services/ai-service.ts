@@ -18,6 +18,27 @@ export const narrativeStrategySchema = z.enum([
   "fundraising",
   "general",
 ]);
+const defaultPresentationBrief = {
+  objective: "清晰传达演示主题",
+  audience: "未指定受众",
+  scenario: "通用演示",
+  expectedAction: "理解演示内容",
+  coreConclusion: "以演示文稿标题和逐页内容为准",
+  narrativeStrategy: "general" as const,
+  assumptions: ["AI 未补充完整演示简报，请在内容审核阶段确认"],
+};
+
+const presentationBriefSchema = z
+  .object({
+    objective: z.string().min(1).max(500).default(defaultPresentationBrief.objective),
+    audience: z.string().min(1).max(300).default(defaultPresentationBrief.audience),
+    scenario: z.string().min(1).max(300).default(defaultPresentationBrief.scenario),
+    expectedAction: z.string().min(1).max(500).default(defaultPresentationBrief.expectedAction),
+    coreConclusion: z.string().min(1).max(500).default(defaultPresentationBrief.coreConclusion),
+    narrativeStrategy: narrativeStrategySchema.default(defaultPresentationBrief.narrativeStrategy),
+    assumptions: z.array(z.string().max(500)).max(10).default(defaultPresentationBrief.assumptions),
+  })
+  .default(defaultPresentationBrief);
 export const contentBlockSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("paragraph"), text: z.string().min(1).max(2000) }),
   z.object({ type: z.literal("bullet-list"), items: z.array(z.string().min(1).max(500)).min(1).max(12) }),
@@ -106,25 +127,7 @@ const legacySlidePlan = {
 };
 export const aiDraftSchema = z.object({
   title: z.string().min(1).max(200),
-  presentationBrief: z
-    .object({
-      objective: z.string().min(1).max(500),
-      audience: z.string().min(1).max(300),
-      scenario: z.string().min(1).max(300),
-      expectedAction: z.string().min(1).max(500),
-      coreConclusion: z.string().min(1).max(500),
-      narrativeStrategy: narrativeStrategySchema,
-      assumptions: z.array(z.string().max(500)).max(10),
-    })
-    .default({
-      objective: "清晰传达演示主题",
-      audience: "未指定受众",
-      scenario: "通用演示",
-      expectedAction: "理解演示内容",
-      coreConclusion: "以演示文稿标题和逐页内容为准",
-      narrativeStrategy: "general",
-      assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"],
-    }),
+  presentationBrief: presentationBriefSchema,
   slides: z
     .array(
       z.object({
@@ -145,25 +148,7 @@ export type ContentBlock = z.infer<typeof contentBlockSchema>;
 /** 大纲阶段只产出标题与简报，正文由分批阶段补齐。 */
 export const aiOutlineSchema = z.object({
   title: z.string().min(1).max(200),
-  presentationBrief: z
-    .object({
-      objective: z.string().min(1).max(500),
-      audience: z.string().min(1).max(300),
-      scenario: z.string().min(1).max(300),
-      expectedAction: z.string().min(1).max(500),
-      coreConclusion: z.string().min(1).max(500),
-      narrativeStrategy: narrativeStrategySchema,
-      assumptions: z.array(z.string().max(500)).max(10),
-    })
-    .default({
-      objective: "清晰传达演示主题",
-      audience: "未指定受众",
-      scenario: "通用演示",
-      expectedAction: "理解演示内容",
-      coreConclusion: "以演示文稿标题和逐页内容为准",
-      narrativeStrategy: "general",
-      assumptions: ["该草稿来自旧版本，尚未补充完整演示简报"],
-    }),
+  presentationBrief: presentationBriefSchema,
   pages: z
     .array(
       z.object({
@@ -180,9 +165,11 @@ export const aiSlideBatchSchema = z.object({
   slides: z
     .array(
       z.object({
-        title: z.string().min(1).max(200),
+        // 批次标题最终以已校验的大纲为准。模型省略这个重复字段时不应让整次生成失败。
+        title: z.string().max(200).default(""),
         body: z.string().max(4000),
-        speakerNotes: z.string().max(4000),
+        // 提示词允许备注为空；省略与空字符串在领域语义上等价。
+        speakerNotes: z.string().max(4000).default(""),
         plan: slidePlanSchema.default(legacySlidePlan),
         blocks: z.array(contentBlockSchema).max(20).default([]),
       }),

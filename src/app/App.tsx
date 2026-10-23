@@ -677,6 +677,7 @@ export function App() {
   const animationPreviewTimers = useRef<number[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
+  const [exportPreflightOpen, setExportPreflightOpen] = useState(false);
   const [contentHistoryOpen, setContentHistoryOpen] = useState(false);
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
   const setTaskStatus = (text?: string) =>
@@ -763,6 +764,7 @@ export function App() {
   const [designQualityReportOpen, setDesignQualityReportOpen] = useState(false);
   const [manualReviewBusy, setManualReviewBusy] = useState(false);
   const manualReviewTaskId = useRef(10_000);
+  const manualReviewCancelled = useRef(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   /** AI 配图对话框是否打开。 */
   const [aiImageOpen, setAiImageOpen] = useState(false);
@@ -780,6 +782,21 @@ export function App() {
   const addGuideToSlide = useCanvasGuidesStore((s) => s.addGuide);
   const clearGuidesOnSlide = useCanvasGuidesStore((s) => s.clearGuides);
   const activeSlide = document.slides.find((slide) => slide.id === activeSlideId) ?? document.slides[0]!;
+  const qualityStaleIndexes = useMemo(
+    () =>
+      designQualityReport
+        ? document.slides.flatMap((slide, index) =>
+            JSON.stringify(slide) === designQualityReport.slideSignatures[index] ? [] : [index],
+          )
+        : [],
+    [designQualityReport, document.slides],
+  );
+  const activeSlideIndex = document.slides.findIndex((slide) => slide.id === activeSlide.id);
+  const activeSlideVisualIssues =
+    designQualityReport?.visualReview?.issues.filter((issue) => issue.slideIndex === activeSlideIndex) ?? [];
+  const activeSlideVisualScore = designQualityReport?.visualReview?.slideScores?.find(
+    (score) => score.slideIndex === activeSlideIndex,
+  );
   // 多选时"当前对象"是最后被选中的那个：属性面板和快捷键都以它为准。
   const selectedElementId = selectedElementIds.length > 0 ? selectedElementIds[selectedElementIds.length - 1]! : null;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
@@ -2515,6 +2532,7 @@ export function App() {
     }
     manualReviewTaskId.current += 1;
     const taskId = manualReviewTaskId.current;
+    manualReviewCancelled.current = false;
     setManualReviewBusy(true);
     setAgentWorkflow((state) =>
       canTransitionAgentWorkflow(state.stage, "visual-review")
@@ -2532,6 +2550,7 @@ export function App() {
         renderReal: renderRealPptxForReview,
         renderCanvas: renderPresentationForVisualReview,
       });
+      if (manualReviewCancelled.current) throw new Error("AI_GENERATION_CANCELLED");
       const refreshedSignatures = [...designQualityReport.slideSignatures];
       result.reviewedIndexes.forEach((index) => {
         refreshedSignatures[index] = currentSignatures[index]!;
@@ -2564,16 +2583,32 @@ export function App() {
       setTaskStatus(`复检完成：检查 ${result.reviewedIndexes.length} 页，整册总览已刷新`);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      setAgentWorkflow((state) =>
-        canTransitionAgentWorkflow(state.stage, "failed")
-          ? transitionAgentWorkflow(state, "failed", { error: detail })
-          : state,
-      );
-      setTaskStatus(`视觉复检失败：${describeAiError(error)}`);
+      if (detail.includes("CANCELLED")) {
+        setAgentWorkflow((state) =>
+          canTransitionAgentWorkflow(state.stage, "cancelled")
+            ? transitionAgentWorkflow(state, "cancelled", { label: "已取消视觉复检" })
+            : state,
+        );
+        setTaskStatus("已取消视觉复检");
+      } else {
+        setAgentWorkflow((state) =>
+          canTransitionAgentWorkflow(state.stage, "failed")
+            ? transitionAgentWorkflow(state, "failed", { error: detail })
+            : state,
+        );
+        setTaskStatus(`视觉复检失败：${describeAiError(error)}`);
+      }
     } finally {
       void endAiGeneration(taskId).catch(() => undefined);
       setManualReviewBusy(false);
     }
+  };
+
+  const cancelManualReview = () => {
+    if (!manualReviewBusy) return;
+    manualReviewCancelled.current = true;
+    void cancelAiGeneration(manualReviewTaskId.current).catch(() => undefined);
+    setTaskStatus("正在取消视觉复检…");
   };
 
   const openQualityTarget = (slideIndex: number, elementIds: string[] = []) => {
@@ -3200,7 +3235,10 @@ export function App() {
               </div>
             )}
           </div>
-          <button className="export-button" onClick={handleExport}>
+          <button
+            className="export-button"
+            onClick={() => (exportBusy ? void handleExport() : setExportPreflightOpen(true))}
+          >
             <Download size={17} /> {exportBusy ? "取消导出" : "导出 PPTX"}
           </button>
         </header>
@@ -4401,12 +4439,16 @@ export function App() {
                 <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("all")}>
                   复检整册
                 </button>
+                {manualReviewBusy && (
+                  <button type="button" className="danger" onClick={cancelManualReview}>停止复检</button>
+                )}
               </div>
               {manualReviewBusy && <small>正在导出真实 PPTX、检查指定页面并刷新整册总览…</small>}
-              {!manualReviewBusy &&
-                document.slides.some(
-                  (slide, index) => JSON.stringify(slide) !== designQualityReport.slideSignatures[index],
-                ) && <small className="warning">文稿在上次视觉评审后发生变化，建议复检变化页。</small>}
+              {!manualReviewBusy && qualityStaleIndexes.length > 0 && (
+                <small className="warning">
+                  上次评审后有 {qualityStaleIndexes.length} 页发生变化，建议复检变化页。
+                </small>
+              )}
             </div>
             {designQualityReport.issues.length === 0 ? (
               <div className="template-empty">
@@ -4460,7 +4502,15 @@ export function App() {
                             <button
                               key={slide.id}
                               type="button"
-                              className={issueCount > 0 ? "has-issues" : score ? "reviewed" : "unreviewed"}
+                              className={
+                                qualityStaleIndexes.includes(slideIndex)
+                                  ? "stale"
+                                  : issueCount > 0
+                                    ? "has-issues"
+                                    : score
+                                      ? "reviewed"
+                                      : "unreviewed"
+                              }
                               aria-label={`打开第 ${slideIndex + 1} 页：${slide.content.title}`}
                               title={`${slide.content.title}${score ? ` · ${score.overallScore} 分` : " · 未逐页评分"}`}
                               onClick={() => openQualityTarget(slideIndex)}
@@ -4468,6 +4518,7 @@ export function App() {
                               <span>{slideIndex + 1}</span>
                               {score && <em>{score.overallScore}</em>}
                               {issueCount > 0 && <strong>{issueCount}</strong>}
+                              {qualityStaleIndexes.includes(slideIndex) && <b>待复检</b>}
                             </button>
                           );
                         })}
@@ -4561,6 +4612,52 @@ export function App() {
                 进入编辑器调整
                 <ArrowRight />
               </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {exportPreflightOpen && !exportBusy && (
+        <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setExportPreflightOpen(false);
+        }}>
+          <section className="upload-dialog export-preflight-dialog" role="dialog" aria-modal="true" aria-labelledby="export-preflight-title">
+            <div className="upload-dialog-heading">
+              <div>
+                <Download />
+                <div>
+                  <h2 id="export-preflight-title">导出前摘要</h2>
+                  <p>本次导出将读取当前不可变文档快照，不会修改项目或撤销栈。</p>
+                </div>
+              </div>
+              <button type="button" aria-label="关闭导出前摘要" onClick={() => setExportPreflightOpen(false)}><X /></button>
+            </div>
+            <dl className="export-preflight-summary">
+              <div><dt>文档版本</dt><dd>{revisionLabel}</dd></div>
+              <div><dt>内容审核</dt><dd>{document.slides.filter((slide) => slide.content.status === "approved").length}/{document.slides.length} 页已确认</dd></div>
+              <div><dt>视觉覆盖</dt><dd>{designQualityReport?.visualReviewCoverage ? `${designQualityReport.visualReviewCoverage.reviewed}/${designQualityReport.visualReviewCoverage.total} 页` : "未执行"}</dd></div>
+              <div><dt>待复检页面</dt><dd>{qualityStaleIndexes.length} 页</dd></div>
+              <div><dt>视觉问题</dt><dd>{designQualityReport?.visualReview?.issues.length ?? 0} 条</dd></div>
+              <div><dt>确定性问题</dt><dd>{designQualityReport?.issues.length ?? 0} 条</dd></div>
+            </dl>
+            {qualityStaleIndexes.length > 0 && (
+              <p className="design-quality-warning">有 {qualityStaleIndexes.length} 页在上次视觉评审后发生变化。可以继续导出，但建议先复检变化页。</p>
+            )}
+            {!designQualityReport?.visualReview && (
+              <p className="design-quality-warning">当前没有可追溯的视觉评审结论；导出仍会执行字体、越界和结构预检。</p>
+            )}
+            <div className="upload-dialog-actions">
+              <button type="button" className="secondary-action" onClick={() => setExportPreflightOpen(false)}>返回编辑</button>
+              {designQualityReport && qualityStaleIndexes.length > 0 && (
+                <button type="button" className="secondary-action" onClick={() => {
+                  setExportPreflightOpen(false);
+                  setDesignQualityReportOpen(true);
+                }}>先复检变化页</button>
+              )}
+              <button type="button" className="primary-action" onClick={() => {
+                setExportPreflightOpen(false);
+                void handleExport();
+              }}>继续导出 PPTX</button>
             </div>
           </section>
         </div>
@@ -4699,6 +4796,35 @@ export function App() {
             <button type="button" onClick={() => setDesignQualityReport(undefined)}>
               稍后处理
             </button>
+          </div>
+        </aside>
+      )}
+
+      {activeView === "editor" && designQualityReport && !designQualityReportOpen && (
+        <aside className="current-slide-quality-card" aria-label="当前页视觉质检">
+          <div>
+            <strong>第 {activeSlideIndex + 1} 页质检</strong>
+            <span>
+              {qualityStaleIndexes.includes(activeSlideIndex)
+                ? "结果已过期"
+                : activeSlideVisualScore
+                  ? `${activeSlideVisualScore.overallScore} 分`
+                  : "未逐页评分"}
+            </span>
+          </div>
+          <p>
+            {activeSlideVisualIssues.length > 0
+              ? `${activeSlideVisualIssues.length} 条视觉建议：${activeSlideVisualIssues
+                  .slice(0, 2)
+                  .map((issue) => visualIssueLabels[issue.issue])
+                  .join("、")}`
+              : qualityStaleIndexes.includes(activeSlideIndex)
+                ? "本页在上次评审后发生变化。"
+                : "本页没有未解决的视觉建议。"}
+          </p>
+          <div>
+            <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("current")}>复检本页</button>
+            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>查看整册报告</button>
           </div>
         </aside>
       )}
