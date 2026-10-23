@@ -1710,7 +1710,7 @@ export function App() {
     if (!target || !draft || !slide) return;
     const requestId = ++slideRewriteRequestId.current;
     const taskId = ++slideRewriteTaskId.current;
-    setSlideRewrite({ ...target, status: "running", error: undefined });
+    setSlideRewrite((current) => (current ? { ...current, status: "running", error: undefined } : current));
     setTaskStatus(`AI 正在重写第 ${target.index + 1} 页…`);
     try {
       const suggestion = await rewritePresentationSlide({
@@ -1735,7 +1735,13 @@ export function App() {
       setTaskStatus(`AI 已给出第 ${target.index + 1} 页的新版本，对照后确认替换`);
     } catch (error) {
       if (requestId !== slideRewriteRequestId.current) return;
-      setSlideRewrite({ index: target.index, status: "error", error: describeAiError(error) });
+      setSlideRewrite((current) => ({
+        index: target.index,
+        status: "error",
+        error: describeAiError(error),
+        // 失败不该抹掉上一版候选：用户可能就想用那一版。
+        proposal: current?.proposal,
+      }));
     } finally {
       void endAiGeneration(taskId).catch(() => undefined);
     }
@@ -1758,7 +1764,13 @@ export function App() {
         ...draft,
         slides: draft.slides.map((slide, slideIndex) =>
           slideIndex === index
-            ? { ...slide, blocks: proposal.blocks, body: proposal.body, speakerNotes: proposal.speakerNotes, reviewed: false }
+            ? {
+                ...slide,
+                blocks: proposal.blocks,
+                body: proposal.body,
+                speakerNotes: proposal.speakerNotes,
+                reviewed: false,
+              }
             : slide,
         ),
       }),

@@ -1273,16 +1273,29 @@ pub async fn polish_presentation_topic(request: PolishTopicRequest) -> Result<St
 /// 标题不参与重写：大纲是整册的事实来源（ADR 0009），单页重写只换正文和备注，
 /// 页面顺序、页面计划也不动。抽成独立函数是为了让真实调用测试问的是线上同一份
 /// 提示词。
-pub fn rewrite_slide_prompt(
-    topic: &str,
-    deck_title: &str,
-    outline: &str,
-    index: usize,
-    total: usize,
-    title: &str,
-    slide: &str,
-    instruction: &str,
-) -> String {
+pub struct RewriteSlidePrompt<'a> {
+    pub topic: &'a str,
+    pub deck_title: &'a str,
+    pub outline: &'a str,
+    /// 本页在整册中的位置（从 1 开始）。
+    pub index: usize,
+    pub total: usize,
+    pub title: &'a str,
+    pub slide: &'a str,
+    pub instruction: &'a str,
+}
+
+pub fn rewrite_slide_prompt(context: RewriteSlidePrompt<'_>) -> String {
+    let RewriteSlidePrompt {
+        topic,
+        deck_title,
+        outline,
+        index,
+        total,
+        title,
+        slide,
+        instruction,
+    } = context;
     let instruction = if instruction.trim().is_empty() {
         "（用户没有额外要求，按当前页面计划重写）"
     } else {
@@ -1384,16 +1397,16 @@ pub async fn rewrite_presentation_slide(
     let provider = ai::resolve(request.provider.as_deref())?;
     let api_key = ai::read_api_key(provider)?;
     let model = ai::resolve_model(provider, request.model)?;
-    let prompt = rewrite_slide_prompt(
+    let prompt = rewrite_slide_prompt(RewriteSlidePrompt {
         topic,
-        request.deck_title.trim(),
-        &outline,
-        request.slide_index,
-        request.outline.len(),
+        deck_title: request.deck_title.trim(),
+        outline: &outline,
+        index: request.slide_index,
+        total: request.outline.len(),
         title,
-        &slide,
+        slide: &slide,
         instruction,
-    );
+    });
     let body = ChatRequest {
         model,
         messages: vec![ChatMessage {

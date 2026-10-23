@@ -537,6 +537,136 @@ button {
   border-color: var(--ppt-accent);
   background: rgb(211 82 48 / 12%);
 }
+/* PPTX 内容导入：模式选择与报告。 */
+.upload-dialog.import-mode-dialog {
+  width: min(560px, calc(100vw - 48px));
+}
+.import-mode-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+.import-mode-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid #3b3d44;
+  border-radius: 10px;
+  color: #e8e9ec;
+  background: #24262b;
+  text-align: left;
+  cursor: pointer;
+}
+.import-mode-option svg {
+  width: 20px;
+  height: 20px;
+  color: var(--ppt-accent);
+}
+.import-mode-option strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+.import-mode-option small {
+  color: #9b9fa7;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.import-mode-option:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+}
+.import-mode-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.import-mode-progress {
+  margin: 14px 0 0;
+  color: #8fd3b6;
+  font-size: 12px;
+}
+.upload-dialog.import-report-dialog {
+  width: min(600px, calc(100vw - 48px));
+}
+.import-report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 14px 0 0;
+}
+.import-report-summary div {
+  padding: 9px;
+  border: 1px solid #34363c;
+  border-radius: 8px;
+  background: #202226;
+}
+.import-report-summary dt {
+  color: #8f939b;
+  font-size: 10px;
+}
+.import-report-summary dd {
+  margin: 3px 0 0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.import-report-issues,
+.import-report-warnings {
+  margin-top: 14px;
+}
+.import-report-issues h3,
+.import-report-warnings h3 {
+  margin: 0 0 6px;
+  color: #c9cbd0;
+  font-size: 11px;
+}
+.import-report-issues ul,
+.import-report-warnings ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 190px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.import-report-issues li {
+  display: flex;
+  gap: 7px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: #c9cbd0;
+  background: #202226;
+  font-size: 11px;
+}
+.import-report-issues li svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 1px;
+  color: #e0b45a;
+}
+.import-report-issues li strong {
+  display: block;
+  color: #e8e9ec;
+  font-size: 10px;
+}
+.import-report-warnings li {
+  color: #a6aab2;
+  font-size: 11px;
+}
+.import-report-note {
+  margin: 14px 0 0;
+  padding: 9px 10px;
+  border-left: 3px solid #e0b45a;
+  color: #c9cbd0;
+  background: rgb(224 180 90 / 8%);
+  font-size: 11px;
+  line-height: 1.5;
+}
 .find-replace-bar {
   position: fixed;
   top: 96px;
