@@ -1,7 +1,7 @@
 import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { importedDeckToDocument, type ImportedDeck } from "../../core/commands";
-import { parsePresentationDocument, presentationDocumentSchema } from "../../core/document-model";
+import { parsePresentationDocument, presentationDocumentSchema, type PresentationDocument } from "../../core/document-model";
 import fixture from "../../core/commands/__fixtures__/imported-deck-level-a.json";
 import { buildPptx } from "./export-pptx";
 
@@ -13,7 +13,7 @@ describe("imported deck round trip", () => {
 
     // Reopening a project parses the persisted document through the same
     // schema; this is the domain-level half of save → reopen.
-    const reopened = parsePresentationDocument(JSON.parse(JSON.stringify(document)));
+    const reopened = parsePresentationDocument(JSON.parse(JSON.stringify(document))) as PresentationDocument;
     expect(reopened.slides).toHaveLength(2);
     expect(reopened.slides[0]!.content.status).toBe("review");
     expect(reopened.slides[0]!.content.speakerNotes).toBe("第一页备注");

@@ -27,8 +27,6 @@ export async function cancelPptxImport(requestId: string): Promise<void> {
   await invoke("cancel_pptx_import", { requestId });
 }
 
-export function listenPptxImportProgress(
-  handler: (progress: PptxImportProgress) => void,
-): Promise<UnlistenFn> {
+export function listenPptxImportProgress(handler: (progress: PptxImportProgress) => void): Promise<UnlistenFn> {
   return listen<PptxImportProgress>("pptx-import-progress", (event) => handler(event.payload));
 }

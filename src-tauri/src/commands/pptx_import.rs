@@ -46,12 +46,6 @@ pub struct ImportCancellation {
 }
 
 impl ImportCancellation {
-    fn begin(&self, request_id: &str) {
-        if let Ok(mut set) = self.cancelled.lock() {
-            set.remove(request_id);
-        }
-    }
-
     fn cancel(&self, request_id: &str) {
         if let Ok(mut set) = self.cancelled.lock() {
             set.insert(request_id.to_string());
@@ -341,7 +335,6 @@ pub async fn import_pptx_content(
     request_id: String,
 ) -> Result<ImportedDeck, String> {
     let cancellation = cancellation.inner().clone();
-    cancellation.begin(&request_id);
     let session_registry = cancellation.clone();
     let session_id = request_id.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -1728,8 +1721,6 @@ mod tests {
     #[test]
     fn cancellation_is_scoped_to_one_request() {
         let registry = ImportCancellation::default();
-        registry.begin("a");
-        registry.begin("b");
         assert!(!registry.is_cancelled("a"));
         registry.cancel("a");
         assert!(registry.is_cancelled("a"));
