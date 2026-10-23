@@ -6,9 +6,7 @@ import { ContentHistory } from "./ContentHistory";
 
 describe("content history", () => {
   it("explains how the first version is created when there is no history", () => {
-    const markup = renderToStaticMarkup(
-      <ContentHistory document={createDocument()} onClose={() => undefined} />,
-    );
+    const markup = renderToStaticMarkup(<ContentHistory document={createDocument()} onClose={() => undefined} />);
     expect(markup).toContain("内容版本");
     expect(markup).toContain("还没有已确认的内容版本");
     expect(markup).toContain("确认本页内容或应用 AI 内容后");

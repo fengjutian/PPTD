@@ -5721,8 +5721,8 @@ button {
   background: linear-gradient(90deg, #18191d 0 50%, #f5f6f8 50%);
 }
 .theme-swatch.amber {
-  border-color: #d9a24a;
-  background: linear-gradient(135deg, #f3c877 0%, #e0993a 55%, #c2660f 100%);
+  border-color: #d24726;
+  background: linear-gradient(135deg, #ef8570 0%, #d24726 55%, #a83218 100%);
 }
 .theme-swatch.green {
   border-color: #107c41;
@@ -6392,13 +6392,13 @@ button {
   background: linear-gradient(transparent, #eef0f3 22%);
 }
 
-/* 橙黄主题：暖米底色 + 橙色强调色，结构覆盖与浅色主题一一对应。 */
+/* 橙黄主题：暖米底色 + PowerPoint 橙强调色，结构覆盖与浅色主题一一对应。 */
 :root[data-theme="amber"] {
   color: #3a3229;
   background: #f0e7d8;
-  --ppt-accent: #c2660f;
-  --ppt-accent-hover: #d97b16;
-  --ppt-accent-soft: #f0c88c;
+  --ppt-accent: #d24726;
+  --ppt-accent-hover: #e05a38;
+  --ppt-accent-soft: #f2c8bd;
   --panel-surface: #faf4e8;
   --panel-border: #e3d6c0;
   --scrollbar-track: #ece0cc;
@@ -6504,11 +6504,11 @@ button {
   color: rgba(255, 255, 255, 0.38);
 }
 :root[data-theme="amber"] .export-button {
-  color: #c2660f;
+  color: #d24726;
   background: #fff;
 }
 :root[data-theme="amber"] .export-button:hover:not(:disabled) {
-  background: #f7e9da;
+  background: #f8e3de;
 }
 :root[data-theme="amber"] .brand small {
   color: #7d7263;

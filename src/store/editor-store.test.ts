@@ -254,17 +254,21 @@ describe("editor history", () => {
     useEditorStore.getState().execute({ type: "approve-slide-content", slideId });
     expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("approved");
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 1, design: 0 });
+    expect(useEditorStore.getState().document.contentVersions).toHaveLength(1);
 
     // Editing the approved title is a content change: the page needs review again.
     useEditorStore.getState().execute({ type: "edit-text", slideId, elementId: title.id, text: "改过的标题" });
     expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("changed");
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 2, design: 0 });
+    expect(useEditorStore.getState().document.contentVersions).toHaveLength(1);
 
     // Confirming the edit closes the loop without touching the words.
     useEditorStore.getState().execute({ type: "approve-slide-content", slideId });
     expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("approved");
     expect(useEditorStore.getState().document.slides[0]!.content.title).toBe("改过的标题");
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 3, content: 3, design: 0 });
+    expect(useEditorStore.getState().document.contentVersions).toHaveLength(2);
+    expect(useEditorStore.getState().document.contentVersions![1]!.contentRevision).toBe(3);
 
     // Confirming an already confirmed page adds no undo entry.
     useEditorStore.getState().execute({ type: "approve-slide-content", slideId });
@@ -273,6 +277,8 @@ describe("editor history", () => {
     useEditorStore.getState().undo();
     expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("changed");
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 2, design: 0 });
+    // 撤销确认时，这个确认动作留下的快照也一起撤回。
+    expect(useEditorStore.getState().document.contentVersions).toHaveLength(1);
   });
 
   it("records a metric edit as one undoable content transaction", () => {

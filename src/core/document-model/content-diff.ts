@@ -40,7 +40,10 @@ export function summarizeContentBlock(block: ContentBlock): string {
   }
 }
 
-function blockChanges(before: ContentVersionSlide, after: PresentationDocument["slides"][number]): ContentFieldChange[] {
+function blockChanges(
+  before: ContentVersionSlide,
+  after: PresentationDocument["slides"][number],
+): ContentFieldChange[] {
   const beforeBlocks = before.blocks ?? [];
   const afterBlocks = after.content.blocks ?? [];
   const beforeById = new Map(beforeBlocks.map((block) => [block.id, block]));
@@ -74,15 +77,11 @@ function blockChanges(before: ContentVersionSlide, after: PresentationDocument["
  * index shifts, and calling all of those pages "moved" would bury the real
  * change. Added and removed pages already tell that story.
  */
-export function diffContentVersion(
-  version: ContentVersion,
-  document: PresentationDocument,
-): ContentSlideDiff[] {
+export function diffContentVersion(version: ContentVersion, document: PresentationDocument): ContentSlideDiff[] {
   const beforeById = new Map(version.slides.map((slide, index) => [slide.slideId, { slide, index }]));
   const afterIds = new Set(document.slides.map((slide) => slide.id));
   const samePageSet =
-    version.slides.length === document.slides.length &&
-    version.slides.every((slide) => afterIds.has(slide.slideId));
+    version.slides.length === document.slides.length && version.slides.every((slide) => afterIds.has(slide.slideId));
 
   const diffs: ContentSlideDiff[] = [];
   document.slides.forEach((slide, afterIndex) => {

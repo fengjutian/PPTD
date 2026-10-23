@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDocument } from "./factory";
-import {
-  MAX_CONTENT_VERSIONS,
-  captureContentVersion,
-  contentSignature,
-  contentVersionSlides,
-} from "./content-version";
+import { MAX_CONTENT_VERSIONS, captureContentVersion, contentSignature, contentVersionSlides } from "./content-version";
 import type { ContentBlock } from "./types";
 
 function metric(id: string, value: string): ContentBlock {

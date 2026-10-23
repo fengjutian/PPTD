@@ -20,4 +20,12 @@ describe("agent workflow state machine", () => {
     const state = startAgentWorkflow(initialAgentWorkflow());
     expect(() => transitionAgentWorkflow(state, "complete")).toThrow("AGENT_WORKFLOW_INVALID_TRANSITION");
   });
+
+  it("allows a manually edited document to enter the export branch after checks", () => {
+    let state = startAgentWorkflow(initialAgentWorkflow());
+    state = transitionAgentWorkflow(state, "ready-to-export");
+    state = transitionAgentWorkflow(state, "exporting");
+    state = transitionAgentWorkflow(state, "complete");
+    expect(state.stage).toBe("complete");
+  });
 });

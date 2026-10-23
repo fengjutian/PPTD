@@ -56,8 +56,7 @@ function ChangeLine({ change }: { change: ContentFieldChange }) {
 
 function SlideDiff({ diff }: { diff: ContentSlideDiff }) {
   const index = diff.afterIndex ?? diff.beforeIndex ?? 0;
-  const moved =
-    diff.beforeIndex !== undefined && diff.afterIndex !== undefined && diff.beforeIndex !== diff.afterIndex;
+  const moved = diff.beforeIndex !== undefined && diff.afterIndex !== undefined && diff.beforeIndex !== diff.afterIndex;
   return (
     <li className={`content-diff-page ${diff.status}`}>
       <div className="content-diff-page-heading">
@@ -89,13 +88,7 @@ function SlideDiff({ diff }: { diff: ContentSlideDiff }) {
  * 版本是确认动作的副产品，只读：这里不提供“恢复”按钮，避免用户以为点一下
  * 就能把设计、对象和版式一起回滚。改动仍然通过撤销或重新编辑完成。
  */
-export function ContentHistory({
-  document,
-  onClose,
-}: {
-  document: PresentationDocument;
-  onClose: () => void;
-}) {
+export function ContentHistory({ document, onClose }: { document: PresentationDocument; onClose: () => void }) {
   const versions = document.contentVersions ?? [];
   const latestId = versions.at(-1)?.id;
   const [selectedId, setSelectedId] = useState<string | undefined>(latestId);

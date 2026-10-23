@@ -25,7 +25,7 @@ export interface AgentWorkflowState {
 
 const transitions: Readonly<Record<AgentWorkflowStage, readonly AgentWorkflowStage[]>> = {
   idle: ["checking"],
-  checking: ["planning", "cancelled", "failed"],
+  checking: ["planning", "ready-to-export", "cancelled", "failed"],
   planning: ["generating-content", "generating-design", "cancelled", "failed"],
   "generating-content": ["reviewing-content", "cancelled", "failed"],
   "reviewing-content": ["generating-design", "cancelled"],

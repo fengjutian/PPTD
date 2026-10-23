@@ -144,9 +144,7 @@ describe("content diff", () => {
   it("summarizes every block kind without leaking object syntax", () => {
     expect(summarizeContentBlock({ id: "x", type: "paragraph", text: "一段话" })).toBe("一段话");
     expect(summarizeContentBlock({ id: "x", type: "bullet-list", items: ["甲", "乙"] })).toBe("甲；乙");
-    expect(summarizeContentBlock({ id: "x", type: "quote", text: "原话", attribution: "某人" })).toBe(
-      "“原话” —— 某人",
-    );
+    expect(summarizeContentBlock({ id: "x", type: "quote", text: "原话", attribution: "某人" })).toBe("“原话” —— 某人");
     expect(summarizeContentBlock({ id: "x", type: "timeline", items: [{ label: "2024", text: "立项" }] })).toBe(
       "2024：立项",
     );
@@ -160,8 +158,6 @@ describe("content diff", () => {
         rightItems: ["稳"],
       }),
     ).toBe("方案 A：快 ｜ 方案 B：稳");
-    expect(summarizeContentBlock({ id: "x", type: "table-data", header: ["列"], rows: [["值"]] })).toBe(
-      "表头：列；值",
-    );
+    expect(summarizeContentBlock({ id: "x", type: "table-data", header: ["列"], rows: [["值"]] })).toBe("表头：列；值");
   });
 });

@@ -113,7 +113,7 @@ describe("PPTX export", () => {
     const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
     // A native line stays editable in PowerPoint: it is a connector shape, not
     // a picture of a line and not a flat rectangle.
-    expect(slideXml).toContain("<a:prstGeom prst=\"line\">");
+    expect(slideXml).toContain('<a:prstGeom prst="line">');
     expect(slideXml).toContain("3366CC");
     // 虚线和箭头都要真的写进 XML，不能只留在画布上。
     expect(slideXml).toContain('<a:prstDash val="dash"/>');
@@ -518,6 +518,6 @@ describe("PPTX export", () => {
     const entries = unzipSync(result.bytes);
     const media = Object.keys(entries).filter((name) => name.endsWith(".svg"));
     expect(media.length).toBe(1);
-    expect(strFromU8(entries[media[0]!]!)).toContain("viewBox=\"0 0 24 24\"");
+    expect(strFromU8(entries[media[0]!]!)).toContain('viewBox="0 0 24 24"');
   });
 });

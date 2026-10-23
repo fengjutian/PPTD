@@ -1172,6 +1172,13 @@ export function App() {
       exportCancelRef.current?.();
       return;
     }
+    setAgentWorkflow((state) => {
+      const ready =
+        state.stage === "ready-to-export"
+          ? state
+          : transitionAgentWorkflow(startAgentWorkflow(state), "ready-to-export", { label: "正在执行导出预检" });
+      return transitionAgentWorkflow(ready, "exporting");
+    });
     setExportBusy(true);
     setExportReport(undefined);
     setTaskStatus("正在生成 PPTX…");
@@ -1208,16 +1215,24 @@ export function App() {
         // 同步 revoke 会在部分 WebView 里取消尚未开始的下载。
         window.setTimeout(() => URL.revokeObjectURL(url), 0);
       } else {
+        setAgentWorkflow((state) => transitionAgentWorkflow(state, "cancelled", { label: "已取消选择导出位置" }));
         setTaskStatus(undefined);
         return;
       }
       setExportReport(report);
+      setAgentWorkflow((state) => transitionAgentWorkflow(state, "complete"));
       setTaskStatus(
         `导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象${report.warnings.length ? `，${report.warnings.length} 条提示` : ""}`,
       );
     } catch (error) {
-      if (error instanceof Error && error.message === "EXPORT_CANCELLED") setTaskStatus("导出已取消");
-      else setTaskStatus(`导出失败：${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error && error.message === "EXPORT_CANCELLED") {
+        setAgentWorkflow((state) => transitionAgentWorkflow(state, "cancelled"));
+        setTaskStatus("导出已取消");
+      } else {
+        const detail = error instanceof Error ? error.message : String(error);
+        setAgentWorkflow((state) => transitionAgentWorkflow(state, "failed", { error: detail }));
+        setTaskStatus(`导出失败：${detail}`);
+      }
     } finally {
       setExportBusy(false);
       exportCancelRef.current = undefined;
@@ -2193,9 +2208,25 @@ export function App() {
       // 视觉评审跑过但没达标（或整体失败）时，确定性质检通过也不代表稿子
       // 视觉上没问题。必须把报告留下，不能只闪一条状态就进入编辑器。
       const visualBelowTarget = stage.visualPassed === false;
+      const qualityReport = {
+        templateName: deckName,
+        issues: [
+          ...new Map(
+            stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),
+          ).values(),
+        ],
+        notes: stage.notes,
+        visualReview: stage.visualReview,
+        visualReviewCoverage: stage.visualReviewCoverage,
+        contactSheet: stage.contactSheet,
+        deckReview: stage.deckReview,
+        reviewReuse: stage.reviewReuse,
+      };
+      // 成功稿也保留报告。Contact Sheet、整册评分和缓存命中是可审计证据，
+      // 不能因为通过质量门就从界面中消失。
+      setDesignQualityReport(qualityReport);
+      setDesignQualityReportOpen(false);
       if (stage.passed && !visualCoverageIncomplete && !visualBelowTarget) {
-        setDesignQualityReport(undefined);
-        setDesignQualityReportOpen(false);
         setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
         setTaskStatus(`PPT 已完成 AI 设计：${deckName}`);
         if (visualNote) window.setTimeout(() => setTaskStatus(visualNote), 50);
@@ -2210,21 +2241,6 @@ export function App() {
               ? "生成完成，视觉评审未覆盖全部页面"
               : "生成完成，视觉评审未达到目标",
         });
-        setDesignQualityReport({
-          templateName: deckName,
-          issues: [
-            ...new Map(
-              stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),
-            ).values(),
-          ],
-          notes: stage.notes,
-          visualReview: stage.visualReview,
-          visualReviewCoverage: stage.visualReviewCoverage,
-          contactSheet: stage.contactSheet,
-          deckReview: stage.deckReview,
-          reviewReuse: stage.reviewReuse,
-        });
-        setDesignQualityReportOpen(false);
         setTaskStatus(
           stage.issues.length > 0
             ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
@@ -4404,9 +4420,7 @@ export function App() {
         </div>
       )}
 
-      {contentHistoryOpen && (
-        <ContentHistory document={document} onClose={() => setContentHistoryOpen(false)} />
-      )}
+      {contentHistoryOpen && <ContentHistory document={document} onClose={() => setContentHistoryOpen(false)} />}
 
       {message && (
         <div className={`page-message ${message.kind}`} role="status" aria-live="polite">
