@@ -6455,8 +6455,8 @@ button {
   background: #ece0cc;
 }
 :root[data-theme="amber"] .nav-rail button.active {
-  color: #6b3f0a;
-  background: #f6d9ac;
+  color: #fff;
+  background: #d24726;
 }
 :root[data-theme="amber"] .left-panel,
 :root[data-theme="amber"] .right-panel {

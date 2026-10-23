@@ -62,7 +62,7 @@ function SlideDiff({ diff }: { diff: ContentSlideDiff }) {
       <div className="content-diff-page-heading">
         <span className={`content-diff-badge ${diff.status}`}>{STATUS_LABELS[diff.status]}</span>
         <strong>{diff.afterTitle || diff.beforeTitle || "未命名页"}</strong>
-        <span>第 {index + 1} 页</span>
+        <span>{diff.status === "removed" ? `原第 ${index + 1} 页` : `第 ${index + 1} 页`}</span>
       </div>
       {diff.status === "added" && <p>这个版本之后新增的页面。</p>}
       {diff.status === "removed" && <p>整页已从当前文稿删除。</p>}
@@ -124,7 +124,7 @@ export function ContentHistory({ document, onClose }: { document: PresentationDo
 
         {versions.length === 0 ? (
           <p className="content-history-empty">
-            还没有已确认的内容版本。确认本页内容或应用 AI 内容后，会自动保存第一份版本。
+            还没有已确认的内容版本。确认本页内容或应用 AI 内容后，会自动保存第一份版本。旧项目不会自动补历史；如需建立基线，可先退回审核，再重新确认本页。
           </p>
         ) : (
           <div className="content-history-body">

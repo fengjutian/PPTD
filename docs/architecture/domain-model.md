@@ -256,7 +256,7 @@ interface TextMeasurer {
 - `approve-slide-content`：把目标页设为 `approved`。
 - `reopen-slide-content`：把目标页设为 `review`，退回审核而不是退回草稿。
 
-两者只改 `slide.content.status`，不碰标题、正文、块、备注、对象和页序；文档与内容 revision 各 +1，设计 revision 不变。目标状态已经达成时命令返回 `null`，不产生空撤销项。
+两者只改 `slide.content.status`，不碰标题、正文、块、备注、对象和页序；文档与内容 revision 各 +1，设计 revision 不变。确认还会按 §18 留下内容版本快照，快照本身不额外递增 revision。目标状态已经达成时命令返回 `null`，不产生空撤销项。
 
 编辑器状态栏展示当前页审核状态，并按状态只给一个动作：未确认时"确认本页内容"，已确认时"退回审核"。状态说明解释这一页为什么还算未审核，而不是重复状态名。
 
@@ -290,4 +290,4 @@ interface TextMeasurer {
 
 快照只读，不提供"恢复此版本"：恢复会同时涉及内容、对象和版式，不能伪装成一个内容命令。
 
-`contentVersions` 是 Schema 14 新增的可选字段。迁移不伪造历史；旧文档在第一次确认时生成第一个版本。详见 [0042 内容版本快照与差异对比](decisions/0042-content-version-history.md)。
+`contentVersions` 是 Schema 14 新增的可选字段。迁移不伪造历史；旧文档在第一次确认时生成第一个版本。已经全部确认的旧文档不会在打开时自动补历史，需要先退回审核再重新确认一页来建立基线。详见 [0042 内容版本快照与差异对比](decisions/0042-content-version-history.md)。

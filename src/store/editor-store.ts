@@ -165,6 +165,12 @@ export const useEditorStore = create<EditorState>((set) => ({
         else delete draft.theme;
         if (document.layouts) draft.layouts = structuredClone(document.layouts);
         else delete draft.layouts;
+        // Confirmed content versions belong to the document as well. The AI
+        // design pipeline installs its working copy through this method, and
+        // dropping the version captured when the reviewed draft was applied
+        // would leave the new deck without its baseline.
+        if (document.contentVersions) draft.contentVersions = structuredClone(document.contentVersions);
+        else delete draft.contentVersions;
         refreshContentHashes(draft);
         draft.revisions = {
           document: draft.revisions.document + 1,

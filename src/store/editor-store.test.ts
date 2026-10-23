@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  captureContentVersion,
   createDocument,
   hashSlideContent,
   inches,
@@ -232,16 +233,21 @@ describe("editor history", () => {
     const generated = createDocument();
     generated.title = "AI 生成文稿";
     generated.slides[0]!.content.title = "新标题";
+    captureContentVersion(generated);
     useEditorStore.getState().replaceDocument(generated, "both");
     const state = useEditorStore.getState();
     expect(state.document.title).toBe("AI 生成文稿");
     expect(state.document.revisions).toEqual({ document: 1, content: 1, design: 1 });
+    // 设计流水线通过 replaceDocument 安装最终文稿，确认快照必须一起带过来。
+    expect(state.document.contentVersions).toHaveLength(1);
     expect(state.undoStack).toHaveLength(1);
     state.undo();
     expect(useEditorStore.getState().document.title).toBe("未命名演示文稿");
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
+    expect(useEditorStore.getState().document.contentVersions).toBeUndefined();
     useEditorStore.getState().redo();
     expect(useEditorStore.getState().document.title).toBe("AI 生成文稿");
+    expect(useEditorStore.getState().document.contentVersions).toHaveLength(1);
   });
 
   it("confirms edited content as one undoable content transaction", () => {

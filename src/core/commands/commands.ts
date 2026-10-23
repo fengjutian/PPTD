@@ -1123,6 +1123,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         });
       return slide;
     });
+    // 应用已审核的 AI 内容也是确认动作：设计阶段之前就留下内容基线。
+    captureContentVersion(document);
     return;
   }
   if (command.type === "apply-ai-designed-draft") {
