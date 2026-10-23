@@ -11,6 +11,7 @@ import versionTenFixture from "./__fixtures__/v10-document.json";
 import versionElevenFixture from "./__fixtures__/v11-document.json";
 import versionTwelveFixture from "./__fixtures__/v12-document.json";
 import versionThirteenFixture from "./__fixtures__/v13-document.json";
+import versionFourteenFixture from "./__fixtures__/v14-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -123,6 +124,48 @@ describe("presentation document schema", () => {
     expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(migrated.contentVersions).toBeUndefined();
     expect(versionThirteenFixture.schemaVersion).toBe(13);
+  });
+
+  it("migrates the fixed version 14 fixture and invents no character formatting", () => {
+    const migrated = parsePresentationDocument(versionFourteenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const element = migrated.slides[0]!.elements[0]!;
+    // A version 14 text predates italic/strike/vertical alignment/markers, so
+    // the migration keeps it plain instead of writing defaults into the file.
+    expect(element.type === "text" ? element.style.italic : undefined).toBeUndefined();
+    expect(element.type === "text" ? element.style.strikethrough : undefined).toBeUndefined();
+    expect(element.type === "text" ? element.style.verticalAlign : undefined).toBeUndefined();
+    expect(element.type === "text" ? element.style.bullet : undefined).toBeUndefined();
+    expect(element.type === "text" ? element.style.indentLevel : undefined).toBeUndefined();
+    expect(versionFourteenFixture.schemaVersion).toBe(14);
+  });
+
+  it("accepts character and paragraph formatting and rejects an impossible indent", () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.style = {
+      ...element.style,
+      italic: true,
+      strikethrough: true,
+      verticalAlign: "middle",
+      bullet: "number",
+      indentLevel: 2,
+    };
+    const parsed = parsePresentationDocument(document);
+    const parsedElement = parsed.slides[0]!.elements[0]!;
+    expect(parsedElement.type === "text" ? parsedElement.style.italic : undefined).toBe(true);
+    expect(parsedElement.type === "text" ? parsedElement.style.bullet : undefined).toBe("number");
+    expect(parsedElement.type === "text" ? parsedElement.style.indentLevel : undefined).toBe(2);
+
+    const broken = structuredClone(document);
+    if (broken.slides[0]!.elements[0]!.type === "text") broken.slides[0]!.elements[0]!.style.indentLevel = 9;
+    expect(() => presentationDocumentSchema.parse(broken)).toThrow();
+
+    const unknownMarker = structuredClone(document);
+    if (unknownMarker.slides[0]!.elements[0]!.type === "text")
+      (unknownMarker.slides[0]!.elements[0]!.style as { bullet: string }).bullet = "dash";
+    expect(() => presentationDocumentSchema.parse(unknownMarker)).toThrow();
   });
 
   it("accepts a native line with arrow heads and a dash pattern", () => {

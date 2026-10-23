@@ -54,6 +54,19 @@ export type ElementOrigin = "generated" | "user";
 
 export type TextAlign = "left" | "center" | "right";
 
+/** Where the text sits vertically inside its frame. */
+export type TextVerticalAlign = "top" | "middle" | "bottom";
+
+/**
+ * The paragraph marker of a text box.
+ *
+ * A marker belongs to the whole text box in this version: the copy is a plain
+ * string, so there is no per-paragraph structure to hang a marker on. Every
+ * line therefore gets the same marker, and the number of a numbered list counts
+ * up per line.
+ */
+export type TextBullet = "none" | "dot" | "number";
+
 /** Presentation-only styling of a text run. Never part of the content hash. */
 export interface TextElementStyle {
   fontFamily: string;
@@ -65,6 +78,16 @@ export interface TextElementStyle {
   letterSpacingPt?: number;
   /** Line height as a multiple of the font size. Absent keeps the renderer's default. */
   lineHeight?: number;
+  /** Absent means upright. */
+  italic?: boolean;
+  /** Absent means no strike line. */
+  strikethrough?: boolean;
+  /** Absent means top, which is where the canvas has always drawn text. */
+  verticalAlign?: TextVerticalAlign;
+  /** Absent means no marker, so existing documents keep their plain paragraphs. */
+  bullet?: TextBullet;
+  /** Indent level of the whole text box, 0–8. Absent means no indent. */
+  indentLevel?: number;
 }
 
 /** Presentation-only styling of a vector shape. Never part of the content hash. */

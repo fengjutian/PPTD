@@ -36,6 +36,7 @@ import {
   stableStringify,
   applyTextRun,
   subtractTextRange,
+  clearedTextStyle,
   type TextRunStyle,
 } from "../document-model";
 import {
@@ -605,6 +606,13 @@ export type DocumentCommand =
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
+  | {
+      type: "set-text-style-elements";
+      slideId: SlideId;
+      elementIds: ElementId[];
+      style: Partial<TextElementStyle>;
+    }
+  | { type: "clear-text-format"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "fit-text"; slideId: SlideId; elementId: ElementId }
   | {
       type: "set-text-emphasis";
@@ -653,6 +661,30 @@ export type DocumentCommand =
   if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_TEXT_STYLE");
   if (style.bold !== undefined && typeof style.bold !== "boolean") throw new Error("INVALID_TEXT_STYLE");
   if (style.align !== undefined && style.align !== "left" && style.align !== "center" && style.align !== "right")
+    throw new Error("INVALID_TEXT_STYLE");
+  if (style.italic !== undefined && typeof style.italic !== "boolean") throw new Error("INVALID_TEXT_STYLE");
+  if (style.strikethrough !== undefined && typeof style.strikethrough !== "boolean")
+    throw new Error("INVALID_TEXT_STYLE");
+  if (
+    style.verticalAlign !== undefined &&
+    style.verticalAlign !== "top" &&
+    style.verticalAlign !== "middle" &&
+    style.verticalAlign !== "bottom"
+  )
+    throw new Error("INVALID_TEXT_STYLE");
+  if (style.bullet !== undefined && style.bullet !== "none" && style.bullet !== "dot" && style.bullet !== "number")
+    throw new Error("INVALID_TEXT_STYLE");
+  if (
+    style.indentLevel !== undefined &&
+    (!Number.isInteger(style.indentLevel) || style.indentLevel < 0 || style.indentLevel > 8)
+  )
+    throw new Error("INVALID_TEXT_STYLE");
+  if (style.lineHeight !== undefined && (!Number.isFinite(style.lineHeight) || style.lineHeight < 0.8 || style.lineHeight > 3))
+    throw new Error("INVALID_TEXT_STYLE");
+  if (
+    style.letterSpacingPt !== undefined &&
+    (!Number.isFinite(style.letterSpacingPt) || style.letterSpacingPt < -2 || style.letterSpacingPt > 20)
+  )
     throw new Error("INVALID_TEXT_STYLE");
 }
 
@@ -926,6 +958,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "remove-slide-background-image":
       return "design";
     case "set-text-style":
+    case "set-text-style-elements":
+    case "clear-text-format":
     case "fit-text":
     case "set-text-emphasis":
     case "clear-text-emphasis":
@@ -3542,6 +3576,31 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
 
   const slide = document.slides.find((item) => item.id === command.slideId);
   if (!slide) throw new Error("SLIDE_NOT_FOUND");
+
+  if (command.type === "set-text-style-elements") {
+    assertTextStyle(command.style);
+    const targets = slide.elements.filter(
+      (element): element is TextElement =>
+        command.elementIds.includes(element.id) && element.type === "text" && !element.locked,
+    );
+    // A batch that selects no editable text would otherwise push an empty undo
+    // entry; the UI disables the controls, so this is a programming error.
+    if (targets.length === 0) throw new Error("ELEMENT_NOT_TEXT");
+    for (const target of targets) target.style = { ...target.style, ...command.style };
+    return;
+  }
+  if (command.type === "clear-text-format") {
+    const targets = slide.elements.filter(
+      (element): element is TextElement =>
+        command.elementIds.includes(element.id) && element.type === "text" && !element.locked,
+    );
+    if (targets.length === 0) throw new Error("ELEMENT_NOT_TEXT");
+    // Clearing restores the deck's own type scale instead of a hard-coded size:
+    // the theme owns the body and title tokens, and a deck without a theme keeps
+    // the factory defaults. Geometry and copy are untouched.
+    for (const target of targets) target.style = clearedTextStyle(target.contentRef, document.theme);
+    return;
+  }
 
   if (command.type === "relayout-slide") {
     relayoutSlide(document, slide);

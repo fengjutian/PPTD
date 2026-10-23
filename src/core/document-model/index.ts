@@ -9,3 +9,4 @@ export * from "./chart-data";
 export * from "./table-data";
 export * from "./icons";
 export * from "./text-runs";
+export * from "./text-style";

@@ -744,6 +744,8 @@ export function App() {
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [themePresetId, setThemePresetId] = useState("");
   const [designBusy, setDesignBusy] = useState(false);
+  const designBusyRef = useRef(false);
+  const [generatingHistoryId, setGeneratingHistoryId] = useState<string>();
   const designCancelRef = useRef(false);
   /** 设计阶段的后端取消任务号。 */
   const designTaskId = useRef(0);
@@ -1665,6 +1667,10 @@ export function App() {
   const openAiPresentation = async (entry: AiHistoryEntry) => {
     if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开这份 AI 文稿吗？")) return;
     if (!entry.presentation) {
+      if (designBusyRef.current) {
+        setTaskStatus("已有 PPT 正在生成，请等待当前任务完成");
+        return;
+      }
       openAiHistory(entry);
       setTaskStatus("这份文稿还没有生成 PPT，正在开始生成…");
       await generateFromDraft("preset", entry.draft, entry.id);
@@ -2027,6 +2033,10 @@ export function App() {
     const sourceDraft = draftOverride ?? aiDraft;
     if (!sourceDraft) return;
     if (mode === "template" && (!selectedTemplate || !templateAnalysis)) return;
+    if (designBusyRef.current) {
+      setTaskStatus("已有 PPT 正在生成，请等待当前任务完成");
+      return;
+    }
     const sourceRecommendedThemePreset =
       findThemePreset(inferThemePresetId(sourceDraft.title.trim())) ?? defaultThemePreset();
     const preset =
@@ -2037,6 +2047,8 @@ export function App() {
         : undefined;
     const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
     const deckName = preset ? preset.name : selectedTemplate!.name;
+    designBusyRef.current = true;
+    setGeneratingHistoryId(historyIdOverride ?? activeHistoryId);
     designCancelRef.current = false;
     setDesignQualityReport(undefined);
     designTaskId.current += 1;
@@ -2346,6 +2358,8 @@ export function App() {
     } finally {
       window.clearInterval(progressTimer);
       void endAiGeneration(taskId).catch(() => undefined);
+      designBusyRef.current = false;
+      setGeneratingHistoryId(undefined);
       setDesignBusy(false);
     }
   };
@@ -3378,18 +3392,20 @@ export function App() {
                   {projectHomeItems.map((item, index) => {
                     if (item.kind === "ai") {
                       const entry = item.entry;
+                      const isGenerating = designBusy && generatingHistoryId === entry.id;
                       return (
                         <article key={`ai:${entry.id}`} className={`project-card ai ${index === 0 ? "featured" : ""}`}>
                           <button
                             type="button"
                             className="project-card-open"
                             title={entry.topic}
+                            disabled={designBusy && !entry.presentation}
                             onClick={() => void openAiPresentation(entry)}
                           >
                             <span className="project-card-preview ai" aria-hidden="true">
                               <span className="project-card-preview-brand">
                                 <Sparkles />
-                                {entry.presentation ? "AI PPT" : "待生成"}
+                                {entry.presentation ? "AI PPT" : isGenerating ? "生成中" : "待生成"}
                               </span>
                               <strong>{entry.draft.title}</strong>
                               <small>{entry.slideCount} 页演示文稿</small>
@@ -3397,7 +3413,15 @@ export function App() {
                             <span className="project-card-copy">
                               <span className="project-card-title-row">
                                 <strong>{entry.draft.title}</strong>
-                                <em>{entry.presentation ? (index === 0 ? "上次编辑" : "PPT") : "待生成"}</em>
+                                <em>
+                                  {entry.presentation
+                                    ? index === 0
+                                      ? "上次编辑"
+                                      : "PPT"
+                                    : isGenerating
+                                      ? `${designProgress.percent}%`
+                                      : "待生成"}
+                                </em>
                               </span>
                               <span>{entry.topic}</span>
                               <small>

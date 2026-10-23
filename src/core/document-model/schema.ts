@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 
-export const CURRENT_SCHEMA_VERSION = 14 as const;
+export const CURRENT_SCHEMA_VERSION = 15 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -36,6 +36,11 @@ const textElement = base.extend({
     align: z.enum(["left", "center", "right"]),
     letterSpacingPt: z.number().min(-2).max(20).optional(),
     lineHeight: z.number().min(0.8).max(3).optional(),
+    italic: z.boolean().optional(),
+    strikethrough: z.boolean().optional(),
+    verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
+    bullet: z.enum(["none", "dot", "number"]).optional(),
+    indentLevel: z.number().int().min(0).max(8).optional(),
   }),
   runs: z
     .array(
@@ -372,6 +377,11 @@ export const presentationDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionFourteenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(14) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTenDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(10) })
   .superRefine(validateUniqueIds)
@@ -474,6 +484,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 14 stores confirmed content snapshots. An older document has no
   // history yet; the first confirmation creates the first version.
   13: (document) => ({ ...versionThirteenDocumentSchema.parse(document), schemaVersion: 14 }),
+  // Version 15 adds character and paragraph formatting (italic, strike,
+  // vertical alignment, markers, indentation). Every field is optional, so a
+  // version 14 document keeps every page and simply shows unstyled paragraphs.
+  14: (document) => ({ ...versionFourteenDocumentSchema.parse(document), schemaVersion: 15 }),
 };
 
 export function parsePresentationDocument(input: unknown) {
