@@ -90,7 +90,7 @@ export interface LayoutRecipe {
 - `editorial-index`：标题 + 编号 + 细线 + 大字号，没有白卡；适合 3–6 条短要点。
 - `asymmetric-split`：约 1/3 标题栏 + 2/3 正文栏，替代左右等宽面板；适合 2–4 条较长要点。
 
-后续配方：`data-story`、`image-led`、`process-rail`、`comparison`、`quote-field`。`cover-statement` 已在 P2a 首批实现。
+后续配方：`image-led`、`process-rail`、`comparison`、`quote-field`。`cover-statement` 与 `data-story` 已在 P2a 实现。
 
 ### 3. 令牌层：让十页像一套系统
 
@@ -182,11 +182,11 @@ export interface DesignTokens {
 - `apply-ai-designed-draft` 的 `designConcept` 与配方分派；没有概念/配方/模板页继续走旧分支。
 - Rust `generate_deck_concepts`、TS `generateDeckConcepts`、逐页设计提示词的 `recipe/variant/focal`，App 生成链路与降级。
 - 真实 PowerPoint 渲染：编辑式四卡页替换为编号栏、五条要点页替换为非对称分栏，文件可打开，文字/形状为原生对象。
-- `vitest run` 878 项通过，`tsc --noEmit` 与 `npm run build` 通过。
+- `vitest run` 889 项通过，`tsc --noEmit` 与 `npm run build` 通过。
 
-P2a 已开始：`cover-statement` 已实现并接入 `editorial` 预设；封面页使用大标题、副标题和几何强调块，不套旧封面分支。
+P2a 已开始：`cover-statement` 与 `data-story` 已实现并接入 `editorial` 预设。封面使用大标题、副标题和几何强调块；指标页使用 1–3 个大数字 + 标签，数字文本框带 `contentBlockRef`，可在编辑器里直接改指标值。
 
 仍未完成：
 
 - 10 页样例走真实 AI 接口的端到端验收（本次只用合成内容验证渲染和命令层）。
-- 设计方向选择器、`data-story` / `image-led`、评审新评分与 `changeRecipe`、概念持久化。
+- 设计方向选择器、`image-led`、评审新评分与 `changeRecipe`、概念持久化。

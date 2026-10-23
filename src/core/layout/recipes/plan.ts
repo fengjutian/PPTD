@@ -31,6 +31,15 @@ export function chooseRecipeId(
   if (options.hasArtwork || options.hasAsset) return undefined;
   if (facts.layout === "cover" && concept.recipes.includes("cover-statement")) return "cover-statement";
   if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return undefined;
+  if (
+    facts.hasMetric &&
+    !facts.hasTimeline &&
+    !facts.hasProcess &&
+    !facts.hasTable &&
+    concept.recipes.includes("data-story")
+  ) {
+    return "data-story";
+  }
   if (facts.hasQuote || facts.hasComparison || facts.hasRowBlock) return undefined;
   if (concept.recipes.includes("editorial-index") && facts.itemCount >= 3 && facts.itemCount <= 6 && facts.shortItems) {
     return "editorial-index";
@@ -81,7 +90,7 @@ export function selectRecipe(request: RecipeRequest): RecipeSelectionResult {
   }
   const id = chooseRecipeId(request.facts, request.concept, request.options);
   const recipe = id ? findRecipe(id) : undefined;
-  return recipe ? { recipe } : {};
+  return recipe && recipe.supports(request.facts, request.concept, request.options) ? { recipe } : {};
 }
 
 export interface RecipePageRequest {

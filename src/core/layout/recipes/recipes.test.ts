@@ -6,6 +6,7 @@ import { deriveDesignTokens } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
 import { asymmetricSplit } from "./asymmetric-split";
 import { coverStatement } from "./cover-statement";
+import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
 import { consumptionProblem } from "./plan";
 import type { RecipeContext, RecipePlan } from "./types";
@@ -163,6 +164,59 @@ describe("editorial-index recipe", () => {
     expect(signature(plan(editorialIndex, ctx))).toEqual(
       signature(plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 4 }) }))),
     );
+  });
+});
+
+describe("data-story recipe", () => {
+  const metricContent: SlideContent = {
+    title: "本季度三项核心指标",
+    body: "销售收入 38 万，客户数 260 家，平均交付 5 天。",
+    blocks: [
+      { id: "m1", type: "metric", label: "销售收入", value: "38 万" },
+      { id: "m2", type: "metric", label: "客户数", value: "260 家" },
+      { id: "m3", type: "metric", label: "平均交付", value: "5 天" },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws three metrics as large numbers with editable bindings", () => {
+    const ctx = context(metricContent, {
+      facts: facts({ itemCount: 0, hasRowBlock: true, hasMetric: true }),
+    });
+    expect(dataStory.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(dataStory, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, metricContent)).toBeUndefined();
+    expect(result.consumed.blockIds).toEqual(["m1", "m2", "m3"]);
+    const texts = result.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
+    expect(texts).toEqual(expect.arrayContaining(["38 万", "260 家", "5 天", "销售收入", "客户数", "平均交付"]));
+    const metricValues = result.elements.filter(
+      (element) => element.type === "text" && element.contentBlockRef?.field === "value",
+    );
+    expect(metricValues).toHaveLength(3);
+  });
+
+  it("refuses a fourth metric", () => {
+    const four = {
+      ...metricContent,
+      blocks: [...metricContent.blocks!, { id: "m4", type: "metric", label: "第四项", value: "1" }] as ContentBlock[],
+    };
+    const result = dataStory.plan(
+      context(four, { facts: facts({ itemCount: 0, hasRowBlock: true, hasMetric: true }) }),
+    );
+    expect("conflict" in result).toBe(true);
+  });
+
+  it("refuses a process page", () => {
+    expect(
+      dataStory.supports(facts({ hasRowBlock: true, hasMetric: true, hasProcess: true }), concept(), {
+        hasArtwork: false,
+        hasAsset: false,
+      }),
+    ).toBe(false);
   });
 });
 

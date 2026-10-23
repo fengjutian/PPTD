@@ -3,6 +3,7 @@ import type { ElementId, Emu, RectEmu, SlideElement, TextAlign, TextContentRole 
 interface TextOptions {
   contentRef?: TextContentRole;
   lineHeight?: number;
+  contentBlockRef?: { blockId: string; field: "label" | "value" };
 }
 
 /** A generated text box. Recipes only describe position, type and ink. */
@@ -20,6 +21,7 @@ export function textElement(
     id: crypto.randomUUID() as ElementId,
     type: "text",
     ...(options.contentRef ? { contentRef: options.contentRef } : {}),
+    ...(options.contentBlockRef ? { contentBlockRef: options.contentBlockRef } : {}),
     frame,
     rotationMilliDegree: 0,
     locked: false,

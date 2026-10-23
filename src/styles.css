@@ -410,6 +410,46 @@ button {
 .page-size-error {
   color: #e07a6a;
 }
+/* 排列功能区的对齐/分布/旋转/锁定：图标按钮保持一行高度。 */
+.arrange-extra-tools {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.arrange-icon-group {
+  display: flex;
+  gap: 1px;
+  padding: 0 3px;
+  border-right: 1px solid rgb(255 255 255 / 16%);
+}
+.arrange-extra-tools button {
+  width: 27px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #d8dae0;
+  background: transparent;
+  cursor: pointer;
+}
+.arrange-extra-tools button svg {
+  width: 14px;
+  height: 14px;
+}
+.arrange-extra-tools button:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 22%);
+  background: rgb(255 255 255 / 10%);
+}
+.arrange-extra-tools button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.arrange-extra-tools .arrange-single-action {
+  border-color: rgb(255 255 255 / 16%);
+}
 .find-replace-bar {
   position: fixed;
   top: 96px;

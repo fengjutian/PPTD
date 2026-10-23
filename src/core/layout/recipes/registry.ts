@@ -1,11 +1,13 @@
 import type { RecipeId } from "../../design/deck-concept";
 import { asymmetricSplit } from "./asymmetric-split";
 import { coverStatement } from "./cover-statement";
+import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
 import type { LayoutRecipe } from "./types";
 
 const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
   "cover-statement": coverStatement,
+  "data-story": dataStory,
   "editorial-index": editorialIndex,
   "asymmetric-split": asymmetricSplit,
 };

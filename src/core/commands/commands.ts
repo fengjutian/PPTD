@@ -643,6 +643,7 @@ export type DocumentCommand =
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
   | { type: "delete-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
+  | { type: "set-elements-lock"; slideId: SlideId; elementIds: ElementId[]; locked: boolean }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
   | {
       type: "add-animation";
@@ -3795,6 +3796,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       return copy;
     });
     slide.elements.push(...copies);
+    return;
+  }
+
+  if (command.type === "set-elements-lock") {
+    const targets = slide.elements.filter((element) => command.elementIds.includes(element.id));
+    if (targets.length === 0) throw new Error("ELEMENT_NOT_FOUND");
+    for (const target of targets) target.locked = command.locked;
     return;
   }
 

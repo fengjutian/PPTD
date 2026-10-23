@@ -165,6 +165,47 @@ describe("recipe rendering through the design command", () => {
     expect(slide.elements.filter((element) => element.type === "shape").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("renders a metric page through the data-story recipe", () => {
+    const document = createDocument();
+    const metricFacts = facts({
+      itemCount: 0,
+      hasRowBlock: true,
+      hasMetric: true,
+      layout: "summary",
+    });
+    const metricConcept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [metricFacts],
+      pageCount: 1,
+      id: "metrics",
+    }).concept;
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "本季度三项核心指标",
+      slides: [
+        {
+          title: "本季度三项核心指标",
+          body: "销售收入 38 万，客户数 260 家，平均交付 5 天。",
+          speakerNotes: "",
+          blocks: [
+            { type: "metric", label: "销售收入", value: "38 万" },
+            { type: "metric", label: "客户数", value: "260 家" },
+            { type: "metric", label: "平均交付", value: "5 天" },
+          ],
+        },
+      ],
+      designs: [design({ layout: "summary", recipe: "data-story" })],
+      designConcept: metricConcept,
+      themePresetId: "consulting-navy",
+    });
+    const slide = document.slides[0]!;
+    const values = slide.elements.filter(
+      (element) => element.type === "text" && element.contentBlockRef?.field === "value",
+    );
+    expect(values).toHaveLength(3);
+    expect(slide.content.blocks?.filter((block) => block.type === "metric")).toHaveLength(3);
+  });
+
   it("maps a ten-page deck to the two recipes and leaves the process page alone", () => {
     const counts = [4, 4, 5, 5, 4, 4, 4, 4, 4, 4];
     const slides = counts.map((count, index) =>

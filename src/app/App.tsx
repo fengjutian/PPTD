@@ -67,6 +67,7 @@ import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 import { FindReplaceBar } from "../features/editor/FindReplaceBar";
 import { PageSizeControls } from "../features/editor/PageSizeControls";
+import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
 import { useFormatPainterStore } from "../store/format-painter";
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 import { ContentHistory } from "../features/editor/ContentHistory";
@@ -3342,6 +3343,13 @@ export function App() {
             >
               <ArrowDown />
             </ToolButton>
+            <span className="separator" />
+            <ArrangeToolbar
+              slideId={activeSlide.id}
+              selected={activeSlide.elements.filter((element) => selectedElementIds.includes(element.id))}
+              execute={execute}
+            />
+            <span className="separator" />
             <ToolButton
               label="删除所选对象"
               disabled={!selected || selected.locked}

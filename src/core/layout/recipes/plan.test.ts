@@ -40,6 +40,10 @@ describe("recipe planning", () => {
     expect(chooseRecipeId(facts({ layout: "cover", itemCount: 1 }), concept(), options)).toBe("cover-statement");
   });
 
+  it("chooses the data story for a metric page", () => {
+    expect(chooseRecipeId(facts({ hasRowBlock: true, hasMetric: true }), concept(), options)).toBe("data-story");
+  });
+
   it("leaves structured pages to the legacy renderer", () => {
     expect(chooseRecipeId(facts({ hasRowBlock: true }), concept(), options)).toBeUndefined();
     expect(chooseRecipeId(facts(), concept(), { hasArtwork: true, hasAsset: false })).toBeUndefined();
