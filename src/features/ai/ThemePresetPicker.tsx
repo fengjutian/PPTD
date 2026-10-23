@@ -27,6 +27,8 @@ export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePr
         const color = (slot: string) => preset.theme.colors.find((entry) => entry.name === slot)?.value;
         const surface = color("surface") ?? "#FFFFFF";
         const accent = color("accent") ?? "#000000";
+        const accent2 = color("accent2") ?? accent;
+        const accent3 = color("accent3") ?? accent2;
         const primary = color("primary") ?? "#000000";
         return (
           <button
@@ -50,6 +52,8 @@ export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePr
                 style={{ background: surface }}
               />
               <span style={{ background: accent }} />
+              <span style={{ background: accent2 }} />
+              <span style={{ background: accent3 }} />
               <span style={{ background: primary }} />
             </span>
             <strong>{preset.name}</strong>

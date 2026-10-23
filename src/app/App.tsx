@@ -598,8 +598,10 @@ function presetTemplateAnalysis(preset: ThemePreset): TemplateAnalysis {
     themeCount: 1,
     themeColors: [
       { name: "accent1", value: color("accent") },
-      { name: "accent2", value: color("muted") },
+      { name: "accent2", value: color("accent2") },
+      { name: "accent3", value: color("accent3") },
       { name: "lt1", value: color("surface") },
+      { name: "lt2", value: color("surfaceAlt") },
       { name: "dk1", value: color("primary") },
     ],
     majorFont: preset.theme.majorFont,

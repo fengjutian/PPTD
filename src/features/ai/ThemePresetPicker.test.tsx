@@ -15,6 +15,7 @@ describe("ThemePresetPicker", () => {
     const markup = renderToStaticMarkup(<ThemePresetPicker value="consulting-navy" onChange={() => undefined} />);
     expect(markup.match(/aria-checked="true"/g)?.length).toBe(1);
     expect(markup).toContain('aria-label="藏青"');
-    expect(markup).toContain("border:2px solid #1F4E79");
+    expect(markup).toContain('class="theme-card active"');
+    expect(markup).toContain("--card-accent:#1F4E79");
   });
 });

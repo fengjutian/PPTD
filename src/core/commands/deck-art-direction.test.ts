@@ -19,7 +19,12 @@ describe("deck art direction", () => {
       slide("cards", "framework"),
       slide("section", "statement"),
     ]);
-    expect(result.map((item) => item.palette?.background)).toEqual(["primary", "surface", "surface", "primary"]);
+    expect(result.map((item) => item.palette?.background)).toEqual([
+      "accent-1",
+      "surface",
+      "surface",
+      "accent-2",
+    ]);
     expect(result[0]!.emphasis).toBe("title-dominant");
   });
 });
