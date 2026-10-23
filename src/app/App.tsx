@@ -199,11 +199,13 @@ function matchTemplateLayoutRender(
 
 function ToolButton({
   label,
+  caption,
   onClick,
   disabled,
   children,
 }: {
   label: string;
+  caption?: string;
   onClick?: () => void;
   disabled?: boolean;
   children: React.ReactNode;
@@ -211,6 +213,7 @@ function ToolButton({
   return (
     <button className="tool-button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>
       {children}
+      <span>{caption ?? label}</span>
     </button>
   );
 }
@@ -806,6 +809,16 @@ export function App() {
   useEffect(() => {
     void refreshRecentProjects().catch(() => setTaskStatus("最近项目读取失败"));
   }, [refreshRecentProjects]);
+  useEffect(() => {
+    const windowTitle = `${document.title}${dirty ? " *" : ""} — PPTD`;
+    if (isDesktopRuntime()) {
+      void import("@tauri-apps/api/window")
+        .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(windowTitle))
+        .catch(() => undefined);
+      return;
+    }
+    globalThis.document.title = windowTitle;
+  }, [document.title, dirty]);
   const fitToWindow = useCallback(() => {
     const node = workspaceRef.current;
     const style = node ? window.getComputedStyle(node) : null;
@@ -2387,13 +2400,6 @@ export function App() {
     >
       {activeView === "editor" && (
         <header className="topbar" data-ribbon-tab={editorRibbonTab}>
-          <div className="brand">
-            <span className="brand-mark">P</span>
-            <div>
-              <strong>PPTD</strong>
-              <small>{document.title}</small>
-            </div>
-          </div>
           <nav className="ribbon-tabs" aria-label="编辑功能区">
             {([
               ["file", "文件"],
@@ -2415,14 +2421,15 @@ export function App() {
             ))}
           </nav>
           <div className="toolbar-group file-tools">
-            <ToolButton label="新建项目" onClick={handleNew}>
+            <ToolButton label="新建项目" caption="新建" onClick={handleNew}>
               <FilePlus2 />
             </ToolButton>
-            <ToolButton label="打开或导入 PPTD、PPTX、PPT" onClick={handleOpenOrImport} disabled={!isDesktopRuntime()}>
+            <ToolButton label="打开或导入 PPTD、PPTX、PPT" caption="打开" onClick={handleOpenOrImport} disabled={!isDesktopRuntime()}>
               <FileUp />
             </ToolButton>
             <ToolButton
               label="最近项目"
+              caption="最近"
               onClick={() => {
                 setRecentProjectsOpen(true);
                 void refreshRecentProjects();
@@ -2431,24 +2438,58 @@ export function App() {
             >
               <FolderClock />
             </ToolButton>
-            <ToolButton label={saving ? "正在保存" : "保存项目"} onClick={handleSave} disabled={saving}>
+            <ToolButton label={saving ? "正在保存" : "保存项目"} caption={saving ? "保存中" : "保存"} onClick={handleSave} disabled={saving}>
               <Save />
             </ToolButton>
-            <ToolButton label="另存为" onClick={handleSaveAs} disabled={saving || !isDesktopRuntime()}>
+            <ToolButton label="另存为" caption="另存" onClick={handleSaveAs} disabled={saving || !isDesktopRuntime()}>
               <SaveAll />
             </ToolButton>
-            <ToolButton label="重命名项目" onClick={handleRenameProject} disabled={saving}>
+            <ToolButton label="重命名项目" caption="重命名" onClick={handleRenameProject} disabled={saving}>
               <FilePenLine />
             </ToolButton>
-            <ToolButton label="复制项目" onClick={handleDuplicateProject} disabled={saving || !isDesktopRuntime()}>
+            <ToolButton label="复制项目" caption="副本" onClick={handleDuplicateProject} disabled={saving || !isDesktopRuntime()}>
               <Copy />
             </ToolButton>
-            <span className="separator" />
+          </div>
+          <div className="toolbar-group home-tools">
             <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}>
               <Undo2 />
             </ToolButton>
             <ToolButton label="重做" onClick={redo} disabled={!redoStack.length}>
               <Redo2 />
+            </ToolButton>
+            <span className="separator" />
+            <ToolButton label="新建幻灯片" caption="新建页面" onClick={() => execute({ type: "add-slide" })}>
+              <Plus />
+            </ToolButton>
+            <ToolButton label="复制当前幻灯片" caption="复制页面" onClick={() => execute({ type: "duplicate-slide", slideId: activeSlide.id })}>
+              <Copy />
+            </ToolButton>
+            <ToolButton label="删除当前幻灯片" caption="删除页面" disabled={document.slides.length <= 1} onClick={() => execute({ type: "delete-slide", slideId: activeSlide.id })}>
+              <Trash2 />
+            </ToolButton>
+            <span className="separator" />
+            <ToolButton
+              label="复制所选对象"
+              caption="复制对象"
+              disabled={selectedElementIds.length === 0 || selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)}
+              onClick={() => {
+                const elementIds = selectedElementIds.filter((id) => !activeSlide.elements.find((item) => item.id === id)?.locked);
+                if (elementIds.length) execute({ type: "duplicate-elements", slideId: activeSlide.id, elementIds });
+              }}
+            >
+              <Copy />
+            </ToolButton>
+            <ToolButton
+              label="删除所选对象"
+              caption="删除对象"
+              disabled={selectedElementIds.length === 0 || selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)}
+              onClick={() => {
+                const elementIds = selectedElementIds.filter((id) => !activeSlide.elements.find((item) => item.id === id)?.locked);
+                if (elementIds.length) execute({ type: "delete-elements", slideId: activeSlide.id, elementIds });
+              }}
+            >
+              <Trash2 />
             </ToolButton>
           </div>
           <div className="toolbar-group insert-tools">
@@ -2519,6 +2560,9 @@ export function App() {
             </ToolButton>
           </div>
           <div className="toolbar-group assist-tools">
+            <ToolButton label="适应窗口" onClick={fitToWindow}>
+              <LayoutDashboard />
+            </ToolButton>
             <ToolButton label={gridEnabled ? "关闭网格" : "显示网格"} onClick={toggleGrid}>
               <Grid3x3 />
             </ToolButton>
@@ -2572,6 +2616,20 @@ export function App() {
               label="下移一层"
               disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) <= 0}
               onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.indexOf(selected) - 1 })}
+            >
+              <ArrowDown />
+            </ToolButton>
+            <ToolButton
+              label="置于顶层"
+              disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) >= activeSlide.elements.length - 1}
+              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.length - 1 })}
+            >
+              <ArrowUp />
+            </ToolButton>
+            <ToolButton
+              label="置于底层"
+              disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) <= 0}
+              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: 0 })}
             >
               <ArrowDown />
             </ToolButton>

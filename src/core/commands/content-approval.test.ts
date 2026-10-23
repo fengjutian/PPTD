@@ -75,8 +75,8 @@ describe("content approval", () => {
 
   it("rejects an unknown page instead of silently doing nothing", () => {
     const document = createDocument();
-    expect(() =>
-      applyCommand(document, { type: "approve-slide-content", slideId: "missing" as SlideId }),
-    ).toThrow("SLIDE_NOT_FOUND");
+    expect(() => applyCommand(document, { type: "approve-slide-content", slideId: "missing" as SlideId })).toThrow(
+      "SLIDE_NOT_FOUND",
+    );
   });
 });

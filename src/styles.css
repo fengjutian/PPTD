@@ -91,6 +91,7 @@ button {
   grid-template-rows: 1fr 28px;
 }
 .topbar {
+  position: relative;
   grid-column: 2 / -1;
   grid-row: 1;
   display: flex;
@@ -101,11 +102,10 @@ button {
   border-bottom: 1px solid #303136;
   z-index: 3;
 }
-.topbar .brand { align-self: center; margin-top: 20px; }
 .ribbon-tabs {
   position: absolute;
   top: 3px;
-  left: 220px;
+  left: 16px;
   right: 145px;
   height: 29px;
   display: flex;
@@ -126,7 +126,7 @@ button {
 .ribbon-tabs button.active { color: #fff; border-bottom-color: #fff; font-weight: 700; }
 .topbar .toolbar-group { display: none; min-height: 38px; }
 .topbar[data-ribbon-tab="file"] .file-tools,
-.topbar[data-ribbon-tab="home"] .file-tools,
+.topbar[data-ribbon-tab="home"] .home-tools,
 .topbar[data-ribbon-tab="insert"] .insert-tools,
 .topbar[data-ribbon-tab="design"] .design-tools,
 .topbar[data-ribbon-tab="arrange"] .arrange-tools,
@@ -172,8 +172,8 @@ button {
 }
 .toolbar-group {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 3px;
 }
 .insert-tools {
   margin-left: 0;
@@ -184,22 +184,36 @@ button {
 }
 .separator {
   width: 1px;
-  height: 24px;
+  height: 38px;
   background: #34363c;
   margin: 0 5px;
 }
 .tool-button {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
+  min-width: 48px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 7px 3px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
 }
 .tool-button svg {
-  width: 18px;
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+.tool-button span {
+  max-width: 70px;
+  overflow: hidden;
+  font-size: 9px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tool-button:hover:not(:disabled) {
   background: #292b30;

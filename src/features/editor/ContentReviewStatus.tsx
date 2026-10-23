@@ -2,7 +2,7 @@ import type { DocumentCommand } from "../../core/commands";
 import type { ContentStatus, SlideId } from "../../core/document-model";
 
 /** 编辑器状态栏里显示的内容审核状态。 */
-export const contentStatusLabels: Record<ContentStatus, string> = {
+const contentStatusLabels: Record<ContentStatus, string> = {
   draft: "内容草稿",
   review: "内容审核中",
   approved: "内容已确认",
@@ -16,7 +16,7 @@ export const contentStatusLabels: Record<ContentStatus, string> = {
  * 用户看到的下一件事是"我能不能导出"，所以这里直接说明那一页为什么还算
  * 未审核，以及确认之后会发生什么。
  */
-export const contentStatusHints: Record<ContentStatus, string> = {
+const contentStatusHints: Record<ContentStatus, string> = {
   draft: "本页内容还没有审核。导出前请确认本页内容。",
   review: "本页正在审核。确认之后才算已确认内容。",
   approved: "本页内容已确认。改文字、数字或备注后会重新变成待确认。",
