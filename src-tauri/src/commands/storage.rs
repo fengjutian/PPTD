@@ -1,4 +1,4 @@
-use crate::storage::{Database, StoredAiHistoryEntry, StoredAppSettings};
+use crate::storage::{Database, RecentProjectEntry, StoredAiHistoryEntry, StoredAppSettings};
 use tauri::State;
 
 #[tauri::command]
@@ -29,4 +29,19 @@ pub fn upsert_ai_draft_history(
     entry: StoredAiHistoryEntry,
 ) -> Result<Vec<StoredAiHistoryEntry>, String> {
     database.save_ai_history(&entry)
+}
+
+#[tauri::command]
+pub fn load_recent_projects(
+    database: State<'_, Database>,
+) -> Result<Vec<RecentProjectEntry>, String> {
+    database.load_recent_projects()
+}
+
+#[tauri::command]
+pub fn upsert_recent_project(
+    database: State<'_, Database>,
+    entry: RecentProjectEntry,
+) -> Result<Vec<RecentProjectEntry>, String> {
+    database.upsert_recent_project(&entry)
 }

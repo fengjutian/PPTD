@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { ICON_LABELS, ICON_NAMES } from "./IconPicker";
+import { ICON_LABELS, ICON_NAMES } from "./icon-options";
 import { IconGlyph } from "./IconView";
 import {
   AlignCenterHorizontal,

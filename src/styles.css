@@ -2349,6 +2349,16 @@ button {
   font-size: 11px;
   line-height: 1.6;
 }
+.design-quality-warning {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #6b5a2e;
+  border-radius: 8px;
+  background: #2b2820;
+  color: #e7c879;
+  font-size: 12px;
+  line-height: 1.6;
+}
 .design-quality-visual {
   margin: 18px 0 0;
 }

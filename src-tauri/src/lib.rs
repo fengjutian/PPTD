@@ -28,6 +28,8 @@ pub fn run() {
             commands::storage::save_app_settings,
             commands::storage::load_ai_draft_history,
             commands::storage::upsert_ai_draft_history,
+            commands::storage::load_recent_projects,
+            commands::storage::upsert_recent_project,
             commands::ai::generate_presentation,
             commands::ai::generate_presentation_outline,
             commands::ai::generate_presentation_slides_batch,

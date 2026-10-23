@@ -493,6 +493,8 @@ export interface VisualAlignmentResult<T> {
   value: T;
   review: VisualReview;
   iterations: number;
+  /** 返回的 review/value 来自哪一轮；覆盖范围等按轮统计的信息要对齐到这一轮。 */
+  bestIteration: number;
   stopReason: "target-reached" | "stagnated" | "regressed" | "no-change" | "iteration-limit";
   /** True when the returned value is an earlier, better design rather than the last repair. */
   reverted: boolean;
@@ -523,10 +525,18 @@ export async function runVisualAlignmentLoop<T>(options: {
   let bestValue = options.initial;
   let bestReview: VisualReview | undefined;
   let bestScore = -1;
+  let bestIteration = 0;
   const settled = (iterations: number, stopReason: VisualAlignmentResult<T>["stopReason"]) => {
     const finalReview = bestReview ?? lastReview;
     if (!finalReview) throw new Error("VISUAL_ALIGNMENT_REVIEW_MISSING");
-    return { value: bestValue, review: finalReview, iterations, stopReason, reverted: bestValue !== value };
+    return {
+      value: bestValue,
+      review: finalReview,
+      iterations,
+      stopReason,
+      reverted: bestValue !== value,
+      bestIteration,
+    };
   };
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
     const review = visualReviewSchema.parse(await options.review(value, options.goal, iteration));
@@ -535,6 +545,7 @@ export async function runVisualAlignmentLoop<T>(options: {
       bestScore = review.overallScore;
       bestValue = value;
       bestReview = review;
+      bestIteration = iteration;
     }
     const reached =
       review.overallScore >= options.goal.minimumScores.overall &&
@@ -543,7 +554,15 @@ export async function runVisualAlignmentLoop<T>(options: {
       review.readabilityScore >= options.goal.minimumScores.readability &&
       review.consistencyScore >= options.goal.minimumScores.consistency &&
       !review.issues.some((issue) => issue.severity === "error");
-    if (reached) return { value, review, iterations: iteration, stopReason: "target-reached", reverted: false };
+    if (reached)
+      return {
+        value,
+        review,
+        iterations: iteration,
+        stopReason: "target-reached",
+        reverted: false,
+        bestIteration: iteration,
+      };
     if (previousScore >= 0 && review.overallScore - previousScore < 3)
       return settled(iteration, review.overallScore < previousScore ? "regressed" : "stagnated");
     if (iteration === maxIterations) return settled(iteration, "iteration-limit");

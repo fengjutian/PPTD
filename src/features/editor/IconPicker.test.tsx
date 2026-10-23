@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BUILTIN_ICONS } from "../../core/document-model";
-import { ICON_LABELS, IconPicker } from "./IconPicker";
+import { IconPicker } from "./IconPicker";
+import { ICON_LABELS } from "./icon-options";
 
 describe("icon picker", () => {
   it("offers every built-in icon once", () => {

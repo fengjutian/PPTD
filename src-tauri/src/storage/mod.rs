@@ -7,8 +7,9 @@ use std::{
     time::Duration,
 };
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const HISTORY_LIMIT: usize = 20;
+const RECENT_PROJECT_LIMIT: usize = 20;
 const MAX_PROVIDER_ID_CHARS: usize = 64;
 const MAX_MODEL_CHARS: usize = 128;
 const MAX_TOPIC_CHARS: usize = 4000;
@@ -48,6 +49,18 @@ pub struct StoredAiHistoryEntry {
     pub slide_count: u32,
     pub updated_at: String,
     pub draft: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentProjectEntry {
+    pub project_id: String,
+    pub path: String,
+    pub title: String,
+    pub created_at: i64,
+    pub modified_at: i64,
+    pub last_opened_at: i64,
+    pub missing: bool,
 }
 
 /// SQLite-backed local store for preferences and AI draft history.
@@ -228,6 +241,78 @@ impl Database {
         drop(connection);
         self.load_ai_history()
     }
+
+    pub fn load_recent_projects(&self) -> Result<Vec<RecentProjectEntry>, String> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT project_id, path, title, created_at, modified_at, last_opened_at
+                 FROM recent_projects
+                 ORDER BY last_opened_at DESC, rowid DESC
+                 LIMIT ?1",
+            )
+            .map_err(|error| format!("DATABASE_READ_FAILED: {error}"))?;
+        let rows = statement
+            .query_map([RECENT_PROJECT_LIMIT as i64], |row| {
+                let path: String = row.get(1)?;
+                Ok(RecentProjectEntry {
+                    project_id: row.get(0)?,
+                    missing: !Path::new(&path).is_file(),
+                    path,
+                    title: row.get(2)?,
+                    created_at: row.get(3)?,
+                    modified_at: row.get(4)?,
+                    last_opened_at: row.get(5)?,
+                })
+            })
+            .map_err(|error| format!("DATABASE_READ_FAILED: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("DATABASE_READ_FAILED: {error}"))
+    }
+
+    pub fn upsert_recent_project(
+        &self,
+        entry: &RecentProjectEntry,
+    ) -> Result<Vec<RecentProjectEntry>, String> {
+        validate_recent_project(entry)?;
+        let mut connection = self.lock()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        transaction
+            .execute(
+                "INSERT INTO recent_projects
+                   (project_id, path, title, created_at, modified_at, last_opened_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(path) DO UPDATE SET
+                   project_id = excluded.project_id,
+                   title = excluded.title,
+                   modified_at = excluded.modified_at,
+                   last_opened_at = excluded.last_opened_at",
+                params![
+                    entry.project_id,
+                    entry.path,
+                    entry.title,
+                    entry.created_at,
+                    entry.modified_at,
+                    entry.last_opened_at
+                ],
+            )
+            .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        transaction
+            .execute(
+                "DELETE FROM recent_projects WHERE path NOT IN (
+                   SELECT path FROM recent_projects ORDER BY last_opened_at DESC, rowid DESC LIMIT ?1
+                 )",
+                [RECENT_PROJECT_LIMIT as i64],
+            )
+            .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("DATABASE_COMMIT_FAILED: {error}"))?;
+        drop(connection);
+        self.load_recent_projects()
+    }
 }
 
 fn migrate(connection: &mut Connection) -> Result<(), String> {
@@ -261,7 +346,17 @@ fn migrate(connection: &mut Connection) -> Result<(), String> {
                draft_json TEXT NOT NULL
              );
              CREATE INDEX IF NOT EXISTS ai_draft_history_updated_at
-               ON ai_draft_history (updated_at DESC);",
+               ON ai_draft_history (updated_at DESC);
+             CREATE TABLE IF NOT EXISTS recent_projects (
+               project_id TEXT NOT NULL,
+               path TEXT PRIMARY KEY NOT NULL,
+               title TEXT NOT NULL,
+               created_at INTEGER NOT NULL,
+               modified_at INTEGER NOT NULL,
+               last_opened_at INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS recent_projects_last_opened_at
+               ON recent_projects (last_opened_at DESC);",
         )
         .map_err(|error| format!("DATABASE_MIGRATION_FAILED: {error}"))?;
     transaction
@@ -325,6 +420,23 @@ fn validate_history_entry(entry: &StoredAiHistoryEntry) -> Result<(), String> {
         .len();
     if size > MAX_DRAFT_BYTES {
         return Err("AI_HISTORY_DRAFT_TOO_LARGE".into());
+    }
+    Ok(())
+}
+
+fn validate_recent_project(entry: &RecentProjectEntry) -> Result<(), String> {
+    if entry.project_id.trim().is_empty() || entry.project_id.chars().count() > 128 {
+        return Err("RECENT_PROJECT_ID_INVALID".into());
+    }
+    let path = Path::new(&entry.path);
+    if !path.is_absolute() || path.extension().and_then(|value| value.to_str()) != Some("pptd") {
+        return Err("RECENT_PROJECT_PATH_INVALID".into());
+    }
+    if entry.title.trim().is_empty() || entry.title.chars().count() > 512 {
+        return Err("RECENT_PROJECT_TITLE_INVALID".into());
+    }
+    if entry.created_at < 0 || entry.modified_at < 0 || entry.last_opened_at < 0 {
+        return Err("RECENT_PROJECT_TIMESTAMP_INVALID".into());
     }
     Ok(())
 }
@@ -502,5 +614,107 @@ mod tests {
             database.save_ai_history(&entry).unwrap_err(),
             "AI_HISTORY_DRAFT_TOO_LARGE"
         );
+    }
+
+    fn recent_project(path: &str, opened_at: i64) -> RecentProjectEntry {
+        RecentProjectEntry {
+            project_id: format!("project-{opened_at}"),
+            path: path.into(),
+            title: "测试项目".into(),
+            created_at: opened_at,
+            modified_at: opened_at,
+            last_opened_at: opened_at,
+            missing: false,
+        }
+    }
+
+    #[test]
+    fn recent_projects_are_ordered_and_upserted_by_path() {
+        let database = Database::open_in_memory().expect("database");
+        let first_path = std::env::temp_dir().join("pptd-recent-a.pptd");
+        let second_path = std::env::temp_dir().join("pptd-recent-b.pptd");
+        database
+            .upsert_recent_project(&recent_project(&first_path.to_string_lossy(), 1))
+            .expect("save first");
+        database
+            .upsert_recent_project(&recent_project(&second_path.to_string_lossy(), 2))
+            .expect("save second");
+
+        let mut updated = recent_project(&first_path.to_string_lossy(), 3);
+        updated.title = "更新标题".into();
+        database
+            .upsert_recent_project(&updated)
+            .expect("update first");
+
+        let entries = database.load_recent_projects().expect("load");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].path, first_path.to_string_lossy());
+        assert_eq!(entries[0].title, "更新标题");
+        assert!(entries.iter().all(|entry| entry.missing));
+    }
+
+    #[test]
+    fn recent_project_rejects_relative_or_wrong_extension_paths() {
+        let database = Database::open_in_memory().expect("database");
+        assert_eq!(
+            database
+                .upsert_recent_project(&recent_project("relative.pptd", 1))
+                .unwrap_err(),
+            "RECENT_PROJECT_PATH_INVALID"
+        );
+        let wrong = std::env::temp_dir().join("not-a-project.json");
+        assert_eq!(
+            database
+                .upsert_recent_project(&recent_project(&wrong.to_string_lossy(), 1))
+                .unwrap_err(),
+            "RECENT_PROJECT_PATH_INVALID"
+        );
+    }
+
+    #[test]
+    fn migrates_version_one_database_without_losing_settings() {
+        let mut connection = Connection::open_in_memory().expect("connection");
+        connection
+            .execute_batch(
+                "CREATE TABLE app_settings (
+                   key TEXT PRIMARY KEY NOT NULL,
+                   value TEXT NOT NULL,
+                   updated_at INTEGER NOT NULL
+                 );
+                 CREATE TABLE ai_draft_history (
+                   id TEXT PRIMARY KEY NOT NULL,
+                   topic TEXT NOT NULL,
+                   slide_count INTEGER NOT NULL,
+                   updated_at TEXT NOT NULL,
+                   draft_json TEXT NOT NULL
+                 );
+                 PRAGMA user_version = 1;",
+            )
+            .expect("v1 schema");
+        for (key, value) in [
+            ("theme", "light"),
+            ("ui_font", "song"),
+            ("ai_provider_id", "minimax"),
+            ("ai_model", "MiniMax-M3"),
+            ("vision_review_enabled", "true"),
+        ] {
+            connection
+                .execute(
+                    "INSERT INTO app_settings (key, value, updated_at) VALUES (?1, ?2, 1)",
+                    params![key, value],
+                )
+                .expect("setting");
+        }
+
+        migrate(&mut connection).expect("migrate");
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version");
+        assert_eq!(version, SCHEMA_VERSION);
+        let database = Database {
+            connection: Mutex::new(connection),
+        };
+        assert_eq!(database.load_settings().expect("load"), Some(settings()));
+        assert!(database.load_recent_projects().expect("recent").is_empty());
     }
 }

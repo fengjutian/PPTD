@@ -521,6 +521,155 @@ describe("设计质检阶段", () => {
     expect(result.designs[0]!.layout).toBe("cards");
   });
 
+  it("页批次请求失败时保留未变化页的结论，但不把失败批算通过", async () => {
+    const pageCalls: number[][] = [];
+    let reviewedFirstBatch = false;
+    let failedSubset = false;
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 7 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes) => {
+          pageCalls.push([...(indexes ?? [])]);
+          if (indexes?.length === 1 && indexes[0] === 0 && !failedSubset) {
+            failedSubset = true;
+            throw new Error("AI_VISION_REVIEW_FAILED:AI_REQUEST_TIMEOUT");
+          }
+          const firstFailing = indexes?.includes(0) && !reviewedFirstBatch;
+          const slideScores = (indexes ?? []).map((slideIndex) => ({
+            slideIndex,
+            overallScore: firstFailing && slideIndex === 0 ? 70 : 90,
+            hierarchyScore: 90,
+            alignmentScore: 90,
+            readabilityScore: 90,
+          }));
+          if (firstFailing) {
+            reviewedFirstBatch = true;
+            return {
+              ...passingReview,
+              overallScore: 70,
+              slideScores,
+              issues: [
+                {
+                  slideIndex: 0,
+                  severity: "error" as const,
+                  issue: "misalignment" as const,
+                  elementIds: [],
+                  suggestion: "换一种版式",
+                },
+              ],
+            };
+          }
+          return { ...passingReview, slideScores };
+        },
+        reviewDeck: async () => passingReview,
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 0,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "第一页需要换版式",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: Array.from({ length: 7 }, () => "data:image/jpeg;base64,AA=="),
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    // 第二轮只请求变化的第 1 页；它失败了，但第 1 批其余页仍有当前结论。
+    expect(pageCalls).toEqual([[0, 1, 2, 3, 4, 5], [6], [0]]);
+    expect(result.visualReviewCoverage).toEqual({ reviewed: 6, total: 7 });
+    expect(result.degraded).toBe(true);
+    expect(result.notes.join("；")).toContain("未评审页不能视为通过");
+    expect(result.designs[0]!.layout).toBe("cards");
+  });
+
+  it("回退到更早一轮时，覆盖范围也跟着那一轮", async () => {
+    let reviewedFirstBatch = false;
+    let failedSubset = false;
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 7 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes) => {
+          if (indexes?.length === 1 && indexes[0] === 0 && !failedSubset) {
+            failedSubset = true;
+            throw new Error("AI_VISION_REVIEW_FAILED:AI_REQUEST_TIMEOUT");
+          }
+          const firstFailing = indexes?.includes(0) && !reviewedFirstBatch;
+          const slideScores = (indexes ?? []).map((slideIndex) => ({
+            slideIndex,
+            overallScore: firstFailing ? (slideIndex === 0 ? 70 : 60) : slideIndex === 6 ? 70 : 60,
+            hierarchyScore: 90,
+            alignmentScore: 90,
+            readabilityScore: 90,
+          }));
+          if (firstFailing) {
+            reviewedFirstBatch = true;
+            return {
+              ...passingReview,
+              overallScore: 70,
+              slideScores,
+              issues: [
+                {
+                  slideIndex: 0,
+                  severity: "error" as const,
+                  issue: "misalignment" as const,
+                  elementIds: [],
+                  suggestion: "换一种版式",
+                },
+              ],
+            };
+          }
+          return { ...passingReview, overallScore: 70, slideScores };
+        },
+        reviewDeck: async () => passingReview,
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 0,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "第一页需要换版式",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: Array.from({ length: 7 }, () => "data:image/jpeg;base64,AA=="),
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    // 第二轮只覆盖了部分页且评分更低，循环回退到第一轮；覆盖范围也必须
+    // 回到第一轮的 7/7，不能把第二轮的缺口算到最终结论上。
+    expect(result.designs[0]!.layout).toBe("title-body");
+    expect(result.visualReviewCoverage).toEqual({ reviewed: 7, total: 7 });
+    expect(result.notes.join("；")).not.toContain("只覆盖");
+  });
+
   it("模型没有逐页分数时退回整批复评，不按页猜测", async () => {
     const pageCalls: number[][] = [];
     let reviewedFirstBatch = false;

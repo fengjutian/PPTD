@@ -25,6 +25,16 @@ export interface StoredAiHistoryEntry {
   draft: unknown;
 }
 
+export interface RecentProjectEntry {
+  projectId: string;
+  path: string;
+  title: string;
+  createdAt: number;
+  modifiedAt: number;
+  lastOpenedAt: number;
+  missing: boolean;
+}
+
 const requireDesktopRuntime = (): void => {
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
 };
@@ -47,4 +57,14 @@ export async function loadStoredAiHistory(): Promise<StoredAiHistoryEntry[]> {
 export async function saveStoredAiHistory(entry: StoredAiHistoryEntry): Promise<StoredAiHistoryEntry[]> {
   requireDesktopRuntime();
   return invoke<StoredAiHistoryEntry[]>("upsert_ai_draft_history", { entry });
+}
+
+export async function loadRecentProjects(): Promise<RecentProjectEntry[]> {
+  if (!isTauri()) return [];
+  return invoke<RecentProjectEntry[]>("load_recent_projects");
+}
+
+export async function saveRecentProject(entry: RecentProjectEntry): Promise<RecentProjectEntry[]> {
+  requireDesktopRuntime();
+  return invoke<RecentProjectEntry[]>("upsert_recent_project", { entry });
 }

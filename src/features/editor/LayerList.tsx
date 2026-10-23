@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { BarChart3, Circle, Image as ImageIcon, Lock, Minus, Square, Table2, Type } from "lucide-react";
 import type { ElementId, Slide, SlideElement } from "../../core/document-model";
-import { ICON_LABELS } from "./IconPicker";
+import { ICON_LABELS } from "./icon-options";
 
 function elementLabel(element: SlideElement): string {
   if (element.type === "text") return element.text.trim().slice(0, 14) || "文本";

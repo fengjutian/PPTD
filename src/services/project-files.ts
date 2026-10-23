@@ -6,6 +6,7 @@ import {
   type PresentationDocument,
 } from "../core/document-model";
 import { resolveDocumentImages, getImageProjectPath } from "./image-url-service";
+import { saveRecentProject } from "./app-database";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
@@ -104,12 +105,33 @@ export async function chooseProjectToOpen(): Promise<{
   if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const path = await open({ multiple: false, directory: false, filters: projectFilter });
   if (!path) return null;
+  return openProjectAtPath(path);
+}
+
+export async function openProjectAtPath(path: string): Promise<{
+  path: string;
+  document: PresentationDocument;
+  modifiedAt: number;
+  removedLayoutReferences: number;
+}> {
+  if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
   const raw = await invoke<unknown>("open_project", { path });
   const stored = readStoredDocument(raw);
+  const modifiedAt = await projectModifiedAt(path);
+  const now = Date.now();
+  await saveRecentProject({
+    projectId: stored.document.id,
+    path,
+    title: stored.document.title,
+    createdAt: now,
+    modifiedAt,
+    lastOpenedAt: now,
+    missing: false,
+  }).catch(() => []);
   return {
     path,
     document: stored.document,
-    modifiedAt: await projectModifiedAt(path),
+    modifiedAt,
     removedLayoutReferences: stored.removedLayoutReferences,
   };
 }
@@ -167,7 +189,18 @@ export async function saveProject(
     document: payload,
     sourcePath: currentPath ?? getImageProjectPath() ?? null,
   });
-  return { path, modifiedAt: await projectModifiedAt(path), report };
+  const modifiedAt = await projectModifiedAt(path);
+  const now = Date.now();
+  await saveRecentProject({
+    projectId: document.id,
+    path,
+    title: document.title,
+    createdAt: now,
+    modifiedAt,
+    lastOpenedAt: now,
+    missing: false,
+  }).catch(() => []);
+  return { path, modifiedAt, report };
 }
 
 let recoveryQueue: Promise<AssetReport | undefined> = Promise.resolve(undefined);

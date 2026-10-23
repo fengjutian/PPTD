@@ -11,6 +11,7 @@ import {
   Download,
   Eye,
   FilePlus2,
+  FolderClock,
   FileUp,
   Grid2x2,
   Grid3x3,
@@ -78,6 +79,7 @@ import { AiImageDialog } from "../features/editor/AiImageDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
+import { loadRecentProjects, type RecentProjectEntry } from "../services/app-database";
 import {
   briefsFromDraft,
   cancelAiGeneration,
@@ -104,6 +106,7 @@ import {
   isDesktopRuntime,
   listPptxTemplates,
   loadRecovery,
+  openProjectAtPath,
   projectModifiedAt,
   recoveryProjectPath,
   renderPptxTemplateLayouts,
@@ -625,6 +628,8 @@ export function App() {
   const [projectPath, setProjectPath] = useState<string>();
   const [projectMtime, setProjectMtime] = useState<number>();
   const [saving, setSaving] = useState(false);
+  const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>([]);
+  const [recentProjectsOpen, setRecentProjectsOpen] = useState(false);
   const savingRef = useRef(false);
   const [savedRevision, setSavedRevision] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -774,6 +779,16 @@ export function App() {
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  const refreshRecentProjects = useCallback(() => {
+    if (!isDesktopRuntime()) return Promise.resolve([] as RecentProjectEntry[]);
+    return loadRecentProjects().then((entries) => {
+      setRecentProjects(entries);
+      return entries;
+    });
+  }, []);
+  useEffect(() => {
+    void refreshRecentProjects().catch(() => setTaskStatus("最近项目读取失败"));
+  }, [refreshRecentProjects]);
   const fitToWindow = useCallback(() => {
     const node = workspaceRef.current;
     const style = node ? window.getComputedStyle(node) : null;
@@ -937,8 +952,32 @@ export function App() {
           ? `项目已打开，但 ${result.removedLayoutReferences} 个页面的模板引用缺失`
           : "项目已打开",
       );
+      void refreshRecentProjects();
     } catch (error) {
       setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleOpenRecent = async (entry: RecentProjectEntry) => {
+    try {
+      if (entry.missing) {
+        setTaskStatus("项目文件已移动或删除，请使用“打开项目”重新选择");
+        return;
+      }
+      if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开其他项目吗？")) return;
+      const result = await openProjectAtPath(entry.path);
+      setImageProjectPath(result.path);
+      loadDocument(result.document);
+      await clearRecovery();
+      setProjectPath(result.path);
+      setProjectMtime(result.modifiedAt);
+      setSavedRevision(result.document.revisions.document);
+      setRecentProjectsOpen(false);
+      await refreshRecentProjects();
+      setTaskStatus("项目已打开");
+    } catch (error) {
+      setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`);
+      void refreshRecentProjects();
     }
   };
 
@@ -988,6 +1027,7 @@ export function App() {
             ? "项目已保存"
             : "浏览器草稿已保存",
       );
+      void refreshRecentProjects();
     } catch (error) {
       setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -1955,7 +1995,11 @@ export function App() {
       // 质量门未过时文档照常产出：问题被逐条列出，PPT 不会因为报错而消失。
       replaceDocument(finalDocument, "both");
       setTemplatePickerOpen(false);
-      if (stage.passed) {
+      // 视觉评审只覆盖部分页面时不能走“完全通过”的静默路径：确定性质量门
+      // 过了，也只代表看过的页没问题。报告必须留下，让用户看到覆盖范围。
+      const coverage = stage.visualReviewCoverage;
+      const visualCoverageIncomplete = coverage !== undefined && coverage.reviewed < coverage.total;
+      if (stage.passed && !visualCoverageIncomplete) {
         setDesignQualityReport(undefined);
         setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
         setActiveView("editor");
@@ -1964,7 +2008,10 @@ export function App() {
       } else {
         // 文档已经写进项目，问题只作为报告展示。界面不自动跳进编辑器，
         // 由用户决定先调整还是稍后处理。
-        setDesignProgress({ percent: 100, label: "生成完成，存在待调整的排版问题" });
+        setDesignProgress({
+          percent: 100,
+          label: stage.passed ? "生成完成，视觉评审未覆盖全部页面" : "生成完成，存在待调整的排版问题",
+        });
         setDesignQualityReport({
           templateName: deckName,
           issues: [
@@ -1979,7 +2026,9 @@ export function App() {
         setTaskStatus(
           stage.issues.length > 0
             ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
-            : `PPT 已生成，但质检未完成：${stage.notes.join("；")}`,
+            : visualCoverageIncomplete && coverage
+              ? `PPT 已生成，但视觉评审只覆盖 ${coverage.reviewed}/${coverage.total} 页`
+              : `PPT 已生成，但质检未完成：${stage.notes.join("；")}`,
         );
       }
     } catch (error) {
@@ -2195,6 +2244,16 @@ export function App() {
             </ToolButton>
             <ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}>
               <FileUp />
+            </ToolButton>
+            <ToolButton
+              label="最近项目"
+              onClick={() => {
+                setRecentProjectsOpen(true);
+                void refreshRecentProjects();
+              }}
+              disabled={!isDesktopRuntime()}
+            >
+              <FolderClock />
             </ToolButton>
             <ToolButton label={saving ? "正在保存" : "保存项目"} onClick={handleSave} disabled={saving}>
               <Save />
@@ -2910,6 +2969,52 @@ export function App() {
         />
       )}
 
+      {recentProjectsOpen && (
+        <div
+          className="upload-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setRecentProjectsOpen(false);
+          }}
+        >
+          <section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="recent-projects-title">
+            <div className="upload-dialog-heading">
+              <div>
+                <FolderClock />
+                <div>
+                  <h2 id="recent-projects-title">最近项目</h2>
+                  <p>项目文件仍保存在原位置；这里仅保存最近访问记录。</p>
+                </div>
+              </div>
+              <button type="button" aria-label="关闭最近项目" onClick={() => setRecentProjectsOpen(false)}>
+                <X />
+              </button>
+            </div>
+            {recentProjects.length === 0 ? (
+              <div className="template-empty">还没有保存或打开过项目</div>
+            ) : (
+              <div className="ai-history">
+                {recentProjects.map((entry) => (
+                  <button
+                    type="button"
+                    key={entry.path}
+                    disabled={entry.missing}
+                    title={entry.path}
+                    onClick={() => void handleOpenRecent(entry)}
+                  >
+                    <FolderClock />
+                    <div>
+                      <strong>{entry.title}</strong>
+                      <span>{entry.missing ? "文件已移动或删除" : entry.path}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {templateUploadOpen && (
         <div
           className="upload-dialog-backdrop"
@@ -3158,6 +3263,12 @@ export function App() {
                 <X />
               </button>
             </div>
+            {designQualityReport.visualReviewCoverage &&
+              designQualityReport.visualReviewCoverage.reviewed < designQualityReport.visualReviewCoverage.total && (
+                <p className="design-quality-warning">
+                  视觉评审未覆盖全部页面，下面的评分和建议只代表已评审页；未评审页不能视为通过。
+                </p>
+              )}
             {designQualityReport.issues.length === 0 ? (
               <div className="template-empty">质量门没有给出具体问题，但检查未完成。</div>
             ) : (

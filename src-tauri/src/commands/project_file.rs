@@ -395,8 +395,8 @@ fn is_reparse_point(metadata: &fs::Metadata) -> bool {
 fn checked_assets_root(path: &Path) -> Result<PathBuf, String> {
     let root = assets_root(path)?;
     if root.exists() {
-        let metadata =
-            fs::symlink_metadata(&root).map_err(|error| format!("ASSET_METADATA_FAILED: {error}"))?;
+        let metadata = fs::symlink_metadata(&root)
+            .map_err(|error| format!("ASSET_METADATA_FAILED: {error}"))?;
         if is_reparse_point(&metadata) {
             return Err("ASSET_DIRECTORY_REPARSE_REJECTED".into());
         }
@@ -596,7 +596,9 @@ fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
 /// save still reads its revision directory; only a save in the new format
 /// retires it.
 fn cleanup_unreferenced_assets(path: &Path, document: &Value) {
-    let Ok(root) = checked_assets_root(path) else { return };
+    let Ok(root) = checked_assets_root(path) else {
+        return;
+    };
     let mut referenced = std::collections::HashSet::new();
     if let Some(slides) = document.pointer("/slides").and_then(Value::as_array) {
         for slide in slides {

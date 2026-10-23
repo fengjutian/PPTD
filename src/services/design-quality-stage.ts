@@ -111,8 +111,18 @@ type SlideReviewCache = {
 
 type ReviewBatchPlan =
   | { kind: "reuse"; review: VisualReview }
+  | { kind: "assemble"; review: VisualReview }
   | { kind: "full"; indexes: number[]; batchIndexes: number[] }
   | { kind: "subset"; indexes: number[]; batchIndexes: number[] };
+
+/** 每轮评审的覆盖与降级信息；最终结论可能来自较早的一轮。 */
+type ReviewRound = {
+  coverage: { reviewed: number; total: number };
+  partialReason?: string;
+  deckUnavailable?: string;
+  source?: "真实 PPTX" | "画布预览";
+  realRenderFailure?: string;
+};
 
 /**
  * 把一次批次响应拆成单页结论。
@@ -251,6 +261,8 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   /** 最近一轮评审实际覆盖的页数和总页数。 */
   let reviewedSlideCount = 0;
   let reviewSlideCount = 0;
+  /** 每轮评审的覆盖与降级信息；返回的结论可能来自更早的一轮。 */
+  const reviewRounds = new Map<number, ReviewRound>();
   /** 部分批次失败的原因，评审不能因为一批失败就整体作废。 */
   let partialReviewReason: string | undefined;
   /** 整册总览评审失败的原因。失败时跨页一致性只能退回批内评分。 */
@@ -288,6 +300,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
       review: async (current, goal, iteration) => {
         if (options.isCancelled()) throw new Error("AI_GENERATION_CANCELLED");
         options.onProgress?.(`第 ${iteration} 轮视觉评审：导出并渲染真实 PPTX`, 94);
+        realRenderFailure = undefined;
         const document = options.buildDocument(current);
         // 优先评审真实导出的 PPTX。画布渲染是近似值：PowerPoint 自行断行，
         // 字体度量与估算略有出入，图表和表格更是由 PowerPoint 自己画的。
@@ -377,13 +390,26 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
             const entry = slideCache.entries.get(slideIndex);
             return entry === undefined || entry.signature !== slideSignatures[slideIndex];
           });
+          if (needsReview.length === 0) {
+            // 整批都有当前结论，只是上一轮的批次请求失败了：直接拼回，
+            // 不再为同一批图片多发一次请求。
+            const bySlide = new Map<number, VisualReview>(
+              batchIndexes.map((slideIndex) => [slideIndex, slideCache.entries.get(slideIndex)!.review] as const),
+            );
+            const assembled = batchReviewFromSlides(
+              batchIndexes,
+              bySlide,
+              Math.min(...[...bySlide.values()].map((item) => item.consistencyScore)),
+            );
+            if (assembled) return { kind: "assemble", review: assembled };
+          }
           if (needsReview.length > 0 && needsReview.length < batchIndexes.length) {
             return { kind: "subset", indexes: needsReview, batchIndexes };
           }
           return { kind: "full", indexes: batchIndexes, batchIndexes };
         });
         const pageReviews = plans.map((plan, batchIndex) => {
-          if (plan.kind === "reuse") return Promise.resolve(plan.review);
+          if (plan.kind === "reuse" || plan.kind === "assemble") return Promise.resolve(plan.review);
           return options.vision.review(render, goal, plan.indexes, options.taskId, {
             // 有专门的整册评审时，逐页批次不再重复上传缩略图。
             includeContactSheet: !hasDeckReview && batchIndex === 0,
@@ -398,21 +424,47 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         let overviewReview: VisualReview | undefined;
         outcomes.forEach((outcome, index) => {
           const isDeck = index >= batches.length;
-          if (outcome.status === "rejected") {
-            if (isGenerationCancelled(outcome.reason)) throw outcome.reason;
-            const reason = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
-            if (isDeck) deckReviewUnavailable ??= reason;
-            else partialReviewReason ??= reason;
-            return;
-          }
           if (isDeck) {
-            overviewReview = outcome.value;
+            if (outcome.status === "fulfilled") {
+              overviewReview = outcome.value;
+              return;
+            }
+            if (isGenerationCancelled(outcome.reason)) throw outcome.reason;
+            deckReviewUnavailable ??= outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
             return;
           }
           const plan = plans[index]!;
+          if (outcome.status === "rejected") {
+            if (isGenerationCancelled(outcome.reason)) throw outcome.reason;
+            partialReviewReason ??= outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+            // 请求失败不等于已有的逐页结论失效：设计没变的页仍沿用上一轮
+            // 结论。只把真正有当前结论的页计入覆盖；失败批次本身不写缓存，
+            // 下一轮仍会重试缺少的页。
+            if (plan.kind === "full" || plan.kind === "subset") {
+              const salvaged = new Map<number, VisualReview>();
+              for (const slideIndex of plan.batchIndexes) {
+                const entry = slideCache.entries.get(slideIndex);
+                if (entry && entry.signature === slideSignatures[slideIndex]) {
+                  salvaged.set(slideIndex, entry.review);
+                }
+              }
+              if (salvaged.size > 0) {
+                const partial = batchReviewFromSlides(
+                  [...salvaged.keys()].sort((left, right) => left - right),
+                  salvaged,
+                  Math.min(...[...salvaged.values()].map((item) => item.consistencyScore)),
+                );
+                if (partial) {
+                  reviews.push(partial);
+                  reviewedSlideCount += salvaged.size;
+                }
+              }
+            }
+            return;
+          }
           let batchReview = outcome.value;
           let covered = batches[index]!.length;
-          if (plan.kind === "reuse") {
+          if (plan.kind === "reuse" || plan.kind === "assemble") {
             batchReview = plan.review;
           } else if (plan.kind === "subset") {
             const split = splitBatchReview(outcome.value, plan.indexes);
@@ -465,6 +517,13 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           signatures,
           reviews: collected,
         };
+        reviewRounds.set(iteration, {
+          coverage: { reviewed: reviewedSlideCount, total: reviewSlideCount },
+          partialReason: partialReviewReason,
+          deckUnavailable: deckReviewUnavailable,
+          source: reviewSource === "真实 PPTX" ? "真实 PPTX" : "画布预览",
+          realRenderFailure,
+        });
         if (reviews.length === 0) throw outcomes.find((outcome) => outcome.status === "rejected")?.reason;
         return mergeReviews(reviews, overviewReview);
       },
@@ -508,7 +567,11 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     });
     designs = aligned.value;
     visualReview = aligned.review;
-    visualReviewCoverage = { reviewed: reviewedSlideCount, total: reviewSlideCount };
+    // 返回的结论可能来自较早的一轮；覆盖范围和降级说明必须跟着那一轮，
+    // 不能用最后一轮的数字去描述更早的结论。
+    const finalRound = reviewRounds.get(aligned.bestIteration);
+    const finalCoverage = finalRound?.coverage ?? { reviewed: reviewedSlideCount, total: reviewSlideCount };
+    visualReviewCoverage = finalCoverage;
     notes.push(`视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`);
     // 评分和建议是评审留下的结构化结论。用户既要能看到它，也要知道它来自
     // 哪一轮、覆盖了多少页，避免把"评审过了"理解成"页面一定好看"。
@@ -516,24 +579,24 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
       `视觉评审最终评分 ${aligned.review.overallScore}（层级 ${aligned.review.hierarchyScore}、对齐 ${aligned.review.alignmentScore}、可读性 ${aligned.review.readabilityScore}、一致性 ${aligned.review.consistencyScore}），剩余 ${aligned.review.issues.length} 处建议`,
     );
     if (aligned.reverted) notes.push("最后一轮修复没有提升评分，已保留评分更高的设计");
-    if (deckReviewUnavailable) {
+    if (finalRound?.deckUnavailable) {
       // 总览评审失败时跨页一致性由逐页批次代答，这不是等价结论，必须说明。
       degraded = true;
-      notes.push(`整册总览评审不可用，跨页一致性退回逐页批次评分（${deckReviewUnavailable.slice(0, 200)}）`);
+      notes.push(`整册总览评审不可用，跨页一致性退回逐页批次评分（${finalRound.deckUnavailable.slice(0, 200)}）`);
     }
-    if (reviewSlideCount > 0 && reviewedSlideCount < reviewSlideCount) {
+    if (finalCoverage.total > 0 && finalCoverage.reviewed < finalCoverage.total) {
       degraded = true;
       notes.push(
-        `视觉评审只覆盖 ${reviewedSlideCount}/${reviewSlideCount} 页${partialReviewReason ? `（${partialReviewReason.slice(0, 200)}）` : ""}`,
+        `视觉评审只覆盖 ${finalCoverage.reviewed}/${finalCoverage.total} 页${finalRound?.partialReason ? `（${finalRound.partialReason.slice(0, 200)}）` : ""}，未评审页不能视为通过`,
       );
     }
-    if (reviewSource === "真实 PPTX") {
+    if (finalRound?.source === "真实 PPTX") {
       notes.push("视觉评审基于导出的 PPTX 真实渲染");
-    } else if (realRenderFailure) {
+    } else if (finalRound?.realRenderFailure) {
       // 评审看到的不是用户最终会看到的画面，这是一次真实的降级，必须记下来。
       degraded = true;
-      notes.push(`视觉评审改用画布预览渲染（${describeRealRenderFailure(realRenderFailure)}）`);
-    } else if (reviewSource === "画布预览") {
+      notes.push(`视觉评审改用画布预览渲染（${describeRealRenderFailure(finalRound.realRenderFailure)}）`);
+    } else if (finalRound?.source === "画布预览") {
       notes.push("视觉评审基于画布预览渲染");
     }
   } catch (error) {

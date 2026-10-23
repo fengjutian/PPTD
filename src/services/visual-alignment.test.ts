@@ -34,7 +34,7 @@ describe("visual alignment loop", () => {
       review: async () => review(92),
       repair: async (value) => value,
     });
-    expect(result).toMatchObject({ iterations: 1, stopReason: "target-reached" });
+    expect(result).toMatchObject({ iterations: 1, bestIteration: 1, stopReason: "target-reached" });
   });
   it("rejects repairs that change approved content", async () => {
     await expect(
@@ -72,7 +72,7 @@ describe("visual alignment loop", () => {
       repair: async (value) => ({ ...value, design: value.design + 1 }),
     });
     // 第一轮 60，修复后第二轮 50：变差的修复不能成为最终设计。
-    expect(result).toMatchObject({ value: { design: 0 }, stopReason: "regressed", reverted: true });
+    expect(result).toMatchObject({ value: { design: 0 }, stopReason: "regressed", reverted: true, bestIteration: 1 });
   });
   it("stops without another review when a repair changes nothing", async () => {
     let reviews = 0;
