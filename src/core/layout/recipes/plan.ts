@@ -32,12 +32,7 @@ export function chooseRecipeId(
   if (options.hasArtwork || options.hasAsset) return undefined;
   if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return undefined;
   if (facts.hasQuote || facts.hasComparison || facts.hasRowBlock) return undefined;
-  if (
-    concept.recipes.includes("editorial-index") &&
-    facts.itemCount >= 3 &&
-    facts.itemCount <= 6 &&
-    facts.shortItems
-  ) {
+  if (concept.recipes.includes("editorial-index") && facts.itemCount >= 3 && facts.itemCount <= 6 && facts.shortItems) {
     return "editorial-index";
   }
   if (
@@ -117,15 +112,13 @@ export function planDeckRecipes(
   const adjustments: DeckRecipePlan["adjustments"] = [];
   for (let index = 0; index < pages.length; index += 1) {
     const page = pages[index]!;
-    const explicit = page.requested && concept.recipes.includes(page.requested) && findRecipe(page.requested)?.supports(page.facts, concept, options);
+    const explicit =
+      page.requested &&
+      concept.recipes.includes(page.requested) &&
+      findRecipe(page.requested)?.supports(page.facts, concept, options);
     let chosen = explicit ? page.requested : chooseRecipeId(page.facts, concept, options);
     const recent = recipes.slice(Math.max(0, index - MAX_CONSECUTIVE));
-    if (
-      chosen &&
-      !explicit &&
-      recent.length === MAX_CONSECUTIVE &&
-      recent.every((value) => value === chosen)
-    ) {
+    if (chosen && !explicit && recent.length === MAX_CONSECUTIVE && recent.every((value) => value === chosen)) {
       const alternativeId =
         chosen === "editorial-index"
           ? "asymmetric-split"
@@ -133,9 +126,7 @@ export function planDeckRecipes(
             ? "editorial-index"
             : undefined;
       const alternative =
-        alternativeId && concept.recipes.includes(alternativeId)
-          ? findRecipe(alternativeId)
-          : undefined;
+        alternativeId && concept.recipes.includes(alternativeId) ? findRecipe(alternativeId) : undefined;
       if (alternative?.supports(page.facts, concept, options)) {
         adjustments.push({
           slideIndex: index,
@@ -167,7 +158,10 @@ export function consumptionProblem(plan: RecipePlan, content: SlideContent): str
   }
   const consumedBlocks = [...plan.consumed.blockIds].sort();
   const expectedBlocks = [...units.blockIds].sort();
-  if (consumedBlocks.length !== expectedBlocks.length || consumedBlocks.some((id, index) => id !== expectedBlocks[index])) {
+  if (
+    consumedBlocks.length !== expectedBlocks.length ||
+    consumedBlocks.some((id, index) => id !== expectedBlocks[index])
+  ) {
     return "recipe did not consume every structured block";
   }
   return undefined;

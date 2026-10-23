@@ -2,7 +2,7 @@
 
 ## 状态
 
-提议（2026-10-23）。本决策只定义方向与边界，具体实施见 `docs/development/tasks/0003-deck-concept-and-recipes.md`。
+已接受（P1，2026-10-23）。本决策只定义方向与边界，具体实施见 `docs/development/tasks/0003-deck-concept-and-recipes.md`。
 
 ## 背景
 
@@ -172,3 +172,19 @@ export interface DesignTokens {
 - 概念选择器的视觉预览与人工评分；P1 只自动选择。
 - 概念持久化、重新设计和跨项目复用。
 - 模板版式内的配方适配；P1 只保证无模板/预设主题的页面，模板页继续走旧分支。
+
+## P1 实施状态（2026-10-23）
+
+已落地：
+
+- `DeckConcept` / `AiDeckConcept` / `resolveDeckConcept` / `DesignTokens`。
+- `editorial-index`、`asymmetric-split` 两个纯函数配方与注册表、合法性、整册节奏、`consumed` 校验。
+- `apply-ai-designed-draft` 的 `designConcept` 与配方分派；没有概念/配方/模板页继续走旧分支。
+- Rust `generate_deck_concepts`、TS `generateDeckConcepts`、逐页设计提示词的 `recipe/variant/focal`，App 生成链路与降级。
+- 真实 PowerPoint 渲染：编辑式四卡页替换为编号栏、五条要点页替换为非对称分栏，文件可打开，文字/形状为原生对象。
+- `vitest run` 865 项通过，`tsc --noEmit` 与 `npm run build` 通过。
+
+仍未完成：
+
+- 10 页样例走真实 AI 接口的端到端验收（本次只用合成内容验证渲染和命令层）。
+- 设计方向选择器、`cover-statement` / `data-story` / `image-led`、评审新评分与 `changeRecipe`、概念持久化。

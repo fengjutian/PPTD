@@ -1,11 +1,4 @@
-import type {
-  ElementId,
-  Emu,
-  RectEmu,
-  SlideElement,
-  TextAlign,
-  TextContentRole,
-} from "../../document-model";
+import type { ElementId, Emu, RectEmu, SlideElement, TextAlign, TextContentRole } from "../../document-model";
 
 interface TextOptions {
   contentRef?: TextContentRole;

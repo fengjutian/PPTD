@@ -38,12 +38,23 @@ function content(items: string[], body = items.join("\n")): SlideContent {
   const blocks: ContentBlock[] | undefined = items.length
     ? [{ id: "bullets-1", type: "bullet-list", items }]
     : undefined;
-  return { title: "百度销售整体保持增长并持续优化结构", body, ...(blocks ? { blocks } : {}), speakerNotes: "", status: "approved" };
+  return {
+    title: "百度销售整体保持增长并持续优化结构",
+    body,
+    ...(blocks ? { blocks } : {}),
+    speakerNotes: "",
+    status: "approved",
+  };
 }
 
 function context(
   pageContent: SlideContent,
-  options: { variant?: "left" | "right"; focal?: "title" | "index" | "body"; facts?: CompositionFacts; typeContrast?: "calm" | "strong" | "dramatic" } = {},
+  options: {
+    variant?: "left" | "right";
+    focal?: "title" | "index" | "body";
+    facts?: CompositionFacts;
+    typeContrast?: "calm" | "strong" | "dramatic";
+  } = {},
 ): RecipeContext {
   const deckConcept = concept(options.typeContrast);
   const bullet = pageContent.blocks?.find(
@@ -102,16 +113,23 @@ function expectInsidePage(planResult: RecipePlan): void {
 
 describe("editorial-index recipe", () => {
   it("draws four short points as numbered rows without white cards", () => {
-    const pageContent = content(["销售收入保持正增长", "移动端成为增长引擎", "资源向高质量业务倾斜", "管理转向质量与效率"]);
+    const pageContent = content([
+      "销售收入保持正增长",
+      "移动端成为增长引擎",
+      "资源向高质量业务倾斜",
+      "管理转向质量与效率",
+    ]);
     const ctx = context(pageContent, { facts: facts({ itemCount: 4 }) });
     expect(editorialIndex.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
     const result = plan(editorialIndex, ctx);
     expectInsidePage(result);
     expect(consumptionProblem(result, pageContent)).toBeUndefined();
     expect(result.consumed.items).toBe(4);
-    expect(result.elements.filter((element) => element.type === "text").map((element) => (element.type === "text" ? element.text : ""))).toEqual(
-      expect.arrayContaining(["01", "02", "03", "04", "销售收入保持正增长"]),
-    );
+    expect(
+      result.elements
+        .filter((element) => element.type === "text")
+        .map((element) => (element.type === "text" ? element.text : "")),
+    ).toEqual(expect.arrayContaining(["01", "02", "03", "04", "销售收入保持正增长"]));
     const whiteCards = result.elements.filter(
       (element) => element.type === "shape" && element.style.fill.toUpperCase() === "#FFFFFF",
     );
@@ -119,10 +137,15 @@ describe("editorial-index recipe", () => {
   });
 
   it("draws uncovered body copy as a lead without duplicating the points", () => {
-    const pageContent = content(["销售收入保持正增长", "移动端成为增长引擎", "资源向高质量业务倾斜"], "本页先给出结论，再展开三项证据。");
+    const pageContent = content(
+      ["销售收入保持正增长", "移动端成为增长引擎", "资源向高质量业务倾斜"],
+      "本页先给出结论，再展开三项证据。",
+    );
     const result = plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 3 }) }));
     expect(consumptionProblem(result, pageContent)).toBeUndefined();
-    const texts = result.elements.filter((element) => element.type === "text").map((element) => (element.type === "text" ? element.text : ""));
+    const texts = result.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
     expect(texts).toContain("本页先给出结论，再展开三项证据。");
     expect(texts.filter((text) => text === "本页先给出结论，再展开三项证据。")).toHaveLength(1);
   });
@@ -136,7 +159,9 @@ describe("editorial-index recipe", () => {
   it("is deterministic", () => {
     const pageContent = content(["一", "二", "三", "四"]);
     const ctx = context(pageContent, { facts: facts({ itemCount: 4 }) });
-    expect(signature(plan(editorialIndex, ctx))).toEqual(signature(plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 4 }) }))));
+    expect(signature(plan(editorialIndex, ctx))).toEqual(
+      signature(plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 4 }) }))),
+    );
   });
 });
 
@@ -151,7 +176,9 @@ describe("asymmetric-split recipe", () => {
 
   it("draws five longer points in an asymmetric split", () => {
     const pageContent = content(items);
-    const ctx = context(pageContent, { facts: facts({ itemCount: 5, shortItems: false, longestItemLength: 24, layout: "split" }) });
+    const ctx = context(pageContent, {
+      facts: facts({ itemCount: 5, shortItems: false, longestItemLength: 24, layout: "split" }),
+    });
     expect(asymmetricSplit.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
     const result = plan(asymmetricSplit, ctx);
     expectInsidePage(result);
@@ -163,17 +190,28 @@ describe("asymmetric-split recipe", () => {
 
   it("mirrors the columns for variant=right", () => {
     const pageContent = content(items);
-    const left = plan(asymmetricSplit, context(pageContent, { facts: facts({ itemCount: 5, shortItems: false }), variant: "left" }));
-    const right = plan(asymmetricSplit, context(pageContent, { facts: facts({ itemCount: 5, shortItems: false }), variant: "right" }));
+    const left = plan(
+      asymmetricSplit,
+      context(pageContent, { facts: facts({ itemCount: 5, shortItems: false }), variant: "left" }),
+    );
+    const right = plan(
+      asymmetricSplit,
+      context(pageContent, { facts: facts({ itemCount: 5, shortItems: false }), variant: "right" }),
+    );
     const leftTitle = left.elements.find((element) => element.type === "text" && element.contentRef === "title")!;
     const rightTitle = right.elements.find((element) => element.type === "text" && element.contentRef === "title")!;
-    expect(Math.abs(rightTitle.frame.x + rightTitle.frame.width - (page.width - leftTitle.frame.x))).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(rightTitle.frame.x + rightTitle.frame.width - (page.width - leftTitle.frame.x)),
+    ).toBeLessThanOrEqual(1);
   });
 
   it("makes the title larger when the page focal point is the title", () => {
     const pageContent = content(items);
     const balanced = plan(asymmetricSplit, context(pageContent, { facts: facts({ itemCount: 5, shortItems: false }) }));
-    const focused = plan(asymmetricSplit, context(pageContent, { facts: facts({ itemCount: 5, shortItems: false }), focal: "title" }));
+    const focused = plan(
+      asymmetricSplit,
+      context(pageContent, { facts: facts({ itemCount: 5, shortItems: false }), focal: "title" }),
+    );
     const size = (result: RecipePlan) => {
       const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
       return title?.type === "text" ? title.style.fontSizePt : 0;

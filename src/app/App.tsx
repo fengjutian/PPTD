@@ -59,6 +59,7 @@ import {
   normalizeTextFormat,
 } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
+import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../core/design/deck-concept";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
@@ -100,8 +101,10 @@ import { loadRecentProjects, removeRecentProject, type RecentProjectEntry } from
 import {
   briefsFromDraft,
   cancelAiGeneration,
+  compositionFactsFromDraft,
   describeAiError,
   endAiGeneration,
+  generateDeckConcepts,
   generatePresentationDesign,
   generatePresentationDraft,
   listenAiGenerationProgress,
@@ -778,6 +781,7 @@ export function App() {
   /** 质量门未过时保留报告，让用户决定进入编辑器调整还是稍后处理。 */
   const [designQualityReport, setDesignQualityReport] = useState<{
     templateName: string;
+    concept?: DeckConcept;
     issues: PresentationQualityIssue[];
     notes: string[];
     /** 视觉评审留下的结构化结论，用于在报告里逐条展示模型建议。 */
@@ -2188,8 +2192,30 @@ export function App() {
     try {
       setDesignProgress({ percent: 18, label: "正在规划逐页设计意图" });
       const briefs = briefsFromDraft(sourceDraft);
+      const pageFacts = compositionFactsFromDraft(sourceDraft);
+      let concept: DeckConcept;
+      setDesignProgress({ percent: 28, label: "正在确定整册设计方向" });
+      try {
+        const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, { taskId });
+        concept = resolveDeckConcept({
+          concept: aiConcept,
+          pageFacts,
+          pageCount: sourceDraft.slides.length,
+        }).concept;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (designCancelRef.current || message.includes("CANCELLED")) throw error;
+        // A direction is an enhancement, not a prerequisite. A failed concept
+        // call falls back to the editorial preset and still produces the deck.
+        concept = resolveDeckConcept({
+          concept: defaultEditorialConcept(),
+          pageFacts,
+          pageCount: sourceDraft.slides.length,
+        }).concept;
+      }
+      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
-      const design = await generatePresentationDesign(sourceDraft, briefs, analysis, { taskId });
+      const design = await generatePresentationDesign(sourceDraft, briefs, analysis, { taskId, concept });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
@@ -2258,6 +2284,7 @@ export function App() {
         title: sourceDraft.title,
         slides: sourceDraft.slides,
         designs: design.slides,
+        designConcept: concept,
         pageSize: hasTemplateSize
           ? { width: emu(analysis.slideWidthEmu!), height: emu(analysis.slideHeightEmu!) }
           : undefined,
@@ -2399,6 +2426,7 @@ export function App() {
       const visualBelowTarget = stage.visualPassed === false;
       const qualityReport = {
         templateName: deckName,
+        concept,
         issues: [
           ...new Map(
             stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),
@@ -4828,6 +4856,11 @@ export function App() {
                 <div>
                   <h2 id="design-quality-title">设计质检报告</h2>
                   <p>{designQualityReport.templateName} · PPT 已生成并写入当前项目，以下问题不会阻止继续编辑或导出。</p>
+                  {designQualityReport.concept && (
+                    <p>
+                      设计方向：{designQualityReport.concept.name} · {designQualityReport.concept.idea}
+                    </p>
+                  )}
                 </div>
               </div>
               <button type="button" aria-label="关闭设计质检报告" onClick={() => setDesignQualityReportOpen(false)}>

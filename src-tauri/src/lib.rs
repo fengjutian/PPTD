@@ -36,6 +36,7 @@ pub fn run() {
             commands::ai::generate_presentation_outline,
             commands::ai::generate_presentation_slides_batch,
             commands::ai::generate_slide_briefs,
+            commands::ai::generate_deck_concepts,
             commands::ai::generate_presentation_design,
             commands::ai::review_presentation_visuals,
             commands::ai::plan_presentation_repairs,

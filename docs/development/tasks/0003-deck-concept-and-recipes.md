@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                      |
 | -------- | --------------------------------------------------------- |
-| 状态     | 待实现                                                    |
+| 状态     | 已实现（P1，待 10 页真实 AI 端到端复核）                  |
 | 优先级   | P1                                                        |
 | 里程碑   | V0.4 设计能力                                             |
 | 预估     | 7–8.5 人日（P1）；P2 另计 4–6 人日                        |
@@ -636,3 +636,29 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 | 10   | 4 条短要点   | `editorial-index`  | 结尾页，去掉计数面板      |
 
 这张表是 P1 的人工验收基准，不是硬编码映射；内容事实改变时配方应随之变化。
+
+## 实施记录（P1）
+
+已落地文件：
+
+- `src/core/design/deck-concept.ts`、`design-tokens.ts` 及测试。
+- `src/core/layout/recipes/{types,measure,elements,content,editorial-index,asymmetric-split,registry,plan}.ts` 及测试。
+- `src/core/commands/template-layouts.ts` 的可选 `recipe/variant/focal`。
+- `src/core/commands/commands.ts` 的概念分派、模板页回退和 `AI_DESIGN_CONTENT_LOSS` 守卫。
+- `src/services/ai-service.ts` 的概念 schema、`generateDeckConcepts`、页面事实派生和 design 请求的 concept。
+- `src-tauri/src/commands/ai.rs` 的 `generate_deck_concepts` 与设计提示词配方段。
+- `src/app/App.tsx` 的概念阶段、失败降级、质量报告概念行和命令参数。
+
+实测：
+
+- 4 条短要点的编辑式页已用 PowerPoint 渲染：编号栏、细线、无白卡，标题/条目为原生文本框。
+- 5 条较长要点的非对称分栏页已渲染：左标题栏、右正文栏、无卡片。
+- 全量 `vitest run` 865 项通过；`tsc --noEmit`、`npm run build` 通过。
+
+实现时的两处合同细化：
+
+- `resolveDeckConcept` 返回 `{ concept, conflicts }`，冲突进入报告；调用方取 `.concept`。
+- `DesignTokens` 增加 `fonts.heading/body`，配方不直接读主题字体。
+- `asymmetric-split` 支持 2–5 条（样张第 2/4/6/8 页实际有 4/5/4/4 条）。
+
+未完成：真实 AI 接口的 10 页端到端复核、设计方向选择器、其余配方、评审新评分与 `changeRecipe`、概念持久化。

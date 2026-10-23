@@ -2017,7 +2017,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // drop copy throws instead of writing the page.
       const recipePlan = (() => {
         const concept = command.designConcept;
-        if (!concept || keepsArtwork) return undefined;
+        // P1 only owns preset decks. A template brings its own masters, safe
+        // regions and artwork; recipes are not allowed to lay over them yet.
+        const hasTemplate = Boolean(
+          command.templateLayouts?.length || command.templateDecorations?.length || command.templateTheme,
+        );
+        if (!concept || keepsArtwork || hasTemplate) return undefined;
         const selection = selectRecipe({
           facts: compositionFacts,
           concept,

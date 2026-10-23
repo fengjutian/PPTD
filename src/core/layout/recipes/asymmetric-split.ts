@@ -65,14 +65,7 @@ export const asymmetricSplit: LayoutRecipe = {
         lineHeight,
       }),
       rectElement(frameFromNormalized(place(TITLE_RULE), page), colors.accent),
-      verticalRule(
-        place(DIVIDER).x,
-        DIVIDER.y,
-        DIVIDER.height,
-        DIVIDER.width,
-        page,
-        colors.rule,
-      ),
+      verticalRule(place(DIVIDER).x, DIVIDER.y, DIVIDER.height, DIVIDER.width, page, colors.rule),
     ];
 
     const pageNumber = String(ctx.page.index + 1).padStart(2, "0");
@@ -120,8 +113,7 @@ export const asymmetricSplit: LayoutRecipe = {
       return conflict("items", "非对称分栏的条目行高低于 0.1，正文会挤成一团");
     }
 
-    const itemBaseSize =
-      ctx.focal === "body" ? Math.min(22, ctx.tokens.type.bodyPt + 2) : ctx.tokens.type.bodyPt;
+    const itemBaseSize = ctx.focal === "body" ? Math.min(22, ctx.tokens.type.bodyPt + 2) : ctx.tokens.type.bodyPt;
     for (let index = 0; index < units.items.length; index += 1) {
       const item = units.items[index]!;
       const rowY = contentTop + index * rowHeight;

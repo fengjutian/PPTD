@@ -65,7 +65,9 @@ describe("recipe rendering through the design command", () => {
     expect(slide.content.title).toBe("百度销售整体保持增长并持续优化结构");
     expect(slide.content.body).toBe(items.join("\n"));
     expect(slide.content.status).toBe("approved");
-    const text = slide.elements.filter((element) => element.type === "text").map((element) => (element.type === "text" ? element.text : ""));
+    const text = slide.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
     expect(text).toEqual(expect.arrayContaining(["01", "02", "03", "04", ...items]));
     const whiteCards = slide.elements.filter(
       (element) => element.type === "shape" && element.style.fill.toUpperCase() === "#FFFFFF",
@@ -99,7 +101,9 @@ describe("recipe rendering through the design command", () => {
       themePresetId: "consulting-navy",
     });
     const slide = document.slides[0]!;
-    const text = slide.elements.filter((element) => element.type === "text").map((element) => (element.type === "text" ? element.text : ""));
+    const text = slide.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
     expect(text).toContain("七个要点");
     // The recipe refuses seven points; the page still renders through the
     // legacy branch instead of throwing or dropping a point.
@@ -123,7 +127,9 @@ describe("recipe rendering through the design command", () => {
       themePresetId: "consulting-navy",
     });
     const slide = document.slides[0]!;
-    const text = slide.elements.filter((element) => element.type === "text").map((element) => (element.type === "text" ? element.text : ""));
+    const text = slide.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
     // Without a concept the page keeps the legacy editorial anchor panel.
     expect(text).toContain("项要点");
   });

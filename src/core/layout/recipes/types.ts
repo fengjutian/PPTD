@@ -58,11 +58,7 @@ export interface RecipePlan {
 
 export interface LayoutRecipe {
   id: RecipeId;
-  supports(
-    facts: CompositionFacts,
-    concept: DeckConcept,
-    options: { hasArtwork: boolean; hasAsset: boolean },
-  ): boolean;
+  supports(facts: CompositionFacts, concept: DeckConcept, options: { hasArtwork: boolean; hasAsset: boolean }): boolean;
   plan(ctx: RecipeContext): RecipePlan | { conflict: IntentConflict };
 }
 

@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emu, inches } from "../../document-model";
-import {
-  fittedFontSize,
-  frameFromNormalized,
-  rectsOverlap,
-  ruleHeight,
-  textFits,
-  textHeightPt,
-} from "./measure";
+import { fittedFontSize, frameFromNormalized, rectsOverlap, ruleHeight, textFits, textHeightPt } from "./measure";
 
 const page = { width: inches(13.333), height: inches(7.5) };
 

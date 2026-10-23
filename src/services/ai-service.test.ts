@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
 import {
   aiDraftSchema,
+  aiDeckConceptSchema,
   aiOutlineSchema,
   aiPresentationDesignSchema,
   aiSlideBatchSchema,
   briefsFromDraft,
   cancelAiGeneration,
   chooseSlideLayout,
+  compositionFactsFromDraft,
   constrainDesignToTemplate,
   describeAiError,
   generatePresentationDraft,
@@ -39,6 +41,71 @@ describe("AI structured outputs", () => {
       title: "",
       speakerNotes: "",
       body: "核心业务保持增长，区域表现存在差异。",
+    });
+  });
+
+  it("accepts only the editorial concept that P1 can render", () => {
+    const concept = aiDeckConceptSchema.parse({
+      preset: "editorial",
+      name: "编辑式",
+      idea: "用细线和大字号组织内容。",
+      typeContrast: "strong",
+      imagery: "none",
+      rationale: "内容以判断和要点为主。",
+    });
+    expect(concept.preset).toBe("editorial");
+    expect(() =>
+      aiDeckConceptSchema.parse({
+        ...concept,
+        preset: "instrument",
+      }),
+    ).toThrow();
+  });
+
+  it("keeps the optional recipe fields on a design", () => {
+    const design = aiPresentationDesignSchema.parse({
+      slides: [
+        {
+          layout: "summary",
+          background: "#FFFFFF",
+          accent: "#1F4E79",
+          titleColor: "#12233D",
+          bodyColor: "#465368",
+          recipe: "editorial-index",
+          variant: "left",
+          focal: "title",
+        },
+      ],
+    });
+    expect(design.slides[0]).toMatchObject({
+      recipe: "editorial-index",
+      variant: "left",
+      focal: "title",
+    });
+  });
+
+  it("derives page facts for the concept planner without changing content", () => {
+    const draft = aiDraftSchema.parse({
+      title: "销售分析",
+      slides: [
+        {
+          title: "销售保持增长",
+          body: "一\n二\n三",
+          speakerNotes: "",
+          blocks: [{ type: "bullet-list", items: ["一", "二", "三"] }],
+        },
+      ],
+    });
+    const facts = compositionFactsFromDraft(draft);
+    expect(facts[0]).toMatchObject({
+      itemCount: 3,
+      shortItems: true,
+      longestItemLength: 1,
+      bodyLength: 5,
+      hasQuote: false,
+      hasComparison: false,
+      hasRowBlock: false,
+      layout: "title-body",
     });
   });
 

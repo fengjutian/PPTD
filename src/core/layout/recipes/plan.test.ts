@@ -31,9 +31,9 @@ const options = { hasArtwork: false, hasAsset: false };
 describe("recipe planning", () => {
   it("chooses the index for short points and the split for longer points", () => {
     expect(chooseRecipeId(facts(), concept(), options)).toBe("editorial-index");
-    expect(
-      chooseRecipeId(facts({ shortItems: false, itemCount: 5, longestItemLength: 30 }), concept(), options),
-    ).toBe("asymmetric-split");
+    expect(chooseRecipeId(facts({ shortItems: false, itemCount: 5, longestItemLength: 30 }), concept(), options)).toBe(
+      "asymmetric-split",
+    );
   });
 
   it("leaves structured pages to the legacy renderer", () => {

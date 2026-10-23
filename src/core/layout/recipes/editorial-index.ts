@@ -93,7 +93,10 @@ export const editorialIndex: LayoutRecipe = {
       const rowY = contentTop + index * rowHeight;
       const separatorY = rowY + rowHeight - separatorHeight / 2;
       elements.push(
-        rectElement(frameFromNormalized({ x: 0.07, y: separatorY, width: 0.86, height: separatorHeight }, page), colors.rule),
+        rectElement(
+          frameFromNormalized({ x: 0.07, y: separatorY, width: 0.86, height: separatorHeight }, page),
+          colors.rule,
+        ),
       );
 
       const indexFrame = frameFromNormalized({ x: 0.09, y: rowY, width: 0.08, height: rowHeight }, page);
@@ -128,10 +131,7 @@ export const editorialIndex: LayoutRecipe = {
         ),
       );
 
-      const textFrame = frameFromNormalized(
-        { x: 0.19, y: rowY + 0.012, width: 0.73, height: rowHeight - 0.024 },
-        page,
-      );
+      const textFrame = frameFromNormalized({ x: 0.19, y: rowY + 0.012, width: 0.73, height: rowHeight - 0.024 }, page);
       const size = fittedFontSize(item, textFrame, itemSize, 12, bodyFamily, lineHeight);
       if (!textFits(item, textFrame, size, bodyFamily, lineHeight)) {
         return conflict("items", `第 ${index + 1} 条要点在编号栏里放不下`);
