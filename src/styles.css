@@ -3400,6 +3400,17 @@ button {
   padding: 20px;
   overflow-y: auto;
 }
+/* 生成中只读预览：说明为什么「使用此主题」不可点。 */
+.theme-drawer-note {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #e4d7b6;
+  border-radius: 8px;
+  color: #7a6420;
+  background: #fdf8e8;
+  font-size: 11px;
+  line-height: 1.6;
+}
 .theme-drawer-scroll .theme-preset-preview {
   padding: 34px;
 }

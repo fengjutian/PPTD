@@ -12,3 +12,4 @@ export * from "./icon-geometry";
 export * from "./text-runs";
 export * from "./text-style";
 export * from "./page-size";
+export * from "./animation";

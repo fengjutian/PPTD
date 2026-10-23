@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { phaseForEffect } from "./animation";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 
-export const CURRENT_SCHEMA_VERSION = 15 as const;
+export const CURRENT_SCHEMA_VERSION = 16 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -285,8 +286,8 @@ const slideSchema = z.object({
       z.object({
         id: z.string().uuid(),
         elementId: z.string().uuid(),
-        effect: z.enum(["appear", "fade", "fly-in"]),
-        phase: z.literal("entrance"),
+        effect: z.enum(["appear", "fade", "fly-in", "float-in", "split", "wipe", "zoom", "pulse", "disappear"]),
+        phase: z.enum(["entrance", "emphasis", "exit"]),
         start: z.enum(["on-click", "with-previous", "after-previous"]),
         durationMs: z.number().int().min(100).max(60_000),
         delayMs: z.number().int().min(0).max(60_000),
@@ -356,6 +357,13 @@ function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): v
           message: "UNKNOWN_ANIMATION_ELEMENT",
         });
       }
+      if (animation.phase !== phaseForEffect(animation.effect)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slides", slideIndex, "animations", animationIndex, "phase"],
+          message: "ANIMATION_PHASE_MISMATCH",
+        });
+      }
     }
   }
 }
@@ -375,6 +383,11 @@ function validateLayoutReferences(document: DocumentShape, context: z.Refinement
 
 export const presentationDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(CURRENT_SCHEMA_VERSION) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionFifteenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(15) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
@@ -489,6 +502,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // vertical alignment, markers, indentation). Every field is optional, so a
   // version 14 document keeps every page and simply shows unstyled paragraphs.
   14: (document) => ({ ...versionFourteenDocumentSchema.parse(document), schemaVersion: 15 }),
+  // Version 16 widens animations to the emphasis and exit phases. Existing
+  // animations are all entrances, which the new schema still accepts; a deck
+  // with no timeline simply keeps no timeline.
+  15: (document) => ({ ...versionFifteenDocumentSchema.parse(document), schemaVersion: 16 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

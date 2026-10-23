@@ -36,6 +36,7 @@ import {
   MAX_PAGE_SIZE_IN,
   MIN_PAGE_SIZE_IN,
   parseMetricValue,
+  phaseForEffect,
   stableStringify,
   TABLE_MAX_COLUMNS,
   TABLE_MAX_ROWS,
@@ -657,6 +658,7 @@ export type DocumentCommand =
       animation: Omit<SlideAnimation, "id" | "elementId" | "phase">;
     }
   | { type: "remove-animation"; slideId: SlideId; animationId: string }
+  | { type: "duplicate-animation"; slideId: SlideId; animationId: string }
   | { type: "clear-slide-animations"; slideId: SlideId }
   | { type: "move-animation"; slideId: SlideId; animationId: string; toIndex: number }
   | {
@@ -1063,6 +1065,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-image-crop":
     case "add-animation":
     case "remove-animation":
+    case "duplicate-animation":
     case "clear-slide-animations":
     case "move-animation":
     case "set-animation":
@@ -4283,7 +4286,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     slide.animations.push({
       id: crypto.randomUUID(),
       elementId: command.elementId,
-      phase: "entrance",
+      phase: phaseForEffect(command.animation.effect),
       ...command.animation,
     });
     return;
@@ -4295,6 +4298,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const animation = slide.animations![index]!;
     if (slide.elements.find((item) => item.id === animation.elementId)?.locked) throw new Error("ELEMENT_LOCKED");
     slide.animations!.splice(index, 1);
+    return;
+  }
+
+  if (command.type === "duplicate-animation") {
+    const animations = slide.animations ?? [];
+    const index = animations.findIndex((animation) => animation.id === command.animationId);
+    if (index < 0) throw new Error("ANIMATION_NOT_FOUND");
+    const source = animations[index]!;
+    if (slide.elements.find((item) => item.id === source.elementId)?.locked) throw new Error("ELEMENT_LOCKED");
+    // The copy sits right behind its source so the preview order is obvious.
+    animations.splice(index + 1, 0, { ...source, id: crypto.randomUUID() });
     return;
   }
 
@@ -4334,6 +4348,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     )
       throw new Error("ANIMATION_DELAY_INVALID");
     Object.assign(animation, command.changes);
+    // Changing the effect may move it to another phase (pulse, disappear, or
+    // back to an entrance). The phase is derived, never supplied by the UI.
+    if (command.changes.effect) animation.phase = phaseForEffect(command.changes.effect);
     return;
   }
 

@@ -51,6 +51,7 @@ import {
   inches,
   type ElementId,
   type DocumentId,
+  type AnimationEffect,
   type RectEmu,
   type Slide,
   type SlideAnimation,
@@ -70,6 +71,11 @@ import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 import { FindReplaceBar } from "../features/editor/FindReplaceBar";
 import { PageSizeControls } from "../features/editor/PageSizeControls";
 import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
+import {
+  ANIMATION_EFFECT_LABELS,
+  ANIMATION_EFFECT_OPTIONS,
+  ANIMATION_PHASE_LABELS,
+} from "../features/editor/animation-options";
 import { useFormatPainterStore } from "../store/format-painter";
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 import { ContentHistory } from "../features/editor/ContentHistory";
@@ -710,6 +716,7 @@ export function App() {
   >("home");
   const [animationPreviews, setAnimationPreviews] = useState<SlideAnimation[]>([]);
   const [selectedAnimationId, setSelectedAnimationId] = useState<string>();
+  const [newAnimationEffect, setNewAnimationEffect] = useState<AnimationEffect>("fade");
   const animationPreviewTimers = useRef<number[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
@@ -777,6 +784,11 @@ export function App() {
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [themePresetId, setThemePresetId] = useState("");
+  /**
+   * 后台生成期间只允许预览主题详情：这里存的是抽屉里正在看的主题，
+   * 与真正选中的 themePresetId 分开，避免任务浮层显示的主题和实际生成稿不一致。
+   */
+  const [themePreviewPresetId, setThemePreviewPresetId] = useState("");
   const [designBusy, setDesignBusy] = useState(false);
   const designBusyRef = useRef(false);
   const [generatingHistoryId, setGeneratingHistoryId] = useState<string>();
@@ -2534,6 +2546,7 @@ export function App() {
 
   const handleSelectTemplate = async (template: TemplateRecord, showDetails = true) => {
     setThemePresetId("");
+    setThemePreviewPresetId("");
     setSelectedTemplate(template);
     setThemeDrawerOpen(showDetails);
     setTemplatePreview(undefined);
@@ -2564,6 +2577,14 @@ export function App() {
   };
 
   const handleSelectThemePreset = (presetId: string, showDetails = true) => {
+    // 后台生成任务在启动时就固定了主题。任务运行期间点击卡片只打开详情预览，
+    // 不改选中的主题，否则任务浮层和最终生成的稿子会对不上。
+    if (designBusyRef.current && showDetails) {
+      setThemePreviewPresetId(presetId);
+      setThemeDrawerOpen(true);
+      return;
+    }
+    setThemePreviewPresetId("");
     setThemePresetId(presetId);
     setSelectedTemplate(undefined);
     setTemplatePreview(undefined);
@@ -2770,11 +2791,35 @@ export function App() {
   };
 
   const selectedThemePreset = findThemePreset(themePresetId);
-  const selectedThemeGuidance = selectedThemePreset ? themePresetGuidance(selectedThemePreset.id) : undefined;
-  const selectedThemeMetadata = selectedThemePreset ? themePresetMetadata(selectedThemePreset.id) : undefined;
-  const selectedThemeAiPrompt = selectedThemePreset ? themePresetAiPrompt(selectedThemePreset) : undefined;
   const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
+  // 抽屉里展示的主题：生成中查看的是被点击的主题（预览），其余时候就是已选主题。
+  const drawerThemePreset =
+    (themePreviewPresetId ? findThemePreset(themePreviewPresetId) : undefined) ?? selectedThemePreset;
+  const drawerThemeGuidance = drawerThemePreset ? themePresetGuidance(drawerThemePreset.id) : undefined;
+  const drawerThemeMetadata = drawerThemePreset ? themePresetMetadata(drawerThemePreset.id) : undefined;
+  const drawerThemeAiPrompt = drawerThemePreset ? themePresetAiPrompt(drawerThemePreset) : undefined;
+  /** 生成中且预览的不是已选主题：详情可看，但不能在这里切换。 */
+  const themePreviewLocked =
+    designBusy && drawerThemePreset !== undefined && drawerThemePreset.id !== themePresetId;
+  const closeThemeDrawer = () => {
+    setThemeDrawerOpen(false);
+    setThemePreviewPresetId("");
+  };
+  const applyDrawerTheme = () => {
+    if (themePreviewLocked) return;
+    if (drawerThemePreset) {
+      setThemePresetId(drawerThemePreset.id);
+      setSelectedTemplate(undefined);
+      setTemplatePreview(undefined);
+      setTemplateAnalysis(undefined);
+      setTemplateLayoutRenders([]);
+      setTaskStatus(`已选择主题：${drawerThemePreset.name}`);
+    } else if (selectedTemplate) {
+      setTaskStatus(`已选择主题：${selectedTemplate.name}`);
+    }
+    closeThemeDrawer();
+  };
   const runManualReview = async (scope: "current" | "changed" | "issues" | "all") => {
     if (manualReviewBusy || !designQualityReport) return;
     const currentSignatures = document.slides.map((slide) => JSON.stringify(slide));
@@ -4232,7 +4277,8 @@ export function App() {
                 </div>
                 <p>点击卡片查看完整配色、字体和适用场景</p>
               </div>
-              <ThemePresetPicker value={themePresetId} onChange={handleSelectThemePreset} disabled={designBusy} />
+              {/* 生成中也能点开详情：锁定的是“切换主题”，不是“查看主题”。 */}
+              <ThemePresetPicker value={themePresetId} onChange={handleSelectThemePreset} />
               <div className="theme-gallery-heading extracted">
                 <div>
                   <strong>从 PPT 抽取的主题</strong>
@@ -4279,47 +4325,52 @@ export function App() {
         </main>
       )}
 
-      {activeView === "theme" && themeDrawerOpen && (selectedThemePreset || selectedTemplate) && (
+      {activeView === "theme" && themeDrawerOpen && (drawerThemePreset || selectedTemplate) && (
         <div
           className="theme-drawer-backdrop"
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setThemeDrawerOpen(false);
+            if (event.target === event.currentTarget) closeThemeDrawer();
           }}
         >
           <aside className="theme-drawer" role="dialog" aria-modal="true" aria-labelledby="theme-drawer-title">
             <div className="theme-drawer-heading">
               <div>
-                <span>{selectedThemePreset ? "内置主题" : "PPT 抽取主题"}</span>
-                <h2 id="theme-drawer-title">{selectedThemePreset?.name ?? selectedTemplate?.name}</h2>
+                <span>{drawerThemePreset ? "内置主题" : "PPT 抽取主题"}</span>
+                <h2 id="theme-drawer-title">{drawerThemePreset?.name ?? selectedTemplate?.name}</h2>
               </div>
-              <button type="button" aria-label="关闭主题详情" onClick={() => setThemeDrawerOpen(false)}>
+              <button type="button" aria-label="关闭主题详情" onClick={closeThemeDrawer}>
                 <X />
               </button>
             </div>
             <div className="theme-drawer-scroll">
-              {selectedThemePreset ? (
+              {themePreviewLocked && (
+                <p className="theme-drawer-note">
+                  AI 正在后台生成当前稿，这里可以查看主题详情；生成完成前不能切换已选主题。
+                </p>
+              )}
+              {drawerThemePreset ? (
                 <>
                   <div
                     className="theme-preset-preview"
                     style={
                       {
-                        "--theme-primary": selectedThemePreset.theme.colors.find((color) => color.name === "primary")
+                        "--theme-primary": drawerThemePreset.theme.colors.find((color) => color.name === "primary")
                           ?.value,
-                        "--theme-accent": selectedThemePreset.theme.colors.find((color) => color.name === "accent")
+                        "--theme-accent": drawerThemePreset.theme.colors.find((color) => color.name === "accent")
                           ?.value,
-                        "--theme-muted": selectedThemePreset.theme.colors.find((color) => color.name === "muted")
+                        "--theme-muted": drawerThemePreset.theme.colors.find((color) => color.name === "muted")
                           ?.value,
-                        "--theme-surface": selectedThemePreset.theme.colors.find((color) => color.name === "surface")
+                        "--theme-surface": drawerThemePreset.theme.colors.find((color) => color.name === "surface")
                           ?.value,
-                        "--theme-major-font": selectedThemePreset.theme.majorFont,
-                        "--theme-minor-font": selectedThemePreset.theme.minorFont,
+                        "--theme-major-font": drawerThemePreset.theme.majorFont,
+                        "--theme-minor-font": drawerThemePreset.theme.minorFont,
                       } as React.CSSProperties
                     }
                   >
                     <span className="theme-preview-kicker">PPTD · THEME SYSTEM</span>
                     <div>
-                      <h2>{selectedThemePreset.name}</h2>
+                      <h2>{drawerThemePreset.name}</h2>
                       <p>让内容层级、字体与色彩保持一致</p>
                     </div>
                     <div className="theme-preview-bars">
@@ -4327,38 +4378,38 @@ export function App() {
                       <i />
                       <i />
                     </div>
-                    <small>{selectedThemePreset.description}</small>
+                    <small>{drawerThemePreset.description}</small>
                   </div>
                   <section className="theme-drawer-section">
                     <h3>主题说明</h3>
-                    <p>{selectedThemePreset.description}</p>
-                    <p>{selectedThemeGuidance?.character}</p>
+                    <p>{drawerThemePreset.description}</p>
+                    <p>{drawerThemeGuidance?.character}</p>
                   </section>
                   <section className="theme-drawer-section theme-guidance-grid">
                     <div>
                       <h3>适用场景</h3>
                       <div className="theme-scenario-tags">
-                        {selectedThemeGuidance?.scenarios.map((scenario) => (
+                        {drawerThemeGuidance?.scenarios.map((scenario) => (
                           <span key={scenario}>{scenario}</span>
                         ))}
                       </div>
                     </div>
                     <div>
                       <h3>页面节奏</h3>
-                      <p>{selectedThemeGuidance?.pageRhythm}</p>
+                      <p>{drawerThemeGuidance?.pageRhythm}</p>
                     </div>
                     <div>
                       <h3>图片建议</h3>
-                      <p>{selectedThemeGuidance?.imageStyle}</p>
+                      <p>{drawerThemeGuidance?.imageStyle}</p>
                     </div>
-                    {selectedThemeMetadata && (
+                    {drawerThemeMetadata && (
                       <div>
                         <h3>设计约束</h3>
                         <p>
-                          密度 {selectedThemeMetadata.density}；推荐页面：
-                          {selectedThemeMetadata.recommendedPageTypes.join("、")}
+                          密度 {drawerThemeMetadata.density}；推荐页面：
+                          {drawerThemeMetadata.recommendedPageTypes.join("、")}
                         </p>
-                        <p>避免：{selectedThemeMetadata.forbiddenCombinations.join("；")}</p>
+                        <p>避免：{drawerThemeMetadata.forbiddenCombinations.join("；")}</p>
                       </div>
                     )}
                   </section>
@@ -4367,27 +4418,27 @@ export function App() {
                     <dl>
                       <div>
                         <dt>标题字体</dt>
-                        <dd>{selectedThemePreset.theme.majorFont}</dd>
+                        <dd>{drawerThemePreset.theme.majorFont}</dd>
                       </div>
                       <div>
                         <dt>正文字体</dt>
-                        <dd>{selectedThemePreset.theme.minorFont}</dd>
+                        <dd>{drawerThemePreset.theme.minorFont}</dd>
                       </div>
                       <div>
                         <dt>封面字号</dt>
-                        <dd>{selectedThemePreset.theme.textStyles?.display?.fontSizePt ?? "—"} pt</dd>
+                        <dd>{drawerThemePreset.theme.textStyles?.display?.fontSizePt ?? "—"} pt</dd>
                       </div>
                       <div>
                         <dt>页标题字号</dt>
-                        <dd>{selectedThemePreset.theme.textStyles?.title?.fontSizePt ?? "—"} pt</dd>
+                        <dd>{drawerThemePreset.theme.textStyles?.title?.fontSizePt ?? "—"} pt</dd>
                       </div>
                       <div>
                         <dt>正文字号</dt>
-                        <dd>{selectedThemePreset.theme.textStyles?.body?.fontSizePt ?? "—"} pt</dd>
+                        <dd>{drawerThemePreset.theme.textStyles?.body?.fontSizePt ?? "—"} pt</dd>
                       </div>
                     </dl>
                     <div className="theme-color-spec" aria-label="主题色">
-                      {selectedThemePreset.theme.colors.map((color) => (
+                      {drawerThemePreset.theme.colors.map((color) => (
                         <div key={color.name} title={`${color.name} ${color.value}`}>
                           <span style={{ backgroundColor: color.value }} />
                           <small>{color.name}</small>
@@ -4395,19 +4446,19 @@ export function App() {
                         </div>
                       ))}
                     </div>
-                    {selectedThemeMetadata && (
+                    {drawerThemeMetadata && (
                       <dl>
                         <div>
                           <dt>中文回退</dt>
-                          <dd>{selectedThemeMetadata.fontFallbacks.eastAsian.join(" → ")}</dd>
+                          <dd>{drawerThemeMetadata.fontFallbacks.eastAsian.join(" → ")}</dd>
                         </div>
                         <div>
                           <dt>西文回退</dt>
-                          <dd>{selectedThemeMetadata.fontFallbacks.latin.join(" → ")}</dd>
+                          <dd>{drawerThemeMetadata.fontFallbacks.latin.join(" → ")}</dd>
                         </div>
                         <div>
                           <dt>图表色板</dt>
-                          <dd>{selectedThemeMetadata.chartPalette.join("、")}</dd>
+                          <dd>{drawerThemeMetadata.chartPalette.join("、")}</dd>
                         </div>
                       </dl>
                     )}
@@ -4422,9 +4473,9 @@ export function App() {
                         type="button"
                         className="secondary-action"
                         onClick={() => {
-                          if (!selectedThemeAiPrompt) return;
-                          void navigator.clipboard.writeText(selectedThemeAiPrompt).then(
-                            () => setTaskStatus(`已复制「${selectedThemePreset.name}」AI 主题提示词`),
+                          if (!drawerThemeAiPrompt) return;
+                          void navigator.clipboard.writeText(drawerThemeAiPrompt).then(
+                            () => setTaskStatus(`已复制「${drawerThemePreset.name}」AI 主题提示词`),
                             () => setTaskStatus("复制失败，请手动选择提示词"),
                           );
                         }}
@@ -4433,7 +4484,7 @@ export function App() {
                         复制提示词
                       </button>
                     </div>
-                    <pre>{selectedThemeAiPrompt}</pre>
+                    <pre>{drawerThemeAiPrompt}</pre>
                   </section>
                 </>
               ) : (
@@ -4501,16 +4552,15 @@ export function App() {
               )}
             </div>
             <div className="theme-drawer-actions">
-              <button type="button" className="secondary-action" onClick={() => setThemeDrawerOpen(false)}>
+              <button type="button" className="secondary-action" onClick={closeThemeDrawer}>
                 关闭
               </button>
               <button
                 type="button"
                 className="primary-action"
-                onClick={() => {
-                  setThemeDrawerOpen(false);
-                  setTaskStatus(`已选择主题：${selectedThemePreset?.name ?? selectedTemplate?.name}`);
-                }}
+                onClick={applyDrawerTheme}
+                disabled={themePreviewLocked}
+                title={themePreviewLocked ? "AI 正在生成，完成后才能切换主题" : undefined}
               >
                 <Check />
                 使用此主题
