@@ -29,6 +29,7 @@ import {
   captureContentVersion,
   createDocument,
   createSlide,
+  diffContentVersion,
   iconForText,
   inches,
   parseMetricValue,
@@ -528,7 +529,8 @@ export type DocumentCommand =
       value: string;
     }
   | { type: "approve-slide-content"; slideId: SlideId }
-  | { type: "reopen-slide-content"; slideId: SlideId };
+  | { type: "reopen-slide-content"; slideId: SlideId }
+  | { type: "restore-content-version"; versionId: string };
 
 /** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */ function assertTextStyle(
   style: Partial<TextElementStyle>,
@@ -912,6 +914,13 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       if (command.type === "approve-slide-content" && slide.content.status === "approved") return null;
       if (command.type === "reopen-slide-content" && slide.content.status === "review") return null;
       return "content";
+    }
+    case "restore-content-version": {
+      if (!document) return "content";
+      const version = document.contentVersions?.find((item) => item.id === command.versionId);
+      // 找不到版本或页面集合不一致时交给 applyCommand 报稳定错误，不能当成空事务。
+      if (!version) return "content";
+      return diffContentVersion(version, document).length === 0 ? null : "content";
     }
     case "add-text":
     case "add-line":

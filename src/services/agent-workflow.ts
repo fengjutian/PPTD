@@ -33,7 +33,7 @@ const transitions: Readonly<Record<AgentWorkflowStage, readonly AgentWorkflowSta
   "deterministic-quality": ["visual-review", "ready-to-export", "cancelled", "failed"],
   "visual-review": ["repairing", "deterministic-quality", "ready-to-export", "cancelled", "failed"],
   repairing: ["visual-review", "deterministic-quality", "cancelled", "failed"],
-  "ready-to-export": ["exporting", "checking"],
+  "ready-to-export": ["exporting", "checking", "visual-review"],
   exporting: ["complete", "cancelled", "failed"],
   complete: ["checking"],
   cancelled: ["checking"],

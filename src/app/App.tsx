@@ -142,6 +142,8 @@ import { DisabledVisionReviewPort, TauriVisionReviewPort } from "../services/vis
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 import { renderRealPptxForReview } from "../features/pptx-export/render-real-pptx";
+import { runManualVisualReview } from "../services/manual-visual-review";
+import { renderPresentationForVisualReview } from "../services/presentation-renderer";
 import {
   initialAgentWorkflow,
   startAgentWorkflow,
@@ -754,8 +756,13 @@ export function App() {
     contactSheet?: string;
     deckReview?: VisualReview;
     reviewReuse?: { reviewed: number; reused: number };
+    slideSignatures: string[];
+    reviewedAt: number;
+    reviewSource?: "真实 PPTX" | "画布预览";
   }>();
   const [designQualityReportOpen, setDesignQualityReportOpen] = useState(false);
+  const [manualReviewBusy, setManualReviewBusy] = useState(false);
+  const manualReviewTaskId = useRef(10_000);
   const imageInputRef = useRef<HTMLInputElement>(null);
   /** AI 配图对话框是否打开。 */
   const [aiImageOpen, setAiImageOpen] = useState(false);
@@ -2221,6 +2228,11 @@ export function App() {
         contactSheet: stage.contactSheet,
         deckReview: stage.deckReview,
         reviewReuse: stage.reviewReuse,
+        slideSignatures: finalDocument.slides.map((slide) => JSON.stringify(slide)),
+        reviewedAt: Date.now(),
+        reviewSource: stage.notes.some((note) => note.includes("真实渲染"))
+          ? ("真实 PPTX" as const)
+          : ("画布预览" as const),
       };
       // 成功稿也保留报告。Contact Sheet、整册评分和缓存命中是可审计证据，
       // 不能因为通过质量门就从界面中消失。
@@ -2473,6 +2485,106 @@ export function App() {
   const selectedThemeAiPrompt = selectedThemePreset ? themePresetAiPrompt(selectedThemePreset) : undefined;
   const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
+  const runManualReview = async (scope: "current" | "changed" | "issues" | "all") => {
+    if (manualReviewBusy || !designQualityReport) return;
+    const currentSignatures = document.slides.map((slide) => JSON.stringify(slide));
+    const issueIndexes = [
+      ...new Set([
+        ...designQualityReport.issues.map((issue) => issue.slideIndex),
+        ...(designQualityReport.visualReview?.issues.map((issue) => issue.slideIndex) ?? []),
+      ]),
+    ];
+    const indexes =
+      scope === "current"
+        ? [document.slides.findIndex((slide) => slide.id === activeSlideId)]
+        : scope === "changed"
+          ? currentSignatures.flatMap((signature, index) =>
+              signature === designQualityReport.slideSignatures[index] ? [] : [index],
+            )
+          : scope === "issues"
+            ? issueIndexes
+            : document.slides.map((_, index) => index);
+    if (indexes.length === 0) {
+      setTaskStatus(scope === "changed" ? "上次评审后没有页面变化" : "当前范围没有可复检页面");
+      return;
+    }
+    const settings = await loadSettings().catch(() => defaultSettings());
+    if (!settings.visionReviewEnabled) {
+      setTaskStatus("视觉评审已在设置中关闭，请先允许发送页面渲染图");
+      return;
+    }
+    manualReviewTaskId.current += 1;
+    const taskId = manualReviewTaskId.current;
+    setManualReviewBusy(true);
+    setAgentWorkflow((state) =>
+      canTransitionAgentWorkflow(state.stage, "visual-review")
+        ? transitionAgentWorkflow(state, "visual-review", { label: `正在复检 ${indexes.length} 页并刷新整册总览` })
+        : state,
+    );
+    setTaskStatus(`正在复检 ${indexes.length} 页，并重新检查整册节奏…`);
+    try {
+      const result = await runManualVisualReview({
+        document: structuredClone(document),
+        indexes,
+        goal: defaultPresentationVisualGoal(),
+        vision: new TauriVisionReviewPort(),
+        taskId,
+        renderReal: renderRealPptxForReview,
+        renderCanvas: renderPresentationForVisualReview,
+      });
+      const refreshedSignatures = [...designQualityReport.slideSignatures];
+      result.reviewedIndexes.forEach((index) => {
+        refreshedSignatures[index] = currentSignatures[index]!;
+      });
+      setDesignQualityReport((previous) =>
+        previous
+          ? {
+              ...previous,
+              visualReview: result.review,
+              visualReviewCoverage: { reviewed: result.reviewedIndexes.length, total: document.slides.length },
+              contactSheet: result.render.contactSheet,
+              deckReview: result.deckReview,
+              reviewReuse: {
+                reviewed: result.reviewedIndexes.length,
+                reused: document.slides.length - result.reviewedIndexes.length,
+              },
+              slideSignatures: refreshedSignatures,
+              reviewedAt: Date.now(),
+              reviewSource: result.source,
+              notes: [
+                ...previous.notes.filter((note) => !note.startsWith("手动复检")),
+                `手动复检 ${result.reviewedIndexes.length} 页；整册总览已刷新${result.degradedReason ? `；真实渲染降级：${result.degradedReason}` : ""}`,
+              ],
+            }
+          : previous,
+      );
+      setAgentWorkflow((state) =>
+        transitionAgentWorkflow(state, "ready-to-export", { label: "复检完成，可继续编辑或导出" }),
+      );
+      setTaskStatus(`复检完成：检查 ${result.reviewedIndexes.length} 页，整册总览已刷新`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setAgentWorkflow((state) =>
+        canTransitionAgentWorkflow(state.stage, "failed")
+          ? transitionAgentWorkflow(state, "failed", { error: detail })
+          : state,
+      );
+      setTaskStatus(`视觉复检失败：${describeAiError(error)}`);
+    } finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+      setManualReviewBusy(false);
+    }
+  };
+
+  const openQualityTarget = (slideIndex: number, elementIds: string[] = []) => {
+    const slide = document.slides[slideIndex];
+    if (!slide) return;
+    setActiveView("editor");
+    selectSlide(slide.id);
+    const existing = new Set(slide.elements.map((element) => element.id));
+    selectElements(elementIds.filter((id): id is ElementId => existing.has(id as ElementId)));
+    setDesignQualityReportOpen(false);
+  };
   const selectedAnimations = selected
     ? (activeSlide.animations ?? []).filter((animation) => animation.elementId === selected.id)
     : [];
@@ -4246,6 +4358,31 @@ export function App() {
                   视觉评审未覆盖全部页面，下面的评分和建议只代表已评审页；未评审页不能视为通过。
                 </p>
               )}
+            <div className="design-review-toolbar" aria-label="视觉复检范围">
+              <span>
+                上次评审：{new Date(designQualityReport.reviewedAt).toLocaleString("zh-CN")} ·{" "}
+                {designQualityReport.reviewSource ?? "来源未记录"}
+              </span>
+              <div>
+                <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("current")}>
+                  复检当前页
+                </button>
+                <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("changed")}>
+                  复检变化页
+                </button>
+                <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("issues")}>
+                  复检问题页
+                </button>
+                <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("all")}>
+                  复检整册
+                </button>
+              </div>
+              {manualReviewBusy && <small>正在导出真实 PPTX、检查指定页面并刷新整册总览…</small>}
+              {!manualReviewBusy &&
+                document.slides.some(
+                  (slide, index) => JSON.stringify(slide) !== designQualityReport.slideSignatures[index],
+                ) && <small className="warning">文稿在上次视觉评审后发生变化，建议复检变化页。</small>}
+            </div>
             {designQualityReport.issues.length === 0 ? (
               <div className="template-empty">
                 {designQualityReport.visualReview
@@ -4262,6 +4399,13 @@ export function App() {
                         第 {issue.slideIndex + 1} 页 · {issue.message}
                       </strong>
                       {issue.elementIds.length > 0 && <p>{issue.elementIds.length} 个对象需要调整</p>}
+                      <button
+                        type="button"
+                        className="quality-target-button"
+                        onClick={() => openQualityTarget(issue.slideIndex, issue.elementIds)}
+                      >
+                        打开第 {issue.slideIndex + 1} 页
+                      </button>
                     </div>
                   </li>
                 ))}
@@ -4272,7 +4416,38 @@ export function App() {
                 <h3>视觉评审建议</h3>
                 {designQualityReport.contactSheet && (
                   <figure className="design-quality-contact-sheet">
-                    <img src={designQualityReport.contactSheet} alt="整册页面缩略图总览" />
+                    <div className="contact-sheet-image-wrap">
+                      <img src={designQualityReport.contactSheet} alt="整册页面缩略图总览" />
+                      <div
+                        className="contact-sheet-page-map"
+                        style={{
+                          gridTemplateColumns: `repeat(${Math.min(4, document.slides.length)}, 1fr)`,
+                        }}
+                      >
+                        {document.slides.map((slide, slideIndex) => {
+                          const issueCount =
+                            designQualityReport.visualReview?.issues.filter((issue) => issue.slideIndex === slideIndex)
+                              .length ?? 0;
+                          const score = designQualityReport.visualReview?.slideScores?.find(
+                            (item) => item.slideIndex === slideIndex,
+                          );
+                          return (
+                            <button
+                              key={slide.id}
+                              type="button"
+                              className={issueCount > 0 ? "has-issues" : score ? "reviewed" : "unreviewed"}
+                              aria-label={`打开第 ${slideIndex + 1} 页：${slide.content.title}`}
+                              title={`${slide.content.title}${score ? ` · ${score.overallScore} 分` : " · 未逐页评分"}`}
+                              onClick={() => openQualityTarget(slideIndex)}
+                            >
+                              <span>{slideIndex + 1}</span>
+                              {score && <em>{score.overallScore}</em>}
+                              {issueCount > 0 && <strong>{issueCount}</strong>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                     <figcaption>整册 Contact Sheet · 检查页面节奏、深浅分布、主题一致性、重复版式与前后跳变</figcaption>
                   </figure>
                 )}
@@ -4328,6 +4503,13 @@ export function App() {
                                 可读性 {score.readabilityScore}）
                               </p>
                             )}
+                            <button
+                              type="button"
+                              className="quality-target-button"
+                              onClick={() => openQualityTarget(issue.slideIndex, issue.elementIds)}
+                            >
+                              打开并定位
+                            </button>
                           </div>
                         </li>
                       );
