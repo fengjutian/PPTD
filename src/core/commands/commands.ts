@@ -33,6 +33,7 @@ import {
   iconForText,
   inches,
   parseMetricValue,
+  stableStringify,
   applyTextRun,
   subtractTextRange,
   type TextRunStyle,
@@ -342,6 +343,65 @@ function syncMetricText(slide: Slide, blockId: string, field: "label" | "value",
     // Fragment offsets address the old copy, so they no longer mean anything.
     element.runs = undefined;
   }
+}
+
+/**
+ * Copies a snapshot's blocks into the current blocks while keeping the current
+ * block IDs.
+ *
+ * Charts, tables and card texts point at those IDs. Replacing the IDs would
+ * silently break those bindings, so a snapshot is only restorable when each of
+ * its blocks can find a current block of the same type. When the topology does
+ * not match, the restore is refused instead of guessing.
+ */
+function restoreSlideBlocks(slide: Slide, sourceBlocks: ContentBlock[] | undefined): boolean {
+  const source = sourceBlocks ?? [];
+  const target = slide.content.blocks ?? [];
+  if (source.length === 0) {
+    if (target.length === 0) return false;
+    throw new Error("CONTENT_VERSION_BLOCKS_INCOMPATIBLE");
+  }
+  if (source.length !== target.length) throw new Error("CONTENT_VERSION_BLOCKS_INCOMPATIBLE");
+
+  const used = new Set<number>();
+  const assignments: Array<{ source: ContentBlock; target: ContentBlock }> = [];
+  for (const block of source) {
+    let index = target.findIndex(
+      (candidate, candidateIndex) =>
+        !used.has(candidateIndex) && candidate.id === block.id && candidate.type === block.type,
+    );
+    if (index < 0) {
+      index = target.findIndex(
+        (candidate, candidateIndex) => !used.has(candidateIndex) && candidate.type === block.type,
+      );
+    }
+    if (index < 0) throw new Error("CONTENT_VERSION_BLOCKS_INCOMPATIBLE");
+    used.add(index);
+    assignments.push({ source: block, target: target[index]! });
+  }
+
+  let changed = false;
+  for (const assignment of assignments) {
+    const { id: _sourceId, ...fields } = assignment.source;
+    const next = { ...fields, id: assignment.target.id } as ContentBlock;
+    if (stableStringify(next) === stableStringify(assignment.target)) continue;
+    Object.assign(assignment.target, next);
+    changed = true;
+  }
+  const reordered = assignments.map((assignment) => assignment.target);
+  if (reordered.some((block, index) => target[index] !== block)) {
+    slide.content.blocks = reordered;
+    changed = true;
+  }
+  // A metric card is a view of the block. Copying the block alone would leave
+  // the visible card on the newer number while the chart and panel show the
+  // restored one.
+  for (const assignment of assignments) {
+    if (assignment.target.type !== "metric") continue;
+    syncMetricText(slide, assignment.target.id, "label", assignment.target.label);
+    syncMetricText(slide, assignment.target.id, "value", assignment.target.value);
+  }
+  return changed;
 }
 
 /** Plain deep copy of an element, safe to read from an Immer draft. */
@@ -3710,6 +3770,38 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "reopen-slide-content") {
     // 退回审核，不是退回草稿：内容本身没变，只是这一页重新进入审核。
     slide.content.status = "review";
+    return;
+  }
+
+  if (command.type === "restore-content-version") {
+    // 版本恢复只回滚内容：标题、正文、内容块、备注和页序。版式、对象和背景
+    // 留在当前文稿里，不能借一次"内容恢复"把设计也静默回滚。
+    const version = document.contentVersions?.find((item) => item.id === command.versionId);
+    if (!version) throw new Error("CONTENT_VERSION_NOT_FOUND");
+    const currentIds = new Set(document.slides.map((item) => item.id));
+    if (
+      version.slides.length !== document.slides.length ||
+      version.slides.some((item) => !currentIds.has(item.slideId))
+    ) {
+      throw new Error("CONTENT_VERSION_PAGE_SET_MISMATCH");
+    }
+    const sourceById = new Map(version.slides.map((item) => [item.slideId, item]));
+    for (const page of document.slides) {
+      const source = sourceById.get(page.id)!;
+      const textChanged =
+        page.content.title !== source.title ||
+        page.content.body !== source.body ||
+        page.content.speakerNotes !== source.speakerNotes;
+      if (textChanged) {
+        page.content.title = source.title;
+        page.content.body = source.body;
+        page.content.speakerNotes = source.speakerNotes;
+      }
+      const blocksChanged = restoreSlideBlocks(page, source.blocks);
+      if (textChanged || blocksChanged) markContentChanged(page);
+    }
+    const order = new Map(version.slides.map((item, index) => [item.slideId, index]));
+    document.slides.sort((left, right) => order.get(left.id)! - order.get(right.id)!);
     return;
   }
 

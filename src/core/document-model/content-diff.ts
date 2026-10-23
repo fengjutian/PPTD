@@ -46,26 +46,47 @@ function blockChanges(
 ): ContentFieldChange[] {
   const beforeBlocks = before.blocks ?? [];
   const afterBlocks = after.content.blocks ?? [];
-  const beforeById = new Map(beforeBlocks.map((block) => [block.id, block]));
-  const afterIds = new Set(afterBlocks.map((block) => block.id));
-  const changes: ContentFieldChange[] = [];
+  // Stable IDs are the best match. When a design re-application regenerated
+  // them, pair the remaining blocks by type so the same copy does not show up
+  // as one deletion plus one insertion.
+  const used = new Set<number>();
+  const beforeByAfter = new Map<ContentBlock, ContentBlock>();
+  for (const afterBlock of afterBlocks) {
+    const index = beforeBlocks.findIndex(
+      (block, blockIndex) =>
+        !used.has(blockIndex) && block.id === afterBlock.id && block.type === afterBlock.type,
+    );
+    if (index < 0) continue;
+    used.add(index);
+    beforeByAfter.set(afterBlock, beforeBlocks[index]!);
+  }
+  for (const afterBlock of afterBlocks) {
+    if (beforeByAfter.has(afterBlock)) continue;
+    const index = beforeBlocks.findIndex(
+      (block, blockIndex) => !used.has(blockIndex) && block.type === afterBlock.type,
+    );
+    if (index < 0) continue;
+    used.add(index);
+    beforeByAfter.set(afterBlock, beforeBlocks[index]!);
+  }
 
-  for (const block of afterBlocks) {
-    const old = beforeById.get(block.id);
+  const changes: ContentFieldChange[] = [];
+  for (const afterBlock of afterBlocks) {
+    const old = beforeByAfter.get(afterBlock);
     if (!old) {
-      changes.push({ field: "block", change: "added", after: summarizeContentBlock(block) });
+      changes.push({ field: "block", change: "added", after: summarizeContentBlock(afterBlock) });
       continue;
     }
     const beforeText = summarizeContentBlock(old);
-    const afterText = summarizeContentBlock(block);
+    const afterText = summarizeContentBlock(afterBlock);
     if (beforeText !== afterText) {
       changes.push({ field: "block", change: "changed", before: beforeText, after: afterText });
     }
   }
-  for (const block of beforeBlocks) {
-    if (afterIds.has(block.id)) continue;
+  beforeBlocks.forEach((block, index) => {
+    if (used.has(index)) return;
     changes.push({ field: "block", change: "removed", before: summarizeContentBlock(block) });
-  }
+  });
   return changes;
 }
 

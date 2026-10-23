@@ -21,13 +21,32 @@ export function contentVersionSlides(document: PresentationDocument): ContentVer
 }
 
 /**
+ * JSON with object keys in a stable order.
+ *
+ * Two copies of the same block can be built with different property order
+ * (parsed from a file, generated, or cloned by a command). Comparing them with
+ * plain JSON.stringify would call that a content change.
+ */
+export function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
  * The canonical text of a snapshot, used to skip duplicate versions.
  *
  * Block IDs are removed on purpose. Applying a design over the same reviewed
  * copy creates new block IDs; that is a design transaction, not a content edit.
  */
 export function contentSignature(slides: readonly ContentVersionSlide[]): string {
-  return JSON.stringify(
+  return stableStringify(
     slides.map((slide) => ({
       title: slide.title,
       body: slide.body,
