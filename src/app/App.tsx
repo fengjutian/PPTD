@@ -2727,6 +2727,10 @@ export function App() {
   };
 
   const editorCanvasOpen = activeView === "editor" && editorSurface === "canvas";
+  const projectHomeItems = [
+    ...recentProjects.map((entry) => ({ kind: "project" as const, timestamp: entry.lastOpenedAt, entry })),
+    ...aiHistory.map((entry) => ({ kind: "ai" as const, timestamp: Date.parse(entry.updatedAt), entry })),
+  ].sort((left, right) => right.timestamp - left.timestamp);
 
   return (
     <div
@@ -3314,11 +3318,11 @@ export function App() {
             </div>
           </header>
           <div className="feature-scroll project-home-scroll">
-            {recentProjects.length === 0 ? (
+            {projectHomeItems.length === 0 ? (
               <section className="project-home-empty">
                 <LayoutDashboard />
                 <h2>还没有编辑过的演示文稿</h2>
-                <p>保存或打开项目后，它们会以卡片形式显示在这里。</p>
+                <p>保存、打开或使用 AI 生成文稿后，它们会以卡片形式显示在这里。</p>
                 <button type="button" className="primary-action" onClick={() => void handleNew()}>
                   <FilePlus2 />
                   创建第一份演示文稿
@@ -3331,56 +3335,96 @@ export function App() {
                     <h2>最近编辑</h2>
                     <p>上一次编辑的项目已排在最前面</p>
                   </div>
-                  <span>{recentProjects.length} 个项目</span>
+                  <span>{projectHomeItems.length} 个项目</span>
                 </div>
                 <div className="project-card-grid">
-                  {recentProjects.map((entry, index) => (
-                    <article key={entry.path} className={`project-card ${index === 0 ? "featured" : ""}`}>
-                      <button
-                        type="button"
-                        className="project-card-open"
-                        disabled={entry.missing}
-                        title={entry.path}
-                        onClick={() => void handleOpenRecent(entry)}
-                      >
-                        <span className="project-card-preview" aria-hidden="true">
-                          <span>{entry.title.slice(0, 1).toUpperCase()}</span>
-                        </span>
-                        <span className="project-card-copy">
-                          <span className="project-card-title-row">
-                            <strong>{entry.title}</strong>
-                            {index === 0 && !entry.missing && <em>上次编辑</em>}
-                          </span>
-                          <span>{entry.missing ? "文件已移动或删除" : entry.path}</span>
-                          <small>
-                            {entry.missing
-                              ? "请移除此记录后重新打开文件"
-                              : `最后打开 ${new Date(entry.lastOpenedAt).toLocaleString("zh-CN", {
+                  {projectHomeItems.map((item, index) => {
+                    if (item.kind === "ai") {
+                      const entry = item.entry;
+                      return (
+                        <article key={`ai:${entry.id}`} className={`project-card ai ${index === 0 ? "featured" : ""}`}>
+                          <button
+                            type="button"
+                            className="project-card-open"
+                            title={entry.topic}
+                            onClick={() => {
+                              openAiHistory(entry);
+                              setActiveView("ai");
+                            }}
+                          >
+                            <span className="project-card-preview ai" aria-hidden="true">
+                              <Sparkles />
+                              <span>AI</span>
+                            </span>
+                            <span className="project-card-copy">
+                              <span className="project-card-title-row">
+                                <strong>{entry.draft.title}</strong>
+                                <em>{index === 0 ? "上次编辑" : "AI 草稿"}</em>
+                              </span>
+                              <span>{entry.topic}</span>
+                              <small>
+                                {entry.slideCount} 页 · 最后编辑
+                                {new Date(entry.updatedAt).toLocaleString("zh-CN", {
                                   month: "numeric",
                                   day: "numeric",
                                   hour: "2-digit",
                                   minute: "2-digit",
-                                })}`}
-                          </small>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="project-card-remove"
-                        aria-label={`从首页移除 ${entry.title}`}
-                        title="仅移除记录，不删除项目文件"
-                        onClick={() => {
-                          void removeRecentProject(entry.path)
-                            .then(setRecentProjects)
-                            .catch((error: unknown) =>
-                              setTaskStatus(`移除失败：${error instanceof Error ? error.message : String(error)}`),
-                            );
-                        }}
-                      >
-                        <Trash2 />
-                      </button>
-                    </article>
-                  ))}
+                                })}
+                              </small>
+                            </span>
+                          </button>
+                        </article>
+                      );
+                    }
+                    const entry = item.entry;
+                    return (
+                      <article key={entry.path} className={`project-card ${index === 0 ? "featured" : ""}`}>
+                        <button
+                          type="button"
+                          className="project-card-open"
+                          disabled={entry.missing}
+                          title={entry.path}
+                          onClick={() => void handleOpenRecent(entry)}
+                        >
+                          <span className="project-card-preview" aria-hidden="true">
+                            <span>{entry.title.slice(0, 1).toUpperCase()}</span>
+                          </span>
+                          <span className="project-card-copy">
+                            <span className="project-card-title-row">
+                              <strong>{entry.title}</strong>
+                              {index === 0 && !entry.missing && <em>上次编辑</em>}
+                            </span>
+                            <span>{entry.missing ? "文件已移动或删除" : entry.path}</span>
+                            <small>
+                              {entry.missing
+                                ? "请移除此记录后重新打开文件"
+                                : `最后打开 ${new Date(entry.lastOpenedAt).toLocaleString("zh-CN", {
+                                    month: "numeric",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}`}
+                            </small>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="project-card-remove"
+                          aria-label={`从首页移除 ${entry.title}`}
+                          title="仅移除记录，不删除项目文件"
+                          onClick={() => {
+                            void removeRecentProject(entry.path)
+                              .then(setRecentProjects)
+                              .catch((error: unknown) =>
+                                setTaskStatus(`移除失败：${error instanceof Error ? error.message : String(error)}`),
+                              );
+                          }}
+                        >
+                          <Trash2 />
+                        </button>
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
             )}
@@ -4995,7 +5039,7 @@ export function App() {
         {activeView === "editor" && editorSurface === "projects" ? (
           <>
             <span>项目首页</span>
-            <span>{recentProjects.length > 0 ? `${recentProjects.length} 个最近项目` : "尚无最近项目"}</span>
+            <span>{projectHomeItems.length > 0 ? `${projectHomeItems.length} 个最近项目` : "尚无最近项目"}</span>
             <span className="saved-dot">● 最近编辑项目优先</span>
           </>
         ) : activeView === "ai" ? (

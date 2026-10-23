@@ -905,8 +905,7 @@ button {
 }
 .project-home {
   background:
-    radial-gradient(circle at 75% 0%, color-mix(in srgb, var(--ppt-accent) 12%, transparent), transparent 34%),
-    #191a1e;
+    radial-gradient(circle at 75% 0%, color-mix(in srgb, var(--ppt-accent) 12%, transparent), transparent 34%), #191a1e;
 }
 .project-home-header {
   min-height: 82px;
@@ -997,8 +996,7 @@ button {
   place-items: center;
   overflow: hidden;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--ppt-accent) 82%, #10223d), #163c50 68%, #26313b),
-    #203147;
+    linear-gradient(135deg, color-mix(in srgb, var(--ppt-accent) 82%, #10223d), #163c50 68%, #26313b), #203147;
 }
 .project-card-preview::after {
   content: "";
@@ -1015,6 +1013,24 @@ button {
   font-size: 42px;
   font-weight: 750;
   text-shadow: 0 4px 16px rgb(0 0 0 / 22%);
+}
+.project-card-preview.ai {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: linear-gradient(135deg, #1d4f91, #315ea8 58%, #647eb7);
+}
+.project-card-preview.ai::after {
+  display: none;
+}
+.project-card-preview.ai > svg {
+  width: 28px;
+  height: 28px;
+  color: rgb(255 255 255 / 88%);
+}
+.project-card-preview.ai > span {
+  font-size: 30px;
+  letter-spacing: 0.08em;
 }
 .project-card-copy {
   display: grid;
@@ -1104,27 +1120,59 @@ button {
   margin: 0 0 22px;
   font-size: 12px;
 }
-:root[data-theme="light"] .project-home {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .project-home {
   background:
-    radial-gradient(circle at 75% 0%, color-mix(in srgb, var(--ppt-accent) 9%, transparent), transparent 34%),
-    #f5f6f8;
+    radial-gradient(circle at 76% 2%, rgb(49 94 168 / 7%), transparent 32%),
+    linear-gradient(180deg, #f7f9fc 0%, #f3f5f8 100%);
 }
-:root[data-theme="light"] .project-gallery-heading h2,
-:root[data-theme="light"] .project-card-title-row strong,
-:root[data-theme="light"] .project-home-empty h2 {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .project-home-actions
+  .secondary-action {
+  border-color: #cbd5e4;
+  color: #25569a;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(31 50 79 / 5%);
+}
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .project-home-actions
+  .secondary-action:hover {
+  border-color: #315ea8;
+  color: #214d8b;
+  background: #f6f9ff;
+}
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .project-gallery-heading
+  h2,
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .project-card-title-row
+  strong,
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .project-home-empty h2 {
   color: #1f2937;
 }
-:root[data-theme="light"] .project-card {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .project-card {
   border-color: #d8dbe2;
   background: #fff;
   box-shadow: 0 10px 26px rgb(36 49 70 / 8%);
 }
-:root[data-theme="light"] .project-card:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .project-card:hover {
   box-shadow: 0 16px 34px rgb(36 49 70 / 14%);
 }
-:root[data-theme="light"] .project-home-empty {
-  border-color: #d2d6de;
-  background: rgb(255 255 255 / 78%);
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .project-home-empty {
+  border: 1px solid #d8e0eb;
+  background: linear-gradient(135deg, rgb(49 94 168 / 5%), transparent 58%), #fff;
+  box-shadow: 0 14px 42px rgb(33 57 91 / 8%);
+}
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .project-home-empty
+  > svg {
+  box-sizing: content-box;
+  padding: 12px;
+  border-radius: 13px;
+  color: #315ea8;
+  background: #edf3fc;
+}
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .project-home-empty p {
+  color: #718096;
 }
 .ai-history > button > svg {
   width: 17px;
