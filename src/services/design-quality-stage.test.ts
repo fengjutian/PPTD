@@ -570,6 +570,39 @@ describe("设计质检阶段", () => {
     expect(result.designs[6]!.layout).toBe("cards");
   });
 
+  it("汇总逐页评分，不把批次分数当成每页分数", async () => {
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 7 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes) => ({
+          ...passingReview,
+          slideScores: (indexes ?? []).map((slideIndex) => ({
+            slideIndex,
+            overallScore: 90 + slideIndex,
+            hierarchyScore: 90,
+            alignmentScore: 90,
+            readabilityScore: 90,
+          })),
+        }),
+        planRepairs: async () => ({ repairs: [] }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: Array.from({ length: 7 }, () => "data:image/jpeg;base64,AA=="),
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    expect(result.visualReview?.slideScores?.map((item) => item.slideIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(result.visualReview?.slideScores?.[6]?.overallScore).toBe(96);
+  });
+
   it("真实渲染不可用时降级到画布预览，并说清楚原因", async () => {
     const result = await runDesignQualityStage({
       initialDesigns: [design()],

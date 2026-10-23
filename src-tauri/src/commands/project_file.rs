@@ -968,9 +968,13 @@ fn load_recovery_at(path: &Path) -> Result<Option<Value>, String> {
 }
 
 #[tauri::command]
-pub fn clear_recovery(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn clear_recovery(app: tauri::AppHandle) -> Result<(), String> {
     let path = recovery_path(&app)?;
-    clear_recovery_at(&path)
+    // Deleting the recovery asset tree is filesystem work; keep it off the
+    // main thread, like save/open already do.
+    tauri::async_runtime::spawn_blocking(move || clear_recovery_at(&path))
+        .await
+        .map_err(|error| format!("RECOVERY_CLEAR_TASK_FAILED: {error}"))?
 }
 
 /// 清除恢复副本与其资源目录。没有恢复文件时也不应该报错。
@@ -1001,7 +1005,7 @@ pub fn write_pptx(path: String, bytes: Vec<u8>) -> Result<(), String> {
 /// Binary-safe export path. The JSON command above remains for tests and small
 /// callers; the UI uses this raw IPC body to avoid serializing a large byte array.
 #[tauri::command]
-pub fn write_pptx_raw(request: Request<'_>) -> Result<(), String> {
+pub async fn write_pptx_raw(request: Request<'_>) -> Result<(), String> {
     let encoded_path = request
         .headers()
         .get("x-pptd-path")
@@ -1021,7 +1025,12 @@ pub fn write_pptx_raw(request: Request<'_>) -> Result<(), String> {
     if !bytes.starts_with(b"PK") {
         return Err("PPTX_ZIP_SIGNATURE_INVALID".into());
     }
-    atomic_write(&path, bytes)
+    let bytes = bytes.to_vec();
+    // A 100MB write plus the Windows replace retries must not run on the
+    // Tauri main thread; the UI would freeze until the file is flushed.
+    tauri::async_runtime::spawn_blocking(move || atomic_write(&path, &bytes))
+        .await
+        .map_err(|error| format!("EXPORT_WRITE_TASK_FAILED: {error}"))?
 }
 
 /// 逐页栅格化脚本。PowerPoint 是这份文稿的目标应用，评审模型看的应该是它

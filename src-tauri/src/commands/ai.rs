@@ -284,7 +284,7 @@ pub async fn review_presentation_visuals(
 【评审范围】
 1. 只看跨页问题：背景变化是否有节奏但不杂乱、相邻页面是否机械重复、标题轴线/字体/配色/组件语言是否稳定、封面、章节、内容、重点和总结页面的角色是否清晰。
 2. 本模式不做逐页评审，也不要判断单页的文字清晰度、局部对齐或安全区；这些由逐页评审负责。
-3. slideGuidance 必须返回空数组，不能输出任何坐标。
+3. slideGuidance 和 slideScores 都必须返回空数组，不能输出任何坐标或逐页评分。
 4. 只报告能从总览明确观察到的问题，不为凑数量制造问题。issues 的 slideIndex 必须是 {indexes} 中能代表该问题的页；没有跨页问题时 issues 也可以为空。
 
 【评分标准】
@@ -295,7 +295,7 @@ pub async fn review_presentation_visuals(
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。slideGuidance 必须为空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[],"slideGuidance":[]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[],"slideGuidance":[],"slideScores":[]}}
 
 【本次整套视觉目标】
 {goal}
@@ -374,10 +374,15 @@ pub async fn review_presentation_visuals(
 5. focalPoint 标记背景或构图中最强的视觉焦点。若没有明显焦点，使用页面几何中心。
 6. recommendedLayout 必须从 cover、title-body、split、cards、quote、section、summary 中选择，并与当前页面的信息类型匹配；不要因为存在编号就机械选择 cards。
 
+【slideScores 规则】
+1. 每个被检查页面必须恰好输出一条 slideScores，slideIndex 与 slideGuidance 一致。
+2. overallScore、hierarchyScore、alignmentScore、readabilityScore 都是该页自己的分数，不是整批平均，也不是整套分数。
+3. 一致性是整套指标，不放进 slideScores；不要输出 consistencyScore。
+
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。所有被检查页面的索引必须来自 {indexes}。elementIds 无法从图片确认时返回空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题和主要内容移动到右侧留白区，并保持共同左轴"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题和主要内容移动到右侧留白区，并保持共同左轴"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}],"slideScores":[{{"slideIndex":0,"overallScore":85,"hierarchyScore":84,"alignmentScore":90,"readabilityScore":88}}]}}
 
 【本次整套视觉目标】
 {goal}

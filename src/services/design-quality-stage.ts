@@ -81,6 +81,10 @@ export function isGenerationCancelled(error: unknown): boolean {
 }
 
 function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualReview {
+  // 逐页评分按页合并；同一页出现多次时保留最后一个，不重复累加。
+  const slideScores = [
+    ...new Map(reviews.flatMap((item) => item.slideScores ?? []).map((item) => [item.slideIndex, item])).values(),
+  ].sort((left, right) => left.slideIndex - right.slideIndex);
   return {
     overallScore: Math.min(...reviews.map((item) => item.overallScore)),
     hierarchyScore: Math.min(...reviews.map((item) => item.hierarchyScore)),
@@ -92,6 +96,7 @@ function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualR
     consistencyScore: overview?.consistencyScore ?? Math.min(...reviews.map((item) => item.consistencyScore)),
     issues: reviews.flatMap((item) => item.issues),
     slideGuidance: reviews.flatMap((item) => item.slideGuidance),
+    ...(slideScores.length > 0 ? { slideScores } : {}),
   };
 }
 

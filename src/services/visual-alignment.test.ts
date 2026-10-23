@@ -276,4 +276,26 @@ describe("visual review normalization", () => {
     expect(result.issues).toEqual([]);
     expect(() => normalizeVisualReview({ overallScore: 80 }, [0])).toThrow("AI_VISION_RESPONSE_UNREPAIRABLE");
   });
+
+  it("keeps per-slide scores only for checked pages and drops invalid entries", () => {
+    const result = normalizeVisualReview(
+      {
+        ...review(84),
+        slideScores: [
+          { slideIndex: 0, overallScore: "bad", hierarchyScore: 70, alignmentScore: 80, readabilityScore: 90 },
+          { slideIndex: 1, overallScore: 120, hierarchyScore: 70, alignmentScore: 80, readabilityScore: 90 },
+          { slideIndex: 0, overallScore: 60, hierarchyScore: 65, alignmentScore: 70, readabilityScore: 75 },
+          { slideIndex: 0, overallScore: 99, hierarchyScore: 99, alignmentScore: 99, readabilityScore: 99 },
+          { slideIndex: 9, overallScore: 50, hierarchyScore: 50, alignmentScore: 50, readabilityScore: 50 },
+        ],
+      },
+      [0, 1],
+    );
+    // 第 1 条分数非法、第 4 条重复、第 5 条不是本次检查的页，都被丢弃；
+    // 第 2 条分数越界被夹到 100。
+    expect(result.slideScores).toEqual([
+      { slideIndex: 0, overallScore: 60, hierarchyScore: 65, alignmentScore: 70, readabilityScore: 75 },
+      { slideIndex: 1, overallScore: 100, hierarchyScore: 70, alignmentScore: 80, readabilityScore: 90 },
+    ]);
+  });
 });

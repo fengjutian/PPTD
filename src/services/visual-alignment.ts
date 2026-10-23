@@ -251,7 +251,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
   // `title-body` layout, which the rule-based repair then applied as if the
   // model had asked for it. Missing guidance must stay missing.
   const slideGuidance = [...guidanceBySlide.values()].sort((left, right) => left.slideIndex - right.slideIndex);
-  return visualReviewSchema.parse({ ...scores, issues, slideGuidance });
+  return visualReviewSchema.parse({ ...scores, issues, slideScores, slideGuidance });
 }
 export const visualRepairPlanSchema = z.object({
   repairs: z.array(
@@ -589,9 +589,7 @@ export function affectedSlideIndexes(
         review.consistencyScore < minimum.consistency;
   return [
     ...new Set(
-      review.issues
-        .filter((issue) => issue.severity === "error" || belowTarget)
-        .map((issue) => issue.slideIndex),
+      review.issues.filter((issue) => issue.severity === "error" || belowTarget).map((issue) => issue.slideIndex),
     ),
   ].sort((left, right) => left - right);
 }

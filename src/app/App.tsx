@@ -3193,20 +3193,31 @@ export function App() {
                   <div className="template-empty">视觉评审没有留下需要调整的建议。</div>
                 ) : (
                   <ul className="export-report-list">
-                    {designQualityReport.visualReview.issues.map((issue, index) => (
-                      <li
-                        key={`${issue.issue}-${issue.slideIndex}-${index}`}
-                        className={issue.severity === "error" ? "error" : "warning"}
-                      >
-                        <CircleAlert />
-                        <div>
-                          <strong>
-                            第 {issue.slideIndex + 1} 页 · {visualIssueLabels[issue.issue]}
-                          </strong>
-                          <p>{issue.suggestion}</p>
-                        </div>
-                      </li>
-                    ))}
+                    {designQualityReport.visualReview.issues.map((issue, index) => {
+                      const score = designQualityReport.visualReview?.slideScores?.find(
+                        (item) => item.slideIndex === issue.slideIndex,
+                      );
+                      return (
+                        <li
+                          key={`${issue.issue}-${issue.slideIndex}-${index}`}
+                          className={issue.severity === "error" ? "error" : "warning"}
+                        >
+                          <CircleAlert />
+                          <div>
+                            <strong>
+                              第 {issue.slideIndex + 1} 页 · {visualIssueLabels[issue.issue]}
+                            </strong>
+                            <p>{issue.suggestion}</p>
+                            {score && (
+                              <p>
+                                本页 {score.overallScore} 分（层级 {score.hierarchyScore}、对齐 {score.alignmentScore}、
+                                可读性 {score.readabilityScore}）
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
