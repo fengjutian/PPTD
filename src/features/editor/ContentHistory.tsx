@@ -124,7 +124,8 @@ export function ContentHistory({ document, onClose }: { document: PresentationDo
 
         {versions.length === 0 ? (
           <p className="content-history-empty">
-            还没有已确认的内容版本。确认本页内容或应用 AI 内容后，会自动保存第一份版本。旧项目不会自动补历史；如需建立基线，可先退回审核，再重新确认本页。
+            还没有已确认的内容版本。确认本页内容或应用 AI
+            内容后，会自动保存第一份版本。旧项目不会自动补历史；如需建立基线，可先退回审核，再重新确认本页。
           </p>
         ) : (
           <div className="content-history-body">

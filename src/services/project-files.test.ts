@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { createDocument, emu, type ImageElement } from "../core/document-model";
+import { captureContentVersion } from "../core/document-model/content-version";
 import { readStoredDocument, saveProject, saveRecovery } from "./project-files";
 import { setImageProjectPath } from "./image-url-service";
 
@@ -48,6 +49,17 @@ describe("stored documents", () => {
 
   it("reports a broken document instead of returning half of it", () => {
     expect(() => readStoredDocument({ schemaVersion: 9, title: "缺少页面" })).toThrow();
+  });
+
+  it("keeps confirmed content versions when a project is read back", () => {
+    const document = createDocument();
+    document.slides[0]!.content.title = "已确认标题";
+    captureContentVersion(document);
+
+    const stored = readStoredDocument(document);
+
+    expect(stored.document.contentVersions).toHaveLength(1);
+    expect(stored.document.contentVersions![0]!.slides[0]!.title).toBe("已确认标题");
   });
 });
 

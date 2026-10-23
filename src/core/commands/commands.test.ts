@@ -613,6 +613,9 @@ describe("document commands", () => {
     expect(result.slides).toHaveLength(2);
     expect(result.slides[0]!.content).toMatchObject({ title: "现状", body: "市场增长\n竞争加剧", status: "approved" });
     expect(result.slides[0]!.elements).toHaveLength(2);
+    // 应用已审核草稿即为第一次确认，设计阶段之前就有可对比的基线。
+    expect(result.contentVersions).toHaveLength(1);
+    expect(result.contentVersions![0]!.slides.map((slide) => slide.title)).toEqual(["现状", "行动"]);
   });
 
   it("stores structured AI content blocks with stable IDs and keeps body edits consistent", () => {
