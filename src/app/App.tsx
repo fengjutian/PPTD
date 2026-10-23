@@ -54,6 +54,7 @@ import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
+import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 import { LayerList } from "../features/editor/LayerList";
 import { SlideElementContent, SlideElementFrame } from "../features/editor/SlideScene";
 import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
@@ -101,6 +102,7 @@ import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../servi
 import {
   analyzePptxTemplate,
   choosePresentationFile,
+  convertLegacyPpt,
   choosePptxPath,
   choosePptxTemplate,
   clearRecovery,
@@ -644,6 +646,7 @@ export function App() {
   const [inspectorWidth, setInspectorWidth] = useState(readInspectorWidth);
   const [message, setMessage] = useState<PageMessage>();
   const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
+  const [editorRibbonTab, setEditorRibbonTab] = useState<"file" | "home" | "insert" | "design" | "arrange" | "view">("home");
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
@@ -967,16 +970,14 @@ export function App() {
         void refreshRecentProjects();
         return;
       }
-      if (selection.format === "ppt") {
-        setTaskStatus("旧版 PPT 需要先通过 PowerPoint 或 LibreOffice 转换为 PPTX；当前版本不会伪装成无损导入");
-        return;
-      }
-      const imported = await importPptxTemplate(selection.path);
+      setTaskStatus(selection.format === "ppt" ? "正在安全转换旧版 PPT…" : "正在分析 PPTX…");
+      const pptxPath = selection.format === "ppt" ? await convertLegacyPpt(selection.path) : selection.path;
+      const imported = await importPptxTemplate(pptxPath);
       setSelectedTemplate(imported);
       setTemplateLibrary(await listPptxTemplates());
       await handleSelectTemplate(imported, false);
       setTemplatePickerOpen(true);
-      setTaskStatus(`PPTX 已安全导入并完成结构分析：${selection.name}`);
+      setTaskStatus(`${selection.format.toUpperCase()} 已安全导入并完成结构分析：${selection.name}`);
     } catch (error) {
       setTaskStatus(`打开或导入失败：${error instanceof Error ? error.message : String(error)}`);
     }
@@ -2385,7 +2386,7 @@ export function App() {
       style={{ "--inspector-width": `${inspectorWidth}px` } as React.CSSProperties}
     >
       {activeView === "editor" && (
-        <header className="topbar">
+        <header className="topbar" data-ribbon-tab={editorRibbonTab}>
           <div className="brand">
             <span className="brand-mark">P</span>
             <div>
@@ -2393,7 +2394,27 @@ export function App() {
               <small>{document.title}</small>
             </div>
           </div>
-          <div className="toolbar-group">
+          <nav className="ribbon-tabs" aria-label="编辑功能区">
+            {([
+              ["file", "文件"],
+              ["home", "开始"],
+              ["insert", "插入"],
+              ["design", "设计"],
+              ["arrange", "排列"],
+              ["view", "视图"],
+            ] as const).map(([id, label]) => (
+              <button
+                type="button"
+                key={id}
+                className={editorRibbonTab === id ? "active" : undefined}
+                aria-current={editorRibbonTab === id ? "page" : undefined}
+                onClick={() => setEditorRibbonTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="toolbar-group file-tools">
             <ToolButton label="新建项目" onClick={handleNew}>
               <FilePlus2 />
             </ToolButton>
@@ -2517,6 +2538,47 @@ export function App() {
               label="清除本页参考线"
               onClick={() => clearGuidesOnSlide(activeSlide.id)}
               disabled={!activeGuides.length}
+            >
+              <Trash2 />
+            </ToolButton>
+          </div>
+          <div className="toolbar-group design-tools">
+            <ToolButton label="选择主题" onClick={() => changeActiveView("theme")}>
+              <Palette />
+            </ToolButton>
+            <ToolButton
+              label="重排当前页面"
+              onClick={() => execute({ type: "relayout-slide", slideId: activeSlide.id })}
+            >
+              <Wand2 />
+            </ToolButton>
+          </div>
+          <div className="toolbar-group arrange-tools">
+            <ToolButton
+              label="复制所选对象"
+              disabled={!selected || selected.locked}
+              onClick={() => selected && execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: selected.id })}
+            >
+              <Copy />
+            </ToolButton>
+            <ToolButton
+              label="上移一层"
+              disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) >= activeSlide.elements.length - 1}
+              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.indexOf(selected) + 1 })}
+            >
+              <ArrowUp />
+            </ToolButton>
+            <ToolButton
+              label="下移一层"
+              disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) <= 0}
+              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.indexOf(selected) - 1 })}
+            >
+              <ArrowDown />
+            </ToolButton>
+            <ToolButton
+              label="删除所选对象"
+              disabled={!selected || selected.locked}
+              onClick={() => selected && execute({ type: "delete-element", slideId: activeSlide.id, elementId: selected.id })}
             >
               <Trash2 />
             </ToolButton>
@@ -3702,6 +3764,13 @@ export function App() {
             <span>
               第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页
             </span>
+            {activeView === "editor" && (
+              <ContentReviewStatus
+                slideId={activeSlide.id}
+                status={activeSlide.content.status}
+                onCommand={execute}
+              />
+            )}
             <span>{countLabel}</span>
             <span>{revisionLabel}</span>
             {missingImageCount > 0 && (

@@ -169,6 +169,8 @@ export async function choosePptxTemplate(): Promise<{ path: string; name: string
 
 export const importPptxTemplate = (sourcePath: string) =>
   invoke<TemplateRecord>("import_pptx_template", { sourcePath });
+export const convertLegacyPpt = (sourcePath: string) =>
+  invoke<string>("convert_legacy_ppt", { sourcePath });
 export const listPptxTemplates = () => invoke<TemplateRecord[]>("list_pptx_templates");
 export const getPptxTemplatePreview = (templateId: string) =>
   invoke<string | null>("get_pptx_template_preview", { templateId });

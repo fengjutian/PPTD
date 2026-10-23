@@ -30,6 +30,7 @@ const REVIEW_RASTER_TIMEOUT: Duration = Duration::from_secs(180);
 const REVIEW_RASTER_MAX_BYTES: usize = 64 * 1024 * 1024;
 /// 评审图最多多少页。
 const REVIEW_RASTER_MAX_SLIDES: usize = 40;
+const LEGACY_PPT_CONVERT_TIMEOUT: Duration = Duration::from_secs(120);
 /// 缓存格式版本。渲染脚本、导出分辨率或缓存结构变化时递增，旧缓存自然失效。
 const LAYOUT_RENDER_CACHE_VERSION: &str = "v1";
 /// 缓存目录名，位于应用数据目录下，与模板库同级。
@@ -236,6 +237,76 @@ fn run_powershell_with_timeout(script: &Path, source: &Path, output: &Path) -> R
             timed_out: "TEMPLATE_LAYOUT_RENDER_TIMEOUT",
         },
     )
+}
+
+const LEGACY_PPT_CONVERT_SCRIPT: &str = r#"param([string]$Source, [string]$Output)
+$ErrorActionPreference = 'Stop'
+$powerPoint = $null
+$presentation = $null
+try {
+  $powerPoint = New-Object -ComObject PowerPoint.Application
+  $powerPoint.AutomationSecurity = 3
+  $presentation = $powerPoint.Presentations.Open($Source, -1, 0, 0)
+  # ppSaveAsOpenXMLPresentation = 24
+  $presentation.SaveAs($Output, 24)
+} finally {
+  if ($presentation -ne $null) { $presentation.Close() }
+  if ($powerPoint -ne $null) { $powerPoint.Quit() }
+  [GC]::Collect()
+  [GC]::WaitForPendingFinalizers()
+}
+"#;
+
+/// Converts an untrusted legacy binary `.ppt` into an isolated `.pptx` copy.
+/// Macros are disabled and the source file is never modified.
+#[tauri::command]
+pub async fn convert_legacy_ppt(
+    app: tauri::AppHandle,
+    source_path: String,
+) -> Result<String, String> {
+    let source = validate_path(&source_path, "ppt")?;
+    let metadata = fs::metadata(&source).map_err(|error| format!("PPT_READ_FAILED: {error}"))?;
+    if metadata.len() == 0 || metadata.len() > MAX_TEMPLATE_BYTES {
+        return Err("PPT_SIZE_INVALID".into());
+    }
+    let cache = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| format!("PPT_CONVERT_CACHE_UNAVAILABLE: {error}"))?
+        .join("legacy-ppt-conversions");
+    fs::create_dir_all(&cache).map_err(|error| format!("PPT_CONVERT_DIRECTORY_FAILED: {error}"))?;
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "SYSTEM_TIME_INVALID")?
+        .as_nanos();
+    let output = cache.join(format!("converted-{stamp}.pptx"));
+    let working =
+        tempfile::tempdir().map_err(|error| format!("PPT_CONVERT_TEMP_FAILED: {error}"))?;
+    let script = working.path().join("convert-ppt.ps1");
+    fs::write(&script, LEGACY_PPT_CONVERT_SCRIPT)
+        .map_err(|error| format!("PPT_CONVERT_SCRIPT_FAILED: {error}"))?;
+    let source_for_task = source.clone();
+    let output_for_task = output.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        run_powershell_script(
+            &script,
+            &source_for_task,
+            &output_for_task,
+            None,
+            LEGACY_PPT_CONVERT_TIMEOUT,
+            PowerShellErrorCodes {
+                unavailable: "PPT_CONVERTER_UNAVAILABLE",
+                wait_failed: "PPT_CONVERTER_WAIT_FAILED",
+                failed: "PPT_CONVERT_FAILED",
+                timed_out: "PPT_CONVERT_TIMEOUT",
+            },
+        )?;
+        validate_pptx_archive(&output_for_task)?;
+        Ok::<(), String>(())
+    })
+    .await
+    .map_err(|error| format!("PPT_CONVERT_TASK_FAILED: {error}"))??;
+    Ok(output.to_string_lossy().into_owned())
 }
 
 /// 外部渲染器的错误码。不同的调用场景用不同的码，用户看到的提示才说得清是哪一步坏了。

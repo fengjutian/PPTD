@@ -84,7 +84,7 @@ button {
   position: relative;
   height: 100vh;
   display: grid;
-  grid-template: 64px 1fr 28px / 64px 216px minmax(640px, 1fr) var(--inspector-width, 252px);
+  grid-template: 88px 1fr 28px / 64px 216px minmax(640px, 1fr) var(--inspector-width, 252px);
   background: #202125;
 }
 .app-shell.module-shell {
@@ -94,13 +94,44 @@ button {
   grid-column: 2 / -1;
   grid-row: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 22px;
-  padding: 0 16px;
+  padding: 0 16px 8px;
   background: #101114;
   border-bottom: 1px solid #303136;
   z-index: 3;
 }
+.topbar .brand { align-self: center; margin-top: 20px; }
+.ribbon-tabs {
+  position: absolute;
+  top: 3px;
+  left: 220px;
+  right: 145px;
+  height: 29px;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+.ribbon-tabs button {
+  min-width: 54px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: rgb(255 255 255 / 72%);
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ribbon-tabs button:hover { color: #fff; background: rgb(255 255 255 / 8%); }
+.ribbon-tabs button.active { color: #fff; border-bottom-color: #fff; font-weight: 700; }
+.topbar .toolbar-group { display: none; min-height: 38px; }
+.topbar[data-ribbon-tab="file"] .file-tools,
+.topbar[data-ribbon-tab="home"] .file-tools,
+.topbar[data-ribbon-tab="insert"] .insert-tools,
+.topbar[data-ribbon-tab="design"] .design-tools,
+.topbar[data-ribbon-tab="arrange"] .arrange-tools,
+.topbar[data-ribbon-tab="view"] .assist-tools { display: flex; }
+.topbar .export-button { margin-left: auto; }
 .brand {
   width: 178px;
   display: flex;
@@ -145,7 +176,7 @@ button {
   gap: 4px;
 }
 .insert-tools {
-  margin-left: auto;
+  margin-left: 0;
 }
 .assist-tools {
   padding-left: 6px;
@@ -4604,6 +4635,45 @@ button {
 }
 .missing-assets {
   color: #e6ae62;
+}
+.content-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.content-status {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  white-space: nowrap;
+}
+.content-status.pending {
+  color: var(--ppt-accent);
+}
+.content-review-action {
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.content-review-action:hover {
+  background: rgba(128, 128, 128, 0.18);
+}
+.content-review-action.approve {
+  color: var(--ppt-accent);
+}
+.content-review-action.approve:hover {
+  background: var(--ppt-accent);
+  color: #fff;
 }
 .zoom-controls {
   display: inline-flex;

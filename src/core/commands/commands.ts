@@ -3502,6 +3502,23 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
 
+  if (command.type === "approve-slide-content") {
+    // 复核闭环的另一半：内容被改过（changed）或人工退回（review）之后，
+    // 用户确认这一页仍然是审过的版本，导出前置检查才会放行。
+    slide.content.status = "approved";
+    return;
+  }
+
+  if (command.type === "reopen-slide-content") {
+    // 退回审核，不是退回草稿：内容本身没变，只是这一页重新进入审核。
+    slide.content.status = "review";
+    return;
+  }
+
+  // Commands below this point are element commands. Keep the runtime guard as
+  // well as the TypeScript narrowing: slide-only review commands may be added
+  // to the union without accidentally being treated as element mutations.
+  if (!("elementId" in command)) throw new Error("ELEMENT_COMMAND_REQUIRED");
   const element = slide.elements.find((item) => item.id === command.elementId);
   if (!element) throw new Error("ELEMENT_NOT_FOUND");
   if (command.type === "set-element-lock") {
