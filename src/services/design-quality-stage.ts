@@ -98,6 +98,7 @@ function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualR
 /** 把视觉评审失败的错误码翻译成用户能读懂的一句话。 */
 export function describeVisualReviewFailure(reason: string): string {
   if (reason.includes("AI_VISION_SLIDE_COUNT_INVALID")) return `文稿页数超过视觉评审上限（${MAX_REVIEWED_SLIDES} 页）`;
+  if (reason.includes("AI_VISION_DISABLED")) return "视觉评审已在设置中关闭，只做确定性校验";
   if (reason.includes("VISUAL_ALIGNMENT_CONTENT_MUTATION")) return "视觉修复试图修改已审核内容，已拒绝该轮修复";
   return reason;
 }
@@ -287,7 +288,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         // A repair plan may name any page, and a fallback plan may be broader
         // than the findings. Only pages the review actually flagged are allowed
         // to change; the rest keep the design the user already saw.
-        const affected = new Set(affectedSlideIndexes(review, goal.minimumScores.overall));
+        const affected = new Set(affectedSlideIndexes(review, goal.minimumScores));
         const repairs = new Map(
           plan.repairs.filter((repair) => affected.has(repair.slideIndex)).map((repair) => [repair.slideIndex, repair]),
         );

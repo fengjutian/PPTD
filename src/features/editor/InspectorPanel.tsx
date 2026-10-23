@@ -50,7 +50,7 @@ import {
 import { isFontAvailable } from "../../core/validation/export-validation";
 import { textLikelyOverflows } from "../../core/rendering/text-fit";
 import { useEditorStore } from "../../store/editor-store";
-import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
+import { ColorField, NumberField, SelectField, TextAreaField, TextField } from "./inspector-fields";
 import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
 import { AlignGrid, type AlignCell } from "./AlignGrid";
 import { MultiSelectionPanel } from "./MultiSelectionPanel";
@@ -86,6 +86,7 @@ function elementTypeLabel(element: SlideElement): string {
   if (element.type === "chart") return "图表";
   if (element.type === "table") return "表格";
   if (element.type === "line") return "线条";
+  if (element.type === "icon") return "图标";
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
@@ -98,6 +99,8 @@ export interface InspectorPanelViewProps {
   /** Page background, used to judge text readability and to offer a readable ink. */
   background: string;
   pageSize: { width: Emu; height: Emu };
+  /** The speaker notes of this page. */
+  speakerNotes: string;
   backgroundImage?: boolean;
   /** Unit the position and size fields are shown in. */
   unit: LengthUnit;
@@ -149,6 +152,7 @@ export function InspectorPanelView({
   elementCount,
   background,
   pageSize,
+  speakerNotes,
   backgroundImage = false,
   unit,
   onUnitChange,
@@ -294,6 +298,7 @@ export function InspectorPanelView({
           slideId={slideId}
           background={background}
           pageSize={pageSize}
+          speakerNotes={speakerNotes}
           backgroundImage={backgroundImage}
           unit={unit}
           palette={palette}
@@ -1052,6 +1057,8 @@ interface PagePropertiesProps {
   slideId: SlideId;
   background: string;
   pageSize: { width: Emu; height: Emu };
+  /** The speaker notes of this page. */
+  speakerNotes: string;
   unit: LengthUnit;
   palette?: readonly string[];
   onCommand: (command: DocumentCommand) => void;
@@ -1062,6 +1069,7 @@ function PageProperties({
   slideId,
   background,
   pageSize,
+  speakerNotes,
   backgroundImage,
   unit,
   palette,
@@ -1083,7 +1091,8 @@ function PageProperties({
     reader.readAsDataURL(file);
   };
   return (
-    <InspectorSection title="页面">
+    <>
+      <InspectorSection title="页面">
       <div className="field">
         <span className="field-label">幻灯片尺寸</span>
         {/* The size of the page is a property of the document, so it is read
@@ -1127,6 +1136,18 @@ function PageProperties({
         </div>
       </div>
     </InspectorSection>
+    <InspectorSection title="演讲备注">
+      <TextAreaField
+        label="备注"
+        value={speakerNotes}
+        placeholder="这一页要讲的内容，会写进 PPTX 的备注页"
+        rows={5}
+        maxLength={20_000}
+        onCommit={(notes) => onCommand({ type: "set-speaker-notes", slideId, notes })}
+      />
+      <p className="field-help">备注不会显示在页面上，但会跟着这一页一起导出。</p>
+    </InspectorSection>
+    </>
   );
 }
 
@@ -1200,6 +1221,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
               elementCount={slide.elements.length}
               background={slide.background}
               pageSize={document.pageSize}
+              speakerNotes={slide.content.speakerNotes}
               backgroundImage={slide.elements.some(
                 (element) => element.type === "image" && element.placement === "slide-background",
               )}
@@ -1236,6 +1258,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
                 slideId={slide.id}
                 background={slide.background}
                 pageSize={document.pageSize}
+                speakerNotes={slide.content.speakerNotes}
                 backgroundImage={slide.elements.some(
                   (element) => element.type === "image" && element.placement === "slide-background",
                 )}

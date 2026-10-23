@@ -347,10 +347,12 @@ export function planVisualAssetLayout(
     }
     case "band": {
       // 通栏图压在文字区上方，文字在其下方。
-      // 图最多占内容区高度的六成，剩下的留给文字；宽度按比例跟着走。
+      // 通栏图先按内容区宽度铺开，再按图片比例算高度；高度超过内容区
+      // 六成时才等比缩回。原来从内容区高度反推宽度，4:1 的图只剩约
+      // 31% 页宽，完全不像“通栏”。
       const maxHeightPx = contentPx.height * 0.6;
-      let heightPx = contentPx.height / aspect;
-      let widthPx = heightPx * aspect;
+      let widthPx = contentPx.width;
+      let heightPx = widthPx / aspect;
       if (heightPx > maxHeightPx) {
         heightPx = maxHeightPx;
         widthPx = heightPx * aspect;

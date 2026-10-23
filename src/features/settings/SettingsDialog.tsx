@@ -178,6 +178,19 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
               ))}
             </select>
           </label>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.visionReviewEnabled}
+              onChange={(event) => setSettings({ ...settings, visionReviewEnabled: event.target.checked })}
+            />
+            <span>
+              <strong>允许视觉评审</strong>
+              <em>
+                生成时把页面渲染图发送给当前模型服务检查排版。关闭后不再上传任何渲染图，只做确定性排版校验，视觉评分与建议将不可用。
+              </em>
+            </span>
+          </label>
           <label>
             API 地址
             <input value={provider.baseUrl} readOnly />

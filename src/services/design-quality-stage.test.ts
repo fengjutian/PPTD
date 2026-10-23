@@ -4,7 +4,7 @@ import { createDocument, type PresentationDocument } from "../core/document-mode
 import { runDesignQualityStage, summarizeQualityIssues } from "./design-quality-stage";
 import type { VisualReview } from "./visual-alignment";
 import { defaultPresentationVisualGoal } from "./visual-alignment";
-import type { VisionReviewPort } from "./vision-review-port";
+import { DisabledVisionReviewPort, type VisionReviewPort } from "./vision-review-port";
 
 const design = (overrides: Partial<AiSlideDesign> = {}): AiSlideDesign => ({
   layout: "title-body",
@@ -82,6 +82,26 @@ describe("设计质检阶段", () => {
     expect(result.document.slides).toHaveLength(1);
     expect(result.passed).toBe(true);
     // 没有评审就没有结论：不能留下一个空的 VisualReview 冒充"已评审，无问题"。
+    expect(result.visualReview).toBeUndefined();
+    expect(result.visualReviewCoverage).toBeUndefined();
+  });
+
+  it("设置关闭视觉评审时说清楚这是主动选择，不把未评审当成通过", async () => {
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: new DisabledVisionReviewPort(),
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+    });
+
+    expect(result.degraded).toBe(true);
+    expect(result.notes.join("；")).toContain("视觉评审已在设置中关闭");
+    expect(result.notes.join("；")).toContain("本次未做视觉评审");
     expect(result.visualReview).toBeUndefined();
     expect(result.visualReviewCoverage).toBeUndefined();
   });

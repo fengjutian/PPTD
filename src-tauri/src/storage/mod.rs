@@ -26,10 +26,18 @@ pub struct StoredAppSettings {
     pub ui_font: String,
     pub ai_provider_id: String,
     pub ai_model: String,
+    /// 是否允许把页面渲染图发送给模型服务做视觉评审。缺省为允许，老库升级后
+    /// 行为不变；只有用户显式关闭才会停止上传渲染图。
+    #[serde(default = "default_vision_review_enabled")]
+    pub vision_review_enabled: bool,
 }
 
 fn default_ui_font() -> String {
     DEFAULT_UI_FONT.to_string()
+}
+
+fn default_vision_review_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -89,12 +97,17 @@ impl Database {
         // 字体键是后加的，老库里没有时回落到默认字体，不让整份设置读不出来。
         let ui_font =
             read_setting(&connection, "ui_font")?.unwrap_or_else(|| DEFAULT_UI_FONT.to_string());
+        // 视觉评审开关同理：缺省为开启，只有显式写入 false 才关闭。
+        let vision_review_enabled = read_setting(&connection, "vision_review_enabled")?
+            .map(|value| value == "true")
+            .unwrap_or(true);
         match (theme, provider, model) {
             (Some(theme), Some(ai_provider_id), Some(ai_model)) => Ok(Some(StoredAppSettings {
                 theme,
                 ui_font,
                 ai_provider_id,
                 ai_model,
+                vision_review_enabled,
             })),
             _ => Ok(None),
         }
@@ -112,6 +125,14 @@ impl Database {
             ("ui_font", settings.ui_font.as_str()),
             ("ai_provider_id", settings.ai_provider_id.as_str()),
             ("ai_model", settings.ai_model.as_str()),
+            (
+                "vision_review_enabled",
+                if settings.vision_review_enabled {
+                    "true"
+                } else {
+                    "false"
+                },
+            ),
         ] {
             transaction
                 .execute(
@@ -327,6 +348,7 @@ mod tests {
             ui_font: "song".into(),
             ai_provider_id: "minimax".into(),
             ai_model: "MiniMax-M3".into(),
+            vision_review_enabled: true,
         }
     }
 
@@ -387,6 +409,42 @@ mod tests {
             .expect("delete");
         let loaded = database.load_settings().expect("load").expect("settings");
         assert_eq!(loaded.ui_font, DEFAULT_UI_FONT);
+    }
+
+    #[test]
+    fn keeps_vision_review_on_when_key_is_missing() {
+        // 老库没有这个键时必须仍然允许视觉评审，否则升级会静默改变行为。
+        let database = Database::open_in_memory().expect("database");
+        database.save_settings(&settings()).expect("save");
+        database
+            .connection
+            .lock()
+            .expect("lock")
+            .execute(
+                "DELETE FROM app_settings WHERE key = 'vision_review_enabled'",
+                [],
+            )
+            .expect("delete");
+        assert!(database
+            .load_settings()
+            .expect("load")
+            .expect("settings")
+            .vision_review_enabled);
+    }
+
+    #[test]
+    fn persists_vision_review_disabled() {
+        let database = Database::open_in_memory().expect("database");
+        let disabled = StoredAppSettings {
+            vision_review_enabled: false,
+            ..settings()
+        };
+        database.save_settings(&disabled).expect("save");
+        assert!(!database
+            .load_settings()
+            .expect("load")
+            .expect("settings")
+            .vision_review_enabled);
     }
 
     #[test]

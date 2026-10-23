@@ -19,11 +19,11 @@ import type {
   SupportedImageMimeType,
   TableElementStyle,
   TextElementStyle,
-  iconForText,
 } from "../document-model";
 import {
   createDocument,
   createSlide,
+  iconForText,
   inches,
   parseMetricValue,
   applyTextRun,
@@ -282,6 +282,7 @@ function copyElementForPaste(element: SlideElement, offset: number): SlideElemen
       contentBlockIds: [...element.contentBlockIds],
     };
   if (element.type === "table") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  if (element.type === "icon") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
   return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, source: { ...element.source } };
 }
 
@@ -315,6 +316,7 @@ function cloneElement(element: SlideElement): SlideElement {
       contentBlockIds: [...element.contentBlockIds],
     };
   if (element.type === "table") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
+  if (element.type === "icon") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
   return {
     ...element,
     frame: { ...element.frame },
@@ -449,7 +451,8 @@ export type DocumentCommand =
   | { type: "set-table-style"; slideId: SlideId; elementId: ElementId; style: Partial<TableElementStyle> }
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
-  | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string };
+  | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string }
+  | { type: "set-speaker-notes"; slideId: SlideId; notes: string };
 
 /** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */ function assertTextStyle(
   style: Partial<TextElementStyle>,
@@ -752,8 +755,10 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "move-elements":
       return "design";
     case "edit-text":
+    case "set-speaker-notes":
     case "delete-element": {
-      if (!document) return command.type === "edit-text" ? "content" : "design";
+      if (!document) return command.type === "edit-text" || command.type === "set-speaker-notes" ? "content" : "design";
+      if (command.type === "set-speaker-notes") return "content";
       const slide = document.slides.find((item) => item.id === command.slideId);
       const element = slide?.elements.find((item) => item.id === command.elementId);
       const legacyTitle = element?.type === "text" && !element.contentRef && slide?.elements[0]?.id === element.id;
@@ -2498,7 +2503,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           // anything else keeps the number, which stays the honest default.
           const cardIcon = iconForText(cleanItem);
           if (cardIcon) {
-            const iconSide = 0.2;
+            const iconSide = 0.24;
             slide.elements.push({
               id: crypto.randomUUID() as ElementId,
               type: "icon",
@@ -3156,6 +3161,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
                     frame: { ...element.frame },
                     style: { ...element.style },
                   }
+                : element.type === "icon"
+                ? {
+                    ...element,
+                    id: crypto.randomUUID() as ElementId,
+                    frame: { ...element.frame },
+                    style: { ...element.style },
+                  }
                 : {
                     ...element,
                     id: crypto.randomUUID() as ElementId,
@@ -3617,5 +3629,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         : [];
     }
     if (contentBound) markContentChanged(slide);
+  }
+  if (command.type === "set-speaker-notes") {
+    // 演讲备注是内容：它进 PPTX 的备注页，也进内容哈希。
+    slide.content.speakerNotes = command.notes;
+    markContentChanged(slide);
   }
 }

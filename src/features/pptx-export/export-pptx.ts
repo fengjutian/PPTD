@@ -398,7 +398,7 @@ export async function buildPptx(
         slide.addImage({
           data: iconSvgDataUrl(element.name, element.style.color, element.style.strokeWidth ?? 2),
           ...position,
-          altText: 图标：,
+          altText: "图标：" + element.name,
         });
       } else {
         slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });

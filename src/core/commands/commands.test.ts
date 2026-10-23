@@ -3786,4 +3786,32 @@ describe("手工路径的 AI 配图", () => {
     expect(coverSize("岳阳楼记")).toBe(63);
     expect(coverSize("从洞庭湖到岳阳楼：一篇记文的地理与心事")).toBe(42);
   });
+
+  it("uses an icon for a point that names something the icon set can draw", () => {
+    const source = createDocument();
+    const content = {
+      title: "四条路径",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        {
+          type: "bullet-list" as const,
+          items: ["目标：提升覆盖率", "数据：增长 32%", "知人论世：生平与时代", "贯通整合：形成能力"],
+        },
+      ],
+    };
+    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#2F6B5F", titleColor: "#111111", bodyColor: "#333333" };
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "apply-ai-designed-draft", title: "图标", slides: [content], designs: [design] }),
+    );
+    const icons = result.slides[0]!.elements.filter((element) => element.type === "icon");
+    expect(icons.map((element) => (element.type === "icon" ? element.name : ""))).toEqual(["target", "chart"]);
+    const numbers = result.slides[0]!.elements.filter(
+      (element) => element.type === "text" && /^\d{2}$/.test(element.text),
+    );
+    const numberTexts = numbers.map((element) => (element.type === "text" ? element.text : ""));
+    expect(numberTexts).toContain("03");
+    expect(numberTexts).toContain("04");
+    expect(numberTexts).not.toContain("02");
+  });
 });

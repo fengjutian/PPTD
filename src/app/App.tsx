@@ -108,7 +108,7 @@ import {
   recoveryProjectPath,
   renderPptxTemplateLayouts,
   saveProject,
-  saveRecovery,
+  autoSave,
   writePptx,
   type TemplateAnalysis,
   type TemplateRecord,
@@ -123,7 +123,7 @@ import {
   summarizeQualityIssues,
 } from "../services/design-quality-stage";
 import type { PresentationQualityIssue } from "../services/presentation-quality-gate";
-import { TauriVisionReviewPort } from "../services/vision-review-port";
+import { DisabledVisionReviewPort, TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 import { renderRealPptxForReview } from "../features/pptx-export/render-real-pptx";
@@ -877,21 +877,27 @@ export function App() {
   useEffect(() => {
     if (!dirty || !isDesktopRuntime()) return;
     const timer = window.setTimeout(() => {
-      // The snapshot keeps the pictures of the document. They live in the asset
-      // directory of the project the document belongs to, so the backend needs
-      // that path to carry them into the snapshot.
-      void saveRecovery(document, getImageProjectPath()).then(
-        (report) => {
+      // 项目已经有路径时直接写项目本体，否则只写恢复副本。
+      // 两者的图片都住在项目自己的资源目录里，所以后端要知道源路径。
+      const revisionAtStart = document.revisions.document;
+      void autoSave(document, projectPath, getImageProjectPath()).then(
+        (result) => {
           // 自动保存失败要让用户看见，而不是继续显示"已保存"。
-          if (report && report.missingAssets.length > 0) {
-            setTaskStatus(`自动保存完成，但 ${report.missingAssets.length} 张图片资源缺失，请检查模板`);
+          if (result.report && result.report.missingAssets.length > 0) {
+            setTaskStatus(`自动保存完成，但 ${result.report.missingAssets.length} 张图片资源缺失，请检查模板`);
+          }
+          // 落盘成功才把"已保存"标记推进到这一版。写失败时状态仍是未保存，
+          // 用户才不会以为改动已经安全了。
+          if (result.saved) {
+            setSavedRevision((current) => (current >= revisionAtStart ? current : revisionAtStart));
+            setProjectMtime(Date.now());
           }
         },
         (error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`),
       );
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [dirty, document]);
+  }, [dirty, document, projectPath]);
 
   const handleNew = async () => {
     if (dirty && !window.confirm("当前项目还有未保存的修改，确定新建吗？")) return;
@@ -1910,7 +1916,11 @@ export function App() {
         // 指纹必须来自修复后的真实文档快照。此前这里忽略了 designs，比较的
         // 始终是同一份生成时草稿，内容隔离守卫在生产里从未生效。
         contentFingerprint: (designs) => documentContentFingerprint(buildFinalDocument(designs)),
-        vision: new TauriVisionReviewPort(),
+        // 视觉评审会把页面渲染图发送给模型服务。用户可以在设置里关闭这项
+        // 上传；关闭后只做确定性校验，并在报告里说明。
+        vision: (await loadSettings().catch(() => defaultSettings())).visionReviewEnabled
+          ? new TauriVisionReviewPort()
+          : new DisabledVisionReviewPort(),
         taskId,
         isCancelled: () => designCancelRef.current,
         onProgress: (label, percent) => setDesignProgress({ percent, label }),

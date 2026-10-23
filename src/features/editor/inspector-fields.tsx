@@ -378,3 +378,57 @@ export function TextField({ label, value, maxLength, disabled, onCommit }: TextF
     </label>
   );
 }
+
+interface TextAreaFieldProps {
+  label: string;
+  value: string;
+  placeholder?: string;
+  rows?: number;
+  maxLength?: number;
+  disabled?: boolean;
+  /** Called when the user leaves the field. */
+  onCommit: (value: string) => void;
+}
+
+/**
+ * A multi-line field that commits when the user leaves it.
+ *
+ * The draft is kept locally while the user types, so a re-render from an
+ * unrelated change cannot move the caret mid-sentence. Only leaving the field
+ * commits, which keeps one long note from becoming dozens of undo steps.
+ */
+export function TextAreaField({ label, value, placeholder, rows = 4, maxLength, disabled, onCommit }: TextAreaFieldProps) {
+  const [draft, setDraft] = useState(value);
+  const [dirty, setDirty] = useState(false);
+  const draftRef = useRef(draft);
+
+  useEffect(() => {
+    if (dirty) return;
+    draftRef.current = value;
+    setDraft(value);
+  }, [value, dirty]);
+
+  return (
+    <label className="field field-stacked">
+      <span className="field-label">{label}</span>
+      <span className="field-control">
+        <textarea
+          value={draft}
+          rows={rows}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={(event) => {
+            draftRef.current = event.target.value;
+            setDraft(event.target.value);
+            setDirty(true);
+          }}
+          onBlur={() => {
+            setDirty(false);
+            onCommit(draftRef.current);
+          }}
+        />
+      </span>
+    </label>
+  );
+}

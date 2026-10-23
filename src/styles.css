@@ -3971,6 +3971,38 @@ button {
   color: #8d929b;
   background: #1c1d21;
 }
+.settings-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 15px 0;
+  color: #a8abb2;
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-toggle input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--ppt-accent);
+}
+.settings-toggle span {
+  display: grid;
+  gap: 4px;
+}
+.settings-toggle strong {
+  color: #f1f2f4;
+  font-size: 12px;
+  font-weight: 500;
+}
+.settings-toggle em {
+  color: #767a83;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.55;
+}
 .field-help {
   margin: -3px 0 15px;
   color: #767a83;

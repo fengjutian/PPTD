@@ -317,7 +317,7 @@ export interface IconElementStyle {
  * path data into the renderer.
  */
 export interface IconElement extends ElementBase {
-  type: icon;
+  type: "icon";
   name: BuiltinIconName;
   style: IconElementStyle;
 }

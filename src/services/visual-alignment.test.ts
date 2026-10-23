@@ -104,6 +104,22 @@ describe("visual alignment loop", () => {
       visualRepairPlanSchema.parse({ repairs: [{ slideIndex: 2, layout: "quote", reason: "强化原文" }] }).repairs,
     ).toHaveLength(1);
   });
+
+  it("keeps warnings repairable when only a non-overall score is below target", () => {
+    const goal = defaultPresentationVisualGoal();
+    const result = affectedSlideIndexes(
+      {
+        ...review(92),
+        readabilityScore: 80,
+        issues: [
+          { slideIndex: 3, severity: "warning", issue: "poor-contrast", elementIds: [], suggestion: "提高对比度" },
+        ],
+      },
+      goal.minimumScores,
+    );
+    // overall 已过 85，但 readability 仍低于 88；这个 warning 必须能修。
+    expect(result).toEqual([3]);
+  });
 });
 
 describe("修复计划的规范化", () => {

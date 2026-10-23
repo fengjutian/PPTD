@@ -322,4 +322,22 @@ describe("presentation document schema", () => {
     if (broken.slides[0]!.elements[0]!.type === "text") broken.slides[0]!.elements[0]!.style.letterSpacingPt = 40;
     expect(() => presentationDocumentSchema.parse(broken)).toThrow();
   });
+
+  it("accepts a built-in icon and rejects a name outside the set", () => {
+    const document = createDocument();
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "icon",
+      name: "target",
+      frame: document.slides[0]!.elements[0]!.frame,
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { color: "#2F6B5F" },
+    });
+    expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
+
+    const broken = structuredClone(document);
+    (broken.slides[0]!.elements[1] as { name: string }).name = "skull";
+    expect(() => presentationDocumentSchema.parse(broken)).toThrow();
+  });
 });

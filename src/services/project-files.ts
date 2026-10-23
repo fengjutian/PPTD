@@ -186,6 +186,37 @@ export function saveRecovery(document: PresentationDocument, sourcePath?: string
   return enqueueRecovery(() => invoke<AssetReport>("save_recovery", { document, sourcePath: sourcePath ?? null }));
 }
 
+/**
+ * 自动保存。
+ *
+ * 项目已经有路径时，直接写项目本体：只写恢复副本的话，用户下次打开看到的
+ * 仍是上一次的版本，得自己记得按保存。自动保存存在的意义就是"不用记得"。
+ *
+ * 没有路径时（新项目还没另存过）仍然只写恢复副本——那时无处可写，硬要弹
+ * 保存对话框会把自动保存变成打断用户的东西。
+ *
+ * 走同一个队列：恢复副本和项目本体不能并发写同一批资源文件。
+ */
+export async function autoSave(
+  document: PresentationDocument,
+  projectPath: string | undefined,
+  imagePath: string | undefined,
+): Promise<{ saved: boolean; report?: AssetReport }> {
+  if (!isTauri()) return { saved: false };
+  if (!projectPath) {
+    const report = await saveRecovery(document, imagePath);
+    return { saved: false, report };
+  }
+  const report = await enqueueRecovery(() =>
+    invoke<AssetReport>("save_project", {
+      path: projectPath,
+      document,
+      sourcePath: imagePath ?? null,
+    }),
+  );
+  return { saved: true, report };
+}
+
 export async function loadRecovery(): Promise<StoredDocument | null> {
   if (!isTauri()) return null;
   const raw: unknown = await invoke("load_recovery");

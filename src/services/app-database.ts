@@ -13,6 +13,8 @@ export interface StoredAppSettings {
   uiFont: string;
   aiProviderId: string;
   aiModel: string;
+  /** 是否允许把页面渲染图发送给模型服务。老库没有这个字段时按允许处理。 */
+  visionReviewEnabled?: boolean;
 }
 
 export interface StoredAiHistoryEntry {

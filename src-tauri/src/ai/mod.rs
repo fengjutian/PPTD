@@ -417,6 +417,36 @@ const STREAM_FAILED_ERROR: &str = "AI_STREAM_FAILED";
 /// 发送一次流式对话请求，边收边回调增量片段，最后返回完整正文。
 ///
 /// 与 [`chat`] 的区别只有两点：响应按 SSE 逐块读取，以及每收到一段正文就调用
+/// Decodes the next bytes of a stream without breaking a UTF-8 character.
+///
+/// `response.chunk()` may split a three-byte CJK character in half. Decoding
+/// each chunk on its own with `from_utf8_lossy` turned both halves into U+FFFD
+/// and silently corrupted the generated copy; the remainder is therefore kept
+/// until the next chunk completes it.
+fn decode_stream_chunk(pending: &mut Vec<u8>, chunk: &[u8]) -> String {
+    pending.extend_from_slice(chunk);
+    match std::str::from_utf8(pending) {
+        Ok(text) => {
+            let decoded = text.to_owned();
+            pending.clear();
+            decoded
+        }
+        Err(error) if error.error_len().is_none() => {
+            let valid = error.valid_up_to();
+            let decoded = std::str::from_utf8(&pending[..valid])
+                .unwrap_or_default()
+                .to_owned();
+            pending.drain(..valid);
+            decoded
+        }
+        Err(_) => {
+            let decoded = String::from_utf8_lossy(pending).into_owned();
+            pending.clear();
+            decoded
+        }
+    }
+}
+
 /// `on_delta`。协议层面的失败一律带 `AI_STREAM_FAILED` 前缀，由调用方决定是否
 /// 退回一次性请求。
 pub async fn chat_stream(
@@ -457,6 +487,7 @@ pub async fn chat_stream(
     };
     let mut parser = SseParser::new();
     let mut content = String::new();
+    let mut pending_utf8 = Vec::new();
     loop {
         let chunk = tokio::select! {
             biased;
@@ -466,7 +497,17 @@ pub async fn chat_stream(
         let Some(chunk) = chunk.map_err(|error| format!("{STREAM_FAILED_ERROR}: {error}"))? else {
             break;
         };
-        for delta in parser.push(&String::from_utf8_lossy(&chunk)) {
+        let text = decode_stream_chunk(&mut pending_utf8, &chunk);
+        for delta in parser.push(&text) {
+            content.push_str(&delta);
+            on_delta(&delta);
+        }
+    }
+    if !pending_utf8.is_empty() {
+        // An unfinished character at the end of the stream is a protocol error;
+        // keep the readable part instead of dropping the whole response.
+        let text = String::from_utf8_lossy(&pending_utf8).into_owned();
+        for delta in parser.push(&text) {
             content.push_str(&delta);
             on_delta(&delta);
         }
@@ -629,7 +670,7 @@ async fn download_image(
 
 /// 读取下载好的图片，并检查体积上限。
 async fn read_image_body(
-    response: reqwest::Response,
+    mut response: reqwest::Response,
     cancel: &CancelToken,
 ) -> Result<(Vec<u8>, Option<String>), String> {
     if let Some(length) = response.content_length() {
@@ -640,15 +681,23 @@ async fn read_image_body(
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .map(|value| value.split(';').next().unwrap_or(value).trim().to_string());
-    let bytes = tokio::select! {
-        biased;
-        () = cancel.cancelled() => return Err(REQUEST_CANCELLED_ERROR.into()),
-        result = response.bytes() => result,
+    // Read in chunks so a response without Content-Length cannot force the
+    // whole body into memory before the size check runs.
+    let mut bytes = Vec::new();
+    loop {
+        let chunk = tokio::select! {
+            biased;
+            () = cancel.cancelled() => return Err(REQUEST_CANCELLED_ERROR.into()),
+            result = response.chunk() => result,
+        }
+        .map_err(|error| format!("AI_IMAGE_DOWNLOAD_FAILED: {error}"))?;
+        let Some(chunk) = chunk else {
+            break;
+        };
+        bytes.extend_from_slice(&chunk);
+        ensure_image_size(bytes.len() as u64)?;
     }
-    .map_err(|error| format!("AI_IMAGE_DOWNLOAD_FAILED: {error}"))?;
-    // 响应可能没有声明长度，读完之后还要再查一次。
-    ensure_image_size(bytes.len() as u64)?;
-    Ok((bytes.to_vec(), content_type))
+    Ok((bytes, content_type))
 }
 
 /// 图片体积上限检查。
@@ -772,9 +821,15 @@ async fn materialize_image(
                 Some((mime, payload)) => (mime.or(mime_type), payload.to_string()),
                 None => (mime_type, data),
             };
+            if payload.len() as u64 > (MAX_IMAGE_BYTES as u64).saturating_mul(4) / 3 + 8 {
+                return Err("AI_IMAGE_RESPONSE_INVALID: image is too large".into());
+            }
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(payload.as_bytes())
                 .map_err(|_| "AI_IMAGE_RESPONSE_INVALID: image payload is not valid base64")?;
+            if bytes.len() > MAX_IMAGE_BYTES {
+                return Err("AI_IMAGE_RESPONSE_INVALID: image is too large".into());
+            }
             (bytes, mime)
         }
         ImagePayload::Url { url } => {
@@ -809,6 +864,9 @@ pub async fn generate_image(
 ) -> Result<ImageResult, String> {
     let client = reqwest::Client::builder()
         .timeout(timeout)
+        // 图片地址的域名白名单只校验第一跳。跟随 302 会把请求带到内网或
+        // 未校验的域名，因此这个 client 不自动跟随重定向。
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| format!("AI_CLIENT_FAILED: {error}"))?;
     let fallback_size = match (body.width, body.height) {
@@ -969,6 +1027,20 @@ mod tests {
             resolve_model(provider, Some("bad name".into())).unwrap_err(),
             "AI_MODEL_INVALID"
         );
+    }
+
+    #[test]
+    fn decodes_a_cjk_character_split_across_stream_chunks() {
+        let bytes = "岳阳楼".as_bytes();
+        let mut pending = Vec::new();
+        let mut decoded = String::new();
+        // 3-byte characters split at 2 and 5 bytes: both boundaries fall inside
+        // a UTF-8 sequence.
+        for chunk in [&bytes[..2], &bytes[2..5], &bytes[5..]] {
+            decoded.push_str(&decode_stream_chunk(&mut pending, chunk));
+        }
+        assert_eq!(decoded, "岳阳楼");
+        assert!(pending.is_empty());
     }
 
     /// 图像生成相关测试。

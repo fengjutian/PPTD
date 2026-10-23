@@ -10,6 +10,13 @@ export interface AppSettings {
   uiFont: AppUiFont;
   aiProviderId: string;
   aiModel: string;
+  /**
+   * 是否允许把页面渲染图发送给模型服务做视觉评审。
+   *
+   * 这是一项隐私开关：关闭后生成流程不再上传任何页面渲染图，只做确定性
+   * 排版校验，视觉评分与建议随之不可用。缺省开启，保持既有行为。
+   */
+  visionReviewEnabled: boolean;
 }
 let systemThemeQuery: MediaQueryList | undefined;
 let systemThemeListener: (() => void) | undefined;
@@ -60,7 +67,13 @@ export const UI_FONT_OPTIONS: readonly UiFontOption[] = [
 
 export function defaultSettings(): AppSettings {
   const provider = findAiProvider(DEFAULT_AI_PROVIDER_ID);
-  return { theme: "dark", uiFont: "sans", aiProviderId: provider.id, aiModel: provider.defaultModel };
+  return {
+    theme: "dark",
+    uiFont: "sans",
+    aiProviderId: provider.id,
+    aiModel: provider.defaultModel,
+    visionReviewEnabled: true,
+  };
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -71,7 +84,9 @@ export async function loadSettings(): Promise<AppSettings> {
   const theme = THEMES.includes(stored.theme as AppTheme) ? (stored.theme as AppTheme) : fallback.theme;
   const uiFont = UI_FONTS.includes(stored.uiFont as AppUiFont) ? (stored.uiFont as AppUiFont) : fallback.uiFont;
   const aiModel = provider.models.includes(stored.aiModel) ? stored.aiModel : provider.defaultModel;
-  return { theme, uiFont, aiProviderId: provider.id, aiModel };
+  // 老库没有这个字段：只有显式 false 才关闭，缺省保持允许。
+  const visionReviewEnabled = stored.visionReviewEnabled !== false;
+  return { theme, uiFont, aiProviderId: provider.id, aiModel, visionReviewEnabled };
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
@@ -80,6 +95,7 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
     uiFont: settings.uiFont,
     aiProviderId: settings.aiProviderId,
     aiModel: settings.aiModel,
+    visionReviewEnabled: settings.visionReviewEnabled,
   });
   applyTheme(settings.theme);
   applyUiFont(settings.uiFont);

@@ -8,6 +8,7 @@ function elementLabel(element: SlideElement): string {
   if (element.type === "chart") return "图表";
   if (element.type === "table") return "表格";
   if (element.type === "line") return "线条";
+  if (element.type === "icon") return "图标";
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
@@ -17,6 +18,7 @@ function ElementIcon({ element }: { element: SlideElement }) {
   if (element.type === "chart") return <BarChart3 />;
   if (element.type === "table") return <Table2 />;
   if (element.type === "line") return <Minus />;
+  if (element.type === "icon") return <Circle />;
   return element.shape === "ellipse" ? <Circle /> : <Square />;
 }
 

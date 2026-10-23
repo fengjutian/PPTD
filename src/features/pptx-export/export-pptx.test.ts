@@ -421,4 +421,23 @@ describe("PPTX export", () => {
     expect(xml).toContain('spc="80"');
     expect(xml).toContain('spcPct val="130000"');
   });
+
+  it("writes an icon as an svg picture", async () => {
+    const document = createDocument();
+    document.slides[0]!.content.status = "approved";
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "icon",
+      name: "book",
+      frame: { x: inches(1), y: inches(1), width: inches(1), height: inches(1) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { color: "#2F6B5F", strokeWidth: 2 },
+    });
+    const result = await buildPptx(document);
+    const entries = unzipSync(result.bytes);
+    const media = Object.keys(entries).filter((name) => name.endsWith(".svg"));
+    expect(media.length).toBe(1);
+    expect(strFromU8(entries[media[0]!]!)).toContain("viewBox=\"0 0 24 24\"");
+  });
 });

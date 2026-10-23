@@ -75,13 +75,35 @@ export class UnavailableVisionReviewPort implements VisionReviewPort {
 }
 
 /**
+ * 用户在设置里关闭了视觉评审。
+ *
+ * 这不是失败，而是一项隐私选择：生成流程不允许把页面渲染图发送给模型
+ * 服务。接口保持与正常端口一致，让质检阶段照常降级到确定性校验。
+ */
+export class DisabledVisionReviewPort implements VisionReviewPort {
+  readonly available = false;
+  async review(): Promise<VisualReview> {
+    throw new Error("AI_VISION_DISABLED");
+  }
+  async reviewDeck(): Promise<VisualReview> {
+    throw new Error("AI_VISION_DISABLED");
+  }
+  async planRepairs(): Promise<VisualRepairPlan> {
+    throw new Error("AI_VISION_DISABLED");
+  }
+}
+
+/**
  * The deterministic repair plan.
  *
  * This is the fallback for when the model cannot be asked, or answers with
  * something unusable. It maps the review's issue kinds onto a fixed set of
  * actions, which is why it can only ever say a handful of things.
  */
-export function planRepairsByRule(review: VisualReview, minimumOverall = 85): VisualRepairPlan {
+export function planRepairsByRule(
+  review: VisualReview,
+  minimum: number | PresentationVisualGoal["minimumScores"] = 85,
+): VisualRepairPlan {
   const bySlide = new Map<number, VisualReview["issues"]>();
   review.issues.forEach((issue) => bySlide.set(issue.slideIndex, [...(bySlide.get(issue.slideIndex) ?? []), issue]));
   const guidance = new Map(review.slideGuidance.map((item) => [item.slideIndex, item]));
@@ -90,7 +112,7 @@ export function planRepairsByRule(review: VisualReview, minimumOverall = 85): Vi
   // for every page, so a failed model call ended up re-laying out the whole
   // deck — moving titles and shrinking body text on pages nobody complained
   // about. A page without a finding has nothing to repair here.
-  const repairs = affectedSlideIndexes(review, minimumOverall).flatMap((slideIndex) => {
+  const repairs = affectedSlideIndexes(review, minimum).flatMap((slideIndex) => {
     const issues = bySlide.get(slideIndex) ?? [];
     if (issues.length === 0) return [];
     const guide = guidance.get(slideIndex);
@@ -312,6 +334,6 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     context?: RepairPlanContext,
   ): Promise<VisualRepairPlan> {
     const planned = await this.planRepairsWithModel(review, goal, context);
-    return planned ?? planRepairsByRule(review, goal.minimumScores.overall);
+    return planned ?? planRepairsByRule(review, goal.minimumScores);
   }
 }

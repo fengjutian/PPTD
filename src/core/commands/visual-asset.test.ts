@@ -106,6 +106,8 @@ describe("配图与文字的几何", () => {
   it("通栏图压在文字上方，文字在其下方", () => {
     const layout = planVisualAssetLayout("band", region, pageWidth, pageHeight);
     expect(layout.image.y).toBeCloseTo(region.y, 6);
+    // 4:1 的图应该按内容区宽度铺开，而不是按内容区高度反推出 31% 页宽。
+    expect(layout.image.width).toBeGreaterThan(0.7);
     expect(layout.text.y).toBeGreaterThan(layout.image.y + layout.image.height);
     expect(layout.text.width).toBeCloseTo(region.width, 6);
   });
