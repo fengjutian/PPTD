@@ -664,6 +664,7 @@ export function App() {
   const [saving, setSaving] = useState(false);
   const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>([]);
   const [recentProjectsOpen, setRecentProjectsOpen] = useState(false);
+  const [editorSurface, setEditorSurface] = useState<"projects" | "canvas">("projects");
   const savingRef = useRef(false);
   const [savedRevision, setSavedRevision] = useState(0);
   const [zoom, setZoom] = useState(1);
@@ -1016,6 +1017,7 @@ export function App() {
     setProjectPath(undefined);
     setProjectMtime(undefined);
     setSavedRevision(0);
+    setEditorSurface("canvas");
     setTaskStatus("已新建项目");
   };
 
@@ -1032,6 +1034,7 @@ export function App() {
         setProjectPath(result.path);
         setProjectMtime(result.modifiedAt);
         setSavedRevision(result.document.revisions.document);
+        setEditorSurface("canvas");
         setTaskStatus("PPTD 项目已打开");
         void refreshRecentProjects();
         return;
@@ -1064,6 +1067,7 @@ export function App() {
       setProjectMtime(result.modifiedAt);
       setSavedRevision(result.document.revisions.document);
       setRecentProjectsOpen(false);
+      setEditorSurface("canvas");
       await refreshRecentProjects();
       setTaskStatus("项目已打开");
     } catch (error) {
@@ -1560,6 +1564,7 @@ export function App() {
 
   const changeActiveView = (view: AppView) => {
     if (activeView === "ai" && view !== "ai" && aiUnsavedRef.current) persistAiDraft();
+    if (view === "editor") setEditorSurface("projects");
     setActiveView(view);
   };
 
@@ -2614,6 +2619,7 @@ export function App() {
     const slide = document.slides[slideIndex];
     if (!slide) return;
     setActiveView("editor");
+    setEditorSurface("canvas");
     selectSlide(slide.id);
     const existing = new Set(slide.elements.map((element) => element.id));
     selectElements(elementIds.filter((id): id is ElementId => existing.has(id as ElementId)));
@@ -2720,12 +2726,14 @@ export function App() {
     }
   };
 
+  const editorCanvasOpen = activeView === "editor" && editorSurface === "canvas";
+
   return (
     <div
-      className={`app-shell ${activeView === "editor" ? "" : "module-shell"}`}
+      className={`app-shell ${editorCanvasOpen ? "" : "module-shell"}`}
       style={{ "--inspector-width": `${inspectorWidth}px` } as React.CSSProperties}
     >
-      {activeView === "editor" && (
+      {editorCanvasOpen && (
         <header className="topbar" data-ribbon-tab={editorRibbonTab}>
           <nav className="ribbon-tabs" aria-label="编辑功能区">
             {(
@@ -3284,7 +3292,103 @@ export function App() {
         </button>
       </nav>
 
-      {activeView === "editor" && (
+      {activeView === "editor" && editorSurface === "projects" && (
+        <main className="feature-workspace project-home">
+          <header className="feature-header project-home-header">
+            <div>
+              <LayoutDashboard />
+              <div>
+                <h1>我的演示文稿</h1>
+                <p>继续编辑最近的项目，或创建一份新的演示文稿</p>
+              </div>
+            </div>
+            <div className="project-home-actions">
+              <button type="button" className="secondary-action" onClick={() => void handleOpenOrImport()}>
+                <FileUp />
+                打开项目
+              </button>
+              <button type="button" className="primary-action" onClick={() => void handleNew()}>
+                <FilePlus2 />
+                新建项目
+              </button>
+            </div>
+          </header>
+          <div className="feature-scroll project-home-scroll">
+            {recentProjects.length === 0 ? (
+              <section className="project-home-empty">
+                <LayoutDashboard />
+                <h2>还没有编辑过的演示文稿</h2>
+                <p>保存或打开项目后，它们会以卡片形式显示在这里。</p>
+                <button type="button" className="primary-action" onClick={() => void handleNew()}>
+                  <FilePlus2 />
+                  创建第一份演示文稿
+                </button>
+              </section>
+            ) : (
+              <section className="project-gallery" aria-label="最近编辑的演示文稿">
+                <div className="project-gallery-heading">
+                  <div>
+                    <h2>最近编辑</h2>
+                    <p>上一次编辑的项目已排在最前面</p>
+                  </div>
+                  <span>{recentProjects.length} 个项目</span>
+                </div>
+                <div className="project-card-grid">
+                  {recentProjects.map((entry, index) => (
+                    <article key={entry.path} className={`project-card ${index === 0 ? "featured" : ""}`}>
+                      <button
+                        type="button"
+                        className="project-card-open"
+                        disabled={entry.missing}
+                        title={entry.path}
+                        onClick={() => void handleOpenRecent(entry)}
+                      >
+                        <span className="project-card-preview" aria-hidden="true">
+                          <span>{entry.title.slice(0, 1).toUpperCase()}</span>
+                        </span>
+                        <span className="project-card-copy">
+                          <span className="project-card-title-row">
+                            <strong>{entry.title}</strong>
+                            {index === 0 && !entry.missing && <em>上次编辑</em>}
+                          </span>
+                          <span>{entry.missing ? "文件已移动或删除" : entry.path}</span>
+                          <small>
+                            {entry.missing
+                              ? "请移除此记录后重新打开文件"
+                              : `最后打开 ${new Date(entry.lastOpenedAt).toLocaleString("zh-CN", {
+                                  month: "numeric",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}`}
+                          </small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="project-card-remove"
+                        aria-label={`从首页移除 ${entry.title}`}
+                        title="仅移除记录，不删除项目文件"
+                        onClick={() => {
+                          void removeRecentProject(entry.path)
+                            .then(setRecentProjects)
+                            .catch((error: unknown) =>
+                              setTaskStatus(`移除失败：${error instanceof Error ? error.message : String(error)}`),
+                            );
+                        }}
+                      >
+                        <Trash2 />
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </main>
+      )}
+
+      {editorCanvasOpen && (
         <>
           <aside className="left-panel">
             <div className="panel-heading">
@@ -4608,6 +4712,7 @@ export function App() {
                 onClick={() => {
                   setDesignQualityReport(undefined);
                   setActiveView("editor");
+                  setEditorSurface("canvas");
                 }}
               >
                 进入编辑器调整
@@ -4853,7 +4958,7 @@ export function App() {
         </aside>
       )}
 
-      {activeView === "editor" && designQualityReport && !designQualityReportOpen && (
+      {editorCanvasOpen && designQualityReport && !designQualityReportOpen && (
         <aside className="current-slide-quality-card" aria-label="当前页视觉质检">
           <div>
             <strong>第 {activeSlideIndex + 1} 页质检</strong>
@@ -4887,7 +4992,13 @@ export function App() {
       )}
 
       <footer className="statusbar">
-        {activeView === "ai" ? (
+        {activeView === "editor" && editorSurface === "projects" ? (
+          <>
+            <span>项目首页</span>
+            <span>{recentProjects.length > 0 ? `${recentProjects.length} 个最近项目` : "尚无最近项目"}</span>
+            <span className="saved-dot">● 最近编辑项目优先</span>
+          </>
+        ) : activeView === "ai" ? (
           aiDraft ? (
             <>
               <span>

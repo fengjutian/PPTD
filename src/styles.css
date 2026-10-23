@@ -903,6 +903,229 @@ button {
   place-items: center;
   padding: 0;
 }
+.project-home {
+  background:
+    radial-gradient(circle at 75% 0%, color-mix(in srgb, var(--ppt-accent) 12%, transparent), transparent 34%),
+    #191a1e;
+}
+.project-home-header {
+  min-height: 82px;
+}
+.project-home-actions {
+  display: flex;
+  gap: 10px;
+}
+.project-home-actions button {
+  min-height: 40px;
+}
+.project-home-actions svg,
+.project-home-empty svg {
+  width: 18px;
+  height: 18px;
+}
+.project-home-scroll {
+  padding: 34px clamp(24px, 4vw, 64px) 64px;
+}
+.project-gallery {
+  width: min(1240px, 100%);
+  margin: 0 auto;
+}
+.project-gallery-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+.project-gallery-heading h2,
+.project-gallery-heading p {
+  margin: 0;
+}
+.project-gallery-heading h2 {
+  color: #f3f4f7;
+  font-size: 22px;
+}
+.project-gallery-heading p,
+.project-gallery-heading > span {
+  margin-top: 5px;
+  color: #858a94;
+  font-size: 12px;
+}
+.project-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+}
+.project-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #343740;
+  border-radius: 14px;
+  background: #202227;
+  box-shadow: 0 12px 28px rgb(0 0 0 / 14%);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+.project-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--ppt-accent) 68%, #4a4d56);
+  box-shadow: 0 18px 36px rgb(0 0 0 / 22%);
+}
+.project-card.featured {
+  border-color: color-mix(in srgb, var(--ppt-accent) 72%, #555a66);
+}
+.project-card-open {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.project-card-open:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.project-card-preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--ppt-accent) 82%, #10223d), #163c50 68%, #26313b),
+    #203147;
+}
+.project-card-preview::after {
+  content: "";
+  position: absolute;
+  inset: 16px 16px auto auto;
+  width: 34%;
+  aspect-ratio: 4 / 3;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 12%);
+  box-shadow: -112px 58px 0 -12px rgb(255 255 255 / 8%);
+}
+.project-card-preview > span {
+  color: rgb(255 255 255 / 92%);
+  font-size: 42px;
+  font-weight: 750;
+  text-shadow: 0 4px 16px rgb(0 0 0 / 22%);
+}
+.project-card-copy {
+  display: grid;
+  gap: 7px;
+  padding: 15px 16px 17px;
+}
+.project-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.project-card-title-row strong,
+.project-card-copy > span,
+.project-card-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-card-title-row strong {
+  color: #f0f1f4;
+  font-size: 14px;
+}
+.project-card-title-row em {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--ppt-accent-hover);
+  background: color-mix(in srgb, var(--ppt-accent) 17%, transparent);
+  font-size: 10px;
+  font-style: normal;
+}
+.project-card-copy > span {
+  color: #858a94;
+  font-size: 11px;
+}
+.project-card-copy small {
+  color: #6f747d;
+  font-size: 10px;
+}
+.project-card-remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 7px;
+  color: #f1f2f4;
+  background: rgb(20 22 27 / 72%);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.project-card:hover .project-card-remove,
+.project-card-remove:focus-visible {
+  opacity: 1;
+}
+.project-card-remove svg {
+  width: 14px;
+  height: 14px;
+}
+.project-home-empty {
+  width: min(620px, 100%);
+  margin: 70px auto 0;
+  padding: 52px 32px;
+  border: 1px dashed #3d414a;
+  border-radius: 18px;
+  color: #858a94;
+  background: rgb(32 34 39 / 74%);
+  text-align: center;
+}
+.project-home-empty > svg {
+  width: 38px;
+  height: 38px;
+  color: var(--ppt-accent-hover);
+}
+.project-home-empty h2 {
+  margin: 15px 0 7px;
+  color: #f0f1f4;
+  font-size: 20px;
+}
+.project-home-empty p {
+  margin: 0 0 22px;
+  font-size: 12px;
+}
+:root[data-theme="light"] .project-home {
+  background:
+    radial-gradient(circle at 75% 0%, color-mix(in srgb, var(--ppt-accent) 9%, transparent), transparent 34%),
+    #f5f6f8;
+}
+:root[data-theme="light"] .project-gallery-heading h2,
+:root[data-theme="light"] .project-card-title-row strong,
+:root[data-theme="light"] .project-home-empty h2 {
+  color: #1f2937;
+}
+:root[data-theme="light"] .project-card {
+  border-color: #d8dbe2;
+  background: #fff;
+  box-shadow: 0 10px 26px rgb(36 49 70 / 8%);
+}
+:root[data-theme="light"] .project-card:hover {
+  box-shadow: 0 16px 34px rgb(36 49 70 / 14%);
+}
+:root[data-theme="light"] .project-home-empty {
+  border-color: #d2d6de;
+  background: rgb(255 255 255 / 78%);
+}
 .ai-history > button > svg {
   width: 17px;
   height: 17px;
