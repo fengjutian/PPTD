@@ -67,6 +67,20 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("writes the speaker notes into the notes page of the deck", async () => {
+    const document = createDocument();
+    const slideId = document.slides[0]!.id;
+    applyCommand(document, { type: "set-speaker-notes", slideId, notes: "这一页先讲背景" });
+    const result = await buildPptx(document);
+    const files = unzipSync(result.bytes);
+    // 备注写进 notesSlide，不只是留在文稿里。
+    const notesFile = Object.keys(files).find((name) => name.startsWith("ppt/notesSlides/notesSlide"));
+    expect(notesFile).toBeDefined();
+    const notesXml = strFromU8(files[notesFile!]!);
+    expect(notesXml).toContain("这一页先讲背景");
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("exports a line as a native line object with its arrow heads", async () => {
     const document = createDocument();
     const slideId = document.slides[0]!.id;
@@ -363,11 +377,46 @@ describe("PPTX export", () => {
     expect(slideXml).toContain("项目");
     expect(slideXml).toContain("380000");
     expect(slideXml).toContain("120000");
+    // Rows fill the element frame exactly instead of being clamped to 0.2–0.6in.
+    const rowHeights = [...slideXml.matchAll(/<a:tr h="(\d+)"/g)].map((match) => Number(match[1]));
+    expect(rowHeights).toHaveLength(3);
+    expect(rowHeights.reduce((sum, height) => sum + height, 0)).toBe(inches(3));
     // The figure column is right-aligned and the alternate row carries the band.
     expect(slideXml).toContain('algn="r"');
     expect(slideXml.toUpperCase()).toContain("F3F5F7");
     expect(result.report.nativeTableCount).toBe(1);
     expect(result.report.package.valid).toBe(true);
+  });
+
+  it("refuses a table whose row is wider than its header", async () => {
+    const document = createDocument();
+    document.slides[0]!.content.status = "approved";
+    const block = {
+      id: crypto.randomUUID(),
+      type: "table-data" as const,
+      header: ["项目", "数量"],
+      rows: [["样本量", "380000", "多出来的一列"]],
+    };
+    document.slides[0]!.content.blocks = [block];
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "table",
+      contentBlockId: block.id,
+      frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(3) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        headerFill: "#3366CC",
+        headerTextColor: "#FFFFFF",
+        bodyTextColor: "#17181c",
+        borderColor: "#E2E7EC",
+        firstColumnBold: true,
+      },
+    });
+    // 多出来的单元格不能静默消失；导出前就拒绝，让用户去补表头或删列。
+    await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
   });
 
   it("writes an emphasised text as real runs so the emphasis stays editable", async () => {
@@ -385,6 +434,21 @@ describe("PPTX export", () => {
     expect(slideXml).toContain("覆盖机构");
     expect(slideXml).toContain("：12万");
     expect(result.report.package.valid).toBe(true);
+  });
+
+  it("keeps a non-bold run inside a bold text element non-bold", async () => {
+    const document = createDocument();
+    document.slides[0]!.content.status = "approved";
+    const title = document.slides[0]!.elements[0]!;
+    if (title.type !== "text") throw new Error("expected a text element");
+    title.text = "普通加粗";
+    title.style = { ...title.style, bold: true };
+    title.runs = [{ start: 0, end: 2, bold: false }];
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    // Only the explicitly bold run carries b="1"; the first run must not
+    // inherit the element-level bold.
+    expect((slideXml.match(/b="1"/g) ?? []).length).toBe(1);
   });
 
   it("refuses to export a table whose cells are gone", async () => {
