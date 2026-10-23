@@ -759,6 +759,10 @@ export function App() {
   const documentRef = useRef(document);
   const dirtyRef = useRef(dirty);
   const projectPathRef = useRef(projectPath);
+  // The first close request is paused while pending snapshots are flushed.
+  // Calling `close()` afterwards emits a second request; this flag lets that
+  // request pass through instead of trapping the window in a close loop.
+  const closeAfterFlushRef = useRef(false);
   documentRef.current = document;
   dirtyRef.current = dirty;
   projectPathRef.current = projectPath;
@@ -1494,6 +1498,7 @@ export function App() {
       void import("@tauri-apps/api/window")
         .then(async ({ getCurrentWindow }) => {
           const stop = await getCurrentWindow().onCloseRequested(async (event) => {
+            if (closeAfterFlushRef.current) return;
             if (!aiUnsavedRef.current && !dirtyRef.current) return;
             event.preventDefault();
             if (aiUnsavedRef.current) await flush();
@@ -1507,7 +1512,20 @@ export function App() {
                 // by the autosave status when the app is still open.
               }
             }
-            await getCurrentWindow().destroy();
+            try {
+              closeAfterFlushRef.current = true;
+              // `destroy()` requires a broader capability and bypasses the
+              // normal close lifecycle. `close()` emits one more close request,
+              // which the flag above deliberately lets through.
+              await getCurrentWindow().close();
+            } catch (error) {
+              closeAfterFlushRef.current = false;
+              setMessage({
+                id: Date.now(),
+                text: `关闭窗口失败：${error instanceof Error ? error.message : String(error)}`,
+                kind: "error",
+              });
+            }
           });
           if (disposed) stop();
           else unlisten = stop;
@@ -1860,8 +1878,21 @@ export function App() {
       ? `正在生成正文（已写 ${aiStreamProgress.pages} 页）`
       : (aiProgress?.label ?? "");
 
+  // Once the draft exists it is the reviewed source of truth. `aiTopic` is an
+  // input-field state and may already have been cleared or replaced when the
+  // user reaches the theme step; using it produced "青编" for a 岳阳楼记 deck.
+  const recommendedThemePresetId = inferThemePresetId(aiDraft?.title.trim() || aiTopic.trim());
+  const recommendedThemePreset = findThemePreset(recommendedThemePresetId) ?? defaultThemePreset();
+
   const continueToTheme = () => {
     if (!aiDraft) return;
+    // Make the recommendation an actual default selection. The user can still
+    // choose an uploaded template or another preset before generation.
+    setThemePresetId((current) => current || recommendedThemePreset.id);
+    setSelectedTemplate(undefined);
+    setTemplatePreview(undefined);
+    setTemplateAnalysis(undefined);
+    setTemplateLayoutRenders([]);
     setTemplatePickerOpen(true);
   };
 
@@ -1870,7 +1901,7 @@ export function App() {
     if (mode === "template" && (!selectedTemplate || !templateAnalysis)) return;
     const preset =
       mode === "preset"
-        ? (findThemePreset(themePresetId || inferThemePresetId(aiTopic)) ?? defaultThemePreset())
+        ? (findThemePreset(themePresetId || recommendedThemePreset.id) ?? defaultThemePreset())
         : undefined;
     const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
     const deckName = preset ? preset.name : selectedTemplate!.name;
@@ -3178,7 +3209,11 @@ export function App() {
             </div>
             <div className="template-picker-toolbar">
               <strong>主题来源</strong>
-              <span>{themePresetId ? `内置 · ${findThemePreset(themePresetId)?.name ?? "主题"}` : "已上传 PPT"}</span>
+              <span>
+                {themePresetId
+                  ? `内置 · ${findThemePreset(themePresetId)?.name ?? "主题"}${themePresetId === recommendedThemePreset.id ? "（内容匹配）" : ""}`
+                  : "已上传 PPT"}
+              </span>
               <button
                 type="button"
                 className="secondary-action"
@@ -3278,7 +3313,7 @@ export function App() {
                 disabled={designBusy || templatePreviewBusy}
                 onClick={() => void generateFromDraft("preset")}
               >
-                使用内置主题{themePresetId ? ` · ${findThemePreset(themePresetId)?.name ?? ""}` : ""}
+                使用内置主题 · {findThemePreset(themePresetId)?.name ?? recommendedThemePreset.name}
               </button>
               <button
                 type="button"
