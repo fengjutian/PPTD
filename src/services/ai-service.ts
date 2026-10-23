@@ -842,8 +842,8 @@ const slideRewriteSchema = z.object({
 });
 const slideRewriteResponseSchema = z.object({ slide: slideRewriteSchema });
 
-/** 重写一页需要的事实：它是什么页、现在写了什么、用户想怎么改。 */
-export interface SlideRewriteInput {
+/** 审核页所有"针对这一页"的 AI 请求共用的上下文。 */
+export interface SlideAiContext {
   topic: string;
   deckTitle: string;
   /** 整册页面标题，按顺序。模型据此避免与相邻页重复。 */
@@ -856,9 +856,15 @@ export interface SlideRewriteInput {
     plan: AiDraft["slides"][number]["plan"];
     blocks: ContentBlock[];
   };
+  taskId?: number;
+}
+
+/** 整页重写输入：在页面上下文上再加一句可选的改写要求。 */
+export interface SlideRewriteInput extends SlideAiContext {
   /** 用户的改写要求，可空。 */
   instruction?: string;
-  taskId?: number;
+  /** 排版预检的结论；有告警时重写要把页面压回容量内。 */
+  capacityNotes?: string[];
 }
 
 export interface SlideRewriteSuggestion {
@@ -904,6 +910,138 @@ export async function rewritePresentationSlide(input: SlideRewriteInput): Promis
   const raw = await invoke<unknown>("rewrite_presentation_slide", { request: { ...input, model, provider } });
   const parsed = parseAiResponse(slideRewriteResponseSchema, raw, "本页重写结果");
   return normalizeSlideRewrite(parsed.slide);
+}
+
+/** 审核页所有"针对这一页"的 AI 请求共用的上下文。 */
+export interface SlideAiContext {
+  topic: string;
+  deckTitle: string;
+  /** 整册页面标题，按顺序。 */
+  outline: string[];
+  slideIndex: number;
+  slide: {
+    title: string;
+    body: string;
+    speakerNotes: string;
+    plan: AiDraft["slides"][number]["plan"];
+    blocks: ContentBlock[];
+  };
+  taskId?: number;
+}
+
+const slideTitlesSchema = z.object({
+  titles: z.array(z.string().trim().min(1).max(200)).min(1).max(5),
+});
+
+/**
+ * 给这一页拟几个候选标题。
+ *
+ * 当前标题和重复项会被剔掉：换标题的动作里，和原来一样的候选没有意义。
+ */
+export async function suggestSlideTitles(input: SlideAiContext & { count?: number }): Promise<string[]> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("suggest_slide_titles", { request: { ...input, model, provider } });
+  const parsed = parseAiResponse(slideTitlesSchema, raw, "标题候选");
+  const current = input.slide.title.trim();
+  const titles = [...new Set(parsed.titles.map((title) => title.trim()).filter((title) => title && title !== current))];
+  if (titles.length === 0) throw new Error("AI_TITLES_EMPTY");
+  return titles.slice(0, 5);
+}
+
+const speakerNotesResponseSchema = z.object({ speakerNotes: z.string().max(4000) });
+
+/**
+ * 只写这一页的演讲备注，不动已审核的正文。
+ *
+ * 备注可以单独重来：正文审核完不想再动，是审核页上很常见的一种状态。
+ */
+export async function writeSpeakerNotes(input: SlideAiContext): Promise<string> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("write_speaker_notes", { request: { ...input, model, provider } });
+  const parsed = parseAiResponse(speakerNotesResponseSchema, raw, "演讲备注");
+  const notes = parsed.speakerNotes.trim();
+  if (!notes) throw new Error("AI_NOTES_EMPTY");
+  return notes;
+}
+
+const splitPageSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  body: z.string().max(4000).default(""),
+  speakerNotes: z.string().max(4000).default(""),
+  plan: slidePlanSchema.default(legacySlidePlan),
+  blocks: z.array(contentBlockSchema).max(20).default([]),
+});
+const splitSlideResponseSchema = z.object({ pages: z.array(splitPageSchema).length(2) });
+
+export type SplitSlidePage = z.infer<typeof splitPageSchema>;
+
+/**
+ * 把一页拆成两页。
+ *
+ * 两页都必须有内容块，否则拆出来的是"有标题没内容"的空页；两页标题也不能相同，
+ * 否则大纲里会出现两个一样的页面。两种情况都按失败处理，让用户重试。
+ */
+export async function splitSlideContent(input: SlideAiContext & { capacityNotes?: string[] }): Promise<SplitSlidePage[]> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("split_slide_content", { request: { ...input, model, provider } });
+  const parsed = parseAiResponse(splitSlideResponseSchema, raw, "拆页结果");
+  const pages = parsed.pages.map((page) => {
+    const blocks = sanitizeBlocks(page.blocks);
+    if (blocks.length === 0) throw new Error("AI_SPLIT_EMPTY");
+    return {
+      ...page,
+      title: page.title.trim(),
+      body: bodyFromBlocks(blocks),
+      speakerNotes: page.speakerNotes.trim(),
+      blocks,
+    };
+  });
+  if (pages[0]!.title === pages[1]!.title) throw new Error("AI_SPLIT_TITLE_DUPLICATE");
+  return pages;
+}
+
+const deckReviewIssueSchema = z.object({
+  slideIndex: z.number().int().min(0),
+  severity: z.enum(["error", "warning"]),
+  kind: z.enum([
+    "duplicate",
+    "title-body-mismatch",
+    "broken-flow",
+    "overloaded",
+    "missing-conclusion",
+    "unclear",
+  ]),
+  message: z.string().trim().min(1).max(300),
+});
+const deckReviewResponseSchema = z.object({ issues: z.array(deckReviewIssueSchema).max(20) });
+
+export type DeckReviewIssue = z.infer<typeof deckReviewIssueSchema>;
+
+/**
+ * 整册语义审稿：只出问题清单，不改任何文字。
+ *
+ * 越界页码和重复条目在这里剔掉：模型偶尔会把页码数错，或把同一条问题
+ * 写成两遍，界面不该为此出现点不动的条目。
+ */
+export async function reviewDeckContent(input: {
+  deckTitle: string;
+  presentationBrief: AiDraft["presentationBrief"];
+  slides: Array<Pick<AiDraft["slides"][number], "title" | "body" | "speakerNotes">>;
+  taskId?: number;
+}): Promise<DeckReviewIssue[]> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("review_deck_content", { request: { ...input, model, provider } });
+  const parsed = parseAiResponse(deckReviewResponseSchema, raw, "内容审稿结果");
+  const seen = new Set<string>();
+  return parsed.issues
+    .filter((issue) => issue.slideIndex < input.slides.length)
+    .filter((issue) => {
+      const key = `${issue.slideIndex}:${issue.kind}:${issue.message}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 12);
 }
 
 export async function generateSlideBriefs(draft: AiDraft, taskId?: number): Promise<SlideBrief[]> {
