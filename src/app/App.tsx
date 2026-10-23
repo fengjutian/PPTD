@@ -42,6 +42,7 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EMU_PER_INCH,
+  createDocument,
   emu,
   type ElementId,
   type DocumentId,
@@ -1660,6 +1661,41 @@ export function App() {
     setAiDraft(draft);
     selectAiDraftSlide(0);
     setAiSaveState("saved");
+  };
+
+  const openAiPresentation = (entry: AiHistoryEntry) => {
+    const matchesOpenDocument =
+      document.title === entry.draft.title &&
+      document.slides.length === entry.draft.slides.length &&
+      document.slides.every((slide, index) => {
+        const draftSlide = entry.draft.slides[index];
+        return (
+          draftSlide !== undefined &&
+          slide.content.title === draftSlide.title &&
+          slide.content.body === draftSlide.body &&
+          slide.content.speakerNotes === draftSlide.speakerNotes
+        );
+      });
+
+    if (!matchesOpenDocument) {
+      if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开这份 AI 文稿吗？")) return;
+      const generatedDocument = createDocument();
+      applyCommand(generatedDocument, {
+        type: "apply-ai-draft",
+        title: entry.draft.title,
+        slides: entry.draft.slides,
+      });
+      loadDocument(generatedDocument);
+      setProjectPath(undefined);
+      setProjectMtime(undefined);
+      setSavedRevision(generatedDocument.revisions.document);
+    } else {
+      selectSlide(document.slides[0]!.id);
+    }
+
+    setActiveView("editor");
+    setEditorSurface("canvas");
+    setTaskStatus("AI 文稿已打开，可继续编辑");
   };
 
   const selectAiDraftSlide = (index: number) => {
@@ -3347,10 +3383,7 @@ export function App() {
                             type="button"
                             className="project-card-open"
                             title={entry.topic}
-                            onClick={() => {
-                              openAiHistory(entry);
-                              setActiveView("ai");
-                            }}
+                            onClick={() => openAiPresentation(entry)}
                           >
                             <span className="project-card-preview ai" aria-hidden="true">
                               <span className="project-card-preview-brand">
