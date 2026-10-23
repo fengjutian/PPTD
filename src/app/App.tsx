@@ -3353,8 +3353,12 @@ export function App() {
                             }}
                           >
                             <span className="project-card-preview ai" aria-hidden="true">
-                              <Sparkles />
-                              <span>AI</span>
+                              <span className="project-card-preview-brand">
+                                <Sparkles />
+                                AI 生成
+                              </span>
+                              <strong>{entry.draft.title}</strong>
+                              <small>{entry.slideCount} 页演示文稿</small>
                             </span>
                             <span className="project-card-copy">
                               <span className="project-card-title-row">

@@ -923,11 +923,11 @@ button {
   height: 18px;
 }
 .project-home-scroll {
-  padding: 34px clamp(24px, 4vw, 64px) 64px;
+  padding: 20px;
 }
 .project-gallery {
-  width: min(1240px, 100%);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
 }
 .project-gallery-heading {
   display: flex;
@@ -952,8 +952,8 @@ button {
 }
 .project-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 320px));
+  gap: 20px;
 }
 .project-card {
   position: relative;
@@ -1015,27 +1015,58 @@ button {
   text-shadow: 0 4px 16px rgb(0 0 0 / 22%);
 }
 .project-card-preview.ai {
-  display: flex;
-  flex-direction: column;
+  align-content: end;
+  justify-items: start;
   gap: 7px;
-  background: linear-gradient(135deg, #1d4f91, #315ea8 58%, #647eb7);
+  padding: 18px;
+  background:
+    radial-gradient(circle at 84% 20%, rgb(255 255 255 / 18%), transparent 27%),
+    linear-gradient(145deg, #183f78 0%, #2d5da4 54%, #718bc0 100%);
 }
 .project-card-preview.ai::after {
-  display: none;
+  inset: 18px 18px auto auto;
+  width: 30%;
+  border: 1px solid rgb(255 255 255 / 18%);
+  background: rgb(255 255 255 / 7%);
+  box-shadow:
+    -126px 42px 0 -19px rgb(255 255 255 / 12%),
+    -126px 67px 0 -19px rgb(255 255 255 / 9%);
 }
-.project-card-preview.ai > svg {
-  width: 28px;
-  height: 28px;
+.project-card-preview > .project-card-preview-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 999px;
   color: rgb(255 255 255 / 88%);
+  background: rgb(14 37 72 / 22%);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-shadow: none;
 }
-.project-card-preview.ai > span {
-  font-size: 30px;
-  letter-spacing: 0.08em;
+.project-card-preview-brand > svg {
+  width: 13px;
+  height: 13px;
+}
+.project-card-preview.ai > strong {
+  width: min(78%, 220px);
+  overflow: hidden;
+  color: #fff;
+  font-size: 17px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-card-preview.ai > small {
+  color: rgb(255 255 255 / 68%);
+  font-size: 10px;
 }
 .project-card-copy {
   display: grid;
   gap: 7px;
-  padding: 15px 16px 17px;
+  padding: 14px 16px 16px;
 }
 .project-card-title-row {
   display: flex;
