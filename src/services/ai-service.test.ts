@@ -583,6 +583,21 @@ describe("多页草稿的分批编排", () => {
     );
   });
 
+  it("报告生成失败的具体阶段和字段，而不是只说格式错误", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "generate_presentation_outline") {
+        return {
+          title: "销售分析",
+          pages: [{ index: 0, title: "销售保持增长" }],
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const error = await generatePresentationDraft("销售分析", 10).catch((reason: unknown) => reason);
+    expect(describeAiError(error)).toBe("AI 返回的演示大纲未通过校验：pages.0.purpose 缺少必填字段");
+  });
+
   it("页数不多时保持一次请求，不额外调用大纲", async () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "generate_presentation") {

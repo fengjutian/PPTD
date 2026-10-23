@@ -549,6 +549,14 @@ async function aiSelection(): Promise<{ provider: string; model: string }> {
 
 export function describeAiError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
+  if (detail.startsWith("AI_RESPONSE_SCHEMA_INVALID:")) {
+    const [, stage = "生成结果", path = "未知字段", reason = "字段值无效"] = detail.split(":");
+    return `AI 返回的${stage}未通过校验：${path} ${reason}`;
+  }
+  if (detail.includes("AI_OUTLINE_PAGE_COUNT_MISMATCH")) return "AI 返回的大纲页数与请求页数不一致，请重新生成";
+  if (detail.includes("AI_OUTLINE_PAGE_INDEX_INVALID")) return "AI 返回的大纲页码不连续，请重新生成";
+  if (detail.includes("AI_BATCH_SLIDE_COUNT_MISMATCH")) return "AI 返回的正文页数与大纲不一致，请重新生成";
+  if (detail.includes("AI_SLIDE_COUNT_MISMATCH")) return "AI 返回的草稿页数与请求页数不一致，请重新生成";
   if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED"))
     return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
   if (detail.includes("AI_VISION_REVIEW_FAILED"))
@@ -636,6 +644,15 @@ const SINGLE_CALL_PAGE_LIMIT = 6;
 /** 单批页数。批越小单次输出越短，越不容易触发服务端超时。 */
 const BATCH_PAGE_COUNT = 5;
 
+function parseAiResponse<Schema extends z.ZodTypeAny>(schema: Schema, raw: unknown, stage: string): z.output<Schema> {
+  const parsed = schema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  const path = issue?.path.length ? issue.path.join(".") : "根对象";
+  const reason = issue?.code === "invalid_type" && issue.received === "undefined" ? "缺少必填字段" : "字段值无效";
+  throw new Error(`AI_RESPONSE_SCHEMA_INVALID:${stage}:${path}:${reason}`);
+}
+
 function assertNotCancelled(options: AiGenerationOptions): void {
   if (options.isCancelled?.()) throw new Error("AI_GENERATION_CANCELLED");
 }
@@ -658,7 +675,7 @@ export async function generatePresentationDraft(
     const raw = await invoke<unknown>("generate_presentation", {
       request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true },
     });
-    const draft = aiDraftSchema.parse(raw);
+    const draft = parseAiResponse(aiDraftSchema, raw, "完整草稿");
     if (draft.slides.length !== slideCount) throw new Error("AI_SLIDE_COUNT_MISMATCH");
     options.onProgress?.({ stage: "content", completed: 1, total: 1, label: "草稿已生成" });
     // 标点在这里收拾：模型刚写完、用户还没看到的时候。
@@ -669,7 +686,7 @@ export async function generatePresentationDraft(
   const outlineRaw = await invoke<unknown>("generate_presentation_outline", {
     request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true },
   });
-  const parsedOutline = aiOutlineSchema.parse(outlineRaw);
+  const parsedOutline = parseAiResponse(aiOutlineSchema, outlineRaw, "演示大纲");
   if (parsedOutline.pages.length !== slideCount) throw new Error("AI_OUTLINE_PAGE_COUNT_MISMATCH");
   // Pages may come back shuffled. Batches are sliced by position, so an
   // unordered outline would put one page's body under another page's title.
@@ -706,7 +723,7 @@ export async function generatePresentationDraft(
             streamProgress: true,
           },
         });
-        const parsed = aiSlideBatchSchema.parse(raw);
+        const parsed = parseAiResponse(aiSlideBatchSchema, raw, `第 ${batch.startIndex + 1} 页起的正文批次`);
         if (parsed.slides.length !== batch.count) throw new Error("AI_BATCH_SLIDE_COUNT_MISMATCH");
         completed += 1;
         options.onProgress?.({

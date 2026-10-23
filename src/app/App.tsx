@@ -102,6 +102,7 @@ import {
   type AiVisualAssetIntent,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
+import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
 import {
   analyzePptxTemplate,
   choosePresentationFile,
@@ -1350,7 +1351,7 @@ export function App() {
     setAiContentHistoryRevision((value) => value + 1);
     setAiProgress({ stage: "outline", completed: 0, total: 1, label: "正在准备生成…" });
     setAiStreamProgress(undefined);
-    if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
+    void prepareSystemNotifications();
     let unlisten: (() => void) | undefined;
     try {
       // 正文分批并行，各批的进度要按请求标识汇总，不能直接相加。
@@ -1387,15 +1388,13 @@ export function App() {
       } catch (error) {
         setTaskStatus(`AI 草稿已生成，但历史保存失败：${error instanceof Error ? error.message : String(error)}`);
       }
-      if ("Notification" in window && Notification.permission === "granted")
-        new Notification("PPTD · AI 生成完成", { body: `${draft.title}（${draft.slides.length} 页）` });
+      void notifySystem({ title: "PPTD · AI 生成完成", body: `${draft.title}（${draft.slides.length} 页）` });
     } catch (error) {
       if (requestId !== aiRequestId.current) return;
       const detail = describeAiError(error);
       setAgentWorkflow((state) => transitionAgentWorkflow(state, "failed", { error: detail }));
       setTaskStatus(`AI 内容生成失败：${detail}`);
-      if ("Notification" in window && Notification.permission === "granted")
-        new Notification("PPTD · AI 生成失败", { body: detail });
+      void notifySystem({ title: "PPTD · AI 生成失败", body: detail });
     } finally {
       unlisten?.();
       void endAiGeneration(taskId).catch(() => undefined);
@@ -4451,7 +4450,9 @@ export function App() {
                   复检整册
                 </button>
                 {manualReviewBusy && (
-                  <button type="button" className="danger" onClick={cancelManualReview}>停止复检</button>
+                  <button type="button" className="danger" onClick={cancelManualReview}>
+                    停止复检
+                  </button>
                 )}
               </div>
               {manualReviewBusy && <small>正在导出真实 PPTX、检查指定页面并刷新整册总览…</small>}
@@ -4629,10 +4630,19 @@ export function App() {
       )}
 
       {exportPreflightOpen && !exportBusy && (
-        <div className="upload-dialog-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setExportPreflightOpen(false);
-        }}>
-          <section className="upload-dialog export-preflight-dialog" role="dialog" aria-modal="true" aria-labelledby="export-preflight-title">
+        <div
+          className="upload-dialog-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setExportPreflightOpen(false);
+          }}
+        >
+          <section
+            className="upload-dialog export-preflight-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-preflight-title"
+          >
             <div className="upload-dialog-heading">
               <div>
                 <Download />
@@ -4641,34 +4651,77 @@ export function App() {
                   <p>本次导出将读取当前不可变文档快照，不会修改项目或撤销栈。</p>
                 </div>
               </div>
-              <button type="button" aria-label="关闭导出前摘要" onClick={() => setExportPreflightOpen(false)}><X /></button>
+              <button type="button" aria-label="关闭导出前摘要" onClick={() => setExportPreflightOpen(false)}>
+                <X />
+              </button>
             </div>
             <dl className="export-preflight-summary">
-              <div><dt>文档版本</dt><dd>{revisionLabel}</dd></div>
-              <div><dt>内容审核</dt><dd>{document.slides.filter((slide) => slide.content.status === "approved").length}/{document.slides.length} 页已确认</dd></div>
-              <div><dt>视觉覆盖</dt><dd>{designQualityReport?.visualReviewCoverage ? `${designQualityReport.visualReviewCoverage.reviewed}/${designQualityReport.visualReviewCoverage.total} 页` : "未执行"}</dd></div>
-              <div><dt>待复检页面</dt><dd>{qualityStaleIndexes.length} 页</dd></div>
-              <div><dt>视觉问题</dt><dd>{designQualityReport?.visualReview?.issues.length ?? 0} 条</dd></div>
-              <div><dt>确定性问题</dt><dd>{designQualityReport?.issues.length ?? 0} 条</dd></div>
+              <div>
+                <dt>文档版本</dt>
+                <dd>{revisionLabel}</dd>
+              </div>
+              <div>
+                <dt>内容审核</dt>
+                <dd>
+                  {document.slides.filter((slide) => slide.content.status === "approved").length}/
+                  {document.slides.length} 页已确认
+                </dd>
+              </div>
+              <div>
+                <dt>视觉覆盖</dt>
+                <dd>
+                  {designQualityReport?.visualReviewCoverage
+                    ? `${designQualityReport.visualReviewCoverage.reviewed}/${designQualityReport.visualReviewCoverage.total} 页`
+                    : "未执行"}
+                </dd>
+              </div>
+              <div>
+                <dt>待复检页面</dt>
+                <dd>{qualityStaleIndexes.length} 页</dd>
+              </div>
+              <div>
+                <dt>视觉问题</dt>
+                <dd>{designQualityReport?.visualReview?.issues.length ?? 0} 条</dd>
+              </div>
+              <div>
+                <dt>确定性问题</dt>
+                <dd>{designQualityReport?.issues.length ?? 0} 条</dd>
+              </div>
             </dl>
             {qualityStaleIndexes.length > 0 && (
-              <p className="design-quality-warning">有 {qualityStaleIndexes.length} 页在上次视觉评审后发生变化。可以继续导出，但建议先复检变化页。</p>
+              <p className="design-quality-warning">
+                有 {qualityStaleIndexes.length} 页在上次视觉评审后发生变化。可以继续导出，但建议先复检变化页。
+              </p>
             )}
             {!designQualityReport?.visualReview && (
               <p className="design-quality-warning">当前没有可追溯的视觉评审结论；导出仍会执行字体、越界和结构预检。</p>
             )}
             <div className="upload-dialog-actions">
-              <button type="button" className="secondary-action" onClick={() => setExportPreflightOpen(false)}>返回编辑</button>
+              <button type="button" className="secondary-action" onClick={() => setExportPreflightOpen(false)}>
+                返回编辑
+              </button>
               {designQualityReport && qualityStaleIndexes.length > 0 && (
-                <button type="button" className="secondary-action" onClick={() => {
-                  setExportPreflightOpen(false);
-                  setDesignQualityReportOpen(true);
-                }}>先复检变化页</button>
+                <button
+                  type="button"
+                  className="secondary-action"
+                  onClick={() => {
+                    setExportPreflightOpen(false);
+                    setDesignQualityReportOpen(true);
+                  }}
+                >
+                  先复检变化页
+                </button>
               )}
-              <button type="button" className="primary-action" onClick={() => {
-                setExportPreflightOpen(false);
-                void handleExport();
-              }}>继续导出 PPTX</button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => {
+                  setExportPreflightOpen(false);
+                  void handleExport();
+                }}
+              >
+                继续导出 PPTX
+              </button>
             </div>
           </section>
         </div>
@@ -4834,8 +4887,12 @@ export function App() {
                 : "本页没有未解决的视觉建议。"}
           </p>
           <div>
-            <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("current")}>复检本页</button>
-            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>查看整册报告</button>
+            <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("current")}>
+              复检本页
+            </button>
+            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>
+              查看整册报告
+            </button>
           </div>
         </aside>
       )}
