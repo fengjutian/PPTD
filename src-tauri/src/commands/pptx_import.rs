@@ -1,4 +1,4 @@
-//! Level A PPTX content import.
+﻿//! Level A PPTX content import.
 //!
 //! The template importer only reads a deck's design language. This module reads
 //! the page content itself: page size and order, text, pictures, basic shapes,
@@ -875,7 +875,7 @@ fn parse_shape(
         .unwrap_or_else(|| "#000000".into());
     let stroke_width = descendant(shape, "ln")
         .and_then(|line| parse_i64(line, "w"))
-        .map(|value| value as f64 / 12_700.0)
+        .map(|value| (value as f64 / 12_700.0).clamp(0.0, 100.0))
         .unwrap_or(1.0);
     if is_line {
         let direction = if frame.height <= 20_000 {
@@ -938,7 +938,7 @@ fn parse_connector(
         .unwrap_or_else(|| "#000000".into());
     let width = descendant(shape, "ln")
         .and_then(|line| parse_i64(line, "w"))
-        .map(|value| value as f64 / 12_700.0)
+        .map(|value| (value as f64 / 12_700.0).clamp(0.0, 100.0))
         .unwrap_or(1.0);
     let direction = if frame.height <= 20_000 {
         "horizontal"
@@ -1001,7 +1001,10 @@ fn parse_text_body(
                     .attribute("val")
                     .and_then(|value| value.parse::<f64>().ok())
                 {
-                    line_height = Some(value / 100_000.0);
+                    let multiple = value / 100_000.0;
+                    if (0.5..=3.0).contains(&multiple) {
+                        line_height = Some(multiple);
+                    }
                 }
             }
         }
@@ -1047,7 +1050,7 @@ fn parse_text_body(
                         if let Some(value) = run_style.font_family {
                             current.font_family = value;
                         }
-                        if bold || explicit_color || underline {
+                        if (bold || explicit_color || underline) && runs.len() < 200 {
                             runs.push(ImportedRun {
                                 start,
                                 end,
@@ -1098,7 +1101,7 @@ fn parse_run_style(props: Node<'_, '_>, theme: &Option<ImportedTheme>) -> RunSty
         font_size_pt: props
             .attribute("sz")
             .and_then(|value| value.parse::<f64>().ok())
-            .map(|value| value / 100.0),
+            .map(|value| (value / 100.0).clamp(1.0, 400.0)),
         font_family: descendant(props, "latin")
             .and_then(|node| node.attribute("typeface"))
             .map(str::to_string),
@@ -1561,6 +1564,44 @@ mod tests {
             validate_archive(&mut archive),
             Err("PPTX_ARCHIVE_ENTRY_PATH_INVALID".into())
         );
+    }
+
+    #[test]
+    fn serializes_the_typescript_contract_in_camel_case() {
+        let element = ImportedElement::Text {
+            frame: ImportedFrame {
+                x: 1,
+                y: 2,
+                width: 3,
+                height: 4,
+            },
+            rotation_milli_degree: 0,
+            text: "hello".into(),
+            style: default_text_style(&None, false),
+            runs: Vec::new(),
+            content_ref: Some("title".into()),
+        };
+        let value = serde_json::to_value(element).expect("json");
+        assert_eq!(value["type"], "text");
+        assert_eq!(value["frame"]["width"], 3);
+        assert_eq!(value["rotationMilliDegree"], 0);
+        assert_eq!(value["contentRef"], "title");
+        assert_eq!(value["style"]["fontSizePt"], 18.0);
+
+        let table = ImportedElement::Table {
+            frame: ImportedFrame {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            },
+            rotation_milli_degree: 0,
+            header: vec!["a".into()],
+            rows: vec![vec!["b".into()]],
+        };
+        let value = serde_json::to_value(table).expect("json");
+        assert_eq!(value["type"], "table");
+        assert_eq!(value["header"][0], "a");
     }
 
     #[test]

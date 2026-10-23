@@ -4,10 +4,14 @@ import {
   CheckCheck,
   CircleAlert,
   Copy,
+  Mic,
   Plus,
   Redo2,
   RotateCcw,
+  ScanText,
+  Scissors,
   Trash2,
+  Type,
   Undo2,
   Wand2,
   X,
@@ -90,6 +94,14 @@ export type ContentReviewProps = {
   onUndoRestore: (index: number) => void;
   /** 让 AI 按这一页的标题和页面计划重写正文；结果先对照，确认后才替换。 */
   onRewriteSlide: (index: number) => void;
+  /** 给这一页拟几个结论式标题候选。 */
+  onSuggestTitle: (index: number) => void;
+  /** 只写这一页的演讲备注，不动正文。 */
+  onWriteNotes: (index: number) => void;
+  /** 把过满的一页拆成两页。 */
+  onSplitSlide: (index: number) => void;
+  /** 通读全稿，只给内容层的问题清单。 */
+  onReviewDeck: () => void;
   onUndo: () => void;
   onRedo: () => void;
 };
@@ -718,6 +730,10 @@ export function ContentReview({
   onRestoreSlide,
   onUndoRestore,
   onRewriteSlide,
+  onSuggestTitle,
+  onWriteNotes,
+  onSplitSlide,
+  onReviewDeck,
   onUndo,
   onRedo,
 }: ContentReviewProps) {
@@ -932,6 +948,16 @@ export function ContentReview({
                   <CheckCheck />
                 </button>
               )}
+              <button
+                type="button"
+                className="secondary-action icon-only"
+                aria-label="AI 审稿"
+                title="通读全稿，只列出内容层的问题，不自动改文字"
+                disabled={regenerating}
+                onClick={onReviewDeck}
+              >
+                <ScanText />
+              </button>
               <button
                 type="button"
                 className="secondary-action icon-only"
@@ -1150,20 +1176,54 @@ export function ContentReview({
                         恢复 AI 原稿
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className="link-action"
-                      disabled={missing || regenerating}
-                      title={
-                        missing
-                          ? "先补全页面标题：标题是这一页重写的依据"
-                          : "让 AI 按本页标题和页面计划重写正文与演讲备注；对照后确认才替换，替换可撤销"
-                      }
-                      onClick={() => onRewriteSlide(index)}
-                    >
-                      <Wand2 />
-                      AI 重写本页
-                    </button>
+                    <div className="draft-ai-actions" role="group" aria-label={`第 ${index + 1} 页 AI 操作`}>
+                      <button
+                        type="button"
+                        className="link-action"
+                        disabled={missing || regenerating}
+                        title={
+                          missing ? "先补全页面标题：标题是这一页重写的依据" : "按这一页的内容给几个结论式标题候选"
+                        }
+                        onClick={() => onSuggestTitle(index)}
+                      >
+                        <Type />
+                        AI 换标题
+                      </button>
+                      <button
+                        type="button"
+                        className="link-action"
+                        disabled={missing || regenerating}
+                        title={
+                          missing
+                            ? "先补全页面标题：标题是这一页重写的依据"
+                            : "让 AI 按本页标题和页面计划重写正文与演讲备注；对照后确认才替换，替换可撤销"
+                        }
+                        onClick={() => onRewriteSlide(index)}
+                      >
+                        <Wand2 />
+                        AI 重写
+                      </button>
+                      <button
+                        type="button"
+                        className="link-action"
+                        disabled={missing || regenerating}
+                        title="只写这一页的演讲备注，不改正文"
+                        onClick={() => onWriteNotes(index)}
+                      >
+                        <Mic />
+                        AI 备注
+                      </button>
+                      <button
+                        type="button"
+                        className="link-action"
+                        disabled={missing || regenerating}
+                        title="把这一页的内容重新分成两页；确认后替换原页，可撤销"
+                        onClick={() => onSplitSlide(index)}
+                      >
+                        <Scissors />
+                        AI 拆页
+                      </button>
+                    </div>
                     <button
                       type="button"
                       className={`review-toggle ${slide.reviewed ? "reviewed" : ""}`}

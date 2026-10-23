@@ -228,6 +228,6 @@ interface ImportReport {
 
 ### 验证
 
-- Rust：`cargo fmt --all`、`cargo clippy --all-targets -- -D warnings`、`cargo test --lib` 通过；新增 5 项导入测试（含真实 ZIP 夹具、路径穿越拒绝），Rust 全量 107 通过、5 忽略。
+- Rust：`cargo fmt --all`、`cargo clippy --all-targets -- -D warnings`、`cargo test --lib` 通过；新增 6 项导入测试（含真实 ZIP 夹具、路径穿越拒绝、serde 字段契约），Rust 全量 108 通过、5 忽略。
 - 前端：`npm run typecheck`、`npm run lint`、`npm run build` 通过；新增 5 项测试（映射 3、对话框 2）；全量 124 个文件、953 项通过。
 - 用 `.tmp/out/recipe-data.pptx` 与 `recipe-image.pptx` 做过手工探针：文本/形状/图片可读，兼容等级 A。

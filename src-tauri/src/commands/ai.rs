@@ -1607,8 +1607,8 @@ pub async fn suggest_slide_titles(
     {
         return Err("AI_TITLES_REQUEST_INVALID".into());
     }
-    let outline =
-        serde_json::to_string(&request.outline).map_err(|_| "AI_TITLES_REQUEST_INVALID".to_owned())?;
+    let outline = serde_json::to_string(&request.outline)
+        .map_err(|_| "AI_TITLES_REQUEST_INVALID".to_owned())?;
     let slide = serde_json::to_string(&request.slide)
         .map_err(|_| "AI_TITLES_REQUEST_INVALID".to_owned())?;
     if outline.len() > 40_000 || slide.len() > 20_000 {
@@ -1718,10 +1718,10 @@ pub async fn write_speaker_notes(
     if title.is_empty() {
         return Err("AI_NOTES_REQUEST_INVALID".into());
     }
-    let outline =
-        serde_json::to_string(&request.outline).map_err(|_| "AI_NOTES_REQUEST_INVALID".to_owned())?;
-    let slide = serde_json::to_string(&request.slide)
+    let outline = serde_json::to_string(&request.outline)
         .map_err(|_| "AI_NOTES_REQUEST_INVALID".to_owned())?;
+    let slide =
+        serde_json::to_string(&request.slide).map_err(|_| "AI_NOTES_REQUEST_INVALID".to_owned())?;
     if outline.len() > 40_000 || slide.len() > 20_000 {
         return Err("AI_NOTES_REQUEST_INVALID".into());
     }
@@ -1852,10 +1852,10 @@ pub async fn split_slide_content(
     if title.is_empty() {
         return Err("AI_SPLIT_REQUEST_INVALID".into());
     }
-    let outline =
-        serde_json::to_string(&request.outline).map_err(|_| "AI_SPLIT_REQUEST_INVALID".to_owned())?;
-    let slide = serde_json::to_string(&request.slide)
+    let outline = serde_json::to_string(&request.outline)
         .map_err(|_| "AI_SPLIT_REQUEST_INVALID".to_owned())?;
+    let slide =
+        serde_json::to_string(&request.slide).map_err(|_| "AI_SPLIT_REQUEST_INVALID".to_owned())?;
     if outline.len() > 40_000 || slide.len() > 20_000 {
         return Err("AI_SPLIT_REQUEST_INVALID".into());
     }
@@ -1941,8 +1941,8 @@ pub async fn review_deck_content(
     if slides.is_empty() || slides.len() > 60 {
         return Err("AI_DECK_REVIEW_REQUEST_INVALID".into());
     }
-    let slides =
-        serde_json::to_string(&request.slides).map_err(|_| "AI_DECK_REVIEW_REQUEST_INVALID".to_owned())?;
+    let slides = serde_json::to_string(&request.slides)
+        .map_err(|_| "AI_DECK_REVIEW_REQUEST_INVALID".to_owned())?;
     let brief = serde_json::to_string(&request.presentation_brief)
         .map_err(|_| "AI_DECK_REVIEW_REQUEST_INVALID".to_owned())?;
     if slides.len() > 160_000 || brief.len() > 20_000 {

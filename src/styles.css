@@ -4521,6 +4521,116 @@ button {
   height: 14px;
   flex: none;
 }
+.draft-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.slide-title-dialog {
+  width: min(640px, 100%);
+}
+.title-candidates {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.title-candidates button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgb(127 127 127 / 28%);
+  border-radius: 9px;
+  color: inherit;
+  background: rgb(127 127 127 / 6%);
+  text-align: left;
+  cursor: pointer;
+}
+.title-candidates button > span {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgb(127 127 127 / 18%);
+  font-size: 10px;
+}
+.title-candidates button strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.title-candidates button:hover:not(:disabled) {
+  border-color: rgb(127 127 127 / 55%);
+}
+.title-candidates button.active {
+  border-color: var(--ppt-accent);
+  background: rgb(211 82 48 / 12%);
+}
+.title-candidates button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.split-page-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.deck-review-dialog {
+  width: min(680px, 100%);
+}
+.deck-review-issues {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
+  margin: 16px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.deck-review-issues li {
+  padding: 12px;
+  border: 1px solid rgb(127 127 127 / 26%);
+  border-left: 3px solid #c9a227;
+  border-radius: 8px;
+  background: rgb(127 127 127 / 6%);
+}
+.deck-review-issues li.error {
+  border-left-color: #d35230;
+}
+.deck-review-issues li > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.deck-review-page {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.deck-review-kind {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(127 127 127 / 16%);
+  font-size: 10px;
+}
+.deck-review-issues p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.deck-review-issues .link-action {
+  font-size: 11px;
+}
+.deck-review-empty {
+  margin: 20px 0 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
 .spin {
   animation: pptd-spin 900ms linear infinite;
 }

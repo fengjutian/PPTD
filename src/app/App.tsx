@@ -107,12 +107,17 @@ import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
 import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
+import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
+import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
+import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
+import { DeckReviewDialog } from "../features/ai/DeckReviewDialog";
 import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
 import {
   countSlidePoints,
   draftMetrics,
   resolveActiveSlideIndex,
   reviewIssues,
+  slideCapacityNotes,
   withSlideIds,
   type AiDraftSaveState,
 } from "../features/ai/content-review";
@@ -137,11 +142,17 @@ import {
   listenAiGenerationProgress,
   mergeStreamProgress,
   polishPresentationTopic,
+  reviewDeckContent,
   rewritePresentationSlide,
+  splitSlideContent,
+  suggestSlideTitles,
+  writeSpeakerNotes,
   type AiDraft,
   type AiGenerationProgress,
   type AiVisualAssetIntent,
+  type DeckReviewIssue,
   type SlideRewriteSuggestion,
+  type SplitSlidePage,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
 import { createTranslator, type UiLanguage } from "../services/i18n";
@@ -813,6 +824,25 @@ export function App() {
   const slideRewriteRequestId = useRef(0);
   /** 后端取消本页重写用的任务号。 */
   const slideRewriteTaskId = useRef(0);
+  /**
+   * 换标题、写备注、拆页三个入口共用一套状态：它们都只开一个对话框，
+   * 同一时间只允许一个在途请求。
+   */
+  type SlideAssistState =
+    | { kind: "title"; index: number; status: "running" | "ready" | "error"; candidates?: string[]; error?: string }
+    | { kind: "notes"; index: number; status: "running" | "ready" | "error"; proposal?: string; error?: string }
+    | { kind: "split"; index: number; status: "running" | "ready" | "error"; pages?: SplitSlidePage[]; error?: string };
+  const [slideAssist, setSlideAssist] = useState<SlideAssistState>();
+  const slideAssistRef = useRef<SlideAssistState | undefined>(undefined);
+  type DeckReviewState = {
+    status: "running" | "ready" | "error";
+    issues?: DeckReviewIssue[];
+    error?: string;
+  };
+  const [deckReview, setDeckReview] = useState<DeckReviewState>();
+  /** 单页 AI 操作的请求号与后端任务号；关掉对话框后在途响应作废。 */
+  const assistRequestId = useRef(0);
+  const assistTaskId = useRef(0);
   const [aiPolishing, setAiPolishing] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
   const [agentWorkflow, setAgentWorkflow] = useState(initialAgentWorkflow);
@@ -1775,6 +1805,12 @@ export function App() {
     setSlideRewrite(undefined);
   };
 
+  /** 这一页的排版预检结论：重写和拆页都要把它交给模型。 */
+  const capacityNoteMessages = (index: number) => {
+    const slide = aiDraftRef.current?.slides[index];
+    return slide ? slideCapacityNotes(slide, index).map((note) => note.message) : [];
+  };
+
   const runSlideRewrite = async (instruction: string) => {
     const target = slideRewriteRef.current;
     const draft = aiDraftRef.current;
@@ -1800,6 +1836,7 @@ export function App() {
           blocks: slide.blocks,
         },
         instruction: instruction.trim() || undefined,
+        capacityNotes: capacityNoteMessages(target.index),
         taskId,
       });
       if (requestId !== slideRewriteRequestId.current) return;
@@ -1852,6 +1889,182 @@ export function App() {
     setTaskStatus(`已替换第 ${index + 1} 页，可用撤销回到替换前的版本`);
   };
 
+  /** 单页 AI 操作共用的上下文；标题为空时返回 undefined，连请求都不发。 */
+  const slideAiContext = (index: number) => {
+    const draft = aiDraftRef.current;
+    const slide = draft?.slides[index];
+    if (!draft || !slide || !slide.title.trim()) return undefined;
+    return {
+      topic: aiTopic.trim() || draft.title,
+      deckTitle: draft.title,
+      outline: draft.slides.map((item) => item.title),
+      slideIndex: index,
+      slide: {
+        title: slide.title,
+        body: slide.body,
+        speakerNotes: slide.speakerNotes,
+        plan: slide.plan,
+        blocks: slide.blocks,
+      },
+    };
+  };
+
+  const runTitleAssist = async (index: number) => {
+    const context = slideAiContext(index);
+    if (!context) return;
+    const requestId = ++assistRequestId.current;
+    const taskId = ++assistTaskId.current;
+    setSlideAssist({ kind: "title", index, status: "running" });
+    setTaskStatus(`AI 正在为第 ${index + 1} 页拟标题…`);
+    try {
+      const candidates = await suggestSlideTitles({ ...context, taskId });
+      if (requestId !== assistRequestId.current) return;
+      setSlideAssist({ kind: "title", index, status: "ready", candidates });
+      setTaskStatus(`AI 给了第 ${index + 1} 页 ${candidates.length} 个标题候选`);
+    } catch (error) {
+      if (requestId !== assistRequestId.current) return;
+      setSlideAssist({ kind: "title", index, status: "error", error: describeAiError(error) });
+    } finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+    }
+  };
+
+  const runNotesAssist = async (index: number) => {
+    const context = slideAiContext(index);
+    if (!context) return;
+    const requestId = ++assistRequestId.current;
+    const taskId = ++assistTaskId.current;
+    setSlideAssist({ kind: "notes", index, status: "running" });
+    setTaskStatus(`AI 正在写第 ${index + 1} 页的演讲备注…`);
+    try {
+      const proposal = await writeSpeakerNotes({ ...context, taskId });
+      if (requestId !== assistRequestId.current) return;
+      setSlideAssist({ kind: "notes", index, status: "ready", proposal });
+      setTaskStatus(`AI 写好了第 ${index + 1} 页的演讲备注，确认后替换`);
+    } catch (error) {
+      if (requestId !== assistRequestId.current) return;
+      setSlideAssist({ kind: "notes", index, status: "error", error: describeAiError(error) });
+    } finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+    }
+  };
+
+  const runSplitAssist = async (index: number) => {
+    const context = slideAiContext(index);
+    if (!context) return;
+    const requestId = ++assistRequestId.current;
+    const taskId = ++assistTaskId.current;
+    setSlideAssist({ kind: "split", index, status: "running" });
+    setTaskStatus(`AI 正在拆分第 ${index + 1} 页…`);
+    try {
+      const pages = await splitSlideContent({
+        ...context,
+        capacityNotes: capacityNoteMessages(index),
+        taskId,
+      });
+      if (requestId !== assistRequestId.current) return;
+      setSlideAssist({ kind: "split", index, status: "ready", pages });
+      setTaskStatus(`AI 把第 ${index + 1} 页拆成了两页，确认后替换`);
+    } catch (error) {
+      if (requestId !== assistRequestId.current) return;
+      setSlideAssist({ kind: "split", index, status: "error", error: describeAiError(error) });
+    } finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+    }
+  };
+
+  const runDeckReview = async () => {
+    const draft = aiDraftRef.current;
+    if (!draft) return;
+    const requestId = ++assistRequestId.current;
+    const taskId = ++assistTaskId.current;
+    setDeckReview({ status: "running" });
+    setTaskStatus("AI 正在通读全稿…");
+    try {
+      const issues = await reviewDeckContent({
+        deckTitle: draft.title,
+        presentationBrief: draft.presentationBrief,
+        slides: draft.slides.map(({ title, body, speakerNotes }) => ({ title, body, speakerNotes })),
+        taskId,
+      });
+      if (requestId !== assistRequestId.current) return;
+      setDeckReview({ status: "ready", issues });
+      setTaskStatus(issues.length > 0 ? `AI 审稿发现 ${issues.length} 处内容问题` : "AI 审稿没有发现内容层的问题");
+    } catch (error) {
+      if (requestId !== assistRequestId.current) return;
+      setDeckReview({ status: "error", error: describeAiError(error) });
+    } finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+    }
+  };
+
+  /** 关掉单页 AI 对话框：在途请求作废，后端请求也真正中断。 */
+  const cancelAssist = () => {
+    assistRequestId.current += 1;
+    void cancelAiGeneration(assistTaskId.current).catch(() => undefined);
+  };
+
+  const closeSlideAssist = () => {
+    cancelAssist();
+    setSlideAssist(undefined);
+  };
+
+  const closeDeckReview = () => {
+    cancelAssist();
+    setDeckReview(undefined);
+  };
+
+  const applyTitleAssist = (title: string) => {
+    const assist = slideAssistRef.current;
+    if (!assist || assist.kind !== "title") return;
+    updateAiSlide(assist.index, "title", title);
+    setSlideAssist(undefined);
+    setTaskStatus(`已换用第 ${assist.index + 1} 页的标题，可用撤销回退`);
+  };
+
+  const applyNotesAssist = () => {
+    const assist = slideAssistRef.current;
+    if (!assist || assist.kind !== "notes" || !assist.proposal) return;
+    updateAiSlide(assist.index, "speakerNotes", assist.proposal);
+    setSlideAssist(undefined);
+    setTaskStatus(`已写入第 ${assist.index + 1} 页的演讲备注`);
+  };
+
+  /**
+   * 两页一起替换原页。第一页沿用原页 id 与配图意图，第二页是新页；
+   * 两页都因为内容变了回到待审核。
+   */
+  const applySplitAssist = () => {
+    const assist = slideAssistRef.current;
+    if (!assist || assist.kind !== "split" || !assist.pages || assist.pages.length !== 2) return;
+    const index = assist.index;
+    const [firstPage, secondPage] = assist.pages;
+    if (!firstPage || !secondPage) return;
+    forgetRestoreBackup(index);
+    updateAiDraftWithHistory(
+      `slide:${index}:split`,
+      (draft) => {
+        const source = draft.slides[index];
+        if (!source) return draft;
+        const slides = [...draft.slides];
+        slides.splice(index, 1, { ...source, ...firstPage, plan: { ...firstPage.plan, visualAsset: source.plan.visualAsset }, reviewed: false }, {
+          id: crypto.randomUUID(),
+          ...secondPage,
+          reviewed: false,
+        });
+        return { ...draft, slides };
+      },
+      false,
+    );
+    setSlideAssist(undefined);
+    setTaskStatus(`已把第 ${index + 1} 页拆成两页，可用撤销回退`);
+  };
+
+  const jumpToDeckReviewIssue = (index: number) => {
+    selectAiDraftSlide(index);
+    setDeckReview(undefined);
+  };
+
   // Refs mirror the latest draft so the exit path can save without waiting for
   // another render, and so a close inside the debounce window is not lost.
   useEffect(() => {
@@ -1861,6 +2074,9 @@ export function App() {
   useEffect(() => {
     slideRewriteRef.current = slideRewrite;
   }, [slideRewrite]);
+  useEffect(() => {
+    slideAssistRef.current = slideAssist;
+  }, [slideAssist]);
   useEffect(() => {
     aiTopicRef.current = aiTopic;
   }, [aiTopic]);
@@ -3260,6 +3476,8 @@ export function App() {
   const editorCanvasOpen = activeView === "editor" && editorSurface === "canvas";
   // 重写对话框跟着页面走：草稿被换掉时 slide 可能已经不存在，此时不渲染。
   const rewriteSlide = slideRewrite && aiDraft ? aiDraft.slides[slideRewrite.index] : undefined;
+  // 单页 AI 对话框都跟着页面走：草稿被换掉时页面可能已经不存在。
+  const assistSlide = slideAssist && aiDraft ? aiDraft.slides[slideAssist.index] : undefined;
   const projectHomeItems = [
     ...recentProjects.map((entry) => ({ kind: "project" as const, timestamp: entry.lastOpenedAt, entry })),
     ...aiHistory.map((entry) => ({ kind: "ai" as const, timestamp: Date.parse(entry.updatedAt), entry })),
@@ -4471,6 +4689,10 @@ export function App() {
                 onRestoreSlide={restoreAiSlide}
                 onUndoRestore={undoRestoreAiSlide}
                 onRewriteSlide={openSlideRewrite}
+                onSuggestTitle={(index) => void runTitleAssist(index)}
+                onWriteNotes={(index) => void runNotesAssist(index)}
+                onSplitSlide={(index) => void runSplitAssist(index)}
+                onReviewDeck={() => void runDeckReview()}
                 onUndo={undoAiContent}
                 onRedo={redoAiContent}
               />
@@ -5734,6 +5956,57 @@ export function App() {
           onGenerate={(instruction) => void runSlideRewrite(instruction)}
           onApply={applySlideRewrite}
           onClose={closeSlideRewrite}
+        />
+      )}
+
+      {slideAssist?.kind === "title" && assistSlide && (
+        <SlideTitleDialog
+          slideIndex={slideAssist.index}
+          currentTitle={assistSlide.title}
+          status={slideAssist.status}
+          candidates={slideAssist.candidates}
+          error={slideAssist.error}
+          onPick={applyTitleAssist}
+          onRetry={() => void runTitleAssist(slideAssist.index)}
+          onClose={closeSlideAssist}
+        />
+      )}
+
+      {slideAssist?.kind === "notes" && assistSlide && (
+        <SpeakerNotesDialog
+          slideIndex={slideAssist.index}
+          title={assistSlide.title}
+          currentNotes={assistSlide.speakerNotes}
+          status={slideAssist.status}
+          proposal={slideAssist.proposal}
+          error={slideAssist.error}
+          onApply={applyNotesAssist}
+          onRetry={() => void runNotesAssist(slideAssist.index)}
+          onClose={closeSlideAssist}
+        />
+      )}
+
+      {slideAssist?.kind === "split" && assistSlide && (
+        <SplitSlideDialog
+          slideIndex={slideAssist.index}
+          title={assistSlide.title}
+          status={slideAssist.status}
+          pages={slideAssist.pages}
+          error={slideAssist.error}
+          onApply={applySplitAssist}
+          onRetry={() => void runSplitAssist(slideAssist.index)}
+          onClose={closeSlideAssist}
+        />
+      )}
+
+      {deckReview && (
+        <DeckReviewDialog
+          status={deckReview.status}
+          issues={deckReview.issues}
+          error={deckReview.error}
+          onJump={jumpToDeckReviewIssue}
+          onRetry={() => void runDeckReview()}
+          onClose={closeDeckReview}
         />
       )}
 
