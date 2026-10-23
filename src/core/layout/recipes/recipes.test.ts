@@ -5,6 +5,7 @@ import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from ".
 import { deriveDesignTokens } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
 import { asymmetricSplit } from "./asymmetric-split";
+import { coverStatement } from "./cover-statement";
 import { editorialIndex } from "./editorial-index";
 import { consumptionProblem } from "./plan";
 import type { RecipeContext, RecipePlan } from "./types";
@@ -162,6 +163,34 @@ describe("editorial-index recipe", () => {
     expect(signature(plan(editorialIndex, ctx))).toEqual(
       signature(plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 4 }) }))),
     );
+  });
+});
+
+describe("cover-statement recipe", () => {
+  it("draws a cover with a large title and a subtitle", () => {
+    const pageContent = {
+      title: "年度销售汇报",
+      body: "2026 财年 · 董事会",
+      speakerNotes: "",
+      status: "approved" as const,
+    };
+    const ctx = context(pageContent, {
+      facts: facts({ layout: "cover", itemCount: 1 }),
+    });
+    expect(coverStatement.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(coverStatement, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, pageContent)).toBeUndefined();
+    const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(title?.type === "text" ? title.style.fontSizePt : 0).toBeGreaterThanOrEqual(40);
+    const texts = result.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
+    expect(texts).toEqual(expect.arrayContaining(["年度销售汇报", "2026 财年 · 董事会"]));
+  });
+
+  it("refuses a content page", () => {
+    expect(coverStatement.supports(facts(), concept(), { hasArtwork: false, hasAsset: false })).toBe(false);
   });
 });
 

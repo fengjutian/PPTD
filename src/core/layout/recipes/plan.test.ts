@@ -36,9 +36,12 @@ describe("recipe planning", () => {
     );
   });
 
+  it("chooses the cover recipe for a cover", () => {
+    expect(chooseRecipeId(facts({ layout: "cover", itemCount: 1 }), concept(), options)).toBe("cover-statement");
+  });
+
   it("leaves structured pages to the legacy renderer", () => {
     expect(chooseRecipeId(facts({ hasRowBlock: true }), concept(), options)).toBeUndefined();
-    expect(chooseRecipeId(facts({ layout: "cover" }), concept(), options)).toBeUndefined();
     expect(chooseRecipeId(facts(), concept(), { hasArtwork: true, hasAsset: false })).toBeUndefined();
   });
 

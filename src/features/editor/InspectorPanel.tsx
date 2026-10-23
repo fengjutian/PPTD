@@ -1351,8 +1351,8 @@ function PageProperties({
       <InspectorSection title="页面">
         <div className="field">
           <span className="field-label">幻灯片尺寸</span>
-          {/* The size of the page is a property of the document, so it is read
-            and not edited here. */}
+          {/* The page size belongs to the document, not to one element. It is
+            edited from the “设计” ribbon and only read here. */}
           <span className="field-readonly">{`${emuToUnit(pageSize.width, unit).toFixed(2)} × ${emuToUnit(pageSize.height, unit).toFixed(2)} ${unitLabel(unit)}`}</span>
         </div>
         <ColorField

@@ -78,6 +78,14 @@ export interface CompositionFacts {
   hasComparison: boolean;
   /** Whether the page carries a row of steps, a timeline or a set of metrics. */
   hasRowBlock: boolean;
+  /** Whether the page carries at least one metric block. */
+  hasMetric?: boolean;
+  /** Whether the page carries a timeline block. */
+  hasTimeline?: boolean;
+  /** Whether the page carries a process block. */
+  hasProcess?: boolean;
+  /** Whether the page carries a table block. */
+  hasTable?: boolean;
   /** The coarse layout the page was given. */
   layout: string;
 }

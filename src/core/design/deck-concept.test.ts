@@ -33,7 +33,12 @@ describe("deck concept", () => {
     expect(resolved.concept.id).toBe("concept-1");
     expect(resolved.concept.motif).toBe("rules");
     expect(resolved.concept.surface).toBe("rules");
-    expect(resolved.concept.recipes).toEqual(["editorial-index", "asymmetric-split"]);
+    expect(resolved.concept.recipes).toEqual([
+      "cover-statement",
+      "data-story",
+      "editorial-index",
+      "asymmetric-split",
+    ]);
     expect(resolved.concept.rhythm).toHaveLength(10);
     expect(resolved.concept.rhythm[0]).toBe("statement");
     expect(resolved.concept.rhythm[9]).toBe("close");

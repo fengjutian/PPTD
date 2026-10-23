@@ -133,4 +133,99 @@ describe("recipe rendering through the design command", () => {
     // Without a concept the page keeps the legacy editorial anchor panel.
     expect(text).toContain("项要点");
   });
+
+  it("renders a cover through the cover-statement recipe", () => {
+    const document = createDocument();
+    const coverFacts = facts({ layout: "cover", itemCount: 2 });
+    const coverConcept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [coverFacts],
+      pageCount: 1,
+      id: "cover",
+    }).concept;
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "年度销售汇报",
+      slides: [
+        {
+          title: "年度销售汇报",
+          body: "2026 财年 · 董事会",
+          speakerNotes: "",
+        },
+      ],
+      designs: [design({ layout: "cover", recipe: "cover-statement" })],
+      designConcept: coverConcept,
+      themePresetId: "consulting-navy",
+    });
+    const slide = document.slides[0]!;
+    const text = slide.elements
+      .filter((element) => element.type === "text")
+      .map((element) => (element.type === "text" ? element.text : ""));
+    expect(text).toEqual(expect.arrayContaining(["年度销售汇报", "2026 财年 · 董事会"]));
+    expect(slide.elements.filter((element) => element.type === "shape").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("maps a ten-page deck to the two recipes and leaves the process page alone", () => {
+    const counts = [4, 4, 5, 5, 4, 4, 4, 4, 4, 4];
+    const slides = counts.map((count, index) =>
+      index === 6
+        ? {
+            title: "销售流程从线索到订单逐步推进",
+            body: "线索\n筛选\n跟进\n成交",
+            speakerNotes: "",
+            blocks: [
+              {
+                type: "process" as const,
+                items: [
+                  { label: "线索", text: "多渠道触达" },
+                  { label: "筛选", text: "分级管理" },
+                  { label: "跟进", text: "响应加快" },
+                  { label: "成交", text: "转化提升" },
+                ],
+              },
+            ],
+          }
+        : {
+            title: `第 ${index + 1} 页结论标题`,
+            body: items.slice(0, count).join("\n"),
+            speakerNotes: "",
+            blocks: [{ type: "bullet-list" as const, items: items.slice(0, count) }],
+          },
+    );
+    const pageFacts = counts.map((count, index) =>
+      facts({
+        itemCount: count,
+        hasRowBlock: index === 6,
+        layout: index === 6 ? "cards" : index % 2 === 0 ? "summary" : "split",
+        shortItems: index % 2 === 0,
+      }),
+    );
+    const deckConcept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts,
+      pageCount: 10,
+      id: "ten-pages",
+    }).concept;
+    const document = createDocument();
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "十页样例",
+      slides,
+      designs: slides.map((_, index) =>
+        design({ layout: index === 6 ? "cards" : index % 2 === 0 ? "summary" : "split", recipe: undefined }),
+      ),
+      designConcept: deckConcept,
+      themePresetId: "consulting-navy",
+    });
+    expect(document.slides).toHaveLength(10);
+    const textOf = (index: number) =>
+      document.slides[index]!.elements.filter((element) => element.type === "text").map((element) =>
+        element.type === "text" ? element.text : "",
+      );
+    // Index pages carry numbered rows; split pages carry no count panel.
+    expect(textOf(0)).toEqual(expect.arrayContaining(["01", "02", "03", "04"]));
+    expect(textOf(1)).not.toContain("项要点");
+    // The process page keeps the legacy branch and the content block.
+    expect(textOf(6)).toEqual(expect.arrayContaining(["线索", "筛选", "跟进", "成交"]));
+  });
 });

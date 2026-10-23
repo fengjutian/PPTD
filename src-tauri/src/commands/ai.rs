@@ -937,7 +937,8 @@ pub async fn generate_deck_concepts(
 ) -> Result<serde_json::Value, String> {
     let cancel = cancels.token_for(request.task_id);
     let draft = serde_json::to_string(&request.draft).map_err(|_| "AI_CONCEPT_REQUEST_INVALID")?;
-    let briefs = serde_json::to_string(&request.briefs).map_err(|_| "AI_CONCEPT_REQUEST_INVALID")?;
+    let briefs =
+        serde_json::to_string(&request.briefs).map_err(|_| "AI_CONCEPT_REQUEST_INVALID")?;
     let template =
         serde_json::to_string(&request.template).map_err(|_| "AI_CONCEPT_REQUEST_INVALID")?;
     let visual_goal =
@@ -1135,11 +1136,12 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 
 八、页面配方（P1）
 模型可以在 layout 之外再选择一个页面配方，配方决定容器内部的骨架；它不改变坐标，也不改变内容。
+- cover-statement：封面，主标题 + 一句副标题 + 几何强调块；仅用于第一页/封面。
 - editorial-index：标题 + 编号 + 细线 + 正文，适合 3–6 条短要点；不要给卡片页选它。
 - asymmetric-split：左标题栏 + 右正文栏，适合 2–5 条较长要点；不要给两栏对比页选它。
 - 有 quote、comparison、timeline、process、metric、table 内容块的页面不选配方。
-- 封面、章节页、结尾总结页不选配方。
-- 3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
+- 章节页、结尾总结页暂不选配方。
+- 封面优先 cover-statement；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
 - variant 只能是 left 或 right；focal 只能是 title、index 或 body；不确定就省略。
 
 九、输出合同

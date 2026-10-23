@@ -241,6 +241,10 @@ export function compositionFactsFromDraft(draft: AiDraft): CompositionFacts[] {
       hasQuote: blocks.some((block) => block.type === "quote"),
       hasComparison: blocks.some((block) => block.type === "comparison"),
       hasRowBlock,
+      hasMetric: blocks.some((block) => block.type === "metric"),
+      hasTimeline: blocks.some((block) => block.type === "timeline"),
+      hasProcess: blocks.some((block) => block.type === "process"),
+      hasTable: blocks.some((block) => block.type === "table-data"),
       layout: "title-body",
     };
   });
@@ -275,7 +279,7 @@ export const aiPresentationDesignSchema = z.object({
          * The page recipe that draws this page. It is optional so old models and
          * old design files keep the legacy composition path.
          */
-        recipe: z.enum(["editorial-index", "asymmetric-split"]).optional(),
+        recipe: z.enum(["cover-statement", "editorial-index", "asymmetric-split"]).optional(),
         variant: z.enum(["left", "right"]).optional(),
         focal: z.enum(["title", "index", "body"]).optional(),
         /** How this page communicates, before choosing a geometric skeleton. */

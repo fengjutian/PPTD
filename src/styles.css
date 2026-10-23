@@ -337,6 +337,79 @@ button {
   opacity: 0.35;
   cursor: default;
 }
+/* 设计功能区的页面尺寸：预设 + 自定义英寸 + 越界计数。 */
+.page-size-controls {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #d8dae0;
+  font-size: 10px;
+}
+.page-size-label {
+  color: #8f939b;
+}
+.page-size-presets {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 5px;
+}
+.page-size-presets button {
+  height: 24px;
+  padding: 0 7px;
+  border: 0;
+  color: #d8dae0;
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+.page-size-presets button:hover {
+  background: rgb(255 255 255 / 10%);
+}
+.page-size-presets button.active {
+  color: #fff;
+  background: rgb(255 255 255 / 18%);
+}
+.page-size-input {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #8f939b;
+}
+.page-size-input input {
+  width: 52px;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+}
+.page-size-times {
+  color: #8f939b;
+}
+.page-size-apply {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+  cursor: pointer;
+}
+.page-size-apply:hover {
+  border-color: var(--ppt-accent);
+}
+.page-size-warning {
+  color: #e0b45a;
+  white-space: nowrap;
+}
+.page-size-error {
+  color: #e07a6a;
+}
 .find-replace-bar {
   position: fixed;
   top: 96px;

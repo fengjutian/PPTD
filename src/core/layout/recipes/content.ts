@@ -38,13 +38,22 @@ export function readContentUnits(content: SlideContent): ContentUnits {
   if (body.length === 0) {
     return { items, blockIds, body, bodyCovered: true, lead: "" };
   }
-  if (items.length > 0 && items.every((item) => body.includes(item))) {
+  if (comparable(body) === comparable(items.join(""))) {
     return { items, blockIds, body, bodyCovered: true, lead: "" };
   }
   const paragraphs = splitBody(body);
-  const uncovered = paragraphs.filter(
-    (paragraph) => !items.some((item) => item.includes(paragraph) || paragraph.includes(item)),
-  );
+  const uncovered: string[] = [];
+  for (const paragraph of paragraphs) {
+    const matching = items.find((item) => comparable(paragraph) === comparable(item));
+    if (matching) continue;
+    // A paragraph that contains a point plus other copy cannot be split without
+    // duplicating or losing the point; the recipe must refuse rather than draw
+    // the body twice.
+    if (items.some((item) => comparable(paragraph).includes(comparable(item)))) {
+      return { items, blockIds, body, bodyCovered: false, lead: "" };
+    }
+    uncovered.push(paragraph);
+  }
   if (uncovered.length === 0) {
     return { items, blockIds, body, bodyCovered: true, lead: "" };
   }
@@ -55,6 +64,10 @@ export function readContentUnits(content: SlideContent): ContentUnits {
     bodyCovered: false,
     lead: uncovered.join(" ").replace(/\s+/g, " ").trim(),
   };
+}
+
+function comparable(value: string): string {
+  return value.replace(/[\s，。；、,.!?！？：:；;"'“”‘’「」『』]/g, "");
 }
 
 function splitBody(body: string): string[] {

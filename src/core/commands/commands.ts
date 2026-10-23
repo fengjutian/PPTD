@@ -32,6 +32,8 @@ import {
   diffContentVersion,
   iconForText,
   inches,
+  MAX_PAGE_SIZE_IN,
+  MIN_PAGE_SIZE_IN,
   parseMetricValue,
   stableStringify,
   applyTextRun,
@@ -586,6 +588,7 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
 export type DocumentCommand =
   | { type: "add-slide" }
   | { type: "rename-document"; title: string }
+  | { type: "set-page-size"; pageSize: { width: Emu; height: Emu } }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
   | {
       type: "apply-ai-designed-draft";
@@ -1032,6 +1035,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       return "content";
     case "set-slide":
       return null;
+    case "set-page-size":
+      return "design";
     case "set-slide-background":
     case "set-slide-background-image":
     case "remove-slide-background-image":
@@ -1328,6 +1333,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const title = command.title.trim();
     if (!title || title.length > 512) throw new Error("DOCUMENT_TITLE_INVALID");
     document.title = title;
+    return;
+  }
+  if (command.type === "set-page-size") {
+    const { width, height } = command.pageSize;
+    // PowerPoint's own limits: a page this editor accepts must open and stay
+    // editable there. Fractional EMU would also break stable import/export.
+    if (
+      !Number.isSafeInteger(width) ||
+      !Number.isSafeInteger(height) ||
+      width < inches(MIN_PAGE_SIZE_IN) ||
+      width > inches(MAX_PAGE_SIZE_IN) ||
+      height < inches(MIN_PAGE_SIZE_IN) ||
+      height > inches(MAX_PAGE_SIZE_IN)
+    )
+      throw new Error("INVALID_PAGE_SIZE");
+    document.pageSize = { width, height };
     return;
   }
   if (command.type === "replace-text-edits") {
@@ -1900,6 +1921,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         hasQuote: Boolean(pullQuote),
         hasComparison: Boolean(comparisonBlock),
         hasRowBlock: Boolean(timelineBlock || processBlock || metricBlocks.length > 0),
+        hasMetric: metricBlocks.length > 0,
+        hasTimeline: Boolean(timelineBlock),
+        hasProcess: Boolean(processBlock),
+        hasTable: Boolean(tableBlock),
         layout: design.layout,
       };
       const intent = resolvePageDesign({

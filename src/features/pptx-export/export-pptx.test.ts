@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 import { applyCommand } from "../../core/commands";
-import { createDocument, emu, inches, type PresentationDocument } from "../../core/document-model";
+import { createDocument, emu, inches, pageSizeFromInches, type PresentationDocument } from "../../core/document-model";
 import { buildPptx } from "./export-pptx";
 import { validatePptxPackage } from "./pptx-package";
 
@@ -34,6 +34,16 @@ function templateDocument(): PresentationDocument {
 }
 
 describe("PPTX export", () => {
+  it("writes a changed page size into the presentation part", async () => {
+    const document = createDocument();
+    applyCommand(document, { type: "set-page-size", pageSize: pageSizeFromInches(10, 7.5)! });
+    const result = await buildPptx(document);
+    const presentationXml = strFromU8(unzipSync(result.bytes)["ppt/presentation.xml"]!);
+    // 10in × 7.5in in EMU: the deck is a standard 4:3 page after the change.
+    expect(presentationXml).toContain('cx="9144000"');
+    expect(presentationXml).toContain('cy="6858000"');
+  });
+
   it("creates a structurally valid ZIP-backed presentation and reports native objects", async () => {
     const document = createDocument();
     applyCommand(document, { type: "add-shape", slideId: document.slides[0]!.id, shape: "rectangle" });

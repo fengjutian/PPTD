@@ -1,7 +1,6 @@
 import type { CompositionFacts, IntentConflict } from "../../commands/design-intent";
 import type { DeckConcept, RecipeId } from "../../design/deck-concept";
 import type { SlideContent } from "../../document-model";
-import { readContentUnits } from "./content";
 import { findRecipe } from "./registry";
 import type { LayoutRecipe, RecipePlan, RecipeSelectionOptions } from "./types";
 
@@ -30,6 +29,7 @@ export function chooseRecipeId(
   options: RecipeSelectionOptions,
 ): RecipeId | undefined {
   if (options.hasArtwork || options.hasAsset) return undefined;
+  if (facts.layout === "cover" && concept.recipes.includes("cover-statement")) return "cover-statement";
   if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return undefined;
   if (facts.hasQuote || facts.hasComparison || facts.hasRowBlock) return undefined;
   if (concept.recipes.includes("editorial-index") && facts.itemCount >= 3 && facts.itemCount <= 6 && facts.shortItems) {
@@ -152,12 +152,15 @@ export function planDeckRecipes(
 export function consumptionProblem(plan: RecipePlan, content: SlideContent): string | undefined {
   if (!plan.consumed.title) return "recipe did not consume the title";
   if (content.body.trim() && !plan.consumed.body) return "recipe did not consume the body";
-  const units = readContentUnits(content);
-  if (plan.consumed.items !== units.items.length) {
-    return `recipe consumed ${plan.consumed.items} items, content has ${units.items.length}`;
+  const bullet = content.blocks?.find((block) => block.type === "bullet-list");
+  if (bullet?.type === "bullet-list" && plan.consumed.items !== bullet.items.length) {
+    return `recipe consumed ${plan.consumed.items} items, content has ${bullet.items.length}`;
   }
+  const expectedBlocks = (content.blocks ?? [])
+    .filter((block) => block.type !== "paragraph")
+    .map((block) => block.id)
+    .sort();
   const consumedBlocks = [...plan.consumed.blockIds].sort();
-  const expectedBlocks = [...units.blockIds].sort();
   if (
     consumedBlocks.length !== expectedBlocks.length ||
     consumedBlocks.some((id, index) => id !== expectedBlocks[index])

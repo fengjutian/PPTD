@@ -66,6 +66,7 @@ import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 import { FindReplaceBar } from "../features/editor/FindReplaceBar";
+import { PageSizeControls } from "../features/editor/PageSizeControls";
 import { useFormatPainterStore } from "../store/format-painter";
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 import { ContentHistory } from "../features/editor/ContentHistory";
@@ -3261,6 +3262,12 @@ export function App() {
             >
               <Wand2 />
             </ToolButton>
+            <span className="separator" />
+            <PageSizeControls
+              pageSize={document.pageSize}
+              elements={document.slides.flatMap((slide) => slide.elements)}
+              execute={execute}
+            />
           </div>
           <div className="toolbar-group arrange-tools">
             <ToolButton

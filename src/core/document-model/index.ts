@@ -11,3 +11,4 @@ export * from "./icons";
 export * from "./icon-geometry";
 export * from "./text-runs";
 export * from "./text-style";
+export * from "./page-size";

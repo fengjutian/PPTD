@@ -51,14 +51,14 @@ P1 成功后，用同一份 10 页内容做前后对比：
 
 ### 3.2 本任务不包含（P2/P3）
 
-| 缺口                                                                                      | 计划  |
-| ----------------------------------------------------------------------------------------- | ----- |
-| 设计方向选择器、缩略图预览、换一批                                                        | P2    |
-| `cover-statement`、`data-story`、`image-led`、`process-rail`、`comparison`、`quote-field` | P2    |
-| `conceptFitScore`、`distinctivenessScore`、`changeRecipe` 修复动作                        | P2    |
-| 概念持久化、重新设计、跨项目复用                                                          | P3    |
-| 模板版式内的配方适配                                                                      | P2/P3 |
-| 任意隐喻、自由坐标、自由字号                                                              | 不做  |
+| 缺口                                                                   | 计划  |
+| ---------------------------------------------------------------------- | ----- |
+| 设计方向选择器、缩略图预览、换一批                                     | P2    |
+| `data-story`、`image-led`、`process-rail`、`comparison`、`quote-field` | P2    |
+| `conceptFitScore`、`distinctivenessScore`、`changeRecipe` 修复动作     | P2    |
+| 概念持久化、重新设计、跨项目复用                                       | P3    |
+| 模板版式内的配方适配                                                   | P2/P3 |
+| 任意隐喻、自由坐标、自由字号                                           | 不做  |
 
 ## 4. 功能需求
 
@@ -608,7 +608,7 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 
 ## 9. P2/P3 预留
 
-- **P2a**：`cover-statement`、`data-story`、`image-led` 配方；设计方向选择器（3 个概念 + 真实缩略图）。
+- **P2a（进行中）**：`cover-statement` 已实现；`data-story`、`image-led` 与设计方向选择器待做。
 - **P2b**：`conceptFitScore`、`distinctivenessScore`、`generic-layout`、`changeRecipe`；评审锚点“等权卡片阵列 ≤69”。
 - **P2c**：模板页配方适配（安全区、背景图、Logo 避让）。
 - **P3**：概念持久化、重新设计、跨项目复用；概念与用户手动编辑的冲突策略。
@@ -642,7 +642,7 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 已落地文件：
 
 - `src/core/design/deck-concept.ts`、`design-tokens.ts` 及测试。
-- `src/core/layout/recipes/{types,measure,elements,content,editorial-index,asymmetric-split,registry,plan}.ts` 及测试。
+- `src/core/layout/recipes/{types,measure,elements,content,editorial-index,asymmetric-split,cover-statement,registry,plan}.ts` 及测试。
 - `src/core/commands/template-layouts.ts` 的可选 `recipe/variant/focal`。
 - `src/core/commands/commands.ts` 的概念分派、模板页回退和 `AI_DESIGN_CONTENT_LOSS` 守卫。
 - `src/services/ai-service.ts` 的概念 schema、`generateDeckConcepts`、页面事实派生和 design 请求的 concept。
@@ -653,7 +653,7 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 
 - 4 条短要点的编辑式页已用 PowerPoint 渲染：编号栏、细线、无白卡，标题/条目为原生文本框。
 - 5 条较长要点的非对称分栏页已渲染：左标题栏、右正文栏、无卡片。
-- 全量 `vitest run` 865 项通过；`tsc --noEmit`、`npm run build` 通过。
+- 全量 `vitest run` 878 项通过；`tsc --noEmit`、`npm run build` 通过。
 
 实现时的两处合同细化：
 
@@ -661,4 +661,4 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 - `DesignTokens` 增加 `fonts.heading/body`，配方不直接读主题字体。
 - `asymmetric-split` 支持 2–5 条（样张第 2/4/6/8 页实际有 4/5/4/4 条）。
 
-未完成：真实 AI 接口的 10 页端到端复核、设计方向选择器、其余配方、评审新评分与 `changeRecipe`、概念持久化。
+未完成：真实 AI 接口的 10 页端到端复核、设计方向选择器、`data-story` / `image-led` 等其余配方、评审新评分与 `changeRecipe`、概念持久化。
