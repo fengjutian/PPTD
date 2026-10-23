@@ -312,3 +312,29 @@ indentLevel?: number; // 0–8
 字号增减使用 Office 字号阶梯（8、9、10、10.5、11、12、14 … 120），定义在 `src/core/document-model/text-style.ts`。画布与 PPTX 导出共享同一份样式语义：导出写成原生 `i`/`u`/`strike`/`anchor`/`lnSpc`/`buChar`/`buAutoNum`/`lvl` 属性，文本仍是可编辑对象。
 
 新增字段使持久化格式升到第 15 版；`14 → 15` 迁移不写入任何默认格式，固定样例见 `src/core/document-model/__fixtures__/v14-document.json`。详见 [0044 字符与段落格式](decisions/0044-text-character-and-paragraph-formatting.md)。
+
+## 20. 动画效果、阶段与复制（V0.2 已实现）
+
+动画是设计态，挂在页面的 `animations` 时间线上，用稳定 `animation.id` 引用稳定 `elementId`：
+
+```ts
+type AnimationEffect = "appear" | "fade" | "fly-in" | "float-in" | "split" | "wipe" | "zoom" | "pulse" | "disappear";
+type AnimationPhase = "entrance" | "emphasis" | "exit";
+
+interface SlideAnimation {
+  id: string;
+  elementId: ElementId;
+  effect: AnimationEffect;
+  phase: AnimationPhase;
+  start: "on-click" | "with-previous" | "after-previous";
+  durationMs: number;
+  delayMs: number;
+  direction: "none" | "left" | "right" | "top" | "bottom";
+}
+```
+
+阶段不由 UI 选择，而由效果派生：出现/淡化/飞入/浮入/劈裂/擦除/缩放属于进入，强调脉冲属于强调，消失属于退出。`add-animation` 与 `set-animation` 调用 `phaseForEffect`；Schema 在文档校验时拒绝阶段与效果不一致的记录（`ANIMATION_PHASE_MISMATCH`）。
+
+`duplicate-animation` 复制一条动画（新 id、相同效果/计时/开始方式/方向）并插到源动画之后，一次撤销；锁定元素拒绝复制。预览通过 `animation-${effect}` 类与 CSS 关键帧实现，属于临时 UI 状态，不改变 revision、保存状态或撤销栈。
+
+效果枚举从 3 种扩到 9 种、阶段扩为三值，使持久化格式升到第 16 版；`15 → 16` 迁移只改版本号，旧动画（全部为进入）保持有效，固定样例见 `v16-document.json`。PPTX 仍不写入原生动画，导出报告逐页说明。详见 [0050 动画阶段由效果派生](decisions/0050-animation-phase-from-effect.md)。

@@ -63,6 +63,12 @@ import {
 } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../core/design/deck-concept";
+import {
+  auditThemeDirection,
+  themeDirectionForPreset,
+  type ThemeDirection,
+  type ThemeDirectionAudit,
+} from "../core/design/theme-direction";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
@@ -800,6 +806,8 @@ export function App() {
   const [designQualityReport, setDesignQualityReport] = useState<{
     templateName: string;
     concept?: DeckConcept;
+    themeDirection?: ThemeDirection;
+    themeDirectionAudit?: ThemeDirectionAudit;
     issues: PresentationQualityIssue[];
     notes: string[];
     /** 视觉评审留下的结构化结论，用于在报告里逐条展示模型建议。 */
@@ -2183,6 +2191,7 @@ export function App() {
           ) ?? defaultThemePreset())
         : undefined;
     const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
+    const themeDirection = preset ? themeDirectionForPreset(preset) : undefined;
     const deckName = preset ? preset.name : selectedTemplate!.name;
     designBusyRef.current = true;
     setGeneratingHistoryId(historyIdOverride ?? activeHistoryId);
@@ -2217,7 +2226,10 @@ export function App() {
       let concept: DeckConcept;
       setDesignProgress({ percent: 28, label: "正在确定整册设计方向" });
       try {
-        const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, { taskId });
+        const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, {
+          taskId,
+          themeDirection,
+        });
         concept = resolveDeckConcept({
           concept: aiConcept,
           pageFacts,
@@ -2236,7 +2248,11 @@ export function App() {
       }
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
-      const design = await generatePresentationDesign(sourceDraft, briefs, analysis, { taskId, concept });
+      const design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
+        taskId,
+        concept,
+        themeDirection,
+      });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
@@ -2448,6 +2464,8 @@ export function App() {
       const qualityReport = {
         templateName: deckName,
         concept,
+        themeDirection,
+        themeDirectionAudit: auditThemeDirection(themeDirection, concept),
         issues: [
           ...new Map(
             stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),
@@ -4984,6 +5002,17 @@ export function App() {
                   {designQualityReport.concept && (
                     <p>
                       设计方向：{designQualityReport.concept.name} · {designQualityReport.concept.idea}
+                    </p>
+                  )}
+                  {designQualityReport.themeDirectionAudit && (
+                    <p>
+                      主题方向：
+                      {designQualityReport.themeDirectionAudit.status === "sent"
+                        ? "已接入"
+                        : designQualityReport.themeDirectionAudit.status === "partial"
+                          ? "部分生效"
+                          : "未接入"}
+                      · {designQualityReport.themeDirectionAudit.notes.join(" ")}
                     </p>
                   )}
                 </div>

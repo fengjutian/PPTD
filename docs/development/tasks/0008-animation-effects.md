@@ -1,13 +1,13 @@
 # TASK-ANIM-001：动画效果、阶段与复制
 
-| 项目     | 内容                                      |
-| -------- | ----------------------------------------- |
-| 状态     | 已实现（原生动画导出另立任务）            |
-| 优先级   | P2                                        |
-| 里程碑   | V0.2 专业编辑功能区                       |
-| 预估     | 2–3 人日                                  |
-| 依赖     | 无                                        |
-| 需求依据 | TRS 4.4.5 动画                            |
+| 项目     | 内容                           |
+| -------- | ------------------------------ |
+| 状态     | 已实现（原生动画导出另立任务） |
+| 优先级   | P2                             |
+| 里程碑   | V0.2 专业编辑功能区            |
+| 预估     | 2–3 人日                       |
+| 依赖     | 无                             |
+| 需求依据 | TRS 4.4.5 动画                 |
 
 ## 1. 背景
 
@@ -93,7 +93,7 @@ phaseForEffect(effect): "entrance" | "emphasis" | "exit"
 - `src/core/commands/animation-effects.test.ts`：阶段派生、效果切换、复制、锁定。
 - `src/core/document-model/schema.test.ts`：v15 迁移、v16 样例、阶段不一致拒绝。
 - 既有 `commands.test.ts` 覆盖动画增删改排序。
-- 全量测试：115 个文件、909 项通过。
+- 全量测试：116 个文件、913 项通过。
 
 ## 7. 已知边界
 
@@ -107,4 +107,4 @@ phaseForEffect(effect): "entrance" | "emphasis" | "exit"
 - 模型：`AnimationPhase`、九种效果、`phaseForEffect`，Schema v16 与固定样例。
 - 命令：`add-animation` 派生阶段、`set-animation` 同步阶段、新增 `duplicate-animation`。
 - UI：动画工具栏效果选择器、复制按钮、窗格阶段标签；新增六组预览关键帧。
-- 验证：`npm run typecheck`、`npm run lint`、`npm run build` 通过；新增测试 8 项（命令 4、Schema 4）；全量套件 115 个文件、909 项通过。
+- 验证：`npm run typecheck`、`npm run lint`、`npm run build` 通过；新增测试 8 项（命令 4、Schema 4）；全量套件 116 个文件、913 项通过。

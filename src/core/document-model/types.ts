@@ -373,11 +373,26 @@ export interface IconElement extends ElementBase {
   style: IconElementStyle;
 }
 
+/**
+ * A selection group on one page.
+ *
+ * The group is design metadata, not a nested element: the objects stay in
+ * `slide.elements` so every renderer, exporter and content path keeps working.
+ * Selecting any member selects the whole group, which is what makes moving,
+ * aligning and deleting a group feel like one object. Groups are flattened on
+ * export; the export report says so.
+ */
+export interface SlideGroup {
+  id: string;
+  elementIds: ElementId[];
+}
+
 export interface Slide {
   id: SlideId;
   content: SlideContent;
   elements: SlideElement[];
   animations?: SlideAnimation[];
+  groups?: SlideGroup[];
   background: string;
   /** The template layout this slide was designed against. */
   layoutId?: string;

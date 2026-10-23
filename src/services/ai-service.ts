@@ -5,6 +5,7 @@ import { applyDeckArtDirection } from "../core/commands/deck-art-direction";
 import { LAYOUT_CAPACITY, stripListPrefix } from "../core/commands/layout-capacity";
 import type { AiPaletteRole, CompositionFacts } from "../core/commands/design-intent";
 import type { DeckConcept } from "../core/design/deck-concept";
+import type { ThemeDirection } from "../core/design/theme-direction";
 import { contrastRatio as colorContrastRatio } from "../core/rendering/contrast";
 import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
@@ -279,7 +280,9 @@ export const aiPresentationDesignSchema = z.object({
          * The page recipe that draws this page. It is optional so old models and
          * old design files keep the legacy composition path.
          */
-        recipe: z.enum(["cover-statement", "data-story", "image-led", "editorial-index", "asymmetric-split"]).optional(),
+        recipe: z
+          .enum(["cover-statement", "data-story", "image-led", "editorial-index", "asymmetric-split"])
+          .optional(),
         variant: z.enum(["left", "right"]).optional(),
         focal: z.enum(["title", "index", "body"]).optional(),
         /** How this page communicates, before choosing a geometric skeleton. */
@@ -835,6 +838,8 @@ export interface AiPresentationDesignOptions {
   visualGoal?: PresentationVisualGoal;
   /** The chosen deck direction; sent to the design prompt so recipes stay legal. */
   concept?: DeckConcept;
+  /** Structured theme art direction; sent to the design prompt. */
+  themeDirection?: ThemeDirection;
   /** 生成任务号：取消时后端会中断该任务下所有在途请求。 */
   taskId?: number;
 }
@@ -850,12 +855,21 @@ export async function generateDeckConcepts(
   draft: AiDraft,
   briefs: SlideBrief[],
   template: DesignTemplateContext,
-  options: { taskId?: number } = {},
+  options: { taskId?: number; themeDirection?: ThemeDirection } = {},
 ): Promise<AiDeckConceptOutput> {
   const { provider, model } = await aiSelection();
   const visualGoal = defaultPresentationVisualGoal();
   const raw = await invoke<unknown>("generate_deck_concepts", {
-    request: { draft, briefs, template, visualGoal, model, provider, taskId: options.taskId },
+    request: {
+      draft,
+      briefs,
+      template,
+      visualGoal,
+      themeDirection: options.themeDirection,
+      model,
+      provider,
+      taskId: options.taskId,
+    },
   });
   const result = aiDeckConceptsSchema.parse(raw);
   if (result.concepts.length !== 1) throw new Error("AI_CONCEPT_COUNT_INVALID");
@@ -871,7 +885,17 @@ export async function generatePresentationDesign(
   const { provider, model } = await aiSelection();
   const visualGoal = options.visualGoal ?? defaultPresentationVisualGoal();
   const raw = await invoke<unknown>("generate_presentation_design", {
-    request: { draft, briefs, template, visualGoal, concept: options.concept, model, provider, taskId: options.taskId },
+    request: {
+      draft,
+      briefs,
+      template,
+      visualGoal,
+      concept: options.concept,
+      themeDirection: options.themeDirection,
+      model,
+      provider,
+      taskId: options.taskId,
+    },
   });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");

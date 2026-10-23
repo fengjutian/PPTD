@@ -3,7 +3,7 @@ import { phaseForEffect } from "./animation";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 
-export const CURRENT_SCHEMA_VERSION = 16 as const;
+export const CURRENT_SCHEMA_VERSION = 17 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -296,6 +296,15 @@ const slideSchema = z.object({
     )
     .max(500)
     .optional(),
+  groups: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        elementIds: z.array(z.string().uuid()).min(2).max(200),
+      }),
+    )
+    .max(100)
+    .optional(),
   layoutId: z.string().uuid().optional(),
 });
 
@@ -321,6 +330,7 @@ function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): v
   const slideIds = new Set<string>();
   const elementIds = new Set<string>();
   const animationIds = new Set<string>();
+  const groupIds = new Set<string>();
   for (const [slideIndex, slide] of document.slides.entries()) {
     if (slideIds.has(slide.id)) {
       context.addIssue({
@@ -365,6 +375,34 @@ function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): v
         });
       }
     }
+    const groupedElements = new Set<string>();
+    for (const [groupIndex, group] of (slide.groups ?? []).entries()) {
+      if (groupIds.has(group.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slides", slideIndex, "groups", groupIndex, "id"],
+          message: "DUPLICATE_GROUP_ID",
+        });
+      }
+      groupIds.add(group.id);
+      for (const elementId of group.elementIds) {
+        if (!slideElementIds.has(elementId)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["slides", slideIndex, "groups", groupIndex, "elementIds"],
+            message: "UNKNOWN_GROUP_ELEMENT",
+          });
+        }
+        if (groupedElements.has(elementId)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["slides", slideIndex, "groups", groupIndex, "elementIds"],
+            message: "ELEMENT_IN_MULTIPLE_GROUPS",
+          });
+        }
+        groupedElements.add(elementId);
+      }
+    }
   }
 }
 
@@ -383,6 +421,11 @@ function validateLayoutReferences(document: DocumentShape, context: z.Refinement
 
 export const presentationDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(CURRENT_SCHEMA_VERSION) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionSixteenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(16) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
@@ -506,6 +549,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // animations are all entrances, which the new schema still accepts; a deck
   // with no timeline simply keeps no timeline.
   15: (document) => ({ ...versionFifteenDocumentSchema.parse(document), schemaVersion: 16 }),
+  // Version 17 adds editor-side selection groups. A version 16 document has no
+  // groups, so every page keeps its objects and simply has no grouping.
+  16: (document) => ({ ...versionSixteenDocumentSchema.parse(document), schemaVersion: 17 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

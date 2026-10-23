@@ -31,7 +31,9 @@ export type AiHistoryEntry = z.infer<typeof historyEntrySchema>;
 function migratePresentation(value: unknown): PresentationDocument | undefined {
   if (value === undefined) return undefined;
   try {
-    return parsePresentationDocument(value);
+    // 与项目文件读取一致：Schema 输出的是校验后的普通字符串 ID，
+    // 领域类型用 DocumentId 品牌标记，迁移后在这里收口一次。
+    return parsePresentationDocument(value) as PresentationDocument;
   } catch {
     // 文稿读不出来时草稿正文仍然可用，条目照常保留，不连正文一起丢。
     return undefined;

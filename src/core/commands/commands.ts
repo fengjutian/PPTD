@@ -325,6 +325,20 @@ function markContentChanged(slide: Slide): void {
   if (slide.content.status === "approved") slide.content.status = "changed";
 }
 
+/**
+ * Drops groups whose members no longer all exist.
+ *
+ * A group is a selection helper, not a container: deleting one member leaves
+ * the other objects in place, and keeping a half-group would make the next
+ * click select objects that are no longer a meaningful unit.
+ */
+function pruneGroups(slide: Slide): void {
+  if (!slide.groups) return;
+  const alive = new Set(slide.elements.map((element) => element.id));
+  const kept = slide.groups.filter((group) => group.elementIds.every((id) => alive.has(id)));
+  slide.groups = kept.length > 0 ? kept : undefined;
+}
+
 type MetricBlock = Extract<ContentBlock, { type: "metric" }>;
 type TableBlock = Extract<ContentBlock, { type: "table-data" }>;
 
@@ -650,6 +664,8 @@ export type DocumentCommand =
   | { type: "delete-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "set-elements-lock"; slideId: SlideId; elementIds: ElementId[]; locked: boolean }
+  | { type: "group-elements"; slideId: SlideId; elementIds: ElementId[] }
+  | { type: "ungroup-elements"; slideId: SlideId; groupId: string }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
   | {
       type: "add-animation";
@@ -1045,6 +1061,9 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       return null;
     case "set-page-size":
       return "design";
+    case "group-elements":
+    case "ungroup-elements":
+      return "design";
     case "set-slide-background":
     case "set-slide-background-image":
     case "remove-slide-background-image":
@@ -1321,6 +1340,9 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
     ...generatedSlide.elements,
     ...preserved.filter((element) => !isPageBackground(element)),
   ];
+  // Relayout replaces the composition; a group whose members were regenerated
+  // would point at ids that no longer exist, so the grouping is dropped.
+  slide.groups = undefined;
   const generatedLayout = temp.layouts?.[0];
   if (!generatedLayout) {
     delete slide.layoutId;
@@ -3695,6 +3717,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const duplicate = {
       ...source,
       id: crypto.randomUUID() as SlideId,
+      // The element ids are regenerated below; the source groups would point at
+      // the old ids, so the duplicate starts ungrouped.
+      groups: undefined,
       content: {
         ...source.content,
         ...(source.content.blocks ? { blocks: cloneContentBlocks(source.content.blocks) } : {}),
@@ -3840,6 +3865,26 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const targets = slide.elements.filter((element) => command.elementIds.includes(element.id));
     if (targets.length === 0) throw new Error("ELEMENT_NOT_FOUND");
     for (const target of targets) target.locked = command.locked;
+    return;
+  }
+
+  if (command.type === "group-elements") {
+    const unique = [...new Set(command.elementIds)];
+    if (unique.length < 2) throw new Error("GROUP_TOO_SMALL");
+    const targets = unique.map((id) => slide.elements.find((element) => element.id === id));
+    if (targets.some((element) => !element)) throw new Error("ELEMENT_NOT_FOUND");
+    if (targets.some((element) => element!.locked)) throw new Error("ELEMENT_LOCKED");
+    if ((slide.groups ?? []).some((group) => group.elementIds.some((id) => unique.includes(id))))
+      throw new Error("ELEMENT_ALREADY_GROUPED");
+    slide.groups = [...(slide.groups ?? []), { id: crypto.randomUUID(), elementIds: unique }];
+    return;
+  }
+
+  if (command.type === "ungroup-elements") {
+    const groups = slide.groups ?? [];
+    const next = groups.filter((group) => group.id !== command.groupId);
+    if (next.length === groups.length) throw new Error("GROUP_NOT_FOUND");
+    slide.groups = next.length > 0 ? next : undefined;
     return;
   }
 
@@ -4182,6 +4227,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       if (slide.animations)
         slide.animations = slide.animations.filter((animation) => animation.elementId !== elementId);
     }
+    pruneGroups(slide);
     return;
   }
   if (command.type === "move-elements") {
@@ -4533,6 +4579,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     );
     if (slide.animations)
       slide.animations = slide.animations.filter((animation) => animation.elementId !== command.elementId);
+    pruneGroups(slide);
     return;
   }
   if (command.type === "move-element") {

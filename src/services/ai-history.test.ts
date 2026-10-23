@@ -35,7 +35,15 @@ const draft = (): AiDraft => ({
     narrativeStrategy: "management-report",
     assumptions: [],
   },
-  slides: [{ title: "封面", body: "季度经营复盘", speakerNotes: "", blocks: [] }],
+  slides: [
+    {
+      title: "封面",
+      body: "季度经营复盘",
+      speakerNotes: "",
+      plan: { purpose: "开篇", conclusion: "本季度增长稳健", visualIntent: "hero", density: "low" },
+      blocks: [],
+    },
+  ],
 });
 
 const historyRow = (presentation: unknown) => ({
