@@ -77,6 +77,28 @@ const imageCropSchema = z
   })
   .refine((crop) => crop.top + crop.bottom < 1 && crop.left + crop.right < 1, { message: "IMAGE_CROP_EMPTY" });
 
+const iconElement = base.extend({
+  type: z.literal("icon"),
+  name: z.enum([
+    "book",
+    "mountain",
+    "water",
+    "sun",
+    "moon",
+    "target",
+    "chart",
+    "users",
+    "bulb",
+    "flag",
+    "heart",
+    "leaf",
+  ]),
+  style: z.object({
+    color: hexColor,
+    strokeWidth: z.number().min(1).max(6).optional(),
+  }),
+});
+
 const imageElement = base.extend({
   type: z.literal("image"),
   source: z.object({
@@ -220,7 +242,7 @@ const slideSchema = z.object({
       .optional(),
   }),
   elements: z.array(
-    z.discriminatedUnion("type", [textElement, shapeElement, lineElement, imageElement, chartElement, tableElement]),
+    z.discriminatedUnion("type", [textElement, shapeElement, lineElement, iconElement, imageElement, chartElement, tableElement]),
   ),
   layoutId: z.string().uuid().optional(),
 });

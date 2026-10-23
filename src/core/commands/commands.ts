@@ -19,6 +19,7 @@ import type {
   SupportedImageMimeType,
   TableElementStyle,
   TextElementStyle,
+  iconForText,
 } from "../document-model";
 import {
   createDocument,
@@ -2493,19 +2494,40 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             shape(frame(x, y, cardWidth, 0.008), design.accent),
           );
           slide.elements.push(shape(circleFrame(badgeX, badgeY, badgeDiameter), accentFill, "ellipse"));
-          const badgeText = String(itemIndex + 1).padStart(2, "0");
-          slide.elements.push(
-            text(
-              badgeText,
-              centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 14),
-              14,
-              "#FFFFFF",
-              true,
-              "center",
-              undefined,
-              accentFillLuminance,
-            ),
-          );
+          // A point that names something the icon set can draw gets the icon;
+          // anything else keeps the number, which stays the honest default.
+          const cardIcon = iconForText(cleanItem);
+          if (cardIcon) {
+            const iconSide = 0.2;
+            slide.elements.push({
+              id: crypto.randomUUID() as ElementId,
+              type: "icon",
+              name: cardIcon,
+              frame: frame(
+                badgeX + (badgeDiameter - iconSide) / 2 / pageWidthIn,
+                badgeY + (badgeDiameter - iconSide) / 2 / pageHeightIn,
+                iconSide / pageWidthIn,
+                iconSide / pageHeightIn,
+              ),
+              rotationMilliDegree: 0,
+              locked: false,
+              style: { color: accentFillLuminance > 0.55 ? "#1E2A32" : "#FFFFFF", strokeWidth: 2 },
+            });
+          } else {
+            const badgeText = String(itemIndex + 1).padStart(2, "0");
+            slide.elements.push(
+              text(
+                badgeText,
+                centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 14),
+                14,
+                "#FFFFFF",
+                true,
+                "center",
+                undefined,
+                accentFillLuminance,
+              ),
+            );
+          }
           const cardTextBox = {
             x: x + 0.03,
             y: textTop,

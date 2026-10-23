@@ -5,4 +5,5 @@ export * from "./repair";
 export * from "./content-hash";
 export * from "./chart-data";
 export * from "./table-data";
+export * from "./icons";
 export * from "./text-runs";

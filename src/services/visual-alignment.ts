@@ -528,15 +528,28 @@ export const defaultPresentationVisualGoal = (): PresentationVisualGoal => ({
 /**
  * The pages a repair round may touch.
  *
- * Errors always count. Warnings only count when the deck as a whole is below
- * the goal, because a warning on an otherwise passing deck is not a reason to
- * move that page's content around.
+ * Errors always count. Warnings only count when the deck is below the goal in
+ * at least one dimension. Judging only the overall score let a deck with a
+ * failing readability/hierarchy threshold pass this filter, so every warning
+ * was discarded and the loop stopped with "no-change" while still below the
+ * goal.
  */
-export function affectedSlideIndexes(review: VisualReview, minimumOverall = 85): number[] {
+export function affectedSlideIndexes(
+  review: VisualReview,
+  minimum: number | PresentationVisualGoal["minimumScores"] = 85,
+): number[] {
+  const belowTarget =
+    typeof minimum === "number"
+      ? review.overallScore < minimum
+      : review.overallScore < minimum.overall ||
+        review.hierarchyScore < minimum.hierarchy ||
+        review.alignmentScore < minimum.alignment ||
+        review.readabilityScore < minimum.readability ||
+        review.consistencyScore < minimum.consistency;
   return [
     ...new Set(
       review.issues
-        .filter((issue) => issue.severity === "error" || review.overallScore < minimumOverall)
+        .filter((issue) => issue.severity === "error" || belowTarget)
         .map((issue) => issue.slideIndex),
     ),
   ].sort((left, right) => left - right);

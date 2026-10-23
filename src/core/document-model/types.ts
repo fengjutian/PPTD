@@ -1,4 +1,5 @@
 import type { SchemaVersion } from "./schema";
+import type { BuiltinIconName } from "./icons";
 
 export type Brand<T, B extends string> = T & { readonly __brand: B };
 export type DocumentId = Brand<string, "DocumentId">;
@@ -291,7 +292,35 @@ export interface TableElement extends ElementBase {
   style: TableElementStyle;
 }
 
-export type SlideElement = TextElement | ShapeElement | LineElement | ImageElement | ChartElement | TableElement;
+export type SlideElement =
+  | TextElement
+  | ShapeElement
+  | LineElement
+  | IconElement
+  | ImageElement
+  | ChartElement
+  | TableElement;
+
+/** Presentation-only styling of a built-in icon. */
+export interface IconElementStyle {
+  color: string;
+  /** Stroke width on the 24×24 grid. */
+  strokeWidth?: number;
+}
+
+/**
+ * A line icon from the built-in set.
+ *
+ * An icon is an element of its own rather than a picture: the canvas draws it
+ * as vectors and the export writes an SVG picture, so the shape stays crisp at
+ * any size. It carries only a name, so a corrupt file cannot smuggle arbitrary
+ * path data into the renderer.
+ */
+export interface IconElement extends ElementBase {
+  type: icon;
+  name: BuiltinIconName;
+  style: IconElementStyle;
+}
 
 export interface Slide {
   id: SlideId;

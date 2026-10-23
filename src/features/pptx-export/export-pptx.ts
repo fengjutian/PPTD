@@ -6,6 +6,7 @@ import {
   resolveFragmentStyle,
   resolveTableData,
   tableColumnAlignsRight,
+  iconSvgDataUrl,
   textFragments,
   type ChartElement,
   type ImageCrop,
@@ -391,6 +392,14 @@ export async function buildPptx(
           border,
         });
         nativeTableCount += 1;
+      } else if (element.type === "icon") {
+        // The icon is written as an SVG picture: it scans at any size and keeps
+        // its strokes, while the document itself stores only the icon name.
+        slide.addImage({
+          data: iconSvgDataUrl(element.name, element.style.color, element.style.strokeWidth ?? 2),
+          ...position,
+          altText: 图标：,
+        });
       } else {
         slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });
         slideCrops.push(element.crop);
