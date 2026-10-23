@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createDocument } from "../../core/document-model";
+import { createDocument, createSlide } from "../../core/document-model";
 import { captureContentVersion } from "../../core/document-model/content-version";
 import { ContentHistory } from "./ContentHistory";
 
@@ -48,6 +48,21 @@ describe("content history", () => {
     expect(markup).toContain("没有差异");
     expect(markup).toContain("当前内容与这个版本一致");
     expect(markup).not.toContain("恢复此版本内容");
+  });
+
+  it("numbers a changed page by its position in the current deck", () => {
+    const document = createDocument();
+    document.slides.push(createSlide(2), createSlide(3));
+    document.slides[2]!.content.title = "第三页旧标题";
+    captureContentVersion(document);
+    document.slides[2]!.content.title = "第三页新标题";
+
+    const markup = renderToStaticMarkup(
+      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} />,
+    );
+
+    expect(markup).toContain("第 3 页");
+    expect(markup).toContain("第三页新标题");
   });
 
   it("only offers content restore when the page set still matches", () => {

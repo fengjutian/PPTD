@@ -55,8 +55,8 @@ function ChangeLine({ change }: { change: ContentFieldChange }) {
   );
 }
 
-function SlideDiff({ diff }: { diff: ContentSlideDiff }) {
-  const index = diff.afterIndex ?? diff.beforeIndex ?? 0;
+function SlideDiff({ diff, currentIndex }: { diff: ContentSlideDiff; currentIndex: number }) {
+  const index = diff.afterIndex ?? (currentIndex >= 0 ? currentIndex : diff.beforeIndex) ?? 0;
   const moved = diff.beforeIndex !== undefined && diff.afterIndex !== undefined && diff.beforeIndex !== diff.afterIndex;
   return (
     <li className={`content-diff-page ${diff.status}`}>
@@ -196,7 +196,11 @@ export function ContentHistory({
               ) : (
                 <ul className="content-diff-list">
                   {diff.map((item) => (
-                    <SlideDiff key={item.slideId} diff={item} />
+                    <SlideDiff
+                      key={item.slideId}
+                      diff={item}
+                      currentIndex={document.slides.findIndex((slide) => slide.id === item.slideId)}
+                    />
                   ))}
                 </ul>
               )}

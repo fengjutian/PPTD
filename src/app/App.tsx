@@ -1616,8 +1616,19 @@ export function App() {
               closeAfterFlushRef.current = true;
               // `destroy()` requires a broader capability and bypasses the
               // normal close lifecycle. `close()` emits one more close request,
-              // which the flag above deliberately lets through.
-              await getCurrentWindow().close();
+              // which the flag above deliberately lets through. Do not await it
+              // inside the first close handler: the second request cannot finish
+              // until this handler returns, so awaiting it deadlocks the window.
+              void getCurrentWindow()
+                .close()
+                .catch((error: unknown) => {
+                  closeAfterFlushRef.current = false;
+                  setMessage({
+                    id: Date.now(),
+                    text: `关闭窗口失败：${error instanceof Error ? error.message : String(error)}`,
+                    kind: "error",
+                  });
+                });
             } catch (error) {
               closeAfterFlushRef.current = false;
               setMessage({
