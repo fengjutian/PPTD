@@ -100,9 +100,9 @@ import {
 import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
 import {
   analyzePptxTemplate,
+  choosePresentationFile,
   choosePptxPath,
   choosePptxTemplate,
-  chooseProjectToOpen,
   clearRecovery,
   getPptxTemplatePreview,
   importPptxTemplate,
@@ -950,25 +950,35 @@ export function App() {
     setTaskStatus("已新建项目");
   };
 
-  const handleOpen = async () => {
+  const handleOpenOrImport = async () => {
     try {
-      if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开其他项目吗？")) return;
-      const result = await chooseProjectToOpen();
-      if (!result) return;
-      setImageProjectPath(result.path);
-      loadDocument(result.document);
-      await clearRecovery();
-      setProjectPath(result.path);
-      setProjectMtime(result.modifiedAt);
-      setSavedRevision(result.document.revisions.document);
-      setTaskStatus(
-        result.removedLayoutReferences > 0
-          ? `项目已打开，但 ${result.removedLayoutReferences} 个页面的模板引用缺失`
-          : "项目已打开",
-      );
-      void refreshRecentProjects();
+      if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开或导入其他演示文稿吗？")) return;
+      const selection = await choosePresentationFile();
+      if (!selection) return;
+      if (selection.format === "pptd") {
+        const result = await openProjectAtPath(selection.path);
+        setImageProjectPath(result.path);
+        loadDocument(result.document);
+        await clearRecovery();
+        setProjectPath(result.path);
+        setProjectMtime(result.modifiedAt);
+        setSavedRevision(result.document.revisions.document);
+        setTaskStatus("PPTD 项目已打开");
+        void refreshRecentProjects();
+        return;
+      }
+      if (selection.format === "ppt") {
+        setTaskStatus("旧版 PPT 需要先通过 PowerPoint 或 LibreOffice 转换为 PPTX；当前版本不会伪装成无损导入");
+        return;
+      }
+      const imported = await importPptxTemplate(selection.path);
+      setSelectedTemplate(imported);
+      setTemplateLibrary(await listPptxTemplates());
+      await handleSelectTemplate(imported, false);
+      setTemplatePickerOpen(true);
+      setTaskStatus(`PPTX 已安全导入并完成结构分析：${selection.name}`);
     } catch (error) {
-      setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`);
+      setTaskStatus(`打开或导入失败：${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -2387,7 +2397,7 @@ export function App() {
             <ToolButton label="新建项目" onClick={handleNew}>
               <FilePlus2 />
             </ToolButton>
-            <ToolButton label="打开项目" onClick={handleOpen} disabled={!isDesktopRuntime()}>
+            <ToolButton label="打开或导入 PPTD、PPTX、PPT" onClick={handleOpenOrImport} disabled={!isDesktopRuntime()}>
               <FileUp />
             </ToolButton>
             <ToolButton

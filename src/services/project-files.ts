@@ -10,6 +10,30 @@ import { saveRecentProject } from "./app-database";
 
 const projectFilter = [{ name: "PPTD 项目", extensions: ["pptd"] }];
 const pptxFilter = [{ name: "PowerPoint 模板", extensions: ["pptx"] }];
+const presentationFilter = [
+  { name: "演示文稿", extensions: ["pptd", "pptx", "ppt"] },
+  { name: "PPTD 项目", extensions: ["pptd"] },
+  { name: "PowerPoint 演示文稿", extensions: ["pptx", "ppt"] },
+];
+
+export type PresentationFileSelection = {
+  path: string;
+  name: string;
+  format: "pptd" | "pptx" | "ppt";
+};
+
+/** Selects a supported presentation without trusting a caller-provided kind. */
+export async function choosePresentationFile(): Promise<PresentationFileSelection | null> {
+  if (!isTauri()) throw new Error("DESKTOP_RUNTIME_REQUIRED");
+  const path = await open({ multiple: false, directory: false, filters: presentationFilter });
+  if (!path) return null;
+  const name = path.split(/[\\/]/).at(-1) || "presentation";
+  const extension = name.split(".").at(-1)?.toLowerCase();
+  if (extension !== "pptd" && extension !== "pptx" && extension !== "ppt") {
+    throw new Error("UNSUPPORTED_PRESENTATION_FORMAT");
+  }
+  return { path, name, format: extension };
+}
 
 export const isDesktopRuntime = () => isTauri();
 export interface TemplateRecord {

@@ -464,7 +464,9 @@ export type DocumentCommand =
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string }
-  | { type: "set-speaker-notes"; slideId: SlideId; notes: string };
+  | { type: "set-speaker-notes"; slideId: SlideId; notes: string }
+  | { type: "approve-slide-content"; slideId: SlideId }
+  | { type: "reopen-slide-content"; slideId: SlideId };
 
 /** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */ function assertTextStyle(
   style: Partial<TextElementStyle>,
@@ -794,6 +796,17 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
         (element.contentRef === "title" || element.contentRef === "body" || legacyTitle)
         ? "content"
         : "design";
+    }
+    case "approve-slide-content":
+    case "reopen-slide-content": {
+      // 审核状态是内容态。已经处于目标状态的命令不产生撤销项：状态没变，
+      // 记录一次"确认"只会让用户多按一次撤销。
+      if (!document) return "content";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      if (!slide) return "content";
+      if (command.type === "approve-slide-content" && slide.content.status === "approved") return null;
+      if (command.type === "reopen-slide-content" && slide.content.status === "review") return null;
+      return "content";
     }
     case "add-text":
     case "add-line":
