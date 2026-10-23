@@ -23,4 +23,3 @@ describe("deck art direction", () => {
     expect(result[0]!.emphasis).toBe("title-dominant");
   });
 });
-

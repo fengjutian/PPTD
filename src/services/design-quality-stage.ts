@@ -116,8 +116,7 @@ function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualR
     ...(overview?.themeFitScore !== undefined || reviews.some((item) => item.themeFitScore !== undefined)
       ? {
           themeFitScore:
-            overview?.themeFitScore ??
-            Math.min(...reviews.map((item) => item.themeFitScore ?? item.consistencyScore)),
+            overview?.themeFitScore ?? Math.min(...reviews.map((item) => item.themeFitScore ?? item.consistencyScore)),
         }
       : {}),
     ...(reviews.some((item) => item.visualFocusScore !== undefined)

@@ -789,49 +789,51 @@ export async function generatePresentationDesign(
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   return constrainDesignToTemplate(
     {
-      slides: applyDeckArtDirection(design.slides.map((slide, index) => {
-        const content = draft.slides[index]!;
-        const brief = briefs[index]!;
-        const blockTypes = new Set((content.blocks ?? []).map((block) => block.type));
-        const visualNarrative =
-          slide.visualNarrative ??
-          (blockTypes.has("quote")
-            ? "quotation"
-            : blockTypes.has("comparison")
-              ? "comparison"
-              : blockTypes.has("timeline") || blockTypes.has("process")
-                ? "chronology"
-                : blockTypes.has("metric") || blockTypes.has("table-data") || brief.visualIntent === "data-chart"
-                  ? "evidence"
-                  : brief.visualIntent === "image-story"
-                    ? "scene"
-                    : brief.visualIntent === "hero" || brief.visualIntent === "summary"
-                      ? "statement"
-                      : "framework");
-        return {
-          ...slide,
-          visualNarrative,
-          // Scene pages need a visual anchor even when an older model omitted
-          // the new asset instruction. The renderer still owns placement.
-          ...(visualNarrative === "scene" && !slide.visualAsset
-            ? {
-                visualAsset: {
-                  enabled: true,
-                  role: "side" as const,
-                  prompt: `${content.title}相关的写实环境或象征性场景，无文字、无字母、无数字`,
-                },
-              }
-            : {}),
-          layout: chooseSlideLayout({
-            index,
-            requested: slide.layout,
-            visualIntent: brief.visualIntent,
-            density: brief.density,
-            body: content.body,
-            blocks: content.blocks,
-          }),
-        };
-      })),
+      slides: applyDeckArtDirection(
+        design.slides.map((slide, index) => {
+          const content = draft.slides[index]!;
+          const brief = briefs[index]!;
+          const blockTypes = new Set((content.blocks ?? []).map((block) => block.type));
+          const visualNarrative =
+            slide.visualNarrative ??
+            (blockTypes.has("quote")
+              ? "quotation"
+              : blockTypes.has("comparison")
+                ? "comparison"
+                : blockTypes.has("timeline") || blockTypes.has("process")
+                  ? "chronology"
+                  : blockTypes.has("metric") || blockTypes.has("table-data") || brief.visualIntent === "data-chart"
+                    ? "evidence"
+                    : brief.visualIntent === "image-story"
+                      ? "scene"
+                      : brief.visualIntent === "hero" || brief.visualIntent === "summary"
+                        ? "statement"
+                        : "framework");
+          return {
+            ...slide,
+            visualNarrative,
+            // Scene pages need a visual anchor even when an older model omitted
+            // the new asset instruction. The renderer still owns placement.
+            ...(visualNarrative === "scene" && !slide.visualAsset
+              ? {
+                  visualAsset: {
+                    enabled: true,
+                    role: "side" as const,
+                    prompt: `${content.title}相关的写实环境或象征性场景，无文字、无字母、无数字`,
+                  },
+                }
+              : {}),
+            layout: chooseSlideLayout({
+              index,
+              requested: slide.layout,
+              visualIntent: brief.visualIntent,
+              density: brief.density,
+              body: content.body,
+              blocks: content.blocks,
+            }),
+          };
+        }),
+      ),
     },
     template,
   );

@@ -275,8 +275,10 @@ function copyElementForPaste(element: SlideElement, offset: number): SlideElemen
       ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
     };
   }
-  if (element.type === "shape") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
-  if (element.type === "line") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  if (element.type === "shape")
+    return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  if (element.type === "line")
+    return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
   if (element.type === "chart")
     return {
       ...element,
@@ -285,8 +287,10 @@ function copyElementForPaste(element: SlideElement, offset: number): SlideElemen
       style: { ...element.style, seriesColors: [...element.style.seriesColors] },
       contentBlockIds: [...element.contentBlockIds],
     };
-  if (element.type === "table") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
-  if (element.type === "icon") return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  if (element.type === "table")
+    return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
+  if (element.type === "icon")
+    return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
   return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, source: { ...element.source } };
 }
 
@@ -577,7 +581,10 @@ function assertChartStyle(style: Partial<ChartElementStyle>): void {
  */
 function assertIconStyle(style: Partial<IconElementStyle>): void {
   if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_ICON_STYLE");
-  if (style.strokeWidth !== undefined && (!Number.isFinite(style.strokeWidth) || style.strokeWidth < 1 || style.strokeWidth > 6))
+  if (
+    style.strokeWidth !== undefined &&
+    (!Number.isFinite(style.strokeWidth) || style.strokeWidth < 1 || style.strokeWidth > 6)
+  )
     throw new Error("INVALID_ICON_STYLE");
 }
 
@@ -604,11 +611,16 @@ function assertTableStyle(style: Partial<TableElementStyle>): void {
     throw new Error("INVALID_TABLE_STYLE");
   if (style.bandingFill !== undefined && !HEX_COLOR_PATTERN.test(style.bandingFill))
     throw new Error("INVALID_TABLE_STYLE");
-  if (style.headerBold !== undefined && typeof style.headerBold !== "boolean")
+  if (style.headerBold !== undefined && typeof style.headerBold !== "boolean") throw new Error("INVALID_TABLE_STYLE");
+  if (
+    style.cellPaddingPt !== undefined &&
+    (!Number.isFinite(style.cellPaddingPt) || style.cellPaddingPt < 0 || style.cellPaddingPt > 30)
+  )
     throw new Error("INVALID_TABLE_STYLE");
-  if (style.cellPaddingPt !== undefined && (!Number.isFinite(style.cellPaddingPt) || style.cellPaddingPt < 0 || style.cellPaddingPt > 30))
-    throw new Error("INVALID_TABLE_STYLE");
-  if (style.borderWidthPt !== undefined && (!Number.isFinite(style.borderWidthPt) || style.borderWidthPt < 0 || style.borderWidthPt > 10))
+  if (
+    style.borderWidthPt !== undefined &&
+    (!Number.isFinite(style.borderWidthPt) || style.borderWidthPt < 0 || style.borderWidthPt > 10)
+  )
     throw new Error("INVALID_TABLE_STYLE");
 }
 
@@ -826,8 +838,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
  */
 function isPageBackground(element: SlideElement): boolean {
   return (
-    element.type === "image" &&
-    (element.placement === "slide-background" || element.placement === "layout-background")
+    element.type === "image" && (element.placement === "slide-background" || element.placement === "layout-background")
   );
 }
 
@@ -1623,23 +1634,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // 13-inch page. A short cover title may grow to hold the page; a long
         // one keeps the display size, because the frame is the limit.
         const coverTitleSize =
-          templateTitleSize ?? (content.title.trim().length <= 8 ? Math.min(72, Math.round(typeScale.display * 1.5)) : typeScale.display);
+          templateTitleSize ??
+          (content.title.trim().length <= 8 ? Math.min(72, Math.round(typeScale.display * 1.5)) : typeScale.display);
         if (!keepsArtwork)
           slide.elements.push(
             shape(frame(0, 0, 0.035, 1), design.accent),
             shape(frame(0.08, 0.7, 0.18, 0.018), design.accent),
           );
         slide.elements.push(
-          text(
-            content.title,
-            clippedTitle,
-            coverTitleSize,
-            titleInk,
-            true,
-            "left",
-            undefined,
-            titleLuminance,
-          ),
+          text(content.title, clippedTitle, coverTitleSize, titleInk, true, "left", undefined, titleLuminance),
         );
         if (content.body.trim())
           slide.elements.push(
@@ -2503,7 +2506,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // stays at the dense size. Sparse grids carry one point more.
         const sparseCards = visible.length <= 4 && visible.every((item) => item.trim().length <= 16);
         const cardFontSize = sparseCards ? 17 : 16;
-        const cardTextHeight = Math.max(...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, cardFontSize, bodyLeading)));
+        const cardTextHeight = Math.max(
+          ...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, cardFontSize, bodyLeading)),
+        );
         // A card is as tall as the badge and the copy it carries. Stretching a
         // one-line card to the row's full height left the copy stranded in the
         // middle of an empty box.
@@ -3188,25 +3193,25 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
                     style: { ...element.style },
                   }
                 : element.type === "table"
-                ? {
-                    ...element,
-                    id: crypto.randomUUID() as ElementId,
-                    frame: { ...element.frame },
-                    style: { ...element.style },
-                  }
-                : element.type === "icon"
-                ? {
-                    ...element,
-                    id: crypto.randomUUID() as ElementId,
-                    frame: { ...element.frame },
-                    style: { ...element.style },
-                  }
-                : {
-                    ...element,
-                    id: crypto.randomUUID() as ElementId,
-                    frame: { ...element.frame },
-                    source: { ...element.source },
-                  },
+                  ? {
+                      ...element,
+                      id: crypto.randomUUID() as ElementId,
+                      frame: { ...element.frame },
+                      style: { ...element.style },
+                    }
+                  : element.type === "icon"
+                    ? {
+                        ...element,
+                        id: crypto.randomUUID() as ElementId,
+                        frame: { ...element.frame },
+                        style: { ...element.style },
+                      }
+                    : {
+                        ...element,
+                        id: crypto.randomUUID() as ElementId,
+                        frame: { ...element.frame },
+                        source: { ...element.source },
+                      },
       ),
     };
     document.slides.splice(sourceIndex + 1, 0, duplicate);
@@ -3574,8 +3579,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // 水平线和竖线用宽高表达方向。只改 direction 不换宽高的话，一条 4in ×
     // 0.02in 的横线切到 vertical 后会变成 0.02in 宽的“点”。以中心为轴交换
     // 宽高，线不会跳到别处。
-    const axisAligned = (direction: typeof command.direction) =>
-      direction === "horizontal" || direction === "vertical";
+    const axisAligned = (direction: typeof command.direction) => direction === "horizontal" || direction === "vertical";
     if (axisAligned(previous) && axisAligned(command.direction) && previous !== command.direction) {
       const centerX = element.frame.x + element.frame.width / 2;
       const centerY = element.frame.y + element.frame.height / 2;

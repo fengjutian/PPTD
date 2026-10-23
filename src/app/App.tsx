@@ -68,6 +68,7 @@ import { fitZoom } from "../core/rendering/viewport";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
+import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
 import {
   countSlidePoints,
   draftMetrics,
@@ -2155,6 +2156,7 @@ export function App() {
   };
 
   const handleSelectTemplate = async (template: TemplateRecord) => {
+    setThemePresetId("");
     setSelectedTemplate(template);
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
@@ -2181,6 +2183,14 @@ export function App() {
     } finally {
       setTemplatePreviewBusy(false);
     }
+  };
+
+  const handleSelectThemePreset = (presetId: string) => {
+    setThemePresetId(presetId);
+    setSelectedTemplate(undefined);
+    setTemplatePreview(undefined);
+    setTemplateAnalysis(undefined);
+    setTemplateLayoutRenders([]);
   };
 
   useEffect(() => {
@@ -2310,6 +2320,8 @@ export function App() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   };
+
+  const selectedThemePreset = findThemePreset(themePresetId);
 
   return (
     <div
@@ -2482,11 +2494,11 @@ export function App() {
         <button
           className={activeView === "theme" ? "active" : ""}
           aria-current={activeView === "theme" ? "page" : undefined}
-          title="PPT 模板"
+          title="主题模板"
           onClick={() => changeActiveView("theme")}
         >
           <Palette />
-          <span>模板</span>
+          <span>主题</span>
         </button>
         <div className="nav-spacer" />
         <button
@@ -2841,8 +2853,8 @@ export function App() {
             <div>
               <Palette />
               <div>
-                <h1>PPT 模板</h1>
-                <p>上传用户模板，在内容确认后提取主题、母版和页面版式</p>
+                <h1>主题模板</h1>
+                <p>选择内置主题，或从已有 PPT 中抽取配色、字体、母版和版式</p>
               </div>
             </div>
             <div className="feature-header-actions">
@@ -2855,7 +2867,7 @@ export function App() {
                   <Check /> 编辑文字
                 </span>
                 <i />
-                <span className="active">3 上传模板</span>
+                <span className="active">3 选择主题</span>
               </div>
               <button
                 type="button"
@@ -2863,58 +2875,26 @@ export function App() {
                 onClick={() => setTemplateUploadOpen(true)}
               >
                 <FileUp />
-                上传 PPT 模板
+                从 PPT 抽取主题
               </button>
             </div>
           </header>
           <div className="feature-scroll">
             <section className="template-content">
               <div className="template-browser">
-                <div className="template-library">
+                <div className="theme-source-panel template-library">
                   <div className="template-library-heading">
                     <div>
-                      <strong>已保存模板</strong>
-                      <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
-                        视觉主题
-                        <select
-                          aria-label="视觉主题"
-                          disabled={designBusy}
-                          value={themePresetId}
-                          onChange={(event) => setThemePresetId(event.currentTarget.value)}
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: "6px",
-                            border: "1px solid rgba(120,130,140,0.4)",
-                            background: "transparent",
-                            color: "inherit",
-                          }}
-                        >
-                          <option value="">跟随模板</option>
-                          {THEME_PRESETS.map((preset) => (
-                            <option key={preset.id} value={preset.id}>
-                              {preset.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {themePresetId === "" &&
-                        (() => {
-                          const suggested = THEME_PRESETS.find((preset) => preset.id === inferThemePresetId(aiTopic));
-                          return suggested ? (
-                            <button
-                              type="button"
-                              className="secondary-action"
-                              disabled={designBusy}
-                              onClick={() => setThemePresetId(suggested.id)}
-                            >
-                              推荐：{suggested.name}
-                            </button>
-                          ) : null;
-                        })()}
-                      <span>{templateLibrary.length} 个</span>
+                      <strong>内置主题</strong>
+                      <span>{THEME_PRESETS.length} 套</span>
                     </div>
                   </div>
-                  <div>
+                  <ThemePresetPicker value={themePresetId} onChange={handleSelectThemePreset} disabled={designBusy} />
+                  <div className="extracted-theme-heading">
+                    <strong>从 PPT 抽取</strong>
+                    <span>{templateLibrary.length} 个</span>
+                  </div>
+                  <div className="extracted-theme-list">
                     {templateLibrary.map((template) => (
                       <button
                         type="button"
@@ -2922,7 +2902,7 @@ export function App() {
                         key={template.id}
                         onClick={() => void handleSelectTemplate(template)}
                       >
-                        <FileUp />
+                        <Palette />
                         <span>
                           <strong>{template.name}</strong>
                           <small>
@@ -2934,27 +2914,72 @@ export function App() {
                       </button>
                     ))}
                   </div>
-                  {templateLibrary.length === 0 && <div className="template-empty">尚未上传模板</div>}
+                  {templateLibrary.length === 0 && (
+                    <button type="button" className="theme-extract-empty" onClick={() => setTemplateUploadOpen(true)}>
+                      <FileUp />
+                      <span>
+                        <strong>上传 PPTX 抽取主题</strong>
+                        <small>提取主题色、标题/正文字体、母版与页面版式</small>
+                      </span>
+                    </button>
+                  )}
                 </div>
                 <div className="template-preview-panel">
                   <div className="template-preview-heading">
                     <strong>
                       <Eye />
-                      模板预览
+                      主题预览
                     </strong>
-                    {selectedTemplate && <span>{selectedTemplate.name}</span>}
+                    <span>{selectedThemePreset?.name ?? selectedTemplate?.name ?? "请选择主题"}</span>
                   </div>
-                  <div className="template-preview-stage">
-                    {templatePreviewBusy ? (
+                  {selectedThemePreset ? (
+                    <div
+                      className="theme-preset-preview"
+                      style={
+                        {
+                          "--theme-primary": selectedThemePreset.theme.colors.find((color) => color.name === "primary")?.value,
+                          "--theme-accent": selectedThemePreset.theme.colors.find((color) => color.name === "accent")?.value,
+                          "--theme-muted": selectedThemePreset.theme.colors.find((color) => color.name === "muted")?.value,
+                          "--theme-surface": selectedThemePreset.theme.colors.find((color) => color.name === "surface")?.value,
+                          "--theme-major-font": selectedThemePreset.theme.majorFont,
+                          "--theme-minor-font": selectedThemePreset.theme.minorFont,
+                        } as React.CSSProperties
+                      }
+                    >
+                      <span className="theme-preview-kicker">PPTD · THEME SYSTEM</span>
+                      <div>
+                        <h2>{selectedThemePreset.name}</h2>
+                        <p>让内容层级、字体与色彩保持一致</p>
+                      </div>
+                      <div className="theme-preview-bars"><i /><i /><i /></div>
+                      <small>{selectedThemePreset.description}</small>
+                    </div>
+                  ) : (
+                    <div className="template-preview-stage">
+                      {templatePreviewBusy ? (
                       <span>正在解析模板…</span>
                     ) : templatePreview ? (
                       <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} />
                     ) : selectedTemplate ? (
                       <span>此 PPTX 没有内嵌封面预览</span>
                     ) : (
-                      <span>选择左侧模板后查看预览</span>
+                      <span>选择左侧主题后查看预览</span>
                     )}
-                  </div>
+                    </div>
+                  )}
+                  {selectedThemePreset && (
+                    <div className="theme-preset-details">
+                      <div>
+                        <strong>字体组合</strong>
+                        <span>{selectedThemePreset.theme.majorFont} · {selectedThemePreset.theme.minorFont}</span>
+                      </div>
+                      <div className="template-color-row" aria-label="主题色">
+                        {selectedThemePreset.theme.colors.map((color) => (
+                          <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {templateAnalysis && (
                     <div className="template-analysis">
                       <div className="template-analysis-grid">
@@ -3141,8 +3166,8 @@ export function App() {
               <div>
                 <FileUp />
                 <div>
-                  <h2 id="upload-template-title">上传 PPT 模板</h2>
-                  <p>模板将保存到 PPTD 模板库。</p>
+                  <h2 id="upload-template-title">从 PPT 抽取主题</h2>
+                  <p>PPTD 将解析主题色、字体、母版和版式，并保存为可复用主题。</p>
                 </div>
               </div>
               <button type="button" aria-label="关闭上传窗口" onClick={() => setTemplateUploadOpen(false)}>
@@ -3151,8 +3176,8 @@ export function App() {
             </div>
             <button type="button" className="template-dropzone" onClick={() => void handleChooseTemplate()}>
               <FileUp />
-              <strong>选择 PPTX 模板</strong>
-              <span>从电脑中选择一个 PowerPoint 模板文件</span>
+              <strong>选择 PPTX 文件</strong>
+              <span>从电脑中选择一份设计风格参考</span>
               <small>支持 .pptx，最大 512 MB</small>
             </button>
             <div className="upload-dialog-actions">
@@ -3183,8 +3208,8 @@ export function App() {
               <div>
                 <Palette />
                 <div>
-                  <h2 id="template-picker-title">选择 PPT 模板</h2>
-                  <p>AI 将依据模板特征设计并渲染文稿，完成后进入编辑模块。</p>
+                  <h2 id="template-picker-title">选择主题模板</h2>
+                  <p>使用内置主题，或从已有 PPT 抽取设计语言，AI 不会改动已确认内容。</p>
                 </div>
               </div>
               <button
@@ -3197,44 +3222,8 @@ export function App() {
               </button>
             </div>
             <div className="template-picker-toolbar">
-              <strong>已保存模板</strong>
-              <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px" }}>
-                视觉主题
-                <select
-                  aria-label="视觉主题"
-                  disabled={designBusy}
-                  value={themePresetId}
-                  onChange={(event) => setThemePresetId(event.currentTarget.value)}
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: "6px",
-                    border: "1px solid rgba(120,130,140,0.4)",
-                    background: "transparent",
-                    color: "inherit",
-                  }}
-                >
-                  <option value="">跟随模板</option>
-                  {THEME_PRESETS.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {themePresetId === "" &&
-                (() => {
-                  const suggested = THEME_PRESETS.find((preset) => preset.id === inferThemePresetId(aiTopic));
-                  return suggested ? (
-                    <button
-                      type="button"
-                      className="secondary-action"
-                      disabled={designBusy}
-                      onClick={() => setThemePresetId(suggested.id)}
-                    >
-                      推荐：{suggested.name}
-                    </button>
-                  ) : null;
-                })()}
+              <strong>主题来源</strong>
+              <span>{themePresetId ? `内置 · ${findThemePreset(themePresetId)?.name ?? "主题"}` : "已上传 PPT"}</span>
               <button
                 type="button"
                 className="secondary-action"
@@ -3242,7 +3231,7 @@ export function App() {
                 onClick={() => setTemplateUploadOpen(true)}
               >
                 <FileUp />
-                上传模板
+                从 PPT 抽取
               </button>
             </div>
             <div className="template-picker-body">
@@ -3268,7 +3257,7 @@ export function App() {
                     </button>
                   ))}
                 </div>
-                {templateLibrary.length === 0 && <div className="template-empty">尚未上传模板，请先上传 PPTX 模板</div>}
+                {templateLibrary.length === 0 && <div className="template-empty">尚未上传 PPT，可直接使用下方内置主题</div>}
               </div>
               <div className="template-preview-panel">
                 <div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>
@@ -3334,7 +3323,7 @@ export function App() {
                 disabled={designBusy || templatePreviewBusy}
                 onClick={() => void generateFromDraft("preset")}
               >
-                不用模板，用内置主题
+                使用内置主题{themePresetId ? ` · ${findThemePreset(themePresetId)?.name ?? ""}` : ""}
               </button>
               <button
                 type="button"

@@ -13,8 +13,7 @@ export function applyDeckArtDirection(slides: AiSlideDesign[]): AiSlideDesign[] 
     const isBeat = index === 0 || slide.layout === "section" || slide.visualNarrative === "statement";
     const previous = slides[index - 1];
     const previousIsBeat =
-      index > 0 &&
-      (index - 1 === 0 || previous?.layout === "section" || previous?.visualNarrative === "statement");
+      index > 0 && (index - 1 === 0 || previous?.layout === "section" || previous?.visualNarrative === "statement");
     // Never make two consecutive pages dark: a beat needs a quiet page after it.
     const dark = isBeat && !previousIsBeat;
     return {
@@ -30,4 +29,3 @@ export function applyDeckArtDirection(slides: AiSlideDesign[]): AiSlideDesign[] 
     };
   });
 }
-

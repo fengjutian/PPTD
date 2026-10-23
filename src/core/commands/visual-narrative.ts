@@ -8,13 +8,7 @@ import type { AiComposition } from "./design-intent";
  * make an art-direction decision without giving it unsafe free coordinates.
  */
 export type AiVisualNarrative =
-  | "statement"
-  | "evidence"
-  | "comparison"
-  | "chronology"
-  | "framework"
-  | "quotation"
-  | "scene";
+  "statement" | "evidence" | "comparison" | "chronology" | "framework" | "quotation" | "scene";
 
 export function narrativeComposition(narrative: AiVisualNarrative): AiComposition {
   switch (narrative) {
@@ -31,4 +25,3 @@ export function narrativeComposition(narrative: AiVisualNarrative): AiCompositio
       return "stacked";
   }
 }
-

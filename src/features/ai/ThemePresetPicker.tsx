@@ -1,4 +1,5 @@
 import { THEME_PRESETS } from "../../core/design/theme-presets";
+import type { CSSProperties } from "react";
 
 export interface ThemePresetPickerProps {
   /** The selected preset id. */
@@ -17,9 +18,9 @@ export interface ThemePresetPickerProps {
 export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePresetPickerProps) {
   return (
     <div
+      className="theme-card-grid"
       role="radiogroup"
       aria-label="视觉主题"
-      style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}
     >
       {THEME_PRESETS.map((preset) => {
         const selected = preset.id === value;
@@ -32,34 +33,28 @@ export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePr
             key={preset.id}
             type="button"
             role="radio"
+            className={`theme-card${selected ? " active" : ""}`}
             aria-checked={selected}
             aria-label={preset.name}
             disabled={disabled}
             onClick={() => onChange(preset.id)}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "6px",
-              padding: "10px",
-              textAlign: "left",
-              border: selected ? `2px solid ${accent}` : "1px solid rgba(120,130,140,0.35)",
-              borderRadius: "10px",
-              background: "transparent",
-              color: "inherit",
-              cursor: disabled ? "default" : "pointer",
-              opacity: disabled ? 0.6 : 1,
-            }}
+            style={{ "--card-accent": accent, opacity: disabled ? 0.6 : 1 } as CSSProperties}
           >
-            <span aria-hidden style={{ display: "flex", gap: "4px", height: "18px" }}>
-              <span
-                style={{ flex: 1, background: surface, border: "1px solid rgba(120,130,140,0.3)", borderRadius: "4px" }}
-              />
-              <span style={{ width: "22px", background: accent, borderRadius: "4px" }} />
-              <span style={{ width: "22px", background: primary, borderRadius: "4px" }} />
+            <span className="theme-card-art" aria-hidden style={{ background: surface }}>
+              <i style={{ background: primary }} />
+              <i style={{ background: accent }} />
+              <i style={{ background: accent }} />
             </span>
-            <strong style={{ fontSize: "13px" }}>{preset.name}</strong>
-            <small style={{ fontSize: "11px", opacity: 0.72, lineHeight: 1.4 }}>{preset.description}</small>
-            <span style={{ fontSize: "10px", opacity: 0.55 }}>
+            <span className="theme-card-palette" aria-hidden>
+              <span
+                style={{ background: surface }}
+              />
+              <span style={{ background: accent }} />
+              <span style={{ background: primary }} />
+            </span>
+            <strong>{preset.name}</strong>
+            <small>{preset.description}</small>
+            <span className="theme-card-fonts">
               {preset.theme.majorFont} · {preset.theme.minorFont}
             </span>
           </button>
