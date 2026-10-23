@@ -2,12 +2,7 @@ import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "luci
 import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
-import {
-  createTranslator,
-  UI_LANGUAGE_OPTIONS,
-  type UiLanguage,
-  type UiMessageKey,
-} from "../../services/i18n";
+import { createTranslator, UI_LANGUAGE_OPTIONS, type UiLanguage, type UiMessageKey } from "../../services/i18n";
 import {
   defaultSettings,
   loadSettings,
@@ -367,9 +362,7 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
               >
                 <span className="language-card-head">
                   <strong>{option.name}</strong>
-                  {option.englishName !== option.name && (
-                    <em className="language-card-native">{option.englishName}</em>
-                  )}
+                  {option.englishName !== option.name && <em className="language-card-native">{option.englishName}</em>}
                   {settings.uiLanguage === option.id && <Check />}
                 </span>
                 <span className="language-card-sample">{option.sample}</span>

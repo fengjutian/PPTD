@@ -61,8 +61,7 @@ const zh = {
   "settings.font.sans.label": "默认无衬线",
   "settings.font.sans.note": "与当前界面一致，跨平台回退最稳。",
   "settings.font.song.label": "思源宋体",
-  "settings.font.song.note":
-    "思源宋体（Source Han Serif）适合正文与引文，需本机已安装；PPTD 不内置字体文件。",
+  "settings.font.song.note": "思源宋体（Source Han Serif）适合正文与引文，需本机已安装；PPTD 不内置字体文件。",
   "settings.font.hei.label": "思源黑体",
   "settings.font.hei.note": "思源黑体（Source Han Sans）适合标题与界面，需本机已安装。",
   "settings.font.mono.label": "等宽",
@@ -70,8 +69,7 @@ const zh = {
 
   "settings.language.title": "界面语言",
   "settings.language.description": "选择 PPTD 界面使用的语言，不会改变演示文稿内容或 PPTX 导出结果。",
-  "settings.language.help":
-    "语言会在保存设置后应用到设置页与主导航。演示文稿正文、模板和导出的 PPTX 文件不会被翻译。",
+  "settings.language.help": "语言会在保存设置后应用到设置页与主导航。演示文稿正文、模板和导出的 PPTX 文件不会被翻译。",
   "settings.language.zh.name": "简体中文",
   "settings.language.zh.englishName": "Chinese (Simplified)",
   "settings.language.zh.note": "使用简体中文显示界面，适合中文内容创作。",
@@ -213,11 +211,7 @@ export const UI_LANGUAGE_OPTIONS: readonly UiLanguageOption[] = [
 export type TranslationValues = Record<string, string | number>;
 export type Translator = (key: UiMessageKey, values?: TranslationValues) => string;
 
-export function translate(
-  language: UiLanguage,
-  key: UiMessageKey,
-  values?: TranslationValues,
-): string {
+export function translate(language: UiLanguage, key: UiMessageKey, values?: TranslationValues): string {
   const template = UI_MESSAGES[language][key];
   if (!values) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>

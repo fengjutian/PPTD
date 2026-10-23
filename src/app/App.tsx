@@ -132,13 +132,7 @@ import {
   type AiGenerationProgress,
   type AiVisualAssetIntent,
 } from "../services/ai-service";
-import {
-  applyTheme,
-  applyUiFont,
-  applyUiLanguage,
-  defaultSettings,
-  loadSettings,
-} from "../services/settings";
+import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
 import {
@@ -4643,11 +4637,7 @@ export function App() {
             </div>
           </header>
           <div className="feature-scroll">
-            <SettingsWorkspace
-              language={uiLanguage}
-              onLanguageChange={setUiLanguage}
-              onMessage={setTaskStatus}
-            />
+            <SettingsWorkspace language={uiLanguage} onLanguageChange={setUiLanguage} onMessage={setTaskStatus} />
           </div>
         </main>
       )}

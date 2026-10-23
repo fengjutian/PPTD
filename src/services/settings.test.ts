@@ -27,13 +27,7 @@ vi.mock("./app-database", () => ({
   }),
 }));
 
-import {
-  applyUiLanguage,
-  defaultSettings,
-  loadSettings,
-  saveSettings,
-  UI_FONT_OPTIONS,
-} from "./settings";
+import { applyUiLanguage, defaultSettings, loadSettings, saveSettings, UI_FONT_OPTIONS } from "./settings";
 
 /** 非浏览器环境没有 DOM 与 matchMedia，保存路径会调用 applyTheme/applyUiFont，这里补最小替身。 */
 function stubDom(): { lang: string; dataset: Record<string, string> } {
