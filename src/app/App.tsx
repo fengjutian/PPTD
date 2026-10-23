@@ -121,6 +121,7 @@ import {
 } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
+import { themePresetGuidance } from "../core/design/theme-preset-guidance";
 import type { BuiltinIconName } from "../core/document-model";
 import { IconPicker } from "../features/editor/IconPicker";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
@@ -2357,6 +2358,7 @@ export function App() {
   };
 
   const selectedThemePreset = findThemePreset(themePresetId);
+  const selectedThemeGuidance = selectedThemePreset ? themePresetGuidance(selectedThemePreset.id) : undefined;
 
   return (
     <div
@@ -2993,16 +2995,40 @@ export function App() {
                   <section className="theme-drawer-section">
                     <h3>主题说明</h3>
                     <p>{selectedThemePreset.description}</p>
+                    <p>{selectedThemeGuidance?.character}</p>
+                  </section>
+                  <section className="theme-drawer-section theme-guidance-grid">
+                    <div>
+                      <h3>适用场景</h3>
+                      <div className="theme-scenario-tags">
+                        {selectedThemeGuidance?.scenarios.map((scenario) => <span key={scenario}>{scenario}</span>)}
+                      </div>
+                    </div>
+                    <div>
+                      <h3>页面节奏</h3>
+                      <p>{selectedThemeGuidance?.pageRhythm}</p>
+                    </div>
+                    <div>
+                      <h3>图片建议</h3>
+                      <p>{selectedThemeGuidance?.imageStyle}</p>
+                    </div>
                   </section>
                   <section className="theme-drawer-section theme-token-details">
                     <h3>设计令牌</h3>
                     <dl>
                       <div><dt>标题字体</dt><dd>{selectedThemePreset.theme.majorFont}</dd></div>
                       <div><dt>正文字体</dt><dd>{selectedThemePreset.theme.minorFont}</dd></div>
+                      <div><dt>封面字号</dt><dd>{selectedThemePreset.theme.textStyles?.display?.fontSizePt ?? "—"} pt</dd></div>
+                      <div><dt>页标题字号</dt><dd>{selectedThemePreset.theme.textStyles?.title?.fontSizePt ?? "—"} pt</dd></div>
+                      <div><dt>正文字号</dt><dd>{selectedThemePreset.theme.textStyles?.body?.fontSizePt ?? "—"} pt</dd></div>
                     </dl>
-                    <div className="template-color-row" aria-label="主题色">
+                    <div className="theme-color-spec" aria-label="主题色">
                       {selectedThemePreset.theme.colors.map((color) => (
-                        <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />
+                        <div key={color.name} title={`${color.name} ${color.value}`}>
+                          <span style={{ backgroundColor: color.value }} />
+                          <small>{color.name}</small>
+                          <code>{color.value}</code>
+                        </div>
                       ))}
                     </div>
                   </section>
