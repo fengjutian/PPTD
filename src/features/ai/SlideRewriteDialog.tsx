@@ -1,6 +1,7 @@
 import { Check, Loader2, Wand2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ContentBlock } from "../../services/ai-service";
+import { SpeakerNotes, TextLines } from "./assist-parts";
 import { countCharacters } from "./content-review";
 
 /**
@@ -28,31 +29,6 @@ export interface SlideRewriteDialogProps {
   onApply: () => void;
   onClose: () => void;
 }
-
-function TextLines({ text, emptyLabel }: { text: string; emptyLabel: string }) {
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return <p className="slide-rewrite-empty">{emptyLabel}</p>;
-  return (
-    <div className="slide-rewrite-lines">
-      {lines.map((line, index) => (
-        <p key={index}>{line}</p>
-      ))}
-    </div>
-  );
-}
-
-function SpeakerNotes({ text }: { text: string }) {
-  return (
-    <div className="slide-rewrite-notes">
-      <span>演讲备注</span>
-      {text.trim() ? <p>{text}</p> : <p className="slide-rewrite-empty">没有备注</p>}
-    </div>
-  );
-}
-
 /**
  * AI 重写对话框。
  *

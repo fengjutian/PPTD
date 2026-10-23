@@ -623,6 +623,21 @@ export function describeAiError(error: unknown): string {
   if (detail.includes("AI_REWRITE_JSON_INVALID")) return "AI 返回的本页重写结果不是完整 JSON，请重新生成";
   if (detail.includes("AI_REWRITE_EMPTY")) return "AI 没有返回可用的正文，请重新生成";
   if (detail.includes("AI_REWRITE_REQUEST_INVALID")) return "这一页暂时无法重写：请先补全页面标题";
+  if (detail.includes("AI_TITLES_JSON_INVALID")) return "AI 返回的标题候选不是完整 JSON，请重试";
+  if (detail.includes("AI_TITLES_EMPTY")) return "AI 没有给出可用的标题候选，请重试";
+  if (detail.includes("AI_NOTES_JSON_INVALID")) return "AI 返回的演讲备注不是完整 JSON，请重试";
+  if (detail.includes("AI_NOTES_EMPTY")) return "AI 没有写出可用的演讲备注，请重试";
+  if (detail.includes("AI_SPLIT_JSON_INVALID")) return "AI 返回的拆页结果不是完整 JSON，请重试";
+  if (detail.includes("AI_SPLIT_EMPTY")) return "AI 拆出的页面没有内容，请重试";
+  if (detail.includes("AI_SPLIT_TITLE_DUPLICATE")) return "AI 拆出的两页标题相同，请重试";
+  if (detail.includes("AI_DECK_REVIEW_JSON_INVALID")) return "AI 返回的审稿结果不是完整 JSON，请重试";
+  if (detail.includes("AI_DECK_REVIEW_REQUEST_INVALID")) return "这份草稿暂时无法审稿：页数或内容超出了单次请求的上限";
+  if (
+    detail.includes("AI_TITLES_REQUEST_INVALID") ||
+    detail.includes("AI_NOTES_REQUEST_INVALID") ||
+    detail.includes("AI_SPLIT_REQUEST_INVALID")
+  )
+    return "这一页暂时无法处理：请先补全页面标题";
   if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED"))
     return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
   if (detail.includes("AI_VISION_REVIEW_FAILED"))
@@ -910,23 +925,6 @@ export async function rewritePresentationSlide(input: SlideRewriteInput): Promis
   const raw = await invoke<unknown>("rewrite_presentation_slide", { request: { ...input, model, provider } });
   const parsed = parseAiResponse(slideRewriteResponseSchema, raw, "本页重写结果");
   return normalizeSlideRewrite(parsed.slide);
-}
-
-/** 审核页所有"针对这一页"的 AI 请求共用的上下文。 */
-export interface SlideAiContext {
-  topic: string;
-  deckTitle: string;
-  /** 整册页面标题，按顺序。 */
-  outline: string[];
-  slideIndex: number;
-  slide: {
-    title: string;
-    body: string;
-    speakerNotes: string;
-    plan: AiDraft["slides"][number]["plan"];
-    blocks: ContentBlock[];
-  };
-  taskId?: number;
 }
 
 const slideTitlesSchema = z.object({
