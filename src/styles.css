@@ -3507,6 +3507,32 @@ button {
 .property-form .field-control input[type="number"] {
   padding: 8px 6px;
 }
+/* 多行字段：标签在上，输入框占满整行，不然长备注挤在右半边没法写。 */
+.property-form .field-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+.property-form .field-stacked .field-control {
+  align-items: stretch;
+}
+.property-form .field-stacked textarea {
+  width: 100%;
+  min-height: 68px;
+  padding: 7px 8px;
+  border: 1px solid #34373d;
+  border-radius: 6px;
+  background: #1b1c20;
+  color: #e1e3e7;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.property-form .field-stacked textarea:focus {
+  outline: none;
+  border-color: var(--ppt-accent);
+}
 .property-form .field-unit {
   color: #6f737c;
   font-size: 10px;

@@ -10,6 +10,7 @@ interface ViewOptions {
   elementIndex?: number;
   elementCount?: number;
   palette?: readonly string[];
+  speakerNotes?: string;
 }
 
 function renderView(element: SlideElement, background = "#ffffff", options: ViewOptions = {}): string {
@@ -21,6 +22,7 @@ function renderView(element: SlideElement, background = "#ffffff", options: View
       elementCount={options.elementCount ?? 2}
       background={background}
       pageSize={{ width: emu(12_192_000), height: emu(6_858_000) }}
+      speakerNotes={options.speakerNotes ?? ""}
       unit={options.unit ?? "inch"}
       onUnitChange={() => undefined}
       aspectLocked={options.aspectLocked ?? false}

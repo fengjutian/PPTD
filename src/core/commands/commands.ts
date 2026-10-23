@@ -3430,6 +3430,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
 
+  if (command.type === "set-speaker-notes") {
+    // 演讲备注是内容：它进 PPTX 的备注页，也进内容哈希。
+    slide.content.speakerNotes = command.notes;
+    markContentChanged(slide);
+    return;
+  }
+
   const element = slide.elements.find((item) => item.id === command.elementId);
   if (!element) throw new Error("ELEMENT_NOT_FOUND");
   if (command.type === "set-element-lock") {
@@ -3629,10 +3636,5 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         : [];
     }
     if (contentBound) markContentChanged(slide);
-  }
-  if (command.type === "set-speaker-notes") {
-    // 演讲备注是内容：它进 PPTX 的备注页，也进内容哈希。
-    slide.content.speakerNotes = command.notes;
-    markContentChanged(slide);
   }
 }

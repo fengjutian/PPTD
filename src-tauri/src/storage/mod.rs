@@ -425,11 +425,13 @@ mod tests {
                 [],
             )
             .expect("delete");
-        assert!(database
-            .load_settings()
-            .expect("load")
-            .expect("settings")
-            .vision_review_enabled);
+        assert!(
+            database
+                .load_settings()
+                .expect("load")
+                .expect("settings")
+                .vision_review_enabled
+        );
     }
 
     #[test]
@@ -440,11 +442,13 @@ mod tests {
             ..settings()
         };
         database.save_settings(&disabled).expect("save");
-        assert!(!database
-            .load_settings()
-            .expect("load")
-            .expect("settings")
-            .vision_review_enabled);
+        assert!(
+            !database
+                .load_settings()
+                .expect("load")
+                .expect("settings")
+                .vision_review_enabled
+        );
     }
 
     #[test]
