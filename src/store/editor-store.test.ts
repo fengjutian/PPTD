@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createDocument, inches, presentationDocumentSchema } from "../core/document-model";
+import {
+  createDocument,
+  hashSlideContent,
+  inches,
+  presentationDocumentSchema,
+  type ContentBlock,
+  type TextElement,
+} from "../core/document-model";
 import { useEditorStore } from "./editor-store";
 
 describe("editor history", () => {
@@ -266,6 +273,58 @@ describe("editor history", () => {
     useEditorStore.getState().undo();
     expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("changed");
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 2, design: 0 });
+  });
+
+  it("records a metric edit as one undoable content transaction", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    const metric: Extract<ContentBlock, { type: "metric" }> = {
+      id: crypto.randomUUID(),
+      type: "metric",
+      label: "收入",
+      value: "38万",
+    };
+    slide.content.blocks = [metric];
+    slide.content.status = "approved";
+    slide.content.contentHash = hashSlideContent(slide.content);
+    const card: TextElement = {
+      id: crypto.randomUUID() as never,
+      type: "text",
+      text: "38万",
+      contentRef: "decorative",
+      contentBlockRef: { blockId: metric.id, field: "value" },
+      frame: { x: inches(1), y: inches(1), width: inches(2), height: inches(1) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { fontFamily: "Microsoft YaHei", fontSizePt: 18, color: "#17181c", bold: true, align: "center" },
+    };
+    slide.elements.push(card);
+    useEditorStore.setState({
+      document,
+      activeSlideId: slide.id,
+      selectedElementIds: [],
+      undoStack: [],
+      redoStack: [],
+    });
+    const hashBefore = slide.content.contentHash;
+
+    useEditorStore
+      .getState()
+      .execute({ type: "set-metric", slideId: slide.id, blockId: metric.id, field: "value", value: "42万" });
+
+    const after = useEditorStore.getState().document;
+    expect(after.revisions).toEqual({ document: 1, content: 1, design: 0 });
+    expect(after.slides[0]!.content.status).toBe("changed");
+    expect(after.slides[0]!.content.blocks).toEqual([{ ...metric, value: "42万" }]);
+    // The reviewed copy changed, so the hash must change with it.
+    expect(after.slides[0]!.content.contentHash).not.toBe(hashBefore);
+
+    useEditorStore.getState().undo();
+    const undone = useEditorStore.getState().document;
+    expect(undone.revisions).toEqual({ document: 0, content: 0, design: 0 });
+    expect(undone.slides[0]!.content.status).toBe("approved");
+    expect(undone.slides[0]!.content.blocks).toEqual([metric]);
+    expect(undone.slides[0]!.content.contentHash).toBe(hashBefore);
   });
 
   it("keeps the template binding of a designed document", () => {

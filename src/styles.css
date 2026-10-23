@@ -11,6 +11,12 @@
   --scrollbar-thumb: #4b4e55;
   --scrollbar-thumb-hover: #676a72;
   --scrollbar-track: #191a1e;
+  --ribbon-background: #101114;
+  --ribbon-border: #303136;
+  --ribbon-text: rgb(255 255 255 / 72%);
+  --ribbon-text-active: #fff;
+  --ribbon-hover: rgb(255 255 255 / 8%);
+  --ribbon-active-indicator: var(--ppt-accent-hover);
 }
 * {
   box-sizing: border-box;
@@ -98,8 +104,9 @@ button {
   align-items: flex-end;
   gap: 22px;
   padding: 0 16px 8px;
-  background: #101114;
-  border-bottom: 1px solid #303136;
+  color: var(--ribbon-text-active);
+  background: var(--ribbon-background);
+  border-bottom: 1px solid var(--ribbon-border);
   z-index: 3;
 }
 .ribbon-tabs {
@@ -117,13 +124,13 @@ button {
   padding: 0 12px;
   border: 0;
   border-bottom: 2px solid transparent;
-  color: rgb(255 255 255 / 72%);
+  color: var(--ribbon-text);
   background: transparent;
   font-size: 11px;
   cursor: pointer;
 }
-.ribbon-tabs button:hover { color: #fff; background: rgb(255 255 255 / 8%); }
-.ribbon-tabs button.active { color: #fff; border-bottom-color: #fff; font-weight: 700; }
+.ribbon-tabs button:hover { color: var(--ribbon-text-active); background: var(--ribbon-hover); }
+.ribbon-tabs button.active { color: var(--ribbon-text-active); border-bottom-color: var(--ribbon-active-indicator); font-weight: 700; }
 .topbar .toolbar-group { display: none; min-height: 38px; }
 .topbar[data-ribbon-tab="file"] .file-tools,
 .topbar[data-ribbon-tab="home"] .home-tools,
@@ -180,8 +187,7 @@ button {
   margin-left: 0;
 }
 .assist-tools {
-  padding-left: 6px;
-  border-left: 1px solid #34363c;
+  padding-left: 0;
 }
 .separator {
   width: 1px;
@@ -456,13 +462,7 @@ button {
   background: var(--ppt-accent-soft);
 }
 .nav-rail button.active::before {
-  content: "";
-  position: absolute;
-  left: -7px;
-  width: 3px;
-  height: 24px;
-  border-radius: 0 4px 4px 0;
-  background: var(--ppt-accent);
+  content: none;
 }
 .nav-rail button:disabled {
   opacity: 0.4;
@@ -4090,6 +4090,45 @@ button {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+/* 结构化内容：表格格子与图表指标。数据本身就是内容，字段密度高一些。 */
+.table-data-fields {
+  margin-bottom: 14px;
+}
+.table-data-fields summary {
+  cursor: pointer;
+  color: #9aa0aa;
+  font-size: 11px;
+  user-select: none;
+}
+.table-data-fields summary:hover {
+  color: #c9ccd2;
+}
+.table-grid {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  overflow-x: auto;
+}
+.property-form .table-grid input {
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.property-form .table-grid input.header {
+  font-weight: 700;
+}
+.metric-fields {
+  margin-bottom: 10px;
+}
+.metric-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.metric-field-row .field {
+  margin-bottom: 6px;
+}
 .property-form .field-wide {
   grid-column: 1 / -1;
 }
@@ -5308,6 +5347,12 @@ button {
   --scrollbar-track: #e4e6e9;
   --scrollbar-thumb: #a8acb3;
   --scrollbar-thumb-hover: #858a93;
+  --ribbon-background: #f9fafb;
+  --ribbon-border: #d6d9de;
+  --ribbon-text: #626871;
+  --ribbon-text-active: #22252a;
+  --ribbon-hover: #eceff3;
+  --ribbon-active-indicator: var(--ppt-accent);
 }
 :root[data-theme="light"] .app-shell {
   background: #eceef1;
@@ -5885,15 +5930,28 @@ button {
   --scrollbar-track: #ece0cc;
   --scrollbar-thumb: #c3b39a;
   --scrollbar-thumb-hover: #a89578;
+  --ribbon-background: #b95f0d;
+  --ribbon-border: #9f5009;
+  --ribbon-text: rgb(255 255 255 / 78%);
+  --ribbon-text-active: #fff;
+  --ribbon-hover: rgb(255 255 255 / 15%);
+  --ribbon-active-indicator: #ffe0ad;
 }
 :root[data-theme="amber"] .app-shell {
   background: #f0e7d8;
 }
 :root[data-theme="amber"] .topbar,
 :root[data-theme="amber"] .statusbar {
+  border-color: var(--ribbon-border);
+}
+:root[data-theme="amber"] .topbar {
+  color: var(--ribbon-text-active);
+  background: var(--ribbon-background);
+}
+:root[data-theme="amber"] .statusbar {
+  color: #6b6153;
   background: #fdf8ef;
   border-color: #e3d6c0;
-  color: #6b6153;
 }
 :root[data-theme="amber"] .page-message {
   color: #3d342a;
@@ -5964,7 +6022,7 @@ button {
   background: #ddd0ba;
 }
 :root[data-theme="amber"] .tool-button:hover:not(:disabled) {
-  background: #f0e7d8;
+  background: var(--ribbon-hover);
 }
 :root[data-theme="amber"] .brand small {
   color: #7d7263;
@@ -6406,6 +6464,12 @@ button {
   --scrollbar-track: #f3f2f1;
   --scrollbar-thumb: #c8c6c4;
   --scrollbar-thumb-hover: #a19f9d;
+  --ribbon-background: #217346;
+  --ribbon-border: #1b6239;
+  --ribbon-text: rgb(255 255 255 / 78%);
+  --ribbon-text-active: #fff;
+  --ribbon-hover: rgb(255 255 255 / 16%);
+  --ribbon-active-indicator: #b7e4c9;
 }
 :root[data-theme="green"] .app-shell {
   background: #f3f2f1;
@@ -6897,6 +6961,12 @@ button {
   --scrollbar-track: #f3f2f1;
   --scrollbar-thumb: #c8c6c4;
   --scrollbar-thumb-hover: #a19f9d;
+  --ribbon-background: #2b579a;
+  --ribbon-border: #244a80;
+  --ribbon-text: rgb(255 255 255 / 78%);
+  --ribbon-text-active: #fff;
+  --ribbon-hover: rgb(255 255 255 / 16%);
+  --ribbon-active-indicator: #c7dcf2;
 }
 :root[data-theme="blue"] .app-shell {
   background: #f3f2f1;

@@ -129,7 +129,9 @@ describe("document commands", () => {
       });
     });
     const firstAnimation = animated.slides[0]!.animations![0]!;
-    expect(commandDomain({ type: "remove-animation", slideId: slide.id, animationId: firstAnimation.id })).toBe("design");
+    expect(commandDomain({ type: "remove-animation", slideId: slide.id, animationId: firstAnimation.id })).toBe(
+      "design",
+    );
 
     const edited = produce(animated, (draft) => {
       applyCommand(draft, {
@@ -140,7 +142,11 @@ describe("document commands", () => {
       });
       applyCommand(draft, { type: "move-animation", slideId: slide.id, animationId: firstAnimation.id, toIndex: 1 });
     });
-    expect(edited.slides[0]!.animations![1]).toMatchObject({ id: firstAnimation.id, durationMs: 900, start: "with-previous" });
+    expect(edited.slides[0]!.animations![1]).toMatchObject({
+      id: firstAnimation.id,
+      durationMs: 900,
+      start: "with-previous",
+    });
 
     const removed = produce(edited, (draft) =>
       applyCommand(draft, { type: "remove-animation", slideId: slide.id, animationId: firstAnimation.id }),
@@ -169,7 +175,9 @@ describe("document commands", () => {
       applyCommand(draft, { type: "duplicate-element", slideId: slide.id, elementId: element.id }),
     );
     const duplicate = duplicated.slides[0]!.elements.at(-1)!;
-    const duplicateAnimation = duplicated.slides[0]!.animations!.find((animation) => animation.elementId === duplicate.id);
+    const duplicateAnimation = duplicated.slides[0]!.animations!.find(
+      (animation) => animation.elementId === duplicate.id,
+    );
     expect(duplicateAnimation).toBeDefined();
     expect(duplicateAnimation!.id).not.toBe(duplicated.slides[0]!.animations![0]!.id);
 
@@ -2206,13 +2214,29 @@ describe("document commands", () => {
     const source = createDocument();
     const body = "登斯楼也，则有去国怀乡，忧谗畏讥，满目萧然，感极而悲者矣。".repeat(4);
     const content = { title: "览物之情", body, speakerNotes: "" };
-    const design = { layout: "title-body" as const, background: "#FFFFFF", accent: "#0F7869", titleColor: "#111111", bodyColor: "#333333" };
-    const result = produce(source, (draft) => applyCommand(draft, { type: "apply-ai-designed-draft", title: "字距", slides: [content], designs: [design], themePresetId: "paper-ink" }));
+    const design = {
+      layout: "title-body" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+    };
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "字距",
+        slides: [content],
+        designs: [design],
+        themePresetId: "paper-ink",
+      }),
+    );
     const slide = result.slides[0]!;
     for (const element of slide.elements) {
       if (element.type === "text") expect(textLikelyOverflows(element)).toBe(false);
     }
-    const bodyElement = slide.elements.find((element): element is TextElement => element.type === "text" && element.text === body)!;
+    const bodyElement = slide.elements.find(
+      (element): element is TextElement => element.type === "text" && element.text === body,
+    )!;
     expect(bodyElement.style.lineHeight).toBe(1.3);
   });
 
@@ -2669,6 +2693,45 @@ describe("document commands", () => {
       (element) => element.text,
     );
     expect(texts).toEqual(["核心指标", "42%", "增长率", "120", "客户数"]);
+  });
+
+  it("links each stat card to the reviewed metric it draws", () => {
+    const source = createDocument();
+    const content = {
+      title: "核心指标",
+      body: "指标说明",
+      speakerNotes: "",
+      blocks: [
+        { type: "metric" as const, label: "增长率", value: "42%" },
+        { type: "metric" as const, label: "客户数", value: "120" },
+      ],
+    };
+    const design = {
+      layout: "title-body" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+    };
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "apply-ai-designed-draft", title: "指标", slides: [content], designs: [design] }),
+    );
+    const slide = result.slides[0]!;
+    const metricIds = slide.content.blocks?.filter((block) => block.type === "metric").map((block) => block.id) ?? [];
+    const linked = slide.elements.filter(
+      (element): element is TextElement => element.type === "text" && Boolean(element.contentBlockRef),
+    );
+    // Without the link the card is just two strings and editing it would leave
+    // the reviewed number behind.
+    expect(linked).toHaveLength(4);
+    expect(linked.map((element) => element.contentBlockRef!.blockId)).toEqual([
+      metricIds[0],
+      metricIds[0],
+      metricIds[1],
+      metricIds[1],
+    ]);
+    expect(linked.map((element) => element.contentBlockRef!.field)).toEqual(["value", "label", "value", "label"]);
+    expect(linked.map((element) => element.text)).toEqual(["42%", "增长率", "120", "客户数"]);
   });
 
   it("renders process blocks as numbered native-object steps", () => {
@@ -3857,9 +3920,20 @@ describe("手工路径的 AI 配图", () => {
   it("grows a short cover title and keeps a long one at the display size", () => {
     const coverSize = (title: string) => {
       const source = createDocument();
-      const design = { layout: "cover" as const, background: "#FBFAF7", accent: "#2F6B5F", titleColor: "#1E2A32", bodyColor: "#333333" };
+      const design = {
+        layout: "cover" as const,
+        background: "#FBFAF7",
+        accent: "#2F6B5F",
+        titleColor: "#1E2A32",
+        bodyColor: "#333333",
+      };
       const result = produce(source, (draft) =>
-        applyCommand(draft, { type: "apply-ai-designed-draft", title: "封面", slides: [{ title, body: "", speakerNotes: "" }], designs: [design] }),
+        applyCommand(draft, {
+          type: "apply-ai-designed-draft",
+          title: "封面",
+          slides: [{ title, body: "", speakerNotes: "" }],
+          designs: [design],
+        }),
       );
       const element = result.slides[0]!.elements.find(
         (candidate): candidate is TextElement => candidate.type === "text" && candidate.text === title,
@@ -3883,7 +3957,13 @@ describe("手工路径的 AI 配图", () => {
         },
       ],
     };
-    const design = { layout: "cards" as const, background: "#FFFFFF", accent: "#2F6B5F", titleColor: "#111111", bodyColor: "#333333" };
+    const design = {
+      layout: "cards" as const,
+      background: "#FFFFFF",
+      accent: "#2F6B5F",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+    };
     const result = produce(source, (draft) =>
       applyCommand(draft, { type: "apply-ai-designed-draft", title: "图标", slides: [content], designs: [design] }),
     );
@@ -3917,7 +3997,12 @@ describe("手工路径的 AI 配图", () => {
     const iconId = withIcon.slides[0]!.elements.at(-1)!.id;
 
     const restyled = produce(withIcon, (draft) =>
-      applyCommand(draft, { type: "set-icon-style", slideId, elementId: iconId, style: { color: "#112233", strokeWidth: 3 } }),
+      applyCommand(draft, {
+        type: "set-icon-style",
+        slideId,
+        elementId: iconId,
+        style: { color: "#112233", strokeWidth: 3 },
+      }),
     );
     const icon = restyled.slides[0]!.elements.at(-1)!;
     if (icon.type !== "icon") throw new Error("expected an icon");

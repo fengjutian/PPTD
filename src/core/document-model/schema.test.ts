@@ -9,6 +9,7 @@ import versionSevenFixture from "./__fixtures__/v7-document.json";
 import versionNineFixture from "./__fixtures__/v9-document.json";
 import versionTenFixture from "./__fixtures__/v10-document.json";
 import versionElevenFixture from "./__fixtures__/v11-document.json";
+import versionTwelveFixture from "./__fixtures__/v12-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -106,6 +107,16 @@ describe("presentation document schema", () => {
     expect(versionElevenFixture.schemaVersion).toBe(11);
   });
 
+  it("migrates the fixed version 12 fixture and invents no content binding", () => {
+    const migrated = parsePresentationDocument(versionTwelveFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const element = migrated.slides[0]!.elements[0]!;
+    // A card written before the binding existed stays a plain text element; it
+    // is not retroactively pointed at a block it never declared.
+    expect(element.type === "text" ? element.contentBlockRef : undefined).toBeUndefined();
+    expect(versionTwelveFixture.schemaVersion).toBe(12);
+  });
+
   it("accepts a native line with arrow heads and a dash pattern", () => {
     const document = createDocument();
     document.slides[0]!.elements.push({
@@ -179,6 +190,23 @@ describe("presentation document schema", () => {
     if (broken.type !== "text") throw new Error("expected a text element");
     broken.runs = [{ start: 0, end: -1 }];
     expect(() => presentationDocumentSchema.parse(invalid)).toThrow();
+  });
+
+  it("accepts a card text linked to a review block and rejects an unknown field", () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.contentBlockRef = { blockId: crypto.randomUUID(), field: "value" };
+    const parsed = presentationDocumentSchema.parse(document);
+    const parsedElement = parsed.slides[0]!.elements[0]!;
+    expect(parsedElement.type === "text" ? parsedElement.contentBlockRef : undefined).toEqual(element.contentBlockRef);
+
+    const broken = structuredClone(document);
+    const brokenElement = broken.slides[0]!.elements[0]!;
+    if (brokenElement.type === "text") {
+      brokenElement.contentBlockRef = { blockId: crypto.randomUUID(), field: "unit" as never };
+    }
+    expect(() => presentationDocumentSchema.parse(broken)).toThrow();
   });
 
   it("accepts explicit element provenance and rejects an unknown origin", () => {

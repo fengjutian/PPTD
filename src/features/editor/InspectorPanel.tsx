@@ -298,6 +298,34 @@ export function InspectorPanelView({
   // a measurer, so the warning matches what the export will look like.
   const overflows = element.type === "text" && textLikelyOverflows(element);
 
+  // Structured content is resolved by block id, never by position: a table or
+  // chart may outlive a regeneration that reorders the blocks.
+  const tableBlock =
+    element.type === "table" && blocks
+      ? blocks.find(
+          (block): block is Extract<ContentBlock, { type: "table-data" }> =>
+            block.id === element.contentBlockId && block.type === "table-data",
+        )
+      : undefined;
+  const chartMetrics: MetricFieldValue[] =
+    element.type === "chart" && blocks
+      ? element.contentBlockIds.flatMap((id) => {
+          const block = blocks.find(
+            (candidate): candidate is Extract<ContentBlock, { type: "metric" }> =>
+              candidate.id === id && candidate.type === "metric",
+          );
+          return block ? [{ blockId: block.id, label: block.label, value: block.value }] : [];
+        })
+      : [];
+  const cardBlockRef = element.type === "text" ? element.contentBlockRef : undefined;
+  const cardMetric =
+    cardBlockRef && blocks
+      ? blocks.find(
+          (block): block is Extract<ContentBlock, { type: "metric" }> =>
+            block.id === cardBlockRef.blockId && block.type === "metric",
+        )
+      : undefined;
+
   return (
     <>
       <div className="property-form">
@@ -359,6 +387,13 @@ export function InspectorPanelView({
                 }}
               />
             </label>
+            {cardBlockRef && (
+              <p className="inspector-hint">
+                {cardMetric
+                  ? `这段文字显示本页指标的${cardBlockRef.field === "value" ? "数值" : "名称"}；修改会同步更新内容，并把本页标记为待确认。`
+                  : "这段文字引用的内容块已不存在；修改只影响当前显示。"}
+              </p>
+            )}
             <div className="field-row">
               <button
                 type="button"
@@ -779,7 +814,12 @@ export function InspectorPanelView({
                 options={["horizontal", "vertical", "diagonal"]}
                 optionLabels={{ horizontal: "水平", vertical: "垂直", diagonal: "斜线" }}
                 onCommit={(direction) =>
-                  onCommand({ type: "set-line-direction", slideId, elementId: element.id, direction: direction as LineDirection })
+                  onCommand({
+                    type: "set-line-direction",
+                    slideId,
+                    elementId: element.id,
+                    direction: direction as LineDirection,
+                  })
                 }
               />
               <SelectField
@@ -816,6 +856,16 @@ export function InspectorPanelView({
 
         {element.type === "chart" && (
           <InspectorSection title="图表">
+            {chartMetrics.length > 0 ? (
+              <>
+                <MetricFields slideId={slideId} metrics={chartMetrics} disabled={locked} onCommand={onCommand} />
+                {chartMetrics.length < element.contentBlockIds.length && (
+                  <p className="inspector-hint">有指标内容已不存在，图表只显示还能读到的数据。</p>
+                )}
+              </>
+            ) : (
+              <p className="inspector-hint">图表引用的指标内容已经不存在，暂时没有可编辑的数据。</p>
+            )}
             <div className="property-grid">
               <SelectField
                 label="类型"
@@ -896,6 +946,18 @@ export function InspectorPanelView({
 
         {element.type === "table" && (
           <InspectorSection title="表格">
+            {tableBlock ? (
+              <TableDataFields
+                slideId={slideId}
+                blockId={tableBlock.id}
+                header={tableBlock.header}
+                rows={tableBlock.rows}
+                disabled={locked}
+                onCommand={onCommand}
+              />
+            ) : (
+              <p className="inspector-hint">这页的表格数据已经不存在，表格暂时没有单元格。</p>
+            )}
             <div className="property-grid">
               <SelectField
                 label="字体"
@@ -1163,60 +1225,60 @@ function PageProperties({
   return (
     <>
       <InspectorSection title="页面">
-      <div className="field">
-        <span className="field-label">幻灯片尺寸</span>
-        {/* The size of the page is a property of the document, so it is read
+        <div className="field">
+          <span className="field-label">幻灯片尺寸</span>
+          {/* The size of the page is a property of the document, so it is read
             and not edited here. */}
-        <span className="field-readonly">{`${emuToUnit(pageSize.width, unit).toFixed(2)} × ${emuToUnit(pageSize.height, unit).toFixed(2)} ${unitLabel(unit)}`}</span>
-      </div>
-      <ColorField
-        label="背景色"
-        value={background}
-        wide
-        swatches={palette}
-        onCommit={(next) => onCommand({ type: "set-slide-background", slideId, background: next })}
-      />
-      <div className="field">
-        <span className="field-label">背景图片</span>
-        <input
-          ref={imageInput}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          hidden
-          onChange={(event) => {
-            chooseBackground(event.currentTarget.files?.[0]);
-            event.currentTarget.value = "";
-          }}
-        />
-        <div className="field-row">
-          <button type="button" className="toggle-button" onClick={() => imageInput.current?.click()}>
-            <ImagePlus />
-            {backgroundImage ? "替换背景图" : "选择背景图"}
-          </button>
-          {backgroundImage && (
-            <button
-              type="button"
-              className="toggle-button"
-              onClick={() => onCommand({ type: "remove-slide-background-image", slideId })}
-            >
-              <Trash2 />
-              移除
-            </button>
-          )}
+          <span className="field-readonly">{`${emuToUnit(pageSize.width, unit).toFixed(2)} × ${emuToUnit(pageSize.height, unit).toFixed(2)} ${unitLabel(unit)}`}</span>
         </div>
-      </div>
-    </InspectorSection>
-    <InspectorSection title="演讲备注">
-      <TextAreaField
-        label="备注"
-        value={speakerNotes}
-        placeholder="这一页要讲的内容，会写进 PPTX 的备注页"
-        rows={5}
-        maxLength={20_000}
-        onCommit={(notes) => onCommand({ type: "set-speaker-notes", slideId, notes })}
-      />
-      <p className="field-help">备注不会显示在页面上，但会跟着这一页一起导出。</p>
-    </InspectorSection>
+        <ColorField
+          label="背景色"
+          value={background}
+          wide
+          swatches={palette}
+          onCommit={(next) => onCommand({ type: "set-slide-background", slideId, background: next })}
+        />
+        <div className="field">
+          <span className="field-label">背景图片</span>
+          <input
+            ref={imageInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            onChange={(event) => {
+              chooseBackground(event.currentTarget.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+          />
+          <div className="field-row">
+            <button type="button" className="toggle-button" onClick={() => imageInput.current?.click()}>
+              <ImagePlus />
+              {backgroundImage ? "替换背景图" : "选择背景图"}
+            </button>
+            {backgroundImage && (
+              <button
+                type="button"
+                className="toggle-button"
+                onClick={() => onCommand({ type: "remove-slide-background-image", slideId })}
+              >
+                <Trash2 />
+                移除
+              </button>
+            )}
+          </div>
+        </div>
+      </InspectorSection>
+      <InspectorSection title="演讲备注">
+        <TextAreaField
+          label="备注"
+          value={speakerNotes}
+          placeholder="这一页要讲的内容，会写进 PPTX 的备注页"
+          rows={5}
+          maxLength={20_000}
+          onCommit={(notes) => onCommand({ type: "set-speaker-notes", slideId, notes })}
+        />
+        <p className="field-help">备注不会显示在页面上，但会跟着这一页一起导出。</p>
+      </InspectorSection>
     </>
   );
 }
@@ -1291,6 +1353,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
               elementCount={slide.elements.length}
               background={slide.background}
               pageSize={document.pageSize}
+              blocks={slide.content.blocks}
               speakerNotes={slide.content.speakerNotes}
               backgroundImage={slide.elements.some(
                 (element) => element.type === "image" && element.placement === "slide-background",

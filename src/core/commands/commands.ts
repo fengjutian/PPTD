@@ -478,7 +478,12 @@ export type DocumentCommand =
   | { type: "remove-animation"; slideId: SlideId; animationId: string }
   | { type: "clear-slide-animations"; slideId: SlideId }
   | { type: "move-animation"; slideId: SlideId; animationId: string; toIndex: number }
-  | { type: "set-animation"; slideId: SlideId; animationId: string; changes: Partial<Omit<SlideAnimation, "id" | "elementId" | "phase">> }
+  | {
+      type: "set-animation";
+      slideId: SlideId;
+      animationId: string;
+      changes: Partial<Omit<SlideAnimation, "id" | "elementId" | "phase">>;
+    }
   | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: AlignTarget }
   | {
       type: "align-elements";
@@ -518,9 +523,7 @@ export type DocumentCommand =
       type: "set-table-cell";
       slideId: SlideId;
       blockId: string;
-      cell:
-        | { section: "header"; column: number }
-        | { section: "body"; row: number; column: number };
+      cell: { section: "header"; column: number } | { section: "body"; row: number; column: number };
       value: string;
     }
   | { type: "approve-slide-content"; slideId: SlideId }
@@ -3596,7 +3599,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.findIndex((item) => item.id === elementId),
         1,
       );
-      if (slide.animations) slide.animations = slide.animations.filter((animation) => animation.elementId !== elementId);
+      if (slide.animations)
+        slide.animations = slide.animations.filter((animation) => animation.elementId !== elementId);
     }
     return;
   }
@@ -3738,9 +3742,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const animation = (slide.animations ?? []).find((item) => item.id === command.animationId);
     if (!animation) throw new Error("ANIMATION_NOT_FOUND");
     if (slide.elements.find((item) => item.id === animation.elementId)?.locked) throw new Error("ELEMENT_LOCKED");
-    if (command.changes.durationMs !== undefined && (!Number.isInteger(command.changes.durationMs) || command.changes.durationMs < 100 || command.changes.durationMs > 60_000))
+    if (
+      command.changes.durationMs !== undefined &&
+      (!Number.isInteger(command.changes.durationMs) ||
+        command.changes.durationMs < 100 ||
+        command.changes.durationMs > 60_000)
+    )
       throw new Error("ANIMATION_DURATION_INVALID");
-    if (command.changes.delayMs !== undefined && (!Number.isInteger(command.changes.delayMs) || command.changes.delayMs < 0 || command.changes.delayMs > 60_000))
+    if (
+      command.changes.delayMs !== undefined &&
+      (!Number.isInteger(command.changes.delayMs) || command.changes.delayMs < 0 || command.changes.delayMs > 60_000)
+    )
       throw new Error("ANIMATION_DELAY_INVALID");
     Object.assign(animation, command.changes);
     return;

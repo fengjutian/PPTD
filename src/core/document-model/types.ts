@@ -307,13 +307,7 @@ export interface TableElement extends ElementBase {
 }
 
 export type SlideElement =
-  | TextElement
-  | ShapeElement
-  | LineElement
-  | IconElement
-  | ImageElement
-  | ChartElement
-  | TableElement;
+  TextElement | ShapeElement | LineElement | IconElement | ImageElement | ChartElement | TableElement;
 
 export type AnimationEffect = "appear" | "fade" | "fly-in";
 export type AnimationStart = "on-click" | "with-previous" | "after-previous";

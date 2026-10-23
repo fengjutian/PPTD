@@ -94,6 +94,27 @@ describe("design-only relayout", () => {
     ).toBe(false);
   });
 
+  it("keeps stat card text pointing at the reviewed metric blocks", () => {
+    const document = designedDocument([
+      { type: "metric", label: "样本量", value: "38万" },
+      { type: "metric", label: "客户数", value: "12人" },
+    ]);
+    const slide = document.slides[0]!;
+    expect(slide.elements.some((element) => element.type === "text" && element.contentBlockRef)).toBe(true);
+    const result = produce(document, (draft) => applyCommand(draft, { type: "relayout-slide", slideId: slide.id }));
+    const resultSlide = result.slides[0]!;
+    const metricIds =
+      resultSlide.content.blocks?.filter((block) => block.type === "metric").map((block) => block.id) ?? [];
+    const linked = resultSlide.elements.filter((element) => element.type === "text" && element.contentBlockRef);
+    // The temporary render creates fresh block ids. A card that kept one would
+    // write into a block the page does not own.
+    expect(linked).toHaveLength(metricIds.length * 2);
+    for (const element of linked) {
+      if (element.type !== "text" || !element.contentBlockRef) continue;
+      expect(metricIds).toContain(element.contentBlockRef.blockId);
+    }
+  });
+
   it("keeps a native table pointing at the reviewed table block", () => {
     const document = designedDocument([{ type: "table-data", header: ["项目", "数值"], rows: [["完成率", "92%"]] }]);
     const slide = document.slides[0]!;

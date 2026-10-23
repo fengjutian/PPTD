@@ -248,7 +248,15 @@ const slideSchema = z.object({
       .optional(),
   }),
   elements: z.array(
-    z.discriminatedUnion("type", [textElement, shapeElement, lineElement, iconElement, imageElement, chartElement, tableElement]),
+    z.discriminatedUnion("type", [
+      textElement,
+      shapeElement,
+      lineElement,
+      iconElement,
+      imageElement,
+      chartElement,
+      tableElement,
+    ]),
   ),
   animations: z
     .array(
