@@ -110,4 +110,44 @@ describe("editor multi selection", () => {
     expect(revisions.design).toBe(revisionsBefore.design + 1);
     expect(revisions.content).toBe(revisionsBefore.content);
   });
+
+  it("selects only the copies when a locked source is part of the group", () => {
+    const state = useEditorStore.getState();
+    state.execute({ type: "add-shape", slideId: state.activeSlideId, shape: "rectangle" });
+    state.execute({ type: "add-shape", slideId: state.activeSlideId, shape: "ellipse" });
+    const elements = useEditorStore.getState().document.slides[0]!.elements;
+    const [first, second] = elements.slice(-2);
+    state.execute({ type: "set-element-lock", slideId: state.activeSlideId, elementId: first!.id, locked: true });
+    state.selectElements([first!.id, second!.id]);
+    const beforeIds = new Set(useEditorStore.getState().document.slides[0]!.elements.map((element) => element.id));
+
+    state.execute({
+      type: "duplicate-elements",
+      slideId: state.activeSlideId,
+      elementIds: [first!.id, second!.id],
+    });
+
+    const after = useEditorStore.getState();
+    const copies = after.document.slides[0]!.elements.filter((element) => !beforeIds.has(element.id));
+    // 只有未锁定的第二个形状被复制；选择必须只包含这个副本，不能把后面
+    // 未复制的元素也选进来。
+    expect(copies).toHaveLength(1);
+    expect(after.selectedElementIds).toEqual([copies[0]!.id]);
+  });
+
+  it("does not add a revision or an undo entry when every source is locked", () => {
+    const state = useEditorStore.getState();
+    state.execute({ type: "add-shape", slideId: state.activeSlideId, shape: "rectangle" });
+    const shape = useEditorStore.getState().document.slides[0]!.elements.at(-1)!;
+    state.execute({ type: "set-element-lock", slideId: state.activeSlideId, elementId: shape.id, locked: true });
+    state.selectElements([shape.id]);
+    const before = useEditorStore.getState();
+
+    state.execute({ type: "duplicate-elements", slideId: state.activeSlideId, elementIds: [shape.id] });
+
+    const after = useEditorStore.getState();
+    expect(after.document.revisions).toEqual(before.document.revisions);
+    expect(after.undoStack).toHaveLength(before.undoStack.length);
+    expect(after.selectedElementIds).toEqual([shape.id]);
+  });
 });

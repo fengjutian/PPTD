@@ -20,9 +20,21 @@ export const LineView = memo(function LineView({ element, scale }: LineViewProps
   const strokeWidth = Math.max(ptToPx(element.style.strokeWidthPt, scale), 1);
   const arrowLength = Math.max(strokeWidth * 4, 6);
 
-  // 起点和终点。斜线从左上到右下，其余居中穿过。
-  const start = element.direction === "diagonal" ? { x: 0, y: 0 } : { x: 0, y: height / 2 };
-  const end = element.direction === "diagonal" ? { x: width, y: height } : { x: width, y: height / 2 };
+  // 起点和终点。斜线从左上到右下；横线穿过框的垂直中线，竖线穿过水平中线。
+  // 两者不能共用“y = height / 2”的写法：竖线框很窄很高，那样画出来是一条
+  // 长度只有框宽的横线，看上去像页面上的一个点。
+  const start =
+    element.direction === "diagonal"
+      ? { x: 0, y: 0 }
+      : element.direction === "vertical"
+        ? { x: width / 2, y: 0 }
+        : { x: 0, y: height / 2 };
+  const end =
+    element.direction === "diagonal"
+      ? { x: width, y: height }
+      : element.direction === "vertical"
+        ? { x: width / 2, y: height }
+        : { x: width, y: height / 2 };
 
   const startMarker = element.style.startArrow === "arrow" ? "url(#pptd-line-arrow-start)" : undefined;
   const endMarker = element.style.endArrow === "arrow" ? "url(#pptd-line-arrow-end)" : undefined;

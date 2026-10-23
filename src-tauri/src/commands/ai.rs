@@ -208,6 +208,8 @@ pub struct ReviewVisualsRequest {
     /// 又容易撞上请求体上限。
     contact_sheet: Option<String>,
     slide_indexes: Vec<usize>,
+    /// 整套总览模式：只发一张缩略图，只判断跨页一致性和节奏，不做逐页几何。
+    deck_only: Option<bool>,
     model: Option<String>,
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
@@ -228,7 +230,18 @@ pub async fn review_presentation_visuals(
     cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
     let cancel = cancels.token_for(request.task_id);
-    if request.slide_images.is_empty()
+    let deck_only = request.deck_only.unwrap_or(false);
+    if deck_only {
+        // 总览模式只带一张缩略图。单页图和逐页几何由逐页评审负责，总览不允许
+        // 输出 safeRegion，避免两路评审对同一页给出冲突的坐标。
+        if !request.slide_images.is_empty()
+            || request.contact_sheet.is_none()
+            || request.slide_indexes.is_empty()
+            || request.slide_indexes.len() > 40
+        {
+            return Err("AI_VISION_REQUEST_INVALID".into());
+        }
+    } else if request.slide_images.is_empty()
         || request.slide_images.len() > 6
         || request.slide_images.len() != request.slide_indexes.len()
     {
@@ -253,6 +266,58 @@ pub async fn review_presentation_visuals(
     let model = ai::resolve_model(provider, request.model)?;
     let indexes =
         serde_json::to_string(&request.slide_indexes).map_err(|_| "AI_VISION_REQUEST_INVALID")?;
+    if deck_only {
+        // 总览评审：一次只看整册，专注跨页一致性和节奏。它不输出逐页几何，
+        // 逐页的文字清晰度、局部对齐和安全区由另一路逐页评审负责。
+        let sheet = request.contact_sheet.ok_or("AI_VISION_REQUEST_INVALID")?;
+        let prompt = format!(
+            r#"你是 PPTD 的资深演示文稿视觉总监。这一次只评审整套演示的总览，不做逐页评审。
+
+【输入图片】
+唯一一张图片是整套演示的缩略图总览，每一格对应一页。
+
+【不可违反的边界】
+1. 页面正文、标题、数字、引用、备注和页面顺序均为已审核内容。不得改写、删减、扩写、纠错、翻译、概括或重新排序。
+2. 不得评价内容观点是否正确，只评价整套的视觉一致性、节奏和重复度。
+3. 不得假设图片中不存在的对象、颜色、Logo、图表或装饰。
+
+【评审范围】
+1. 只看跨页问题：背景变化是否有节奏但不杂乱、相邻页面是否机械重复、标题轴线/字体/配色/组件语言是否稳定、封面、章节、内容、重点和总结页面的角色是否清晰。
+2. 本模式不做逐页评审，也不要判断单页的文字清晰度、局部对齐或安全区；这些由逐页评审负责。
+3. slideGuidance 必须返回空数组，不能输出任何坐标。
+4. 只报告能从总览明确观察到的问题，不为凑数量制造问题。issues 的 slideIndex 必须是 {indexes} 中能代表该问题的页；没有跨页问题时 issues 也可以为空。
+
+【评分标准】
+- hierarchyScore、alignmentScore、readabilityScore：按整套观感给出，不要因为个别页在缩略图上太小看不清就大幅扣分。
+- consistencyScore：整套模板语言、颜色、字体、背景节奏和页面角色是否跨页一致，同时避免所有页面完全同构。这是本模式最重要的分数。
+- overallScore：整套视觉完成度，不是五项简单平均。
+
+【输出协议】
+只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。slideGuidance 必须为空数组。
+输出结构：
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[],"slideGuidance":[]}}
+
+【本次整套视觉目标】
+{goal}
+
+【重试纠正要求】
+{repair_hint}"#
+        );
+        let content = ai::vision_chat(
+            provider,
+            &api_key,
+            &VisionRequest {
+                model,
+                prompt,
+                image_data_urls: vec![sheet],
+                temperature: 0.1,
+            },
+            VISION_TIMEOUT,
+            &cancel,
+        )
+        .await?;
+        return parse_json(strip_code_fence(&content), "AI_VISION_JSON_INVALID");
+    }
     let has_contact_sheet = request.contact_sheet.is_some();
     let image_instructions = if has_contact_sheet {
         format!(

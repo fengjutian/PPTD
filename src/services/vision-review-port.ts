@@ -47,6 +47,13 @@ export interface VisionReviewPort {
     taskId?: number,
     options?: { includeContactSheet?: boolean },
   ): Promise<VisualReview>;
+  /**
+   * 整套总览评审：只看跨页一致性、节奏和重复度，不产生逐页几何。
+   *
+   * 可选实现。没有它时调用方退回“第一批附带缩略图”的旧行为，跨页一致性
+   * 也就只能取那一批的评分。
+   */
+  reviewDeck?(render: PresentationRender, goal: PresentationVisualGoal, taskId?: number): Promise<VisualReview>;
   planRepairs(
     review: VisualReview,
     goal: PresentationVisualGoal,
@@ -57,6 +64,9 @@ export interface VisionReviewPort {
 export class UnavailableVisionReviewPort implements VisionReviewPort {
   readonly available = false;
   async review(): Promise<VisualReview> {
+    throw new Error("AI_VISION_UNSUPPORTED");
+  }
+  async reviewDeck(): Promise<VisualReview> {
     throw new Error("AI_VISION_UNSUPPORTED");
   }
   async planRepairs(): Promise<VisualRepairPlan> {
@@ -160,6 +170,43 @@ export function planRepairsByRule(review: VisualReview, minimumOverall = 85): Vi
 export class TauriVisionReviewPort implements VisionReviewPort {
   readonly available = true;
 
+  /**
+   * Sends one review request and normalizes the answer, retrying once for
+   * transport-level noise.
+   *
+   * Retrying is only useful when the model answered with something unusable:
+   * a timeout means the request was too large, and a 4xx means it was invalid,
+   * so both would fail again the same way. Cancellation must not be retried at
+   * all.
+   */
+  private async requestReview(payload: Record<string, unknown>, expected: number[]): Promise<VisualReview> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await invoke<unknown>("review_presentation_visuals", {
+          request: {
+            ...payload,
+            repairHint:
+              attempt === 0
+                ? undefined
+                : "上一次响应不是可接受的严格 JSON，或缺少必填评分字段。请重新检查并严格遵循输出协议。",
+          },
+        });
+        return normalizeVisualReview(result, expected);
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        // 取消不是失败：立刻放弃，不再重试一次。
+        if (message.includes("AI_REQUEST_CANCELLED")) throw error;
+        // 超时说明这一次请求的规模超出预算，4xx 说明请求本身不合法。
+        // 这两类错误重试一次只会让用户多等一轮，收益为零。
+        if (message.includes("AI_REQUEST_TIMEOUT") || /AI_PROVIDER_HTTP_ERROR:4\d\d/.test(message)) break;
+      }
+    }
+    // 保留真实原因：用户看到的降级提示必须能指出是超时、鉴权还是返回不合法。
+    throw new Error(`AI_VISION_REVIEW_FAILED:${lastError instanceof Error ? lastError.message : String(lastError)}`);
+  }
+
   async review(
     render: PresentationRender,
     goal: PresentationVisualGoal,
@@ -176,37 +223,46 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     if (indexes.length === 0 || indexes.some((index) => !render.slides[index]))
       throw new Error("AI_VISION_SLIDE_INDEX_INVALID");
     const settings = await loadSettings();
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const result = await invoke<unknown>("review_presentation_visuals", {
-          request: {
-            goal,
-            slideImages: indexes.map((index) => render.slides[index]!),
-            ...(includeContactSheet ? { contactSheet: render.contactSheet } : {}),
-            slideIndexes: indexes,
-            model: settings.aiModel,
-            provider: settings.aiProviderId,
-            repairHint:
-              attempt === 0
-                ? undefined
-                : "上一次响应不是可接受的严格 JSON，或缺少必填评分字段。请重新检查并严格遵循输出协议。",
-            taskId,
-          },
-        });
-        return normalizeVisualReview(result, indexes);
-      } catch (error) {
-        lastError = error;
-        const message = error instanceof Error ? error.message : String(error);
-        // 取消不是失败：立刻放弃，不再重试一次。
-        if (message.includes("AI_REQUEST_CANCELLED")) throw error;
-        // 超时说明这一次请求的规模超出预算，4xx 说明请求本身不合法。
-        // 这两类错误重试一次只会让用户多等一轮，收益为零。
-        if (message.includes("AI_REQUEST_TIMEOUT") || /AI_PROVIDER_HTTP_ERROR:4\d\d/.test(message)) break;
-      }
-    }
-    // 保留真实原因：用户看到的降级提示必须能指出是超时、鉴权还是返回不合法。
-    throw new Error(`AI_VISION_REVIEW_FAILED:${lastError instanceof Error ? lastError.message : String(lastError)}`);
+    return this.requestReview(
+      {
+        goal,
+        slideImages: indexes.map((index) => render.slides[index]!),
+        ...(includeContactSheet ? { contactSheet: render.contactSheet } : {}),
+        slideIndexes: indexes,
+        model: settings.aiModel,
+        provider: settings.aiProviderId,
+        taskId,
+      },
+      indexes,
+    );
+  }
+
+  /**
+   * Reviews the deck as a whole from the contact sheet alone.
+   *
+   * Cross-page consistency is not observable from a batch of six pages; the
+   * batch that happened to hold the overview used to answer for the whole
+   * deck. This call is the only one that sees every page at once, so it is the
+   * only one whose consistency score is used. Per-page geometry is explicitly
+   * out of scope here.
+   */
+  async reviewDeck(render: PresentationRender, goal: PresentationVisualGoal, taskId?: number): Promise<VisualReview> {
+    validateVisualRenderPayload(render);
+    const indexes = render.slides.map((_, index) => index);
+    const settings = await loadSettings();
+    return this.requestReview(
+      {
+        goal,
+        slideImages: [],
+        contactSheet: render.contactSheet,
+        slideIndexes: indexes,
+        deckOnly: true,
+        model: settings.aiModel,
+        provider: settings.aiProviderId,
+        taskId,
+      },
+      indexes,
+    );
   }
 
   /**

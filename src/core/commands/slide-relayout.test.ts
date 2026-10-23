@@ -134,4 +134,52 @@ describe("design-only relayout", () => {
     expect(useEditorStore.getState().document.revisions).toEqual(before.revisions);
     expect(useEditorStore.getState().document.slides[0]!.elements).toEqual(before.slides[0]!.elements);
   });
+
+  it("keeps a page background picture behind the regenerated copy", () => {
+    const document = createDocument();
+    const slideId = document.slides[0]!.id;
+    applyCommand(document, {
+      type: "set-slide-background-image",
+      slideId,
+      dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+      mimeType: "image/png",
+    });
+    applyCommand(document, { type: "relayout-slide", slideId });
+    const elements = document.slides[0]!.elements;
+    const background = elements.findIndex(
+      (element) => element.type === "image" && element.placement === "slide-background",
+    );
+    const firstText = elements.findIndex((element) => element.type === "text");
+    // 背景必须在正文之前；放到最后会让整页被自己的背景盖住。
+    expect(background).toBeGreaterThanOrEqual(0);
+    expect(background).toBeLessThan(firstText);
+  });
+
+  it("keeps the deck page number when a single page is relaid out", () => {
+    const source = createDocument();
+    const document = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "三页稿",
+        slides: [
+          { title: "封面", body: "", speakerNotes: "" },
+          { title: "第一页", body: "正文一", speakerNotes: "" },
+          { title: "第二页", body: "正文二", speakerNotes: "" },
+        ],
+        designs: [design, design, design],
+      }),
+    );
+    const slideId = document.slides[1]!.id;
+    const footerBefore = document.slides[1]!.elements.find(
+      (element) => element.type === "text" && element.text.includes("/ 03"),
+    );
+    expect(footerBefore?.type).toBe("text");
+
+    const relaid = produce(document, (draft) => applyCommand(draft, { type: "relayout-slide", slideId }));
+    const footerAfter = relaid.slides[1]!.elements.find(
+      (element) => element.type === "text" && element.text.includes("/ 03"),
+    );
+    // 重排只渲染一页，但页脚仍要写“02 / 03”，不能退回单页编号。
+    expect(footerAfter?.type).toBe("text");
+  });
 });

@@ -2349,6 +2349,14 @@ button {
   font-size: 11px;
   line-height: 1.6;
 }
+.design-quality-visual {
+  margin: 18px 0 0;
+}
+.design-quality-visual h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
 .template-picker-dialog {
   width: min(920px, 100%);
 }

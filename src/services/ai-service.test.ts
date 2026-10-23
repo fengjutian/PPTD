@@ -540,8 +540,29 @@ describe("多页草稿的分批编排", () => {
     expect(progress[progress.length - 1]).toMatchObject({ completed: 3, total: 3 });
   });
 
-  it("页数不多时保持一次请求，不额外调用大纲", async () => {
-    vi.mocked(invoke).mockImplementation(async (command) => {
+  it("按大纲的 index 排序，正文不会配到错误的标题下", async () => {
+    const shuffled = outlineFor(7);
+    shuffled.pages.reverse();
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      if (command === "generate_presentation_outline") return shuffled;
+      if (command === "generate_presentation_slides_batch") {
+        const request = (args as { request: { startIndex: number; count: number } }).request;
+        return batchFor(request.startIndex, request.count);
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const draft = await generatePresentationDraft("主题", 7);
+
+    expect(draft.slides.map((slide) => slide.title)).toEqual(
+      Array.from({ length: 7 }, (_, index) => `第 ${index + 1} 页标题`),
+    );
+    expect(draft.slides.map((slide) => slide.body)).toEqual(
+      Array.from({ length: 7 }, (_, index) => `第 ${index + 1} 页正文`),
+    );
+  });
+
+  it("页数不多时保持一次请求，不额外调用大纲", async () => {    vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "generate_presentation") {
         return {
           title: "短稿",

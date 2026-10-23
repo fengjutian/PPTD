@@ -116,7 +116,7 @@ import {
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
-import { defaultPresentationVisualGoal } from "../services/visual-alignment";
+import { defaultPresentationVisualGoal, type VisualReview } from "../services/visual-alignment";
 import {
   documentContentFingerprint,
   runDesignQualityStage,
@@ -136,6 +136,16 @@ import {
 } from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
+/** 视觉评审的问题类型 → 用户能读懂的中文。 */
+const visualIssueLabels: Record<VisualReview["issues"][number]["issue"], string> = {
+  "weak-hierarchy": "层级不强",
+  "poor-contrast": "对比度不足",
+  "visual-imbalance": "构图失衡",
+  "background-conflict": "背景干扰",
+  misalignment: "元素未对齐",
+  "excessive-empty-space": "留白过多",
+  "repetitive-layout": "版式重复",
+};
 /** The narrowest and the widest the property panel may be dragged to. */
 const INSPECTOR_MIN_WIDTH = 220;
 const INSPECTOR_MAX_WIDTH = 520;
@@ -659,6 +669,8 @@ export function App() {
   const aiTopicRef = useRef("");
   const activeHistoryIdRef = useRef<string | undefined>(undefined);
   const aiUnsavedRef = useRef(false);
+  /** 每次保存的序号；只有最新一次保存可以清掉“未保存”标记。 */
+  const aiSaveTokenRef = useRef(0);
   const [aiBusy, setAiBusy] = useState(false);
   /** 整份草稿重新生成的状态。它和开始页的生成互斥，因为两者都要占用 AI 任务号。 */
   const [aiRegenerating, setAiRegenerating] = useState(false);
@@ -688,6 +700,9 @@ export function App() {
     templateName: string;
     issues: PresentationQualityIssue[];
     notes: string[];
+    /** 视觉评审留下的结构化结论，用于在报告里逐条展示模型建议。 */
+    visualReview?: VisualReview;
+    visualReviewCoverage?: { reviewed: number; total: number };
   }>();
   const imageInputRef = useRef<HTMLInputElement>(null);
   /** AI 配图对话框是否打开。 */
@@ -740,9 +755,7 @@ export function App() {
       const width = Math.max(node.clientWidth - paddingX, 0);
       const height = Math.max(node.clientHeight - paddingY, 0);
       setViewport((current) =>
-        Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1
-          ? current
-          : { width, height },
+        Math.abs(current.width - width) < 1 && Math.abs(current.height - height) < 1 ? current : { width, height },
       );
     };
     measure();
@@ -975,16 +988,18 @@ export function App() {
     setExportReport(undefined);
     setTaskStatus("正在生成 PPTX…");
     try {
+      // asset 引用在 Worker 里没有 IPC 可读，先在主线程解析成内嵌数据。
+      // 预检必须看解析后的文档：把 `asset://` 当成“不是内嵌 data URL”会
+      // 拒绝掉每一个重新打开过的项目，而这只是存储形式，不是缺失。
+      const exportDocument = await resolveDocumentImages(document);
       // 预检在主线程完成（含字体探测），重活交给 Worker，导出期间画布不冻结。
       const { validatePresentationForExport, isFontAvailable } = await import("../core/validation/export-validation");
-      const issues = await validatePresentationForExport(document, { fontAvailable: isFontAvailable });
+      const issues = await validatePresentationForExport(exportDocument, { fontAvailable: isFontAvailable });
       const blocking = issues.filter((issue) => issue.severity === "error");
       if (blocking.length > 0) {
         throw new Error(`EXPORT_VALIDATION_FAILED: ${blocking.map((issue) => issue.message).join("；")}`);
       }
       const { buildPptxInWorker } = await import("../features/pptx-export/export-worker-client");
-      // asset 引用在 Worker 里没有 IPC 可读，先在主线程解析成内嵌数据。
-      const exportDocument = await resolveDocumentImages(document);
       const task = buildPptxInWorker(exportDocument, issues);
       exportCancelRef.current = task.cancel;
       const { bytes, report } = await task.promise;
@@ -999,8 +1014,11 @@ export function App() {
           href: url,
           download: `${document.title}.pptx`,
         });
+        globalThis.document.body.append(anchor);
         anchor.click();
-        URL.revokeObjectURL(url);
+        anchor.remove();
+        // 同步 revoke 会在部分 WebView 里取消尚未开始的下载。
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
       } else {
         setTaskStatus(undefined);
         return;
@@ -1272,14 +1290,19 @@ export function App() {
     if (!aiDraft || !activeHistoryId) return;
     setAiSaveState("saving");
     aiUnsavedRef.current = true;
+    const token = (aiSaveTokenRef.current += 1);
     const timer = window.setTimeout(() => {
       void saveAiHistory({ id: activeHistoryId, topic: aiTopic, slideCount: aiDraft.slides.length, draft: aiDraft })
         .then((history) => {
+          // 这次保存开始后用户又改了草稿：新的保存已经排队，旧的返回不能
+          // 把“未保存”标记清掉，否则关闭窗口会跳过 flush。
+          if (token !== aiSaveTokenRef.current) return;
           setAiHistory(history);
           setAiSaveState("saved");
           aiUnsavedRef.current = false;
         })
         .catch((error: unknown) => {
+          if (token !== aiSaveTokenRef.current) return;
           setAiSaveState("saved");
           setTaskStatus(`草稿历史保存失败：${error instanceof Error ? error.message : String(error)}`);
         });
@@ -1291,9 +1314,11 @@ export function App() {
     if (!aiDraft || !activeHistoryId) return;
     const draft = aiDraft;
     const id = activeHistoryId;
+    const token = (aiSaveTokenRef.current += 1);
     setAiSaveState("saved");
     void saveAiHistory({ id, topic: aiTopic, slideCount: draft.slides.length, draft })
       .then((history) => {
+        if (token !== aiSaveTokenRef.current) return;
         setAiHistory(history);
         aiUnsavedRef.current = false;
       })
@@ -1394,22 +1419,24 @@ export function App() {
   };
 
   const updateAiDraftWithHistory = (key: string, update: (draft: AiDraft) => AiDraft, coalesce = true) => {
-    setAiDraft((current) => {
-      if (!current) return current;
-      const next = update(current);
-      if (next === current) return current;
-      const now = Date.now();
-      const previous = aiContentCoalesce.current;
-      if (!coalesce || !previous || previous.key !== key || now - previous.at > 750) {
-        aiContentUndo.current.push(snapshotAiContent(current));
-        if (aiContentUndo.current.length > 100) aiContentUndo.current.shift();
-      }
-      aiContentCoalesce.current = coalesce ? { key, at: now } : undefined;
-      aiContentRedo.current = [];
-      aiDraftRef.current = next;
-      setAiContentHistoryRevision((value) => value + 1);
-      return next;
-    });
+    // 不能在 setState 的 updater 里 push 撤销栈：React 会重复调用 updater
+    // （StrictMode 下必现），一次编辑于是留下两条相同快照，按一次 Ctrl+Z
+    // 看起来没有反应。用 ref 取当前值，在 updater 外完成副作用。
+    const current = aiDraftRef.current;
+    if (!current) return;
+    const next = update(current);
+    if (next === current) return;
+    const now = Date.now();
+    const previous = aiContentCoalesce.current;
+    if (!coalesce || !previous || previous.key !== key || now - previous.at > 750) {
+      aiContentUndo.current.push(snapshotAiContent(current));
+      if (aiContentUndo.current.length > 100) aiContentUndo.current.shift();
+    }
+    aiContentCoalesce.current = coalesce ? { key, at: now } : undefined;
+    aiContentRedo.current = [];
+    aiDraftRef.current = next;
+    setAiDraft(next);
+    setAiContentHistoryRevision((value) => value + 1);
   };
 
   const undoAiContent = () => {
@@ -1703,7 +1730,10 @@ export function App() {
   const generateFromDraft = async (mode: "template" | "preset" = "template") => {
     if (!aiDraft) return;
     if (mode === "template" && (!selectedTemplate || !templateAnalysis)) return;
-    const preset = mode === "preset" ? (findThemePreset(themePresetId || inferThemePresetId(aiTopic)) ?? defaultThemePreset()) : undefined;
+    const preset =
+      mode === "preset"
+        ? (findThemePreset(themePresetId || inferThemePresetId(aiTopic)) ?? defaultThemePreset())
+        : undefined;
     const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
     const deckName = preset ? preset.name : selectedTemplate!.name;
     designCancelRef.current = false;
@@ -1730,9 +1760,7 @@ export function App() {
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
       const hasTemplateSize = analysis.slideWidthEmu && analysis.slideHeightEmu;
-      const templateColors = new Map(
-        analysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]),
-      );
+      const templateColors = new Map(analysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]));
       const resolveTemplateColor = (value: string | null) =>
         value?.startsWith("#") ? value : value ? templateColors.get(value.toLowerCase()) : undefined;
       setDesignProgress({ percent: 94, label: "正在渲染可编辑页面" });
@@ -1801,27 +1829,10 @@ export function App() {
           : undefined,
         fontFamily: preset ? undefined : analysis.majorFont || analysis.minorFont || undefined,
         bodyFontFamily: preset ? undefined : analysis.minorFont || analysis.majorFont || undefined,
-        templateDecorations: preset ? undefined : hasTemplateSize
-          ? (analysis.defaultDecorations ?? []).map((item) => ({
-              shape: item.shape,
-              fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent,
-              frame: {
-                x: item.x / analysis.slideWidthEmu!,
-                y: item.y / analysis.slideHeightEmu!,
-                width: item.width / analysis.slideWidthEmu!,
-                height: item.height / analysis.slideHeightEmu!,
-              },
-            }))
-          : undefined,
-        templateLayouts: preset ? undefined : hasTemplateSize
-          ? templateLayoutSources.map((layout) => ({
-              index: layout.index,
-              name: layout.name,
-              backgroundColor: resolveTemplateColor(layout.backgroundColor),
-              backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)
-                ?.dataUrl,
-              backgroundLuminance: backgroundProbes.get(layout.index),
-              decorations: (layout.decorations ?? []).map((item) => ({
+        templateDecorations: preset
+          ? undefined
+          : hasTemplateSize
+            ? (analysis.defaultDecorations ?? []).map((item) => ({
                 shape: item.shape,
                 fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent,
                 frame: {
@@ -1830,14 +1841,35 @@ export function App() {
                   width: item.width / analysis.slideWidthEmu!,
                   height: item.height / analysis.slideHeightEmu!,
                 },
-              })),
-              regions: layout.regions.map((region) => ({
-                ...normalizeRegion(region),
-                textColor: region.textColor ?? undefined,
-                fontSizePt: region.fontSizePt ?? undefined,
-              })),
-            }))
-          : undefined,
+              }))
+            : undefined,
+        templateLayouts: preset
+          ? undefined
+          : hasTemplateSize
+            ? templateLayoutSources.map((layout) => ({
+                index: layout.index,
+                name: layout.name,
+                backgroundColor: resolveTemplateColor(layout.backgroundColor),
+                backgroundImageDataUrl: matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)
+                  ?.dataUrl,
+                backgroundLuminance: backgroundProbes.get(layout.index),
+                decorations: (layout.decorations ?? []).map((item) => ({
+                  shape: item.shape,
+                  fill: resolveTemplateColor(item.fill) ?? design.slides[0]!.accent,
+                  frame: {
+                    x: item.x / analysis.slideWidthEmu!,
+                    y: item.y / analysis.slideHeightEmu!,
+                    width: item.width / analysis.slideWidthEmu!,
+                    height: item.height / analysis.slideHeightEmu!,
+                  },
+                })),
+                regions: layout.regions.map((region) => ({
+                  ...normalizeRegion(region),
+                  textColor: region.textColor ?? undefined,
+                  fontSizePt: region.fontSizePt ?? undefined,
+                })),
+              }))
+            : undefined,
         // The theme of the template travels with the design, so the exported
         // deck keeps the typography and the palette of the template.
         themePresetId: themePresetId || undefined,
@@ -1910,6 +1942,8 @@ export function App() {
             ).values(),
           ],
           notes: stage.notes,
+          visualReview: stage.visualReview,
+          visualReviewCoverage: stage.visualReviewCoverage,
         });
         setTaskStatus(
           stage.issues.length > 0
@@ -1984,6 +2018,9 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // 编辑快捷键只在编辑器视图生效。AI 审核页、主题页和设置页里 Delete /
+      // Ctrl+Z 属于它们自己的交互，不能让隐藏的画布跟着动。
+      if (activeView !== "editor") return;
       const target = event.target instanceof HTMLElement ? event.target : undefined;
       const shortcut = resolveEditorShortcut({
         key: event.key,
@@ -2062,6 +2099,7 @@ export function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     activeSlide,
+    activeView,
     document.pageSize.height,
     document.pageSize.width,
     execute,
@@ -2081,18 +2119,23 @@ export function App() {
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = inspectorWidth;
+    // `inspectorWidth` in this closure is the width at drag start. Keep the
+    // last value the drag actually produced so the persisted width is not the
+    // one from before the drag.
+    let latestWidth = inspectorWidth;
     const move = (moveEvent: PointerEvent) => {
       const next = Math.min(
         INSPECTOR_MAX_WIDTH,
         Math.max(INSPECTOR_MIN_WIDTH, startWidth - (moveEvent.clientX - startX)),
       );
+      latestWidth = next;
       setInspectorWidth(next);
     };
     const stop = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       try {
-        window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(inspectorWidth));
+        window.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(latestWidth));
       } catch {
         // A window without a local storage simply forgets the width.
       }
@@ -3087,6 +3130,42 @@ export function App() {
                   </li>
                 ))}
               </ul>
+            )}
+            {designQualityReport.visualReview && (
+              <div className="design-quality-visual">
+                <h3>视觉评审建议</h3>
+                {designQualityReport.visualReviewCoverage && (
+                  <p className="design-quality-notes">
+                    已评审 {designQualityReport.visualReviewCoverage.reviewed}/
+                    {designQualityReport.visualReviewCoverage.total} 页 · 总分{" "}
+                    {designQualityReport.visualReview.overallScore}（层级{" "}
+                    {designQualityReport.visualReview.hierarchyScore}、对齐{" "}
+                    {designQualityReport.visualReview.alignmentScore}、可读性{" "}
+                    {designQualityReport.visualReview.readabilityScore}、一致性{" "}
+                    {designQualityReport.visualReview.consistencyScore}）
+                  </p>
+                )}
+                {designQualityReport.visualReview.issues.length === 0 ? (
+                  <div className="template-empty">视觉评审没有留下需要调整的建议。</div>
+                ) : (
+                  <ul className="export-report-list">
+                    {designQualityReport.visualReview.issues.map((issue, index) => (
+                      <li
+                        key={`${issue.issue}-${issue.slideIndex}-${index}`}
+                        className={issue.severity === "error" ? "error" : "warning"}
+                      >
+                        <CircleAlert />
+                        <div>
+                          <strong>
+                            第 {issue.slideIndex + 1} 页 · {visualIssueLabels[issue.issue]}
+                          </strong>
+                          <p>{issue.suggestion}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
             {designQualityReport.notes.length > 0 && (
               <p className="design-quality-notes">{designQualityReport.notes.join("；")}</p>

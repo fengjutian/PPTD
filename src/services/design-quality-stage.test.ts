@@ -81,6 +81,9 @@ describe("设计质检阶段", () => {
     expect(result.notes.join("；")).toContain("本次未做视觉评审");
     expect(result.document.slides).toHaveLength(1);
     expect(result.passed).toBe(true);
+    // 没有评审就没有结论：不能留下一个空的 VisualReview 冒充"已评审，无问题"。
+    expect(result.visualReview).toBeUndefined();
+    expect(result.visualReviewCoverage).toBeUndefined();
   });
 
   it("文稿超过评审上限时说明未做视觉评审，而不是笼统降级", async () => {
@@ -129,6 +132,8 @@ describe("设计质检阶段", () => {
     expect(result.degraded).toBe(true);
     expect(result.notes.join("；")).toContain("视觉评审只覆盖 6/7 页");
     expect(result.document.slides).toHaveLength(7);
+    // 覆盖范围要能作为结构化数据被界面读取，而不是只能从文案里猜。
+    expect(result.visualReviewCoverage).toEqual({ reviewed: 6, total: 7 });
   });
 
   it("修复计划不能改动评审没有提到问题的页面", async () => {
@@ -291,6 +296,10 @@ describe("设计质检阶段", () => {
     expect(reviewed).toEqual([["data:image/jpeg;base64,UkVBTA=="]]);
     expect(result.notes.join("；")).toContain("视觉评审基于导出的 PPTX 真实渲染");
     expect(result.degraded).toBe(false);
+    // 评审结论与覆盖范围要原样带到结果里，供界面逐条展示模型建议。
+    expect(result.visualReview).toEqual(passingReview);
+    expect(result.visualReviewCoverage).toEqual({ reviewed: 1, total: 1 });
+    expect(result.notes.join("；")).toContain("视觉评审最终评分 90");
   });
 
   it("只重画设计发生变化的页面，并复用上一轮画面", async () => {
@@ -353,6 +362,67 @@ describe("设计质检阶段", () => {
     expect(calls[1]!.previousSlides).toEqual(["page-0", "page-1"]);
     expect(result.designs[0]!.layout).toBe("cards");
     expect(result.designs[1]!.layout).toBe("title-body");
+  });
+
+  it("整册总览单独评审，逐页批次不再重复携带缩略图", async () => {
+    const pageOptions: Array<{ includeContactSheet?: boolean }> = [];
+    let deckCalls = 0;
+    const result = await runDesignQualityStage({
+      initialDesigns: [design(), design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, _indexes, _taskId, options) => {
+          pageOptions.push(options ?? {});
+          // 逐页批次只看得到自己那几页，它对"跨页一致性"的判断不作数。
+          return { ...passingReview, consistencyScore: 40 };
+        },
+        reviewDeck: async () => {
+          deckCalls += 1;
+          return { ...passingReview, consistencyScore: 95 };
+        },
+        planRepairs: async () => ({ repairs: [] }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: ["data:image/jpeg;base64,AA==", "data:image/jpeg;base64,AA=="],
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    expect(deckCalls).toBe(1);
+    expect(pageOptions.every((entry) => entry.includeContactSheet === false)).toBe(true);
+    // 跨页一致性只认看过整册的那一路，不被逐页批次的 40 分拉低。
+    expect(result.visualReview?.consistencyScore).toBe(95);
+  });
+
+  it("总览评审失败时跨页一致性退回逐页批次，并如实报告这次降级", async () => {
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async () => ({ ...passingReview, consistencyScore: 88 }),
+        reviewDeck: async () => {
+          throw new Error("AI_REQUEST_TIMEOUT");
+        },
+        planRepairs: async () => ({ repairs: [] }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+    });
+
+    expect(result.visualReview?.consistencyScore).toBe(88);
+    expect(result.degraded).toBe(true);
+    expect(result.notes.join("；")).toContain("整册总览评审不可用");
   });
 
   it("真实渲染不可用时降级到画布预览，并说清楚原因", async () => {

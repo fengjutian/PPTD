@@ -73,6 +73,16 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((state) => {
       const domain = commandDomain(command, state.document);
       if (!domain) return state;
+      // A group copy whose sources are all locked copies nothing. It must not
+      // bump a revision or leave an undo entry that cannot change the document.
+      if (command.type === "duplicate-elements") {
+        const slide = state.document.slides.find((item) => item.id === command.slideId);
+        const copyable = command.elementIds.some((id) => {
+          const element = slide?.elements.find((item) => item.id === id);
+          return element !== undefined && !element.locked;
+        });
+        if (!copyable) return state;
+      }
       const [document, forward, inverse] = produceWithPatches(state.document, (draft) => {
         applyCommand(draft, command);
         draft.revisions.document += 1;
@@ -104,20 +114,21 @@ export const useEditorStore = create<EditorState>((set) => ({
         selectedElementIds = [slide.elements[sourceIndex + 1]!.id];
       }
       if (command.type === "duplicate-elements") {
-        // 复制整组后选中这一组副本：用户能立刻看出复制出了什么。
-        const slide = document.slides.find((item) => item.id === command.slideId)!;
-        const lastIndex = Math.max(
-          ...command.elementIds.map((id) => slide.elements.findIndex((item) => item.id === id)),
+        // 复制整组后选中这一组副本：用户能立刻看出复制出了什么。按插入前后
+        // 的 id 差集选，而不是按 elementIds 的数量切片——锁定元素会被命令
+        // 跳过，数量切片会把后面未复制的元素也选进来。
+        const before = new Set(
+          state.document.slides.find((item) => item.id === command.slideId)?.elements.map((item) => item.id) ?? [],
         );
-        selectedElementIds = slide.elements
-          .slice(lastIndex + 1, lastIndex + 1 + command.elementIds.length)
-          .map((item) => item.id);
+        const slide = document.slides.find((item) => item.id === command.slideId)!;
+        const copies = slide.elements.filter((item) => !before.has(item.id)).map((item) => item.id);
+        if (copies.length > 0) selectedElementIds = copies;
       }
       if (command.type === "set-element-lock") selectedElementIds = [command.elementId];
       if (command.type === "delete-element")
         selectedElementIds = selectedElementIds.filter((id) => id !== command.elementId);
-      if (command.type === "delete-elements")
-        selectedElementIds = selectedElementIds.filter((id) => !command.elementIds.includes(id));
+      // `delete-elements` may leave locked objects in place, so the selection is
+      // pruned against the resulting document (below) rather than dropped by id.
       if (
         command.type === "add-slide" ||
         command.type === "duplicate-slide" ||

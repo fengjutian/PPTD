@@ -5,12 +5,15 @@ import {
   resolveTableData,
   textFragments,
   type ChartElement,
+  type LineElement,
   type PresentationDocument,
   type Slide,
   type TableElement,
   type TextElement,
 } from "../core/document-model";
 import { breakAtoms } from "../core/rendering/cjk-linebreak";
+import { isLargeText } from "../core/rendering/contrast";
+import { cropGeometry } from "../core/rendering/image-crop";
 import { resolveImageUrl } from "./image-url-service";
 
 export interface PresentationRender {
@@ -72,7 +75,15 @@ async function renderSlide(
         // a picture that cannot be decoded: the page is drawn without it.
         if (!url) throw new Error("VISUAL_RENDER_IMAGE_FAILED");
         const image = await loadImage(url);
-        context.drawImage(image, 0, 0, w, h);
+        // A crop is drawn the way the editor and the exporter draw it: the
+        // visible source region is stretched over the frame and clipped to it.
+        const crop = cropGeometry(element.crop);
+        context.save();
+        context.beginPath();
+        context.rect(0, 0, w, h);
+        context.clip();
+        context.drawImage(image, crop.left * w, crop.top * h, crop.width * w, crop.height * h);
+        context.restore();
       } catch (error) {
         // 评审图可以缺一张底图，整段质检不能因为一张图解码失败就中断。
         if (!tolerateImageErrors || !isImageRenderFailure(error)) throw error;
@@ -86,10 +97,13 @@ async function renderSlide(
         context.fill();
       } else {
         context.beginPath();
-        context.roundRect(0, 0, w, h, element.style.radiusPt);
+        // radiusPt is in points; the canvas works in pixels of this render.
+        const radius = Math.min(element.style.radiusPt * 12_700 * sx, w / 2, h / 2);
+        context.roundRect(0, 0, w, h, radius);
         context.fill();
       }
     }
+    if (element.type === "line") drawLine(context, element, w, h, sx);
     if (element.type === "text") drawText(context, element, w, h, sx);
     if (element.type === "chart") drawChart(context, element, slide, w, h);
     if (element.type === "table") drawTable(context, element, slide, w, h);
@@ -168,7 +182,7 @@ export async function inspectRenderedTextContrast(
         }
       samples.sort((left, right) => left.ratio - right.ratio);
       const worst = samples[Math.floor(samples.length * 0.25)]!;
-      const requiredRatio = element.style.fontSizePt >= 24 || element.style.bold ? 3 : 4.5;
+      const requiredRatio = isLargeText(element.style.fontSizePt, element.style.bold) ? 3 : 4.5;
       if (worst.ratio < requiredRatio) {
         const backgroundColor =
           `#${worst.rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`.toUpperCase();
@@ -177,6 +191,57 @@ export async function inspectRenderedTextContrast(
     }
   }
   return { issues, unreadableSlides };
+}
+
+/**
+ * Draws a line for the visual review.
+ *
+ * The line has its own geometry: horizontal/vertical lines run through the
+ * middle of their frame, a diagonal one uses the frame corners. Arrow heads
+ * are drawn here too, otherwise a review of an arrow page sees a plain stroke.
+ */
+function drawLine(
+  context: CanvasRenderingContext2D,
+  element: LineElement,
+  width: number,
+  height: number,
+  scale: number,
+): void {
+  const start =
+    element.direction === "diagonal"
+      ? { x: 0, y: 0 }
+      : element.direction === "vertical"
+        ? { x: width / 2, y: 0 }
+        : { x: 0, y: height / 2 };
+  const end =
+    element.direction === "diagonal"
+      ? { x: width, y: height }
+      : element.direction === "vertical"
+        ? { x: width / 2, y: height }
+        : { x: width, y: height / 2 };
+  const strokeWidth = Math.max(1, element.style.strokeWidthPt * 12_700 * scale);
+  context.strokeStyle = element.style.stroke;
+  context.fillStyle = element.style.stroke;
+  context.lineWidth = strokeWidth;
+  context.setLineDash(element.style.dashed ? [strokeWidth * 3, strokeWidth * 2] : []);
+  context.beginPath();
+  context.moveTo(start.x, start.y);
+  context.lineTo(end.x, end.y);
+  context.stroke();
+  context.setLineDash([]);
+
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  const arrow = (x: number, y: number, direction: number) => {
+    const size = Math.max(strokeWidth * 4, 6);
+    context.beginPath();
+    context.moveTo(x, y);
+    context.lineTo(x - Math.cos(direction - 0.45) * size, y - Math.sin(direction - 0.45) * size);
+    context.lineTo(x - Math.cos(direction + 0.45) * size, y - Math.sin(direction + 0.45) * size);
+    context.closePath();
+    context.fill();
+  };
+  if (element.style.startArrow === "arrow") arrow(start.x, start.y, angle + Math.PI);
+  if (element.style.endArrow === "arrow") arrow(end.x, end.y, angle);
 }
 
 /**
@@ -338,7 +403,9 @@ function drawText(
     if (atoms.length === 0) continue;
     for (const line of breakAtoms(atoms, width)) lines.push(line.map((atom) => atom.value));
   }
-  const lineHeight = fontSize * 1.25;
+  // The export honours an explicit leading; the review picture must use the
+  // same one, or a page that fits in the file looks like it overflows here.
+  const lineHeight = fontSize * (element.style.lineHeight ?? 1.25);
   context.textBaseline = "top";
   context.textAlign = "left";
   lines.slice(0, Math.max(1, Math.floor(height / lineHeight))).forEach((lineCharacters, lineIndex) => {

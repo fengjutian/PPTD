@@ -67,6 +67,29 @@ describe("line element", () => {
       }),
     ).toThrow();
   });
+
+  it("swaps the frame extents and keeps the center when an axis line turns vertical", () => {
+    const document = createDocument();
+    const slideId = document.slides[0]!.id;
+    const withLine = produce(document, (draft) => {
+      applyCommand(draft, { type: "add-line", slideId, direction: "horizontal" });
+    });
+    const line = withLine.slides[0]!.elements.at(-1)!;
+    if (line.type !== "line") throw new Error("expected a line");
+    const center = { x: line.frame.x + line.frame.width / 2, y: line.frame.y + line.frame.height / 2 };
+    const before = { ...line.frame };
+
+    const next = produce(withLine, (draft) => {
+      applyCommand(draft, { type: "set-line-direction", slideId, elementId: line.id, direction: "vertical" });
+    });
+    const vertical = next.slides[0]!.elements.at(-1)!;
+    if (vertical.type !== "line") throw new Error("expected a line");
+    // 只改 direction 不换宽高，竖线的框仍然是很宽的横框，画出来只有一个点。
+    expect(vertical.frame.width).toBe(before.height);
+    expect(vertical.frame.height).toBe(before.width);
+    expect(vertical.frame.x + vertical.frame.width / 2).toBeCloseTo(center.x, 0);
+    expect(vertical.frame.y + vertical.frame.height / 2).toBeCloseTo(center.y, 0);
+  });
 });
 
 describe("duplicate a group of elements", () => {

@@ -63,6 +63,15 @@ export interface DesignQualityStageResult {
   passed: boolean;
   /** 是否发生过降级（视觉评审不可用、底图无法渲染等）。 */
   degraded: boolean;
+  /**
+   * 视觉评审的最终结论：评分、逐页建议和模型给出的安全区。
+   *
+   * 这是评审过程留下的唯一结构化记录。整体降级到确定性校验时为 undefined，
+   * 调用方不能把"没有结论"当成"检查通过"。
+   */
+  visualReview?: VisualReview;
+  /** 最后一轮评审实际覆盖的页数与总页数。未评审时为空。 */
+  visualReviewCoverage?: { reviewed: number; total: number };
 }
 
 /** 取消不是失败：取消必须一路向上抛出，不能被降级逻辑吞掉。 */
@@ -163,8 +172,13 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let reviewSlideCount = 0;
   /** 部分批次失败的原因，评审不能因为一批失败就整体作废。 */
   let partialReviewReason: string | undefined;
+  /** 整册总览评审失败的原因。失败时跨页一致性只能退回批内评分。 */
+  let deckReviewUnavailable: string | undefined;
   /** 上一轮成功渲染的设计与整册画面，用于只重画变化页。 */
   let lastRealRender: { designs: AiSlideDesign[]; slides: string[]; contactSheet: string } | undefined;
+  /** 评审最终留下的结构化结论，随结果一起返回给界面。 */
+  let visualReview: VisualReview | undefined;
+  let visualReviewCoverage: { reviewed: number; total: number } | undefined;
 
   try {
     const aligned = await runVisualAlignmentLoop<AiSlideDesign[]>({
@@ -222,25 +236,40 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         reviewedSlideCount = 0;
         reviewSlideCount = render.slides.length;
         partialReviewReason = undefined;
-        const outcomes = await Promise.allSettled(
-          batches.map((indexes, batchIndex) =>
+        deckReviewUnavailable = undefined;
+        // 整册总览由一次专门的评审负责：它只看跨页一致性和节奏，不产生逐页
+        // 几何。这样每一批逐页评审都不必再附带缩略图，跨页一致性也只由真正
+        // 看过整册的那一路给出，而不是由碰巧排在第一的批次代答。
+        const deckReview = options.vision.reviewDeck
+          ? options.vision.reviewDeck(render, goal, options.taskId)
+          : undefined;
+        const outcomes = await Promise.allSettled([
+          ...batches.map((indexes, batchIndex) =>
             options.vision.review(render, goal, indexes, options.taskId, {
-              // 整套缩略图只跟第一批一起发，避免每批重复上传同一张图。
-              includeContactSheet: batchIndex === 0,
+              // 有专门的整册评审时，逐页批次不再重复上传缩略图。
+              includeContactSheet: options.vision.reviewDeck ? false : batchIndex === 0,
             }),
           ),
-        );
+          ...(deckReview ? [deckReview] : []),
+        ]);
         const reviews: VisualReview[] = [];
         let overviewReview: VisualReview | undefined;
         outcomes.forEach((outcome, index) => {
+          const isDeck = index >= batches.length;
           if (outcome.status === "fulfilled") {
+            if (isDeck) {
+              overviewReview = outcome.value;
+              return;
+            }
             reviews.push(outcome.value);
-            if (index === 0) overviewReview = outcome.value;
+            if (!options.vision.reviewDeck && index === 0) overviewReview = outcome.value;
             reviewedSlideCount += batches[index]!.length;
             return;
           }
           if (isGenerationCancelled(outcome.reason)) throw outcome.reason;
-          partialReviewReason ??= outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+          const reason = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+          if (isDeck) deckReviewUnavailable ??= reason;
+          else partialReviewReason ??= reason;
         });
         if (reviews.length === 0) throw outcomes.find((outcome) => outcome.status === "rejected")?.reason;
         return mergeReviews(reviews, overviewReview);
@@ -284,8 +313,20 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
       },
     });
     designs = aligned.value;
+    visualReview = aligned.review;
+    visualReviewCoverage = { reviewed: reviewedSlideCount, total: reviewSlideCount };
     notes.push(`视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`);
+    // 评分和建议是评审留下的结构化结论。用户既要能看到它，也要知道它来自
+    // 哪一轮、覆盖了多少页，避免把"评审过了"理解成"页面一定好看"。
+    notes.push(
+      `视觉评审最终评分 ${aligned.review.overallScore}（层级 ${aligned.review.hierarchyScore}、对齐 ${aligned.review.alignmentScore}、可读性 ${aligned.review.readabilityScore}、一致性 ${aligned.review.consistencyScore}），剩余 ${aligned.review.issues.length} 处建议`,
+    );
     if (aligned.reverted) notes.push("最后一轮修复没有提升评分，已保留评分更高的设计");
+    if (deckReviewUnavailable) {
+      // 总览评审失败时跨页一致性由逐页批次代答，这不是等价结论，必须说明。
+      degraded = true;
+      notes.push(`整册总览评审不可用，跨页一致性退回逐页批次评分（${deckReviewUnavailable.slice(0, 200)}）`);
+    }
     if (reviewSlideCount > 0 && reviewedSlideCount < reviewSlideCount) {
       degraded = true;
       notes.push(
@@ -395,5 +436,5 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         : "质量门未能完成检查，问题清单不完整",
     );
   }
-  return { designs, document, notes, issues, passed, degraded };
+  return { designs, document, notes, issues, passed, degraded, visualReview, visualReviewCoverage };
 }

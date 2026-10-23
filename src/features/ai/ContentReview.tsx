@@ -134,7 +134,10 @@ function ItemListEditor({
     if (!action) return;
     event.preventDefault();
     if (action.type === "insert") {
-      onChange([...items, ""]);
+      // Insert after the row being edited; the focus target is the new row.
+      // Appending at the end and focusing index+1 used to overwrite a
+      // pre-existing row's text.
+      onChange([...items.slice(0, index + 1), "", ...items.slice(index + 1)]);
       focusRow(index + 1);
     } else {
       onChange(items.filter((_, itemIndex) => itemIndex !== index));
@@ -206,7 +209,7 @@ function PairListEditor({
     if (!action) return;
     event.preventDefault();
     if (action.type === "insert") {
-      onChange([...items, { label: "", text: "" }]);
+      onChange([...items.slice(0, index + 1), { label: "", text: "" }, ...items.slice(index + 1)]);
       focusRow(index + 1);
     } else {
       onChange(items.filter((_, itemIndex) => itemIndex !== index));
@@ -797,6 +800,9 @@ export function ContentReview({
       className="draft-review"
       onKeyDownCapture={(event) => {
         if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
+        // 审核页自己拥有撤销语义。只 preventDefault 不会阻止 window 上的
+        // 编辑器快捷键，结果一次 Ctrl+Z 同时撤销草稿和画布文档。
+        event.stopPropagation();
         if (event.shiftKey) {
           if (!canRedo) return;
           event.preventDefault();
@@ -986,7 +992,7 @@ export function ContentReview({
             <CircleAlert />
             <div>
               {issues.map((issue) => (
-                <p key={issue.kind} className={issue.blocking ? "" : "warning"}>
+                <p key={`${issue.kind}:${issue.indexes.join("-")}`} className={issue.blocking ? "" : "warning"}>
                   <strong>{issue.message}</strong>
                   <button type="button" className="link-action" onClick={() => goToSlide(issue.indexes[0]!)}>
                     定位到第 {issue.indexes[0]! + 1} 页
@@ -1249,8 +1255,8 @@ export function ContentReview({
                       </p>
                       {imageIssues.length > 0 && (
                         <ul className="visual-asset-issues" aria-label={`第 ${index + 1} 页的配图问题`}>
-                          {imageIssues.map((issue) => (
-                            <li key={issue.kind}>
+                          {imageIssues.map((issue, issueIndex) => (
+                            <li key={`${issue.kind}:${issueIndex}`}>
                               <CircleAlert />
                               {issue.message}
                             </li>

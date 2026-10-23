@@ -677,8 +677,13 @@ export async function generatePresentationDraft(
   const outlineRaw = await invoke<unknown>("generate_presentation_outline", {
     request: { topic, slideCount, model, provider, taskId: options.taskId, streamProgress: true },
   });
-  const outline = aiOutlineSchema.parse(outlineRaw);
-  if (outline.pages.length !== slideCount) throw new Error("AI_OUTLINE_PAGE_COUNT_MISMATCH");
+  const parsedOutline = aiOutlineSchema.parse(outlineRaw);
+  if (parsedOutline.pages.length !== slideCount) throw new Error("AI_OUTLINE_PAGE_COUNT_MISMATCH");
+  // Pages may come back shuffled. Batches are sliced by position, so an
+  // unordered outline would put one page's body under another page's title.
+  const pages = [...parsedOutline.pages].sort((left, right) => left.index - right.index);
+  if (pages.some((page, index) => page.index !== index)) throw new Error("AI_OUTLINE_PAGE_INDEX_INVALID");
+  const outline = { ...parsedOutline, pages };
   assertNotCancelled(options);
 
   const batches = Array.from({ length: Math.ceil(slideCount / BATCH_PAGE_COUNT) }, (_, index) => ({

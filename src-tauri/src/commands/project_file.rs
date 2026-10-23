@@ -555,7 +555,6 @@ fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
             );
         }
     }
-    cleanup_unreferenced_assets(path, document);
     Ok(())
 }
 
@@ -760,6 +759,10 @@ fn save_project_at(
     externalize_images(&path, &mut document)?;
     let missing_assets = copy_referenced_assets(&path, &document, source_path, layout_cache_root)?;
     atomic_write_json(&path, &document)?;
+    // GC only after the new document is durable. Deleting assets before the
+    // replace leaves the still-on-disk old document pointing at files that are
+    // already gone when the replace fails (locked file, oversized project).
+    cleanup_unreferenced_assets(&path, &document);
     Ok(AssetReport { missing_assets })
 }
 
@@ -835,6 +838,9 @@ fn save_recovery_at(
     externalize_images(path, &mut document)?;
     let missing_assets = copy_referenced_assets(path, &document, source_path, layout_cache_root)?;
     atomic_write_json(path, &document)?;
+    // Same ordering as a project save: never remove an asset the last good
+    // snapshot still references before the new snapshot is on disk.
+    cleanup_unreferenced_assets(path, &document);
     Ok(AssetReport { missing_assets })
 }
 

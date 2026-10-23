@@ -122,6 +122,32 @@ describe("视觉评审端口", () => {
     expect(calls[1]!.contactSheet).toBeUndefined();
   });
 
+  it("整册总览评审只发送缩略图，并明确声明 deckOnly", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "load_app_settings") return null;
+      if (command === "review_presentation_visuals") {
+        return {
+          overallScore: 90,
+          hierarchyScore: 90,
+          alignmentScore: 90,
+          readabilityScore: 90,
+          consistencyScore: 90,
+          issues: [],
+          slideGuidance: [],
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const port = new TauriVisionReviewPort();
+    await port.reviewDeck(render(3), goal, 5);
+
+    const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "review_presentation_visuals");
+    expect(call?.[1]).toMatchObject({
+      request: { deckOnly: true, slideImages: [], contactSheet: JPEG, slideIndexes: [0, 1, 2], taskId: 5 },
+    });
+  });
+
   it("任务被取消时立刻放弃，不再重试一次", async () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "load_app_settings") return null;

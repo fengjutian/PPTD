@@ -284,6 +284,17 @@ function copyElementForPaste(element: SlideElement, offset: number): SlideElemen
   return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, source: { ...element.source } };
 }
 
+/**
+ * Reviewed copy changed: an approved page has to leave the approved state.
+ *
+ * Deleting a content-bound title/body is a content edit just as much as typing
+ * over it. Without this transition the page could be empty and still be
+ * reported as approved, and the export preflight would not warn about it.
+ */
+function markContentChanged(slide: Slide): void {
+  if (slide.content.status === "approved") slide.content.status = "changed";
+}
+
 /** Plain deep copy of an element, safe to read from an Immer draft. */
 function cloneElement(element: SlideElement): SlideElement {
   if (element.type === "text")
@@ -373,6 +384,12 @@ export type DocumentCommand =
       backgroundRhythm?: BackgroundRhythm;
       visualAssets?: AiVisualAssetData[];
       themePresetId?: string;
+      /**
+       * The page's place in the deck, when this command renders only one page
+       * of a larger document (relayout). Without it the footer counts the
+       * one-page command, so a relaid-out page loses its "03 / 12".
+       */
+      pageContext?: { index: number; total: number; sectionLabel?: string };
     }
   | { type: "relayout-slide"; slideId: SlideId }
   | { type: "duplicate-slide"; slideId: SlideId }
@@ -777,6 +794,21 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
  * replaced from the same content, while user images/text, locked objects and
  * anything the legacy classifier cannot prove is generated are carried over.
  */
+/**
+ * A page background has to stay behind everything the relayout generates.
+ *
+ * Preserved objects used to be appended after the new composition, which put a
+ * full-page background picture on top of the text: the page looked blank after
+ * "重排版式". Backgrounds keep their place at the bottom; other preserved
+ * objects stay on top as annotations.
+ */
+function isPageBackground(element: SlideElement): boolean {
+  return (
+    element.type === "image" &&
+    (element.placement === "slide-background" || element.placement === "layout-background")
+  );
+}
+
 function relayoutSlide(document: PresentationDocument, slide: Slide): void {
   const context = inferRelayoutContext(slide, document);
   const preserved = classifyRelayoutElements(slide)
@@ -800,6 +832,18 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
   const documentTitle = document.title.trim() || "未命名演示文稿";
   temp.title = documentTitle;
   temp.pageSize = { ...document.pageSize };
+  const pageIndex = document.slides.findIndex((item) => item.id === slide.id);
+  // A section page keeps its name in the footer of the pages that follow it.
+  // The temporary one-page render cannot see that page, so the name is carried
+  // in explicitly.
+  let sectionLabel: string | undefined;
+  for (let index = pageIndex; index >= 0 && sectionLabel === undefined; index -= 1) {
+    const candidate = document.slides[index];
+    if (!candidate) continue;
+    const candidateLayout = document.layouts?.find((layout) => layout.id === candidate.layoutId)?.name ?? "";
+    if (!/(章节|section|过渡|分隔)/u.test(candidateLayout)) continue;
+    sectionLabel = candidate.content.title.trim() || undefined;
+  }
   const relayoutCommand: DocumentCommand = {
     type: "apply-ai-designed-draft",
     title: documentTitle,
@@ -808,6 +852,9 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
     pageSize: { ...document.pageSize },
     templateLayouts: [context.templateLayout],
     backgroundRhythm: { coverVariants: 1, contentVariants: 1, repeatLimit: 1 },
+    ...(pageIndex >= 0
+      ? { pageContext: { index: pageIndex, total: document.slides.length, ...(sectionLabel ? { sectionLabel } : {}) } }
+      : {}),
     ...(context.fontFamily ? { fontFamily: context.fontFamily } : {}),
     ...(context.bodyFontFamily ? { bodyFontFamily: context.bodyFontFamily } : {}),
     ...(document.theme ? { templateTheme: document.theme } : {}),
@@ -843,7 +890,14 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
   });
 
   slide.background = generatedSlide.background;
-  slide.elements = [...generatedSlide.elements, ...preserved];
+  // Backgrounds must be painted before the regenerated copy; user annotations
+  // stay on top of it. Unconditionally appending `preserved` buried the page
+  // under its own background picture.
+  slide.elements = [
+    ...preserved.filter(isPageBackground),
+    ...generatedSlide.elements,
+    ...preserved.filter((element) => !isPageBackground(element)),
+  ];
   const generatedLayout = temp.layouts?.[0];
   if (!generatedLayout) {
     delete slide.layoutId;
@@ -2406,12 +2460,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const badgeDiameter = 0.36;
         const badgeHeight = badgeDiameter / pageHeightIn;
         const cardTextTop = 0.035 + badgeHeight + 0.03;
-        const cardTextHeight = Math.max(...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, 16, bodyLeading)));
+        // Four short points leave a grid that reads as a caption when the type
+        // stays at the dense size. Sparse grids carry one point more.
+        const sparseCards = visible.length <= 4 && visible.every((item) => item.trim().length <= 16);
+        const cardFontSize = sparseCards ? 17 : 16;
+        const cardTextHeight = Math.max(...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, cardFontSize, bodyLeading)));
         // A card is as tall as the badge and the copy it carries. Stretching a
         // one-line card to the row's full height left the copy stranded in the
         // middle of an empty box.
         const cardHeight = Math.min(
-          rows === 1 ? 0.3 : 0.24,
+          rows === 1 ? 0.3 : sparseCards ? 0.26 : 0.24,
           Math.max(0.16, cardTextTop + cardTextHeight + 0.03),
           contentHeight / rows - 0.04,
         );
@@ -2439,8 +2497,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(
             text(
               badgeText,
-              centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 12),
-              12,
+              centeredBlock(badgeText, { x: badgeX, y: badgeY, width: badgeWidth, height: badgeHeight }, 14),
+              14,
               "#FFFFFF",
               true,
               "center",
@@ -2457,16 +2515,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const fittedCardSize = fittedFontSize(
             cleanItem,
             frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height),
-            16,
+            cardFontSize,
             12,
           );
           const fittedHeight = blockHeight(cleanItem, cardWidth - 0.06, fittedCardSize, bodyLeading);
+          // Centre the copy in the space under the badge: a one-line card with
+          // the text pinned to the top reads as a card that was cut short.
+          const copyTop = cardTextBox.y + Math.max(0, (cardTextBox.height - fittedHeight) / 2);
           slide.elements.push(
             text(
               cleanItem,
               frame(
                 cardTextBox.x,
-                cardTextBox.y,
+                copyTop,
                 cardTextBox.width,
                 Math.max(0.04, Math.min(cardTextBox.height, fittedHeight)),
               ),
@@ -2495,7 +2556,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!keepsArtwork) slide.elements.push(shape(frame(0.5, 0.25, 0.012, 0.6), design.accent));
         const middle = Math.ceil(items.length / 2);
         const columnCopy = (columnItems: string[]) => columnItems.map((item) => `• ${cleanPoint(item)}`).join("\n\n");
-        const columnFont = templateColumnSize ?? 18;
+        // A short comparison can carry larger type; a long one must shrink to stay
+        // inside its column.
+        const sparseColumns = items.length <= 4 && items.every((item) => item.trim().length <= 16);
+        const columnFont = templateColumnSize ?? (sparseColumns ? 20 : 18);
         const leftSlot = hasSafeColumns
           ? { x: leftRecipe!.x, y: leftRecipe!.y, width: leftRecipe!.width, height: leftRecipe!.height }
           : { x: 0.08, y: 0.28, width: 0.36, height: 0.54 };
@@ -2517,7 +2581,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // two unrelated blocks instead of one comparison.
         const panelHeight = Math.min(
           Math.min(leftSlot.height, rightSlot.height),
-          Math.max(contentBox.height * 0.5, Math.max(leftHeight, rightHeight) + padding * 2),
+          Math.max(contentBox.height * 0.6, Math.max(leftHeight, rightHeight) + padding * 2),
         );
         const drawColumn = (
           copy: string,
@@ -2957,20 +3021,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const footerBand = { x: 0, y: 0.94, width: 1, height: 0.06 };
       const footerClaimed = obstacles.some((obstacle) => intersects(footerBand, obstacle));
       const templateFooter = recipe ? templateLayoutHasFooterMarker(recipe) : false;
+      // Relayout renders one page through a one-slide command. The deck it
+      // belongs to still decides whether a footer exists and what it says.
+      const pageIndex = command.pageContext?.index ?? index;
+      const pageTotal = command.pageContext?.total ?? command.slides.length;
       if (
-        command.slides.length > 1 &&
+        pageTotal > 1 &&
         design.layout !== "cover" &&
         design.layout !== "section" &&
         !footerClaimed &&
         !templateFooter
       ) {
-        const pageLabel = `${String(index + 1).padStart(2, "0")} / ${String(command.slides.length).padStart(2, "0")}`;
+        const pageLabel = `${String(pageIndex + 1).padStart(2, "0")} / ${String(pageTotal).padStart(2, "0")}`;
         // The left side names the section the page belongs to, not the deck:
         // a 20-page deck whose footer repeats the deck title on every page says
         // nothing about where the reader is. Without sections it falls back to
         // the deck title.
-        let sectionLabel: string | undefined;
-        for (let sectionIndex = index; sectionIndex >= 0; sectionIndex -= 1) {
+        let sectionLabel = command.pageContext?.sectionLabel;
+        for (let sectionIndex = pageIndex; sectionLabel === undefined && sectionIndex >= 0; sectionIndex -= 1) {
           if (command.designs[sectionIndex]?.layout !== "section") continue;
           const sectionTitle = command.slides[sectionIndex]?.title.trim();
           if (sectionTitle) {
@@ -3279,12 +3347,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // 逐个删会留下 N 个撤销项，用户得按 N 次撤销才回到原样。
     for (const elementId of command.elementIds) {
       const target = slide.elements.find((item) => item.id === elementId);
-      if (!target) continue;
+      if (!target || target.locked) continue;
       if (target.type === "text") {
-        if (target.contentRef === "title") slide.content.title = "";
+        if (target.contentRef === "title") {
+          slide.content.title = "";
+          markContentChanged(slide);
+        }
         if (target.contentRef === "body") {
           slide.content.body = "";
           slide.content.blocks = [];
+          markContentChanged(slide);
         }
       }
       slide.elements.splice(
@@ -3410,6 +3482,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "line") throw new Error("ELEMENT_NOT_LINE");
     if (command.direction !== "horizontal" && command.direction !== "vertical" && command.direction !== "diagonal")
       throw new Error("INVALID_LINE_DIRECTION");
+    const previous = element.direction;
+    // 水平线和竖线用宽高表达方向。只改 direction 不换宽高的话，一条 4in ×
+    // 0.02in 的横线切到 vertical 后会变成 0.02in 宽的“点”。以中心为轴交换
+    // 宽高，线不会跳到别处。
+    const axisAligned = (direction: typeof command.direction) =>
+      direction === "horizontal" || direction === "vertical";
+    if (axisAligned(previous) && axisAligned(command.direction) && previous !== command.direction) {
+      const centerX = element.frame.x + element.frame.width / 2;
+      const centerY = element.frame.y + element.frame.height / 2;
+      const width = element.frame.height;
+      const height = element.frame.width;
+      element.frame = {
+        x: Math.round(centerX - width / 2) as Emu,
+        y: Math.round(centerY - height / 2) as Emu,
+        width: width as Emu,
+        height: height as Emu,
+      };
+    }
     element.direction = command.direction;
     return;
   }
@@ -3450,10 +3540,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   }
   if (command.type === "delete-element") {
     if (element.type === "text") {
-      if (element.contentRef === "title") slide.content.title = "";
+      if (element.contentRef === "title") {
+        slide.content.title = "";
+        markContentChanged(slide);
+      }
       if (element.contentRef === "body") {
         slide.content.body = "";
         slide.content.blocks = [];
+        markContentChanged(slide);
       }
     }
     slide.elements.splice(
@@ -3500,6 +3594,6 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         ? [{ id: slide.content.blocks?.[0]?.id ?? crypto.randomUUID(), type: "paragraph", text: command.text }]
         : [];
     }
-    if (contentBound && slide.content.status === "approved") slide.content.status = "changed";
+    if (contentBound) markContentChanged(slide);
   }
 }

@@ -165,6 +165,13 @@ export function InspectorPanelView({
   const fontFamily = element.type === "text" ? element.style.fontFamily : "";
 
   useEffect(() => {
+    // A text selection addresses a range of one specific element. Keeping it
+    // when another element is selected would bold the wrong characters.
+    setSelection(undefined);
+    setTextDraft(undefined);
+  }, [element.id]);
+
+  useEffect(() => {
     if (!fontFamily) return;
     let active = true;
     void isFontAvailable(fontFamily).then((available) => {

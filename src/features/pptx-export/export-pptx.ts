@@ -102,9 +102,16 @@ function planMasters(document: PresentationDocument): Map<string, MasterPlan> {
     if (!slide.layoutId) continue;
     const spec: SlideLayoutSpec | undefined = document.layouts?.find((layout) => layout.id === slide.layoutId);
     if (!spec || plans.has(spec.id)) continue;
-    const artwork = slide.elements.find(
-      (element): element is ImageElement => element.type === "image" && element.placement === "layout-background",
-    );
+    // The artwork is a property of the layout, not of the first page that
+    // happens to use it. If that first page was simplified, the next page may
+    // still carry the artwork; use whichever page has it.
+    const artwork = document.slides
+      .filter((candidate) => candidate.layoutId === spec.id)
+      .flatMap((candidate) => candidate.elements)
+      .find(
+        (element): element is ImageElement =>
+          element.type === "image" && element.placement === "layout-background",
+      );
     const base = safeMasterTitle(spec.name, "PPTD 版式");
     let title = base;
     let counter = 2;
@@ -209,10 +216,10 @@ export async function buildPptx(
 
     for (const element of model.elements) {
       throwIfCancelled(options.signal);
-      // The artwork of the layout now lives in the master. Drawing it again
-      // would put the same picture on the page and break the editability of
-      // the exported deck.
-      if (element.type === "image" && element.placement === "layout-background") {
+      // The artwork of the layout lives in the master when the master has it.
+      // If it does not (the page that carried it was simplified or removed),
+      // drawing the page's own artwork is better than silently losing it.
+      if (element.type === "image" && element.placement === "layout-background" && master?.artwork) {
         nativeObjectCount += 1;
         continue;
       }
