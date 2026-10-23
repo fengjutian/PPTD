@@ -5,6 +5,7 @@ import { DEFAULT_THEME_PRESET_ID, THEME_PRESETS } from "./theme-presets";
 describe("theme preset inference", () => {
   it("maps a subject to the visual family it belongs to", () => {
     expect(inferThemePresetId("《岳阳楼记》教学课件")).toBe("paper-ink");
+    expect(inferThemePresetId("青花瓷纹样与器型教学课件")).toBe("blue-white-porcelain");
     expect(inferThemePresetId("2026 年度经营汇报")).toBe("consulting-navy");
     expect(inferThemePresetId("城市叙事摄影展陈")).toBe("warm-paper");
     expect(inferThemePresetId("年度财务与投资回顾")).toBe("finance-gold");

@@ -12,6 +12,12 @@ const GUIDANCE: Readonly<Record<string, ThemePresetGuidance>> = {
     pageRhythm: "暖白内容页为主，以墨绿章节页和赭石重点页形成节奏。",
     imageStyle: "宣纸肌理、山水局部、古籍细节或自然光摄影，避免科技感图库。",
   },
+  "blue-white-porcelain": {
+    character: "清雅、含蓄、疏朗，以瓷白留白和青花层次传达东方秩序感。",
+    scenarios: ["传统文化", "瓷器艺术", "博物馆课程", "古典文学"],
+    pageRhythm: "鱼肚白内容页为主，以靛青章节页和远天蓝图文页形成节奏；土黄只用于低频结论标记。",
+    imageStyle: "青花瓷器局部、器物纹样、博物馆实拍和柔和自然光静物，避免满版纹样与仿古滤镜。",
+  },
   "editorial-teal": {
     character: "清爽、理性、编辑感强，兼顾课程内容与现代产品表达。",
     scenarios: ["通用课程", "产品说明", "知识分享", "内部培训"],

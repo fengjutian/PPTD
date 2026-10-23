@@ -71,6 +71,26 @@ export const THEME_PRESETS: readonly ThemePreset[] = [
     ),
   },
   {
+    id: "blue-white-porcelain",
+    name: "青花瓷韵",
+    description: "鱼肚白底、青灰正文、靛青与花青强调；适合传统文化、瓷器艺术与人文课程。",
+    theme: theme(
+      "青花瓷韵",
+      "华文中宋",
+      "微软雅黑",
+      {
+        primary: "#2B333E",
+        accent: "#1661AB",
+        accent2: "#2376B7",
+        accent3: "#D6A01D",
+        muted: "#5E7987",
+        surface: "#F7F4ED",
+        surfaceAlt: "#D0DFE6",
+      },
+      scale(44, 31, 18, 16, 11, 0.8),
+    ),
+  },
+  {
     id: "editorial-teal",
     name: "青编",
     description: "宋黑混排、白底青强调，克制而现代；适合通用课程与产品说明。",

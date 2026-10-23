@@ -9,6 +9,7 @@ import { DEFAULT_THEME_PRESET_ID, findThemePreset } from "./theme-presets";
  */
 export function inferThemePresetId(topic: string): string {
   const text = topic.toLowerCase();
+  if (/青花|瓷器|陶瓷|瓷文化|博物馆|文物/.test(text)) return "blue-white-porcelain";
   if (/教学|课件|语文|文学|古文|诗词|教材|课堂|阅读|写作/.test(text)) return "paper-ink";
   if (/汇报|方案|尽调|战略|咨询|调研|路演|report|proposal|strategy/.test(text)) return "consulting-navy";
   if (/金融|投资|年报|财务|融资|基金|银行/.test(text)) return "finance-gold";

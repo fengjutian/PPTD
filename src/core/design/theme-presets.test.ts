@@ -27,4 +27,17 @@ describe("built-in theme presets", () => {
     expect(findThemePreset(fallback.id)).toBe(fallback);
     expect(findThemePreset("missing")).toBeUndefined();
   });
+
+  it("provides the sourced blue-and-white porcelain palette", () => {
+    const preset = findThemePreset("blue-white-porcelain");
+    expect(preset?.name).toBe("青花瓷韵");
+    expect(Object.fromEntries(preset!.theme.colors.map((item) => [item.name, item.value]))).toMatchObject({
+      primary: "#2B333E",
+      accent: "#1661AB",
+      accent2: "#2376B7",
+      accent3: "#D6A01D",
+      surface: "#F7F4ED",
+      surfaceAlt: "#D0DFE6",
+    });
+  });
 });
