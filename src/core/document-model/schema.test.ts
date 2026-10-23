@@ -8,6 +8,7 @@ import versionSixFixture from "./__fixtures__/v6-document.json";
 import versionSevenFixture from "./__fixtures__/v7-document.json";
 import versionNineFixture from "./__fixtures__/v9-document.json";
 import versionTenFixture from "./__fixtures__/v10-document.json";
+import versionElevenFixture from "./__fixtures__/v11-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -96,6 +97,13 @@ describe("presentation document schema", () => {
     // page and every object and simply draws nothing extra.
     expect(migrated.slides[0]!.elements.some((element) => element.type === "line")).toBe(false);
     expect(versionTenFixture.schemaVersion).toBe(10);
+  });
+
+  it("migrates the fixed version 11 fixture and invents no animation", () => {
+    const migrated = parsePresentationDocument(versionElevenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.animations).toBeUndefined();
+    expect(versionElevenFixture.schemaVersion).toBe(11);
   });
 
   it("accepts a native line with arrow heads and a dash pattern", () => {

@@ -13,6 +13,7 @@ import type {
   PresentationDocument,
   RectEmu,
   ShapeElementStyle,
+  SlideAnimation,
   Slide,
   SlideElement,
   SlideId,
@@ -431,6 +432,15 @@ export type DocumentCommand =
   | { type: "delete-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
+  | {
+      type: "add-animation";
+      slideId: SlideId;
+      elementId: ElementId;
+      animation: Omit<SlideAnimation, "id" | "elementId" | "phase">;
+    }
+  | { type: "remove-animation"; slideId: SlideId; animationId: string }
+  | { type: "move-animation"; slideId: SlideId; animationId: string; toIndex: number }
+  | { type: "set-animation"; slideId: SlideId; animationId: string; changes: Partial<Omit<SlideAnimation, "id" | "elementId" | "phase">> }
   | { type: "align-element"; slideId: SlideId; elementId: ElementId; align: AlignTarget }
   | {
       type: "align-elements";
@@ -766,6 +776,10 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-table-style":
     case "set-image-alt-text":
     case "set-image-crop":
+    case "add-animation":
+    case "remove-animation":
+    case "move-animation":
+    case "set-animation":
       return "design";
     case "delete-elements": {
       // 批量删除可能连带清空标题或正文——那属于内容变更，不能算作纯设计操作。
@@ -3462,6 +3476,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.findIndex((item) => item.id === elementId),
         1,
       );
+      if (slide.animations) slide.animations = slide.animations.filter((animation) => animation.elementId !== elementId);
     }
     return;
   }
@@ -3492,6 +3507,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       return copy;
     });
     slide.elements.splice(lastIndex + 1, 0, ...copies);
+    const copiedAnimations = sources.flatMap((source, index) =>
+      (slide.animations ?? [])
+        .filter((animation) => animation.elementId === source.id)
+        .map((animation) => ({ ...animation, id: crypto.randomUUID(), elementId: copies[index]!.id })),
+    );
+    if (copiedAnimations.length) slide.animations = [...(slide.animations ?? []), ...copiedAnimations];
     return;
   }
 
@@ -3515,6 +3536,52 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
 
+  if (command.type === "add-animation") {
+    const target = slide.elements.find((item) => item.id === command.elementId);
+    if (!target) throw new Error("ELEMENT_NOT_FOUND");
+    if (target.locked) throw new Error("ELEMENT_LOCKED");
+    slide.animations ??= [];
+    slide.animations.push({
+      id: crypto.randomUUID(),
+      elementId: command.elementId,
+      phase: "entrance",
+      ...command.animation,
+    });
+    return;
+  }
+
+  if (command.type === "remove-animation") {
+    const index = (slide.animations ?? []).findIndex((animation) => animation.id === command.animationId);
+    if (index < 0) throw new Error("ANIMATION_NOT_FOUND");
+    const animation = slide.animations![index]!;
+    if (slide.elements.find((item) => item.id === animation.elementId)?.locked) throw new Error("ELEMENT_LOCKED");
+    slide.animations!.splice(index, 1);
+    return;
+  }
+
+  if (command.type === "move-animation") {
+    const animations = slide.animations ?? [];
+    const index = animations.findIndex((animation) => animation.id === command.animationId);
+    if (index < 0) throw new Error("ANIMATION_NOT_FOUND");
+    const destination = Math.max(0, Math.min(command.toIndex, animations.length - 1));
+    if (destination === index) return;
+    const [animation] = animations.splice(index, 1);
+    animations.splice(destination, 0, animation!);
+    return;
+  }
+
+  if (command.type === "set-animation") {
+    const animation = (slide.animations ?? []).find((item) => item.id === command.animationId);
+    if (!animation) throw new Error("ANIMATION_NOT_FOUND");
+    if (slide.elements.find((item) => item.id === animation.elementId)?.locked) throw new Error("ELEMENT_LOCKED");
+    if (command.changes.durationMs !== undefined && (!Number.isInteger(command.changes.durationMs) || command.changes.durationMs < 100 || command.changes.durationMs > 60_000))
+      throw new Error("ANIMATION_DURATION_INVALID");
+    if (command.changes.delayMs !== undefined && (!Number.isInteger(command.changes.delayMs) || command.changes.delayMs < 0 || command.changes.delayMs > 60_000))
+      throw new Error("ANIMATION_DELAY_INVALID");
+    Object.assign(animation, command.changes);
+    return;
+  }
+
   // Commands below this point are element commands. Keep the runtime guard as
   // well as the TypeScript narrowing: slide-only review commands may be added
   // to the union without accidentally being treated as element mutations.
@@ -3533,6 +3600,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // A copy is user-owned even when its source was generated.
     duplicate.origin = "user";
     slide.elements.splice(sourceIndex + 1, 0, duplicate);
+    const copiedAnimations = (slide.animations ?? [])
+      .filter((animation) => animation.elementId === element.id)
+      .map((animation) => ({ ...animation, id: crypto.randomUUID(), elementId: duplicate.id }));
+    if (copiedAnimations.length) slide.animations = [...(slide.animations ?? []), ...copiedAnimations];
     return;
   }
   if (command.type === "reorder-element") {
@@ -3688,6 +3759,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       slide.elements.findIndex((item) => item.id === command.elementId),
       1,
     );
+    if (slide.animations)
+      slide.animations = slide.animations.filter((animation) => animation.elementId !== command.elementId);
     return;
   }
   if (command.type === "move-element") {

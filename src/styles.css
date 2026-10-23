@@ -130,6 +130,7 @@ button {
 .topbar[data-ribbon-tab="insert"] .insert-tools,
 .topbar[data-ribbon-tab="design"] .design-tools,
 .topbar[data-ribbon-tab="arrange"] .arrange-tools,
+.topbar[data-ribbon-tab="animation"] .animation-tools,
 .topbar[data-ribbon-tab="view"] .assist-tools { display: flex; }
 .topbar .export-button { margin-left: auto; }
 .brand {
@@ -214,6 +215,68 @@ button {
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.animation-timing-controls {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid rgb(255 255 255 / 20%);
+}
+.animation-timing-controls label {
+  display: grid;
+  gap: 2px;
+  color: rgb(255 255 255 / 72%);
+  font-size: 8px;
+}
+.animation-timing-controls select,
+.animation-timing-controls input {
+  height: 25px;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 5px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+}
+.animation-timing-controls select { width: 112px; }
+.animation-timing-controls input { width: 58px; padding: 0 5px; }
+.animation-order-controls {
+  display: flex;
+  gap: 3px;
+  align-self: end;
+}
+.animation-order-controls button {
+  width: 27px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 5px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+}
+.animation-order-controls button:disabled { opacity: 0.35; }
+.animation-order-controls svg { width: 13px; height: 13px; }
+.animation-preview {
+  animation-fill-mode: both;
+  animation-timing-function: ease;
+}
+.animation-preview.animation-appear { animation-name: pptd-appear; }
+.animation-preview.animation-fade { animation-name: pptd-fade; }
+.animation-preview.animation-fly-in { animation-name: pptd-fly-in; }
+@keyframes pptd-appear {
+  from { visibility: hidden; }
+  to { visibility: visible; }
+}
+@keyframes pptd-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pptd-fly-in {
+  from { opacity: 0; translate: var(--pptd-animation-x, 0) var(--pptd-animation-y, 36px); }
+  to { opacity: 1; translate: 0 0; }
 }
 .tool-button:hover:not(:disabled) {
   background: #292b30;

@@ -46,6 +46,7 @@ import {
   type DocumentId,
   type RectEmu,
   type Slide,
+  type SlideAnimation,
   type SlideElement,
   type SupportedImageMimeType,
 } from "../core/document-model";
@@ -275,12 +276,14 @@ const ElementView = memo(function ElementView({
   scale,
   selected,
   snap,
+  previewAnimation,
 }: {
   element: SlideElement;
   slide: Slide;
   scale: number;
   selected: boolean;
   snap: SnapContext;
+  previewAnimation?: SlideAnimation;
 }) {
   const execute = useEditorStore((s) => s.execute);
   const activeSlideId = useEditorStore((s) => s.activeSlideId);
@@ -319,13 +322,17 @@ const ElementView = memo(function ElementView({
       ? { ...element.frame, x: emu(element.frame.x + followerOffset.x), y: emu(element.frame.y + followerOffset.y) }
       : element.frame;
   const rotation = previewRotation ?? element.rotationMilliDegree;
-  const style: React.CSSProperties = {
+  const style: React.CSSProperties & { "--pptd-animation-x"?: string; "--pptd-animation-y"?: string } = {
     left: frame.x * scale,
     top: frame.y * scale,
     width: frame.width * scale,
     height: frame.height * scale,
     transform: `rotate(${rotation / 1000}deg)`,
     touchAction: "none",
+    animationDuration: previewAnimation ? `${previewAnimation.durationMs}ms` : undefined,
+    animationDelay: previewAnimation ? `${previewAnimation.delayMs}ms` : undefined,
+    "--pptd-animation-x": previewAnimation?.direction === "left" ? "-36px" : previewAnimation?.direction === "right" ? "36px" : "0",
+    "--pptd-animation-y": previewAnimation?.direction === "top" ? "-36px" : previewAnimation?.direction === "bottom" ? "36px" : "0",
   };
 
   /**
@@ -526,7 +533,7 @@ const ElementView = memo(function ElementView({
       ref={rootRef}
       element={element}
       scale={scale}
-      className={`${selected ? "selected" : ""} ${element.locked ? "locked" : ""}`}
+      className={`${selected ? "selected" : ""} ${element.locked ? "locked" : ""}${previewAnimation ? ` animation-preview animation-${previewAnimation.effect}` : ""}`}
       style={style}
       onPointerDown={(event) => begin("move", event)}
       onPointerMove={pointerMove}
@@ -649,7 +656,8 @@ export function App() {
   const [inspectorWidth, setInspectorWidth] = useState(readInspectorWidth);
   const [message, setMessage] = useState<PageMessage>();
   const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
-  const [editorRibbonTab, setEditorRibbonTab] = useState<"file" | "home" | "insert" | "design" | "arrange" | "view">("home");
+  const [editorRibbonTab, setEditorRibbonTab] = useState<"file" | "home" | "insert" | "design" | "arrange" | "animation" | "view">("home");
+  const [animationPreview, setAnimationPreview] = useState<SlideAnimation>();
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
@@ -2392,6 +2400,20 @@ export function App() {
   const selectedThemeAiPrompt = selectedThemePreset ? themePresetAiPrompt(selectedThemePreset) : undefined;
   const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
+  const selectedAnimations = selected ? (activeSlide.animations ?? []).filter((animation) => animation.elementId === selected.id) : [];
+  const selectedAnimation = selectedAnimations.at(-1);
+  const selectedAnimationIndex = selectedAnimation
+    ? (activeSlide.animations ?? []).findIndex((animation) => animation.id === selectedAnimation.id)
+    : -1;
+
+  const previewSelectedAnimation = () => {
+    if (!selectedAnimation) return;
+    setAnimationPreview(undefined);
+    window.requestAnimationFrame(() => {
+      setAnimationPreview(selectedAnimation);
+      window.setTimeout(() => setAnimationPreview(undefined), selectedAnimation.durationMs + selectedAnimation.delayMs + 120);
+    });
+  };
 
   return (
     <div
@@ -2407,6 +2429,7 @@ export function App() {
               ["insert", "插入"],
               ["design", "设计"],
               ["arrange", "排列"],
+              ["animation", "动画"],
               ["view", "视图"],
             ] as const).map(([id, label]) => (
               <button
@@ -2641,6 +2664,106 @@ export function App() {
               <Trash2 />
             </ToolButton>
           </div>
+          <div className="toolbar-group animation-tools">
+            <ToolButton label="预览当前动画" caption="预览" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>
+              <MousePointer2 />
+            </ToolButton>
+            <span className="separator" />
+            {([
+              ["appear", "出现"],
+              ["fade", "淡化"],
+              ["fly-in", "飞入"],
+            ] as const).map(([effect, label]) => (
+              <ToolButton
+                key={effect}
+                label={`添加${label}动画`}
+                caption={label}
+                disabled={!selected || selected.locked}
+                onClick={() => selected && execute({
+                  type: "add-animation",
+                  slideId: activeSlide.id,
+                  elementId: selected.id,
+                  animation: {
+                    effect,
+                    start: "on-click",
+                    durationMs: effect === "appear" ? 300 : 600,
+                    delayMs: 0,
+                    direction: effect === "fly-in" ? "bottom" : "none",
+                  },
+                })}
+              >
+                <Sparkles />
+              </ToolButton>
+            ))}
+            <span className="separator" />
+            <ToolButton
+              label="删除所选对象的最后一个动画"
+              caption="删除动画"
+              disabled={!selected || !(activeSlide.animations ?? []).some((animation) => animation.elementId === selected.id)}
+              onClick={() => {
+                if (!selected) return;
+                const animation = [...(activeSlide.animations ?? [])].reverse().find((item) => item.elementId === selected.id);
+                if (animation) execute({ type: "remove-animation", slideId: activeSlide.id, animationId: animation.id });
+              }}
+            >
+              <Trash2 />
+            </ToolButton>
+            {selectedAnimation && (
+              <div className="animation-timing-controls" aria-label="动画计时与顺序">
+                <label>
+                  开始
+                  <select
+                    value={selectedAnimation.start}
+                    onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { start: event.target.value as typeof selectedAnimation.start } })}
+                  >
+                    <option value="on-click">单击时</option>
+                    <option value="with-previous">与上一动画同时</option>
+                    <option value="after-previous">上一动画之后</option>
+                  </select>
+                </label>
+                <label>
+                  时长
+                  <input type="number" min="0.1" max="60" step="0.1" value={selectedAnimation.durationMs / 1000} onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { durationMs: Math.round(Number(event.target.value) * 1000) } })} />
+                </label>
+                <label>
+                  延迟
+                  <input type="number" min="0" max="60" step="0.1" value={selectedAnimation.delayMs / 1000} onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { delayMs: Math.round(Number(event.target.value) * 1000) } })} />
+                </label>
+                {selectedAnimation.effect === "fly-in" && (
+                  <label>
+                    方向
+                    <select
+                      value={selectedAnimation.direction}
+                      onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { direction: event.target.value as SlideAnimation["direction"] } })}
+                    >
+                      <option value="left">从左侧</option>
+                      <option value="right">从右侧</option>
+                      <option value="top">从顶部</option>
+                      <option value="bottom">从底部</option>
+                    </select>
+                  </label>
+                )}
+                <div className="animation-order-controls" aria-label="调整动画顺序">
+                  <button
+                    type="button"
+                    title="动画前移"
+                    disabled={selectedAnimationIndex <= 0}
+                    onClick={() => execute({ type: "move-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, toIndex: selectedAnimationIndex - 1 })}
+                  >
+                    <ArrowUp />
+                  </button>
+                  <button
+                    type="button"
+                    title="动画后移"
+                    disabled={selectedAnimationIndex < 0 || selectedAnimationIndex >= (activeSlide.animations?.length ?? 0) - 1}
+                    onClick={() => execute({ type: "move-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, toIndex: selectedAnimationIndex + 1 })}
+                  >
+                    <ArrowDown />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <button className="export-button" onClick={handleExport}>
             <Download size={17} /> {exportBusy ? "取消导出" : "导出 PPTX"}
           </button>
@@ -2794,6 +2917,7 @@ export function App() {
                   scale={scale}
                   selected={selectedElementIds.includes(element.id)}
                   snap={snapContext}
+                  previewAnimation={animationPreview?.elementId === element.id ? animationPreview : undefined}
                 />
               ))}
               <CanvasGuideLayer

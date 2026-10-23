@@ -106,6 +106,74 @@ describe("document commands", () => {
     expect(deleted.slides[0]!.elements).toHaveLength(1);
   });
 
+  it("adds, edits, reorders and removes entrance animations as design commands", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const firstElement = slide.elements[0]!;
+    const secondElement = structuredClone(firstElement);
+    secondElement.id = crypto.randomUUID();
+    slide.elements.push(secondElement);
+
+    const animated = produce(source, (draft) => {
+      applyCommand(draft, {
+        type: "add-animation",
+        slideId: slide.id,
+        elementId: firstElement.id,
+        animation: { effect: "fade", start: "on-click", durationMs: 600, delayMs: 0, direction: "none" },
+      });
+      applyCommand(draft, {
+        type: "add-animation",
+        slideId: slide.id,
+        elementId: secondElement.id,
+        animation: { effect: "fly-in", start: "after-previous", durationMs: 800, delayMs: 200, direction: "left" },
+      });
+    });
+    const firstAnimation = animated.slides[0]!.animations![0]!;
+    expect(commandDomain({ type: "remove-animation", slideId: slide.id, animationId: firstAnimation.id })).toBe("design");
+
+    const edited = produce(animated, (draft) => {
+      applyCommand(draft, {
+        type: "set-animation",
+        slideId: slide.id,
+        animationId: firstAnimation.id,
+        changes: { durationMs: 900, start: "with-previous" },
+      });
+      applyCommand(draft, { type: "move-animation", slideId: slide.id, animationId: firstAnimation.id, toIndex: 1 });
+    });
+    expect(edited.slides[0]!.animations![1]).toMatchObject({ id: firstAnimation.id, durationMs: 900, start: "with-previous" });
+
+    const removed = produce(edited, (draft) =>
+      applyCommand(draft, { type: "remove-animation", slideId: slide.id, animationId: firstAnimation.id }),
+    );
+    expect(removed.slides[0]!.animations).toHaveLength(1);
+  });
+
+  it("remaps animations when duplicating an element and removes them when deleting it", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = slide.elements[0]!;
+    const animated = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "add-animation",
+        slideId: slide.id,
+        elementId: element.id,
+        animation: { effect: "appear", start: "on-click", durationMs: 300, delayMs: 0, direction: "none" },
+      }),
+    );
+    const duplicated = produce(animated, (draft) =>
+      applyCommand(draft, { type: "duplicate-element", slideId: slide.id, elementId: element.id }),
+    );
+    const duplicate = duplicated.slides[0]!.elements.at(-1)!;
+    const duplicateAnimation = duplicated.slides[0]!.animations!.find((animation) => animation.elementId === duplicate.id);
+    expect(duplicateAnimation).toBeDefined();
+    expect(duplicateAnimation!.id).not.toBe(duplicated.slides[0]!.animations![0]!.id);
+
+    const deleted = produce(duplicated, (draft) =>
+      applyCommand(draft, { type: "delete-element", slideId: slide.id, elementId: duplicate.id }),
+    );
+    expect(deleted.slides[0]!.animations!.some((animation) => animation.elementId === duplicate.id)).toBe(false);
+  });
+
   it("allows unlocking but rejects edits to locked elements", () => {
     const source = createDocument();
     const slide = source.slides[0]!;

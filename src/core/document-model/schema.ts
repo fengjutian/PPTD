@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 
-export const CURRENT_SCHEMA_VERSION = 11 as const;
+export const CURRENT_SCHEMA_VERSION = 12 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -244,6 +244,21 @@ const slideSchema = z.object({
   elements: z.array(
     z.discriminatedUnion("type", [textElement, shapeElement, lineElement, iconElement, imageElement, chartElement, tableElement]),
   ),
+  animations: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        elementId: z.string().uuid(),
+        effect: z.enum(["appear", "fade", "fly-in"]),
+        phase: z.literal("entrance"),
+        start: z.enum(["on-click", "with-previous", "after-previous"]),
+        durationMs: z.number().int().min(100).max(60_000),
+        delayMs: z.number().int().min(0).max(60_000),
+        direction: z.enum(["none", "left", "right", "top", "bottom"]),
+      }),
+    )
+    .max(500)
+    .optional(),
   layoutId: z.string().uuid().optional(),
 });
 
@@ -267,6 +282,7 @@ type DocumentShape = z.infer<typeof baseDocumentSchema>;
 function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): void {
   const slideIds = new Set<string>();
   const elementIds = new Set<string>();
+  const animationIds = new Set<string>();
   for (const [slideIndex, slide] of document.slides.entries()) {
     if (slideIds.has(slide.id)) {
       context.addIssue({
@@ -285,6 +301,24 @@ function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): v
         });
       }
       elementIds.add(element.id);
+    }
+    const slideElementIds = new Set(slide.elements.map((element) => element.id));
+    for (const [animationIndex, animation] of (slide.animations ?? []).entries()) {
+      if (animationIds.has(animation.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slides", slideIndex, "animations", animationIndex, "id"],
+          message: "DUPLICATE_ANIMATION_ID",
+        });
+      }
+      animationIds.add(animation.id);
+      if (!slideElementIds.has(animation.elementId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slides", slideIndex, "animations", animationIndex, "elementId"],
+          message: "UNKNOWN_ANIMATION_ELEMENT",
+        });
+      }
     }
   }
 }
@@ -309,6 +343,11 @@ export const presentationDocumentSchema = baseDocumentSchema
 
 const versionTenDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(10) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionElevenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(11) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
@@ -384,6 +423,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 11 adds the line element. A version 10 document has no line, so it
   // keeps every page and every object and simply draws nothing extra.
   10: (document) => ({ ...versionTenDocumentSchema.parse(document), schemaVersion: 11 }),
+  // Version 12 adds design-only page animations. Existing documents keep all
+  // objects and simply have no animation timeline.
+  11: (document) => ({ ...versionElevenDocumentSchema.parse(document), schemaVersion: 12 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

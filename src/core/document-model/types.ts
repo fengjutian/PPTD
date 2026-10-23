@@ -301,6 +301,22 @@ export type SlideElement =
   | ChartElement
   | TableElement;
 
+export type AnimationEffect = "appear" | "fade" | "fly-in";
+export type AnimationStart = "on-click" | "with-previous" | "after-previous";
+export type AnimationDirection = "none" | "left" | "right" | "top" | "bottom";
+
+/** A design-only animation attached to one stable page element. */
+export interface SlideAnimation {
+  id: string;
+  elementId: ElementId;
+  effect: AnimationEffect;
+  phase: "entrance";
+  start: AnimationStart;
+  durationMs: number;
+  delayMs: number;
+  direction: AnimationDirection;
+}
+
 /** Presentation-only styling of a built-in icon. */
 export interface IconElementStyle {
   color: string;
@@ -326,6 +342,7 @@ export interface Slide {
   id: SlideId;
   content: SlideContent;
   elements: SlideElement[];
+  animations?: SlideAnimation[];
   background: string;
   /** The template layout this slide was designed against. */
   layoutId?: string;
