@@ -5,6 +5,9 @@ import {
   AlignCenterHorizontal,
   AlignLeft,
   AlignRight,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
   ArrowDown,
   ArrowUp,
   Bold,
@@ -12,17 +15,25 @@ import {
   ChevronDown,
   CircleAlert,
   Copy,
+  Eraser,
   ImagePlus,
+  IndentDecrease,
+  IndentIncrease,
+  Italic,
   Layers3,
   Link2,
+  List,
+  ListOrdered,
   Lock,
   LockOpen,
   MousePointer2,
   RotateCcw,
   SendToBack,
   Square,
+  Strikethrough,
   Trash2,
   Type,
+  Underline,
   Unlink,
 } from "lucide-react";
 import {
@@ -61,20 +72,7 @@ import { MultiSelectionPanel } from "./MultiSelectionPanel";
 import { unionFrame } from "../../core/commands/arrange";
 import { ElementPreview } from "./ElementPreview";
 import { paletteSwatches } from "./inspector-palette";
-
-const FONT_OPTIONS = [
-  "Microsoft YaHei",
-  "Source Han Serif SC",
-  "Noto Serif SC",
-  "SimSun",
-  "SimHei",
-  "KaiTi",
-  "FangSong",
-  "Arial",
-  "Calibri",
-  "Times New Roman",
-  "Georgia",
-] as const;
+import { FONT_OPTIONS } from "./font-options";
 
 const ROTATION_PRESETS = [0, 90, 180, 270] as const;
 
@@ -597,12 +595,48 @@ export function InspectorPanelView({
                 type="button"
                 className={`toggle-button ${element.style.bold ? "active" : ""}`}
                 disabled={locked}
+                aria-label="加粗"
+                title="加粗"
                 aria-pressed={element.style.bold}
                 onClick={() => setTextStyle({ bold: !element.style.bold })}
               >
                 <Bold />
-                加粗
               </button>
+              <button
+                type="button"
+                className={`toggle-button ${element.style.italic ? "active" : ""}`}
+                disabled={locked}
+                aria-label="斜体"
+                title="斜体"
+                aria-pressed={Boolean(element.style.italic)}
+                onClick={() => setTextStyle({ italic: !(element.style.italic ?? false) })}
+              >
+                <Italic />
+              </button>
+              <button
+                type="button"
+                className={`toggle-button ${element.style.underline ? "active" : ""}`}
+                disabled={locked}
+                aria-label="下划线"
+                title="下划线"
+                aria-pressed={Boolean(element.style.underline)}
+                onClick={() => setTextStyle({ underline: !(element.style.underline ?? false) })}
+              >
+                <Underline />
+              </button>
+              <button
+                type="button"
+                className={`toggle-button ${element.style.strikethrough ? "active" : ""}`}
+                disabled={locked}
+                aria-label="删除线"
+                title="删除线"
+                aria-pressed={Boolean(element.style.strikethrough)}
+                onClick={() => setTextStyle({ strikethrough: !(element.style.strikethrough ?? false) })}
+              >
+                <Strikethrough />
+              </button>
+            </div>
+            <div className="field-row">
               <div className="segmented" role="group" aria-label="文字对齐">
                 {TEXT_ALIGN.map(({ align, label, Icon }) => (
                   <button
@@ -675,6 +709,96 @@ export function InspectorPanelView({
                 </div>
               </div>
             )}
+          </InspectorSection>
+        )}
+
+        {element.type === "text" && (
+          <InspectorSection title="段落">
+            <div className="field">
+              <span className="field-label">垂直对齐</span>
+              <div className="segmented" role="group" aria-label="垂直对齐">
+                {(
+                  [
+                    ["top", "顶端对齐", <AlignVerticalJustifyStart key="top" />],
+                    ["middle", "垂直居中", <AlignVerticalJustifyCenter key="middle" />],
+                    ["bottom", "底端对齐", <AlignVerticalJustifyEnd key="bottom" />],
+                  ] as const
+                ).map(([value, label, icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    title={label}
+                    aria-label={label}
+                    className={(element.style.verticalAlign ?? "top") === value ? "active" : undefined}
+                    disabled={locked}
+                    onClick={() => setTextStyle({ verticalAlign: value })}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <SelectField
+              label="行距"
+              value={element.style.lineHeight === undefined ? "" : String(element.style.lineHeight)}
+              options={["", "1", "1.15", "1.5", "2"]}
+              optionLabels={{ "": "默认", "1": "1.0", "1.15": "1.15", "1.5": "1.5", "2": "2.0" }}
+              disabled={locked}
+              onCommit={(value) => setTextStyle({ lineHeight: value === "" ? undefined : Number(value) })}
+            />
+            <div className="field-row">
+              <button
+                type="button"
+                className={`toggle-button ${element.style.bullet === "dot" ? "active" : ""}`}
+                disabled={locked}
+                aria-label="项目符号"
+                title="项目符号"
+                aria-pressed={element.style.bullet === "dot"}
+                onClick={() => setTextStyle({ bullet: element.style.bullet === "dot" ? "none" : "dot" })}
+              >
+                <List />
+              </button>
+              <button
+                type="button"
+                className={`toggle-button ${element.style.bullet === "number" ? "active" : ""}`}
+                disabled={locked}
+                aria-label="编号"
+                title="编号"
+                aria-pressed={element.style.bullet === "number"}
+                onClick={() => setTextStyle({ bullet: element.style.bullet === "number" ? "none" : "number" })}
+              >
+                <ListOrdered />
+              </button>
+              <button
+                type="button"
+                className="toggle-button"
+                disabled={locked || (element.style.indentLevel ?? 0) <= 0}
+                aria-label="减少缩进"
+                title="减少缩进"
+                onClick={() => setTextStyle({ indentLevel: Math.max(0, (element.style.indentLevel ?? 0) - 1) })}
+              >
+                <IndentDecrease />
+              </button>
+              <button
+                type="button"
+                className="toggle-button"
+                disabled={locked || (element.style.indentLevel ?? 0) >= 8}
+                aria-label="增加缩进"
+                title="增加缩进"
+                onClick={() => setTextStyle({ indentLevel: Math.min(8, (element.style.indentLevel ?? 0) + 1) })}
+              >
+                <IndentIncrease />
+              </button>
+            </div>
+            <button
+              type="button"
+              className="toggle-button"
+              disabled={locked}
+              onClick={() => onCommand({ type: "clear-text-format", slideId, elementIds: [element.id] })}
+            >
+              <Eraser />
+              清除格式
+            </button>
           </InspectorSection>
         )}
 

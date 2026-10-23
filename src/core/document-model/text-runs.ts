@@ -123,6 +123,6 @@ export function resolveFragmentStyle(
   return {
     bold: style.bold ?? element.bold,
     color: style.color ?? element.color,
-    underline: style.underline ?? false,
+    underline: style.underline ?? element.underline ?? false,
   };
 }

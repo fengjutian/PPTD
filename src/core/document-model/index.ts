@@ -8,5 +8,6 @@ export * from "./content-diff";
 export * from "./chart-data";
 export * from "./table-data";
 export * from "./icons";
+export * from "./icon-geometry";
 export * from "./text-runs";
 export * from "./text-style";

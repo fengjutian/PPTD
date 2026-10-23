@@ -291,3 +291,24 @@ interface TextMeasurer {
 `restore-content-version` 是内容域命令，只恢复标题、正文、内容块、演讲备注和页序。恢复保留当前内容块 id，并重映射仍指向旧 id 的卡片、图表和表格引用；不重建元素、样式、背景或版式。页面集合与当前文稿不一致，或内容块数量和类型无法一一对应时，命令分别返回 `CONTENT_VERSION_PAGE_SET_MISMATCH` 和 `CONTENT_VERSION_BLOCKS_INCOMPATIBLE`，只允许查看差异。恢复后的页面进入 `changed`，需要用户重新确认。
 
 `contentVersions` 是 Schema 14 新增的可选字段。迁移不伪造历史；旧文档在第一次确认时生成第一个版本。已经全部确认的旧文档不会在打开时自动补历史，需要先退回审核再重新确认一页来建立基线。详见 [0043 内容版本快照、差异与恢复](decisions/0043-content-version-history.md)。
+
+## 19. 字符与段落格式（V0.2 已实现）
+
+`TextElementStyle` 增加斜体、下划线、删除线、垂直对齐、项目符号和缩进级别，全部是可选的设计字段，不进入内容哈希：
+
+```ts
+italic?: boolean;
+underline?: boolean;
+strikethrough?: boolean;
+verticalAlign?: "top" | "middle" | "bottom";
+bullet?: "none" | "dot" | "number";
+indentLevel?: number; // 0–8
+```
+
+正文仍是字符串，没有逐段结构，因此项目符号、编号和缩进作用于整个文本框：标记画在每行左侧，编号按行递增，标记不写进 `element.text`。逐段格式需要先给内容模型增加段落结构，本阶段不做。
+
+多选格式走批量命令 `set-text-style-elements`，清除格式走 `clear-text-format`；两者都只产生一个设计事务和一个撤销项。锁定对象被跳过；没有可编辑文本时命令拒绝执行。`clear-text-format` 的默认值来自主题的标题/正文令牌，没有主题时回退到工厂默认值，不把硬编码字号写回文档。
+
+字号增减使用 Office 字号阶梯（8、9、10、10.5、11、12、14 … 120），定义在 `src/core/document-model/text-style.ts`。画布与 PPTX 导出共享同一份样式语义：导出写成原生 `i`/`u`/`strike`/`anchor`/`lnSpc`/`buChar`/`buAutoNum`/`lvl` 属性，文本仍是可编辑对象。
+
+新增字段使持久化格式升到第 15 版；`14 → 15` 迁移不写入任何默认格式，固定样例见 `src/core/document-model/__fixtures__/v14-document.json`。详见 [0044 字符与段落格式](decisions/0044-text-character-and-paragraph-formatting.md)。

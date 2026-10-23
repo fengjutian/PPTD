@@ -611,6 +611,11 @@ export type DocumentCommand =
       slideId: SlideId;
       elementIds: ElementId[];
       style: Partial<TextElementStyle>;
+      /**
+       * The format painter replaces the whole format, so fragment emphasis the
+       * source does not have must go as well. A plain bold toggle leaves it on.
+       */
+      clearRuns?: boolean;
     }
   | { type: "clear-text-format"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "fit-text"; slideId: SlideId; elementId: ElementId }
@@ -663,6 +668,7 @@ export type DocumentCommand =
   if (style.align !== undefined && style.align !== "left" && style.align !== "center" && style.align !== "right")
     throw new Error("INVALID_TEXT_STYLE");
   if (style.italic !== undefined && typeof style.italic !== "boolean") throw new Error("INVALID_TEXT_STYLE");
+  if (style.underline !== undefined && typeof style.underline !== "boolean") throw new Error("INVALID_TEXT_STYLE");
   if (style.strikethrough !== undefined && typeof style.strikethrough !== "boolean")
     throw new Error("INVALID_TEXT_STYLE");
   if (
@@ -679,7 +685,10 @@ export type DocumentCommand =
     (!Number.isInteger(style.indentLevel) || style.indentLevel < 0 || style.indentLevel > 8)
   )
     throw new Error("INVALID_TEXT_STYLE");
-  if (style.lineHeight !== undefined && (!Number.isFinite(style.lineHeight) || style.lineHeight < 0.8 || style.lineHeight > 3))
+  if (
+    style.lineHeight !== undefined &&
+    (!Number.isFinite(style.lineHeight) || style.lineHeight < 0.8 || style.lineHeight > 3)
+  )
     throw new Error("INVALID_TEXT_STYLE");
   if (
     style.letterSpacingPt !== undefined &&
@@ -3586,7 +3595,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // A batch that selects no editable text would otherwise push an empty undo
     // entry; the UI disables the controls, so this is a programming error.
     if (targets.length === 0) throw new Error("ELEMENT_NOT_TEXT");
-    for (const target of targets) target.style = { ...target.style, ...command.style };
+    for (const target of targets) {
+      target.style = { ...target.style, ...command.style };
+      if (command.clearRuns) target.runs = undefined;
+    }
     return;
   }
   if (command.type === "clear-text-format") {
@@ -3597,8 +3609,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (targets.length === 0) throw new Error("ELEMENT_NOT_TEXT");
     // Clearing restores the deck's own type scale instead of a hard-coded size:
     // the theme owns the body and title tokens, and a deck without a theme keeps
-    // the factory defaults. Geometry and copy are untouched.
-    for (const target of targets) target.style = clearedTextStyle(target.contentRef, document.theme);
+    // the factory defaults. Fragment emphasis is character formatting too, so it
+    // goes away with the rest; geometry and copy are untouched.
+    for (const target of targets) {
+      target.style = clearedTextStyle(target.contentRef, document.theme);
+      target.runs = undefined;
+    }
     return;
   }
 

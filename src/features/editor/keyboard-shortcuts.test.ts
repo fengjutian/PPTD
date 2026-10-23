@@ -33,6 +33,21 @@ describe("editor keyboard shortcuts", () => {
     expect(shortcut({ key: "[", ctrlKey: true })).toBe("layer-backward");
   });
 
+  it("maps the text format shortcuts without shadowing the clipboard", () => {
+    expect(shortcut({ key: "b", ctrlKey: true })).toBe("toggle-bold");
+    expect(shortcut({ key: "i", ctrlKey: true })).toBe("toggle-italic");
+    expect(shortcut({ key: "u", ctrlKey: true })).toBe("toggle-underline");
+    expect(shortcut({ key: ">", ctrlKey: true, shiftKey: true })).toBe("font-increase");
+    expect(shortcut({ key: ".", ctrlKey: true, shiftKey: true })).toBe("font-increase");
+    expect(shortcut({ key: "<", ctrlKey: true, shiftKey: true })).toBe("font-decrease");
+    expect(shortcut({ key: ",", ctrlKey: true, shiftKey: true })).toBe("font-decrease");
+    expect(shortcut({ key: "c", ctrlKey: true, shiftKey: true })).toBe("copy-format");
+    expect(shortcut({ key: "v", ctrlKey: true, shiftKey: true })).toBe("apply-format");
+    // Without Shift the clipboard still wins.
+    expect(shortcut({ key: "c", ctrlKey: true })).toBe("copy-element");
+    expect(shortcut({ key: "v", ctrlKey: true })).toBe("paste-element");
+  });
+
   it("does not intercept editable controls", () => {
     expect(shortcut({ key: "z", ctrlKey: true, targetTagName: "textarea" })).toBeNull();
     expect(shortcut({ key: "Delete", targetTagName: "input" })).toBeNull();

@@ -6,7 +6,7 @@ import {
   resolveFragmentStyle,
   resolveTableData,
   tableColumnAlignsRight,
-  iconSvgDataUrl,
+  iconOutline,
   textFragments,
   type ChartElement,
   type ImageCrop,
@@ -27,6 +27,12 @@ import { patchImageCrops } from "./image-crop-xml";
 
 const inch = (value: number) => value / EMU_PER_INCH;
 const color = (value: string) => value.replace(/^#/, "");
+/**
+ * PptxGenJS supports custom geometry at runtime, but its bundled `SHAPE_NAME`
+ * type predates the value. The cast is confined to this constant so the rest of
+ * the exporter stays typed.
+ */
+const CUSTOM_GEOMETRY = "custGeom" as unknown as PptxGenJS.SHAPE_NAME;
 
 export interface ExportReport {
   slideCount: number;
@@ -110,8 +116,7 @@ function planMasters(document: PresentationDocument): Map<string, MasterPlan> {
       .filter((candidate) => candidate.layoutId === spec.id)
       .flatMap((candidate) => candidate.elements)
       .find(
-        (element): element is ImageElement =>
-          element.type === "image" && element.placement === "layout-background",
+        (element): element is ImageElement => element.type === "image" && element.placement === "layout-background",
       );
     const base = safeMasterTitle(spec.name, "PPTD 版式");
     let title = base;
@@ -244,12 +249,19 @@ export async function buildPptx(
           // bold:false run under a bold element used to come out bold. Leaving
           // the box-level flag out lets the run decide.
           ...(hasRuns ? {} : { bold: element.style.bold }),
+          italic: element.style.italic ?? false,
+          ...(element.style.underline ? { underline: { style: "sng" as const } } : {}),
+          ...(element.style.strikethrough ? { strike: "sngStrike" as const } : {}),
           align: element.style.align,
           ...(element.style.letterSpacingPt === undefined ? {} : { charSpacing: element.style.letterSpacingPt }),
           ...(element.style.lineHeight === undefined ? {} : { lineSpacingMultiple: element.style.lineHeight }),
-          // The canvas draws text from the top of its frame; the export has to
-          // agree or the file no longer looks like what the editor shows.
-          valign: "top" as const,
+          // The canvas and the file have to agree on where the text sits in its
+          // frame; both read the same vertical alignment now.
+          valign: element.style.verticalAlign ?? "top",
+          ...(element.style.bullet && element.style.bullet !== "none"
+            ? { bullet: element.style.bullet === "number" ? { type: "number" as const } : true }
+            : {}),
+          ...(element.style.indentLevel ? { indentLevel: element.style.indentLevel } : {}),
           margin: 0,
           breakLine: false,
           fit: "shrink" as const,
@@ -351,7 +363,11 @@ export async function buildPptx(
         const resolved = resolveTableData(model, element);
         if (!resolved) throw new Error("EXPORT_TABLE_DATA_INVALID");
         const columnCount = resolved.header.length;
-        const border = { type: "solid" as const, pt: element.style.borderWidthPt ?? 0.75, color: color(element.style.borderColor) };
+        const border = {
+          type: "solid" as const,
+          pt: element.style.borderWidthPt ?? 0.75,
+          color: color(element.style.borderColor),
+        };
         const alignsRight = (column: number) => tableColumnAlignsRight(resolved.rows, column);
         const headerBold = element.style.headerBold ?? true;
         const header = resolved.header.map((cell, index) => ({
@@ -360,7 +376,7 @@ export async function buildPptx(
             bold: headerBold,
             color: color(element.style.headerTextColor),
             fill: { color: color(element.style.headerFill) },
-            align: alignsRight(index) ? "right" as const : "left" as const,
+            align: alignsRight(index) ? ("right" as const) : ("left" as const),
             border,
           },
         }));
@@ -375,7 +391,7 @@ export async function buildPptx(
               ...(rowIndex % 2 === 1 && element.style.bandingFill
                 ? { fill: { color: color(element.style.bandingFill) } }
                 : {}),
-              align: alignsRight(cellIndex) ? "right" as const : "left" as const,
+              align: alignsRight(cellIndex) ? ("right" as const) : ("left" as const),
               border,
             },
           }));
@@ -398,12 +414,14 @@ export async function buildPptx(
         });
         nativeTableCount += 1;
       } else if (element.type === "icon") {
-        // The icon is written as an SVG picture: it scans at any size and keeps
-        // its strokes, while the document itself stores only the icon name.
-        slide.addImage({
-          data: iconSvgDataUrl(element.name, element.style.color, element.style.strokeWidth ?? 2),
+        // The icon is written as a native custom-geometry shape. PptxGenJS's
+        // SVG picture support writes the SVG bytes into the PNG fallback part
+        // as well; PowerPoint then refuses the whole package. Native geometry
+        // has no image part at all and stays editable after export.
+        slide.addShape(CUSTOM_GEOMETRY, {
           ...position,
-          altText: "图标：" + element.name,
+          line: { color: color(element.style.color), width: element.style.strokeWidth ?? 2 },
+          points: iconOutline(element.name, position.w, position.h),
         });
       } else {
         slide.addImage({ data: element.source.dataUrl, ...position, altText: element.altText });

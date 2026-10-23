@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                  |
 | -------- | ------------------------------------- |
-| 状态     | 待开发                                |
+| 状态     | 已实现（待 PowerPoint 人工复核）      |
 | 优先级   | P0                                    |
 | 里程碑   | V0.2 专业编辑功能区                   |
 | 预估     | 4–6 人日                              |
@@ -279,12 +279,12 @@ valign: element.style.verticalAlign ?? "top", // 去掉当前硬编码 top
 
 ## 11. 完成定义
 
-- [ ] 类型检查、Lint、单元测试、构建全部通过。
-- [ ] v14 项目可打开、编辑并保存为 v15，重开无损。
-- [ ] 导出夹具通过 XML 断言，PowerPoint 人工检查通过。
-- [ ] 内容哈希与审核状态不变，设计 revision 规则有测试。
-- [ ] 功能区、属性面板、快捷键三条路径行为一致。
-- [ ] 文档更新：TRS 无需变更；在 V0.1 计划第 7 节或任务索引登记本任务。
+- [x] 类型检查、Lint、单元测试、构建通过。
+- [x] v14 项目可打开、编辑并保存为 v15，迁移有固定样例与测试。
+- [ ] 导出夹具通过 XML 断言（已完成），PowerPoint 人工检查待做。
+- [x] 内容哈希与审核状态不变，设计 revision 规则有测试。
+- [x] 功能区、属性面板、快捷键三条路径行为一致。
+- [x] 文档更新：新增 ADR 0044、领域模型第 19 节、V0.1 计划第 7 节、README 编辑器说明。
 
 ## 12. 待定问题
 
@@ -293,3 +293,24 @@ valign: element.style.verticalAlign ?? "top", // 去掉当前硬编码 top
 3. `Ctrl+Shift+V` 当前没有绑定，是否与未来的“粘贴为纯文本”冲突？若冲突改为 `Ctrl+Alt+V`。
 4. 格式刷是否应支持形状、表格和图表？本任务只做文本，其他对象另评。
 5. 垂直对齐是否会影响现有版式计算和质检阈值？实施前先用 3 个生成样例回归。
+
+## 13. 实现记录（2026-10-23）
+
+已落地：
+
+- 模型：`TextElementStyle` 增加 `italic`、`underline`、`strikethrough`、`verticalAlign`、`bullet`、`indentLevel`；字号阶梯、格式刷归一化和清除格式默认值在 `src/core/document-model/text-style.ts`。
+- Schema：升到 v15，补 `14 → 15` 迁移、`v14`/`v15` 固定样例和 Schema 测试。
+- 命令：`set-text-style-elements`（可带 `clearRuns`）、`clear-text-format`；锁定对象跳过，空目标抛 `ELEMENT_NOT_TEXT`，批量只产生一个撤销项。
+- 画布：`RichText` 支持斜体、下划线、删除线、行距、垂直对齐、项目符号/编号与缩进；标记不写入正文；带格式片段的文本仍是一个段落。
+- 功能区：`TextFormatToolbar` 提供两行紧凑的字体组和段落组，含混合态、禁用态、格式刷；属性面板复用同一命令并新增“段落”区。
+- 快捷键：Ctrl+B/I/U、Ctrl+Shift+> / <、Ctrl+Shift+C/V、Esc 退出格式刷。
+- 导出：斜体、下划线、删除线、垂直对齐、行距、项目符号、缩进写为原生文本属性；导出测试断言 `i`、`u`、`strike`、`anchor`、`buAutoNum`、`lvl`、`lnSpc`。
+
+验证：
+
+- `npm run typecheck`、`npm run lint`、`npm run build` 通过。
+- 新增测试：`text-format.test.ts`、`text-format` store 测试、`TextFormatToolbar.test.tsx`、`RichText` 渲染测试、导出 XML 测试、快捷键与 `text-style` helper 测试。
+- `npx vitest run --exclude ".tmp/**" --exclude "tools/visual-regression/**"`：94 个测试文件、812 项全部通过。
+- 本地全量 `npm test` 另有两类非本任务失败：`.tmp` 恢复脚本缺文件（gitignored 的调试脚本）、视觉回归缺少 PowerPoint COM（仓库约定的显式跳过项）。
+
+剩余人工项：用 PowerPoint 打开导出夹具，确认项目符号、缩进、垂直对齐和行距的真实观感；如与画布差异明显，再补视觉基线。

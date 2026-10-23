@@ -10,7 +10,14 @@ export type EditorShortcut =
   | "nudge-up"
   | "nudge-down"
   | "layer-forward"
-  | "layer-backward";
+  | "layer-backward"
+  | "toggle-bold"
+  | "toggle-italic"
+  | "toggle-underline"
+  | "font-increase"
+  | "font-decrease"
+  | "copy-format"
+  | "apply-format";
 
 export interface ShortcutInput {
   key: string;
@@ -31,6 +38,17 @@ export function resolveEditorShortcut(input: ShortcutInput): EditorShortcut | nu
   if (modifier && key === "z") return input.shiftKey ? "redo" : "undo";
   if (modifier && key === "y") return "redo";
   if (modifier && key === "d") return "duplicate-element";
+  // Format painter and font size use Shift, so they are resolved before the
+  // plain clipboard shortcuts they would otherwise shadow.
+  if (modifier && input.shiftKey && key === "c") return "copy-format";
+  if (modifier && input.shiftKey && key === "v") return "apply-format";
+  // Keyboard layouts disagree on what Shift+period reports; both spellings mean
+  // "the > key" to the user.
+  if (modifier && input.shiftKey && (key === ">" || key === ".")) return "font-increase";
+  if (modifier && input.shiftKey && (key === "<" || key === ",")) return "font-decrease";
+  if (modifier && key === "b") return "toggle-bold";
+  if (modifier && key === "i") return "toggle-italic";
+  if (modifier && key === "u") return "toggle-underline";
   if (modifier && key === "c") return "copy-element";
   if (modifier && key === "v") return "paste-element";
   if (modifier && key === "]") return "layer-forward";

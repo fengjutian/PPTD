@@ -80,6 +80,8 @@ export interface TextElementStyle {
   lineHeight?: number;
   /** Absent means upright. */
   italic?: boolean;
+  /** Absent means no underline. A run may override this for its own range. */
+  underline?: boolean;
   /** Absent means no strike line. */
   strikethrough?: boolean;
   /** Absent means top, which is where the canvas has always drawn text. */

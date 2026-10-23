@@ -37,6 +37,7 @@ const textElement = base.extend({
     letterSpacingPt: z.number().min(-2).max(20).optional(),
     lineHeight: z.number().min(0.8).max(3).optional(),
     italic: z.boolean().optional(),
+    underline: z.boolean().optional(),
     strikethrough: z.boolean().optional(),
     verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
     bullet: z.enum(["none", "dot", "number"]).optional(),

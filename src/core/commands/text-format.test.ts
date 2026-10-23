@@ -34,9 +34,9 @@ describe("text formatting commands", () => {
     expect(nextBody!.type === "text" ? nextBody!.style.italic : undefined).toBe(true);
     // The shape has no text style; it must not gain one or be rejected.
     expect(nextShape!.type).toBe("shape");
-    expect(commandDomain({ type: "set-text-style-elements", slideId: slide.id, elementIds: [title.id], style: {} })).toBe(
-      "design",
-    );
+    expect(
+      commandDomain({ type: "set-text-style-elements", slideId: slide.id, elementIds: [title.id], style: {} }),
+    ).toBe("design");
   });
 
   it("keeps the reviewed copy and its hash out of a formatting change", () => {
@@ -77,6 +77,7 @@ describe("text formatting commands", () => {
     const slide = source.slides[0]!;
     const element = textElement(source);
     element.contentRef = "body";
+    element.runs = [{ start: 0, end: 1, bold: true, color: "#FF0000" }];
     element.style = {
       ...element.style,
       fontFamily: "Georgia",
@@ -118,6 +119,42 @@ describe("text formatting commands", () => {
       lineHeight: 1.4,
     });
     expect(cleared.text).toBe(element.text);
+    // Fragment emphasis is character formatting; clearing must remove it too,
+    // otherwise a red bold fragment would survive “clear formatting”.
+    expect(cleared.runs).toBeUndefined();
+  });
+
+  it("replaces fragment emphasis only when the whole format is applied", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = textElement(source);
+    element.runs = [{ start: 0, end: 1, bold: true, color: "#FF0000" }];
+
+    const toggled = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "set-text-style-elements",
+        slideId: slide.id,
+        elementIds: [element.id],
+        style: { italic: true },
+      }),
+    );
+    // A normal format change must not silently wipe the user's local emphasis.
+    const toggledElement = toggled.slides[0]!.elements[0]!;
+    expect(toggledElement.type === "text" ? toggledElement.runs : undefined).toHaveLength(1);
+
+    const painted = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "set-text-style-elements",
+        slideId: slide.id,
+        elementIds: [element.id],
+        style: { italic: true },
+        clearRuns: true,
+      }),
+    );
+    // The format painter replaces the whole character format, so emphasis the
+    // source does not carry goes away.
+    const paintedElement = painted.slides[0]!.elements[0]!;
+    expect(paintedElement.type === "text" ? paintedElement.runs : undefined).toBeUndefined();
   });
 
   it("rejects formatting the schema or the exporter could not round-trip", () => {

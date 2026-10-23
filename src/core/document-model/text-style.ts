@@ -26,6 +26,32 @@ export function nextTextSize(current: number, direction: "up" | "down"): number 
 }
 
 /**
+ * The complete format of one text, with every optional field spelled out.
+ *
+ * The format painter has to make the target identical to the source, including
+ * the absence of a leading or a marker. Spreading a partial style would leave
+ * the target's own values in place, so the painter copies this normalized form
+ * and the command writes every field, clearing the ones the source does not set.
+ */
+export function normalizeTextFormat(style: TextElementStyle): TextElementStyle {
+  return {
+    fontFamily: style.fontFamily,
+    fontSizePt: style.fontSizePt,
+    color: style.color,
+    bold: style.bold,
+    align: style.align,
+    letterSpacingPt: style.letterSpacingPt,
+    lineHeight: style.lineHeight,
+    italic: style.italic ?? false,
+    underline: style.underline ?? false,
+    strikethrough: style.strikethrough ?? false,
+    verticalAlign: style.verticalAlign ?? "top",
+    bullet: style.bullet ?? "none",
+    indentLevel: style.indentLevel ?? 0,
+  };
+}
+
+/**
  * The style “clear formatting” restores.
  *
  * The theme owns the type scale, so a cleared run keeps the deck's own body (or
@@ -46,6 +72,7 @@ export function clearedTextStyle(role: TextContentRole | undefined, theme?: Docu
     ...(token?.lineHeight === undefined ? {} : { lineHeight: token.lineHeight }),
     ...(token?.letterSpacingPt === undefined ? {} : { letterSpacingPt: token.letterSpacingPt }),
     italic: false,
+    underline: false,
     strikethrough: false,
     verticalAlign: "top",
     bullet: "none",

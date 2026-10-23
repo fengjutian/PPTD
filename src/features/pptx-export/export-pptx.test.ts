@@ -97,6 +97,36 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("writes character and paragraph formatting as native text properties", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, {
+      type: "set-text-style",
+      slideId: slide.id,
+      elementId: slide.elements[0]!.id,
+      style: {
+        italic: true,
+        underline: true,
+        strikethrough: true,
+        verticalAlign: "middle",
+        bullet: "number",
+        indentLevel: 2,
+        lineHeight: 1.5,
+      },
+    });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    // These are native run/paragraph properties, not a picture of styled text.
+    expect(slideXml).toContain('i="1"');
+    expect(slideXml).toContain('u="sng"');
+    expect(slideXml).toContain('strike="sngStrike"');
+    expect(slideXml).toContain('anchor="ctr"');
+    expect(slideXml).toContain("<a:buAutoNum");
+    expect(slideXml).toContain('lvl="2"');
+    expect(slideXml).toContain("<a:spcPct");
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("exports a line as a native line object with its arrow heads", async () => {
     const document = createDocument();
     const slideId = document.slides[0]!.id;
@@ -502,7 +532,7 @@ describe("PPTX export", () => {
     expect(xml).toContain('spcPct val="130000"');
   });
 
-  it("writes an icon as an svg picture", async () => {
+  it("writes an icon as a native custom-geometry shape", async () => {
     const document = createDocument();
     document.slides[0]!.content.status = "approved";
     document.slides[0]!.elements.push({
@@ -516,8 +546,15 @@ describe("PPTX export", () => {
     });
     const result = await buildPptx(document);
     const entries = unzipSync(result.bytes);
-    const media = Object.keys(entries).filter((name) => name.endsWith(".svg"));
-    expect(media.length).toBe(1);
-    expect(strFromU8(entries[media[0]!]!)).toContain('viewBox="0 0 24 24"');
+    // An icon must not become a picture: PptxGenJS's SVG preview is written as
+    // an invalid PNG fallback, and PowerPoint refuses the whole package.
+    expect(Object.keys(entries).filter((name) => name.startsWith("ppt/media/") && !name.endsWith("/"))).toEqual([]);
+    const xml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    expect(xml).toContain("<a:custGeom>");
+    expect(xml).toContain("<a:path ");
+    expect(xml).toContain("<a:noFill/>");
+    expect(xml).toContain('val="2F6B5F"');
+    expect(xml).not.toContain("<p:pic>");
+    expect(xml).not.toContain(".svg");
   });
 });

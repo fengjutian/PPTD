@@ -49,13 +49,18 @@ import {
   type Slide,
   type SlideAnimation,
   type SlideElement,
+  type TextElement,
   type SupportedImageMimeType,
+  nextTextSize,
+  normalizeTextFormat,
 } from "../core/document-model";
 import { applyCommand, type AiSlideDesign, type DocumentCommand } from "../core/commands";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
+import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
+import { useFormatPainterStore } from "../store/format-painter";
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 import { ContentHistory } from "../features/editor/ContentHistory";
 import { LayerList } from "../features/editor/LayerList";
@@ -384,6 +389,21 @@ const ElementView = memo(function ElementView({
   const begin = (kind: "move" | "resize" | "rotate", event: React.PointerEvent, direction?: ResizeDirection) => {
     event.stopPropagation();
     event.preventDefault();
+    // An active format brush consumes the click instead of starting a drag: the
+    // user is pointing at the target, not grabbing it.
+    const painter = useFormatPainterStore.getState();
+    if (kind === "move" && painter.style && element.type === "text" && !element.locked) {
+      execute({
+        type: "set-text-style-elements",
+        slideId: activeSlideId,
+        elementIds: [element.id],
+        style: painter.style,
+        clearRuns: true,
+      });
+      selectElement(element.id);
+      painter.consume();
+      return;
+    }
     // Ctrl、Cmd 或 Shift 点选是增减选中，不该顺手拖动对象。
     if (kind === "move" && (event.ctrlKey || event.metaKey || event.shiftKey)) {
       toggleElement(element.id);
@@ -804,6 +824,15 @@ export function App() {
   // 多选时"当前对象"是最后被选中的那个：属性面板和快捷键都以它为准。
   const selectedElementId = selectedElementIds.length > 0 ? selectedElementIds[selectedElementIds.length - 1]! : null;
   const selected = activeSlide.elements.find((element) => element.id === selectedElementId);
+  // The format controls work on every selected text, but display the last one.
+  const selectedTextElements = useMemo(
+    () =>
+      activeSlide.elements.filter(
+        (element): element is TextElement => selectedElementIds.includes(element.id) && element.type === "text",
+      ),
+    [activeSlide.elements, selectedElementIds],
+  );
+  const formatPainterStyle = useFormatPainterStore((state) => state.style);
   const activeGuides = useCanvasGuidesStore((s) => s.guidesBySlide[activeSlideId]) ?? [];
   const addGuide = (axis: "x" | "y", position: number) => addGuideToSlide(activeSlide.id, axis, emu(position));
   const scale = (CANVAS_WIDTH / document.pageSize.width) * zoom;
@@ -2425,6 +2454,11 @@ export function App() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // The format painter is a mode, so Escape leaves it from anywhere.
+      if (event.key === "Escape" && useFormatPainterStore.getState().style) {
+        useFormatPainterStore.getState().cancel();
+        setTaskStatus("已退出格式刷");
+      }
       // 编辑快捷键只在编辑器视图生效。AI 审核页、主题页和设置页里 Delete /
       // Ctrl+Z 属于它们自己的交互，不能让隐藏的画布跟着动。
       if (activeView !== "editor") return;
@@ -2477,6 +2511,61 @@ export function App() {
         execute({ type: "duplicate-elements", slideId: activeSlide.id, elementIds: available });
         return;
       }
+      if (shortcut === "copy-format") {
+        const text = selectedTextElements.at(-1);
+        if (!text) return;
+        event.preventDefault();
+        useFormatPainterStore.getState().copy(normalizeTextFormat(text.style), false);
+        setTaskStatus("已复制文本格式：点击目标文本应用，Esc 取消");
+        return;
+      }
+      if (shortcut === "apply-format") {
+        const brush = useFormatPainterStore.getState();
+        const targets = selectedTextElements.filter((element) => !element.locked);
+        if (!brush.style || targets.length === 0) {
+          setTaskStatus("先复制格式，再选择目标文本");
+          return;
+        }
+        event.preventDefault();
+        execute({
+          type: "set-text-style-elements",
+          slideId: activeSlide.id,
+          elementIds: targets.map((element) => element.id),
+          style: brush.style,
+          clearRuns: true,
+        });
+        brush.consume();
+        return;
+      }
+      if (
+        shortcut === "toggle-bold" ||
+        shortcut === "toggle-italic" ||
+        shortcut === "toggle-underline" ||
+        shortcut === "font-increase" ||
+        shortcut === "font-decrease"
+      ) {
+        const targets = selectedTextElements.filter((element) => !element.locked);
+        const target = targets.at(-1);
+        if (!target) return;
+        event.preventDefault();
+        const style =
+          shortcut === "toggle-bold"
+            ? { bold: !target.style.bold }
+            : shortcut === "toggle-italic"
+              ? { italic: !(target.style.italic ?? false) }
+              : shortcut === "toggle-underline"
+                ? { underline: !(target.style.underline ?? false) }
+                : {
+                    fontSizePt: nextTextSize(target.style.fontSizePt, shortcut === "font-increase" ? "up" : "down"),
+                  };
+        execute({
+          type: "set-text-style-elements",
+          slideId: activeSlide.id,
+          elementIds: targets.map((element) => element.id),
+          style,
+        });
+        return;
+      }
       if (!selected || selected.locked) return;
       event.preventDefault();
       if (
@@ -2514,6 +2603,7 @@ export function App() {
     redoStack.length,
     selected,
     selectedElementIds,
+    selectedTextElements,
     undo,
     undoStack.length,
   ]);
@@ -2918,6 +3008,8 @@ export function App() {
             >
               <Trash2 />
             </ToolButton>
+            <span className="separator" />
+            <TextFormatToolbar slideId={activeSlide.id} elements={selectedTextElements} execute={execute} />
           </div>
           <div className="toolbar-group insert-tools">
             <ToolButton label="选择">
@@ -3587,7 +3679,7 @@ export function App() {
           <main className="workspace" ref={workspaceRef}>
             <div className="canvas-ruler">13.33 × 7.5 in</div>
             <div
-              className="slide-canvas"
+              className={`slide-canvas${formatPainterStyle ? " format-painter-active" : ""}`}
               style={{ width: CANVAS_WIDTH * zoom, height: canvasHeight, background: activeSlide.background }}
               onPointerDown={marquee.onPointerDown}
             >

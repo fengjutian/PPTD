@@ -154,6 +154,158 @@ button {
 .topbar .export-button {
   margin-left: auto;
 }
+/* “开始”功能区里的字符与段落控件：两行紧凑排布，高度与 48px 的工具按钮对齐。 */
+.text-format-tools {
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+.text-format-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.text-format-select {
+  height: 22px;
+  padding: 0 3px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+}
+.text-format-select.font {
+  width: 102px;
+}
+.text-format-select.spacing {
+  width: 54px;
+}
+.text-format-select option {
+  color: #111;
+  background: #fff;
+}
+.text-format-size {
+  width: 44px;
+  height: 22px;
+  padding: 0 3px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+}
+.text-format-steppers {
+  display: flex;
+  gap: 1px;
+}
+.text-format-steppers button {
+  width: 17px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.text-format-steppers button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.text-format-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: rgb(255 255 255 / 22%);
+}
+.text-format-toggle {
+  width: 23px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #d8dae0;
+  background: transparent;
+  cursor: pointer;
+}
+.text-format-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+.text-format-toggle:hover:not(:disabled) {
+  background: rgb(255 255 255 / 12%);
+}
+.text-format-toggle[aria-pressed="true"] {
+  border-color: rgb(255 255 255 / 32%);
+  color: #fff;
+  background: rgb(255 255 255 / 18%);
+}
+.text-format-toggle[data-mixed="true"] {
+  border-style: dashed;
+}
+.text-format-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.text-format-color {
+  width: 23px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  background: rgb(0 0 0 / 16%);
+  cursor: pointer;
+}
+.text-format-color::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+.text-format-color::-webkit-color-swatch {
+  border: 0;
+  border-radius: 2px;
+}
+.text-format-color:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.text-format-segmented {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 4px;
+}
+.text-format-segmented button {
+  width: 21px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: #d8dae0;
+  background: transparent;
+  cursor: pointer;
+}
+.text-format-segmented button svg {
+  width: 12px;
+  height: 12px;
+}
+.text-format-segmented button.active {
+  color: #fff;
+  background: rgb(255 255 255 / 20%);
+}
+.text-format-segmented button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.slide-canvas.format-painter-active .slide-element.text {
+  cursor: copy;
+}
 .brand {
   width: 178px;
   display: flex;

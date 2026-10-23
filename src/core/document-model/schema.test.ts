@@ -12,6 +12,7 @@ import versionElevenFixture from "./__fixtures__/v11-document.json";
 import versionTwelveFixture from "./__fixtures__/v12-document.json";
 import versionThirteenFixture from "./__fixtures__/v13-document.json";
 import versionFourteenFixture from "./__fixtures__/v14-document.json";
+import versionFifteenFixture from "./__fixtures__/v15-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -140,6 +141,22 @@ describe("presentation document schema", () => {
     expect(versionFourteenFixture.schemaVersion).toBe(14);
   });
 
+  it("keeps the formatting of a fixed version 15 document", () => {
+    const parsed = parsePresentationDocument(versionFifteenFixture);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const element = parsed.slides[0]!.elements[0]!;
+    expect(element.type === "text" ? element.style : undefined).toMatchObject({
+      italic: true,
+      underline: true,
+      strikethrough: true,
+      verticalAlign: "middle",
+      bullet: "dot",
+      indentLevel: 2,
+      lineHeight: 1.5,
+    });
+    expect(versionFifteenFixture.schemaVersion).toBe(15);
+  });
+
   it("accepts character and paragraph formatting and rejects an impossible indent", () => {
     const document = createDocument();
     const element = document.slides[0]!.elements[0]!;
@@ -147,6 +164,7 @@ describe("presentation document schema", () => {
     element.style = {
       ...element.style,
       italic: true,
+      underline: true,
       strikethrough: true,
       verticalAlign: "middle",
       bullet: "number",
@@ -155,6 +173,7 @@ describe("presentation document schema", () => {
     const parsed = parsePresentationDocument(document);
     const parsedElement = parsed.slides[0]!.elements[0]!;
     expect(parsedElement.type === "text" ? parsedElement.style.italic : undefined).toBe(true);
+    expect(parsedElement.type === "text" ? parsedElement.style.underline : undefined).toBe(true);
     expect(parsedElement.type === "text" ? parsedElement.style.bullet : undefined).toBe("number");
     expect(parsedElement.type === "text" ? parsedElement.style.indentLevel : undefined).toBe(2);
 
