@@ -1129,6 +1129,12 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       let touchesContent = false;
       let touchesDesign = false;
       for (const edit of command.edits) {
+        // 标题、备注、表格单元格和图表字段都是内容；它们的写回命令各自
+        // 维护内容版本，所以批量替换里出现任何一条都算内容变更。
+        if (edit.kind !== "text") {
+          touchesContent = true;
+          continue;
+        }
         const slide = document.slides.find((item) => item.id === edit.slideId);
         const element = slide?.elements.find((item) => item.id === edit.elementId);
         if (!slide || element?.type !== "text") continue;
@@ -1390,16 +1396,92 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "replace-text-edits") {
     if (command.edits.length === 0 || command.edits.length > 500) throw new Error("TEXT_EDITS_INVALID");
     // Resolve and validate every target before writing, so one bad id cannot
-    // leave the document half-replaced.
+    // leave the document half-replaced. Each kind checks the same invariants
+    // its single-target command would: a batch must not be a way around a lock
+    // or a length limit.
     const resolved = command.edits.map((edit) => {
+      if (edit.kind === "document-title") {
+        const title = edit.text.trim();
+        if (!title || title.length > 512) throw new Error("DOCUMENT_TITLE_INVALID");
+        return { kind: "document-title" as const, text: title };
+      }
       const targetSlide = document.slides.find((slide) => slide.id === edit.slideId);
-      const target = targetSlide?.elements.find((element) => element.id === edit.elementId);
-      if (!targetSlide || !target || target.type !== "text") throw new Error("TEXT_EDIT_TARGET_INVALID");
+      if (!targetSlide) throw new Error("TEXT_EDIT_TARGET_INVALID");
+      if (edit.kind === "speaker-notes") {
+        if (edit.text.length > 20_000) throw new Error("CONTENT_TEXT_TOO_LONG");
+        return { kind: "speaker-notes" as const, slide: targetSlide, text: edit.text };
+      }
+      if (edit.kind === "text") {
+        const target = targetSlide.elements.find((element) => element.id === edit.elementId);
+        if (!target || target.type !== "text") throw new Error("TEXT_EDIT_TARGET_INVALID");
+        if (target.locked) throw new Error("ELEMENT_LOCKED");
+        if (edit.text.length > 20_000) throw new Error("CONTENT_TEXT_TOO_LONG");
+        return { kind: "text" as const, slide: targetSlide, element: target, text: edit.text };
+      }
+      if (edit.kind === "table-cell") {
+        const target = targetSlide.elements.find((element) => element.id === edit.elementId);
+        if (!target || target.type !== "table" || target.contentBlockId !== edit.blockId) {
+          throw new Error("TEXT_EDIT_TARGET_INVALID");
+        }
+        if (target.locked) throw new Error("ELEMENT_LOCKED");
+        const block = findTableBlock(targetSlide, edit.blockId);
+        if (!block) throw new Error("CONTENT_BLOCK_NOT_TABLE");
+        const { cell } = edit;
+        if (!Number.isInteger(cell.column) || cell.column < 0 || cell.column >= block.header.length) {
+          throw new Error("TABLE_CELL_OUT_OF_RANGE");
+        }
+        if (cell.section === "body" && (!Number.isInteger(cell.row) || cell.row < 0 || cell.row >= block.rows.length)) {
+          throw new Error("TABLE_CELL_OUT_OF_RANGE");
+        }
+        // The same per-field limits as `set-table-cell`. A long replacement must
+        // not build a cell the project schema would reject on save.
+        if (edit.text.length > (cell.section === "header" ? 200 : 500)) throw new Error("CONTENT_TEXT_TOO_LONG");
+        return { kind: "table-cell" as const, slide: targetSlide, block, cell, text: edit.text };
+      }
+      const target = targetSlide.elements.find((element) => element.id === edit.elementId);
+      if (!target || target.type !== "chart" || !target.contentBlockIds.includes(edit.blockId)) {
+        throw new Error("TEXT_EDIT_TARGET_INVALID");
+      }
       if (target.locked) throw new Error("ELEMENT_LOCKED");
-      if (edit.text.length > 20_000) throw new Error("CONTENT_TEXT_TOO_LONG");
-      return { slide: targetSlide, element: target, text: edit.text };
+      const block = findMetricBlock(targetSlide, edit.blockId);
+      if (!block) throw new Error("CONTENT_BLOCK_NOT_METRIC");
+      if (edit.text.length > 1_000) throw new Error("CONTENT_TEXT_TOO_LONG");
+      return { kind: "metric" as const, slide: targetSlide, block, field: edit.field, text: edit.text };
     });
-    for (const edit of resolved) applyTextEdit(edit.slide, edit.element, edit.text);
+
+    for (const edit of resolved) {
+      if (edit.kind === "document-title") {
+        document.title = edit.text;
+        continue;
+      }
+      if (edit.kind === "speaker-notes") {
+        edit.slide.content.speakerNotes = edit.text;
+        markContentChanged(edit.slide);
+        continue;
+      }
+      if (edit.kind === "text") {
+        applyTextEdit(edit.slide, edit.element, edit.text);
+        continue;
+      }
+      if (edit.kind === "table-cell") {
+        const { cell, block, text } = edit;
+        if (cell.section === "header") {
+          block.header[cell.column] = text;
+        } else {
+          const row = block.rows[cell.row]!;
+          // Rows may be shorter than the header. Padding keeps the grid
+          // rectangular instead of writing a hole the schema rejects.
+          while (row.length <= cell.column) row.push("");
+          row[cell.column] = text;
+        }
+        markContentChanged(edit.slide);
+        continue;
+      }
+      if (edit.field === "value") edit.block.value = edit.text;
+      else edit.block.label = edit.text;
+      syncMetricText(edit.slide, edit.block.id, edit.field, edit.text);
+      markContentChanged(edit.slide);
+    }
     return;
   }
   if (command.type === "add-slide") {

@@ -253,6 +253,19 @@ pub struct SpeakerNotesRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ImagePromptRequest {
+    topic: String,
+    deck_title: String,
+    outline: Vec<String>,
+    slide_index: usize,
+    slide: serde_json::Value,
+    model: Option<String>,
+    provider: Option<String>,
+    task_id: Option<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SplitSlideRequest {
     topic: String,
     deck_title: String,
@@ -1755,6 +1768,117 @@ pub async fn write_speaker_notes(
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_NOTES_JSON_INVALID")
+}
+
+/// 页面配图的画面描述提示词。
+///
+/// 图和文字是两套表达：这里要的是画面本身，不是把标题再写一遍。生成的图里
+/// 出现文字几乎总是错的，所以规则里直接禁止。
+pub fn image_prompt_suggestion_prompt(
+    topic: &str,
+    deck_title: &str,
+    outline: &str,
+    index: usize,
+    total: usize,
+    title: &str,
+    slide: &str,
+) -> String {
+    format!(
+        r#"请为下面这一页拟 2 个画面描述，用于生成一张配图。
+
+【整册主题】
+{topic}
+
+【整册标题】
+{deck_title}
+
+【整册页面大纲】
+{outline}
+
+【这一页】
+第 {index} 页 / 共 {total} 页，标题：{title}
+
+【已审核内容】
+{slide}
+
+规则：
+1. 只描述画面本身：场景、主体、构图、光线、氛围。不要在描述里要求出现文字、字母、数字、标题或标注。
+2. 描述要贴合这一页讲的内容，避免"商务""科技感"这类空泛词堆砌。
+3. 两条要有明显区别：一条具体场景，一条抽象几何或隐喻。
+4. 不要建议图表、截图、UI 界面或拼贴：这些不是生成图片能准确表达的东西。
+5. 不得引入页面里没有的事实：具体公司名、真实人物、真实数据。
+6. 每条不超过 60 个汉字，不使用省略号或标点堆叠。
+{punctuation_rules}
+
+仅返回严格 JSON，不要 Markdown或额外说明：
+{{"prompts":["画面描述一","画面描述二"]}}"#,
+        topic = topic,
+        deck_title = deck_title,
+        outline = outline,
+        index = index + 1,
+        total = total,
+        title = title,
+        slide = slide,
+        punctuation_rules = TitleLexicon::load().punctuation_rules_prompt()
+    )
+}
+
+#[tauri::command]
+pub async fn suggest_image_prompts(
+    request: ImagePromptRequest,
+    cancels: tauri::State<'_, CancelRegistry>,
+) -> Result<serde_json::Value, String> {
+    let cancel = cancels.token_for(request.task_id);
+    let topic = request.topic.trim();
+    if topic.is_empty()
+        || topic.chars().count() > 4_000
+        || request.outline.is_empty()
+        || request.outline.len() > 200
+        || request.slide_index >= request.outline.len()
+    {
+        return Err("AI_IMAGE_PROMPTS_REQUEST_INVALID".into());
+    }
+    let title = request.outline[request.slide_index].trim();
+    if title.is_empty() {
+        return Err("AI_IMAGE_PROMPTS_REQUEST_INVALID".into());
+    }
+    let outline = serde_json::to_string(&request.outline)
+        .map_err(|_| "AI_IMAGE_PROMPTS_REQUEST_INVALID".to_owned())?;
+    let slide = serde_json::to_string(&request.slide)
+        .map_err(|_| "AI_IMAGE_PROMPTS_REQUEST_INVALID".to_owned())?;
+    if outline.len() > 40_000 || slide.len() > 20_000 {
+        return Err("AI_IMAGE_PROMPTS_REQUEST_INVALID".into());
+    }
+    let provider = ai::resolve(request.provider.as_deref())?;
+    let api_key = ai::read_api_key(provider)?;
+    let model = ai::resolve_model(provider, request.model)?;
+    let prompt = image_prompt_suggestion_prompt(
+        topic,
+        request.deck_title.trim(),
+        &outline,
+        request.slide_index,
+        request.outline.len(),
+        title,
+        &slide,
+    );
+    let body = ChatRequest {
+        model,
+        messages: vec![ChatMessage {
+            role: "user".into(),
+            content: prompt,
+        }],
+        temperature: 0.75,
+    };
+    let content = ai::chat(
+        provider,
+        &api_key,
+        &body,
+        SLIDE_ASSIST_TIMEOUT,
+        "AI_IMAGE_PROMPTS_REQUEST_FAILED",
+        &cancel,
+    )
+    .await?;
+    parse_json(strip_code_fence(&content), "AI_IMAGE_PROMPTS_JSON_INVALID")
 }
 
 /// 拆页的提示词。

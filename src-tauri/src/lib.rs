@@ -45,6 +45,7 @@ pub fn run() {
             commands::ai::rewrite_presentation_slide,
             commands::ai::suggest_slide_titles,
             commands::ai::write_speaker_notes,
+            commands::ai::suggest_image_prompts,
             commands::ai::split_slide_content,
             commands::ai::review_deck_content,
             commands::ai::cancel_ai_generation,

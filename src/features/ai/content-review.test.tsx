@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { bodyFromBlocks, sanitizeBlocks, sanitizeDraftForSave } from "../../services/ai-draft-content";
 import { aiDraftSchema, chooseSlideLayout, type AiDraft } from "../../services/ai-service";
-import { ContentReview } from "./ContentReview";
+import { ContentReview, type ImagePromptAssist } from "./ContentReview";
 import {
   countCharacters,
   densityLabels,
@@ -12,6 +12,7 @@ import {
   missingTitleIndexes,
   nearestSlideIndex,
   outlineNavTarget,
+  remapChecks,
   reviewIssues,
   resolveActiveSlideIndex,
   slideCardScrollTop,
@@ -398,6 +399,7 @@ function renderReview(
   activeIndex = 0,
   originalDraft?: AiDraft,
   regeneration?: { label: string; percent: number },
+  imagePromptAssist?: ImagePromptAssist,
 ) {
   return renderToStaticMarkup(
     <ContentReview
@@ -415,6 +417,7 @@ function renderReview(
       onSlideFieldChange={() => undefined}
       onSlideVisualAssetChange={() => undefined}
       onSlideBlocksChange={() => undefined}
+      onSlideChecksChange={() => undefined}
       onSlideReviewedChange={() => undefined}
       onReviewAllSlides={() => undefined}
       onAddSlide={() => undefined}
@@ -428,6 +431,9 @@ function renderReview(
       onWriteNotes={() => undefined}
       onSplitSlide={() => undefined}
       onReviewDeck={() => undefined}
+      imagePromptAssist={imagePromptAssist}
+      onSuggestImagePrompts={() => undefined}
+      onDismissImagePrompts={() => undefined}
       onUndo={() => undefined}
       onRedo={() => undefined}
     />,
@@ -520,6 +526,33 @@ describe("content review layout", () => {
     expect(markup).toContain("全部标记已审核");
     expect(markup).toContain("上移第 1 页的");
     expect(markup).toContain("下移第 1 页的");
+  });
+
+  it("shows picture-description candidates inside the page's image section", () => {
+    const draft = withSlideIds(createDraft());
+    const withAsset: AiDraft = {
+      ...draft,
+      slides: draft.slides.map((slide, index) =>
+        index === 0
+          ? {
+              ...slide,
+              plan: {
+                ...slide.plan,
+                visualAsset: { enabled: true, prompt: "", role: "side" as const, source: "model" as const },
+              },
+            }
+          : slide,
+      ),
+    };
+    const markup = renderReview(withAsset, 0, undefined, undefined, {
+      index: 0,
+      status: "ready",
+      candidates: ["一间明亮的现代化数据中心", "抽象几何线条构成的上升箭头"],
+    });
+
+    expect(markup).toContain("AI 写画面描述");
+    expect(markup).toContain("一间明亮的现代化数据中心");
+    expect(markup).toContain("收起");
   });
 
   it("keeps the per-page review flag when a draft is sanitized for history", () => {
@@ -731,5 +764,56 @@ describe("layout pre-check", () => {
       1,
     );
     expect(notes.find((note) => note.scope === "comparison")!.message).toContain("两栏相差 3 条");
+  });
+});
+
+describe("核实标记", () => {
+  it("块重排时标记跟着换位置，被删掉的块连标记一起消失", () => {
+    const checks = [
+      { blockIndex: 1, kind: "number" as const, status: "unverified" as const },
+      { blockIndex: undefined, kind: "fact" as const, status: "verified" as const },
+    ];
+
+    expect(remapChecks(checks, (old) => (old === 1 ? 0 : old))).toEqual([
+      { blockIndex: 0, kind: "number", status: "unverified" },
+      { blockIndex: undefined, kind: "fact", status: "verified" },
+    ]);
+    expect(remapChecks(checks, () => undefined)).toEqual([
+      { blockIndex: undefined, kind: "fact", status: "verified" },
+    ]);
+  });
+
+  it("待核实作为非阻塞提醒出现在问题清单里", () => {
+    const draft = createDraft();
+    const checked: AiDraft = {
+      ...draft,
+      slides: draft.slides.map((slide, index) =>
+        index === 0 ? { ...slide, checks: [{ blockIndex: 0, kind: "number" as const, status: "unverified" as const }] } : slide,
+      ),
+    };
+
+    expect(reviewIssues(checked)).toContainEqual({
+      kind: "unverified-claims",
+      indexes: [0],
+      message: "还有 1 处内容待核实",
+      blocking: false,
+    });
+  });
+
+  it("每个内容块都有待核实入口，页头显示未核实数量", () => {
+    const draft = withSlideIds(createDraft());
+    const checked: AiDraft = {
+      ...draft,
+      slides: draft.slides.map((slide, index) =>
+        index === 0
+          ? { ...slide, checks: [{ blockIndex: 0, kind: "number" as const, status: "unverified" as const }] }
+          : slide,
+      ),
+    };
+    const markup = renderReview(checked);
+
+    expect(markup).toContain("数字 · 待核实");
+    expect(markup).toContain("1 处待核实");
+    expect(markup).toContain("标记第 1 页的要点列表待核实");
   });
 });

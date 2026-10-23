@@ -622,7 +622,7 @@ button {
 }
 .import-report-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   margin: 14px 0 0;
 }
@@ -2855,6 +2855,43 @@ button {
   height: 12px;
   flex: 0 0 auto;
 }
+.visual-asset-ai {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 6px;
+}
+.visual-asset-suggestions {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+.visual-asset-suggestions p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.visual-asset-suggestion {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgb(127 127 127 / 28%);
+  border-radius: 8px;
+  color: inherit;
+  background: rgb(127 127 127 / 6%);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+.visual-asset-suggestion:hover {
+  border-color: var(--ppt-accent);
+}
+.visual-asset-error {
+  color: #ee9199;
+}
 .block-editor {
   display: grid;
   gap: 8px;
@@ -2890,6 +2927,43 @@ button {
   background: rgb(211 82 48 / 10%);
   font-size: 9px;
   font-weight: 700;
+}
+.block-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.check-chip {
+  padding: 1px 7px;
+  border: 1px dashed rgb(127 127 127 / 60%);
+  border-radius: 999px;
+  color: #c08a2e;
+  background: rgb(127 127 127 / 8%);
+  font-size: 9px;
+  cursor: pointer;
+}
+.check-chip.verified {
+  border-style: solid;
+  border-color: rgb(110 153 63 / 55%);
+  color: #8fae69;
+  background: rgb(110 153 63 / 12%);
+}
+.check-kind-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+}
+.check-add {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.draft-unverified-badge {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #c08a2e;
+  background: rgb(192 138 46 / 12%);
+  font-size: 9px;
 }
 .block-row .icon-action {
   display: inline-flex;
@@ -4655,6 +4729,11 @@ button {
 }
 .deck-review-issues .link-action {
   font-size: 11px;
+}
+.deck-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
 }
 .deck-review-empty {
   margin: 20px 0 0;

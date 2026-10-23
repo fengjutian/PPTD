@@ -25,6 +25,8 @@ export interface SlideRewriteDialogProps {
   status: "editing" | "running" | "ready" | "error";
   proposal?: SlideRewriteProposal;
   error?: string;
+  /** 从审稿问题进来时预填的改写要求。对话框关闭即丢弃。 */
+  defaultInstruction?: string;
   onGenerate: (instruction: string) => void;
   onApply: () => void;
   onClose: () => void;
@@ -43,11 +45,12 @@ export function SlideRewriteDialog({
   status,
   proposal,
   error,
+  defaultInstruction,
   onGenerate,
   onApply,
   onClose,
 }: SlideRewriteDialogProps) {
-  const [instruction, setInstruction] = useState("");
+  const [instruction, setInstruction] = useState(defaultInstruction ?? "");
   const instructionRef = useRef<HTMLTextAreaElement>(null);
   const running = status === "running";
 

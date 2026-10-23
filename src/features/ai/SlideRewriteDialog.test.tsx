@@ -47,6 +47,11 @@ describe("AI 重写对话框", () => {
     expect(buttonMarkup(markup, "替换本页")).toContain("disabled");
   });
 
+  it("从审稿建议进来时预填改写要求", () => {
+    const markup = renderDialog({ defaultInstruction: "按这条审稿意见重写本页：与第 4 页重复" });
+    expect(markup).toContain("按这条审稿意见重写本页");
+  });
+
   it("标题只读，并说明它不参与重写", () => {
     const markup = renderDialog();
     expect(markup).toContain("本页标题");

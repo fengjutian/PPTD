@@ -20,6 +20,7 @@ import {
   rewritePresentationSlide,
   slideBriefsSchema,
   splitSlideContent,
+  suggestImagePrompts,
   suggestSlideTitles,
   writeSpeakerNotes,
   splitBodyItems,
@@ -47,6 +48,24 @@ describe("AI structured outputs", () => {
       speakerNotes: "",
       body: "核心业务保持增长，区域表现存在差异。",
     });
+  });
+
+  it("旧草稿没有核实标记也能解析，标记按块保存", () => {
+    const legacy = aiDraftSchema.parse({ title: "标题", slides: [{ title: "页", body: "正文", speakerNotes: "" }] });
+    expect(legacy.slides[0]!.checks).toBeUndefined();
+
+    const checked = aiDraftSchema.parse({
+      title: "标题",
+      slides: [
+        {
+          title: "页",
+          body: "正文",
+          speakerNotes: "",
+          checks: [{ blockIndex: 2, kind: "number" }],
+        },
+      ],
+    });
+    expect(checked.slides[0]!.checks).toEqual([{ blockIndex: 2, kind: "number", status: "unverified" }]);
   });
 
   it("accepts only the editorial concept that P1 can render", () => {
@@ -938,6 +957,44 @@ describe("多页草稿的分批编排", () => {
     }).catch((reason: unknown) => reason);
 
     expect(describeAiError(error)).toBe("AI 没有写出可用的演讲备注，请重试");
+  });
+
+  it("画面描述候选去重，空结果不当作可用描述", async () => {
+    const input = {
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["标题"],
+      slideIndex: 0,
+      slide: {
+        title: "标题",
+        body: "正文",
+        speakerNotes: "",
+        plan: {
+          purpose: "目的",
+          conclusion: "结论",
+          visualIntent: "structured-text" as const,
+          density: "medium" as const,
+        },
+        blocks: [],
+      },
+    };
+
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "suggest_image_prompts")
+        return { prompts: ["一间明亮的现代化数据中心", "一间明亮的现代化数据中心", "抽象几何线条构成的上升箭头"] };
+      throw new Error(`unexpected command: ${command}`);
+    });
+    await expect(suggestImagePrompts(input)).resolves.toEqual([
+      "一间明亮的现代化数据中心",
+      "抽象几何线条构成的上升箭头",
+    ]);
+
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "suggest_image_prompts") return { prompts: ["  ", "  "] };
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const error = await suggestImagePrompts(input).catch((reason: unknown) => reason);
+    expect(describeAiError(error)).toBe("AI 没有给出可用的画面描述，请重试");
   });
 
   it("拆页返回两页，正文按各自的块重算", async () => {

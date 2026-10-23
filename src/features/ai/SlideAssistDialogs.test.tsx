@@ -159,7 +159,7 @@ describe("拆页对话框", () => {
 });
 
 describe("整册审稿对话框", () => {
-  it("列出问题、页码与可跳转的入口，不提供自动改写", () => {
+  it("列出问题、页码与可跳转的入口，并允许把问题交给单页重写", () => {
     const markup = renderToStaticMarkup(
       <DeckReviewDialog
         status="ready"
@@ -168,6 +168,7 @@ describe("整册审稿对话框", () => {
           { slideIndex: 5, severity: "error", kind: "missing-conclusion", message: "这一页没有结论" },
         ]}
         onJump={() => undefined}
+        onRewriteIssue={() => undefined}
         onRetry={() => undefined}
         onClose={() => undefined}
       />,
@@ -177,8 +178,8 @@ describe("整册审稿对话框", () => {
     expect(markup).toContain("内容重复");
     expect(markup).toContain("缺少结论");
     expect(markup).toContain("定位到第 6 页");
-    // 审稿只出清单：页面里不能出现任何“自动修好”的动作。
-    expect(markup).not.toContain("自动改写");
+    expect(markup).toContain("让 AI 按这条建议重写");
+    // 审稿本身仍然不自动改文字：重写入口打开的是需要人确认的候选对话框。
     expect(markup).not.toContain("一键修复");
   });
 
@@ -188,6 +189,7 @@ describe("整册审稿对话框", () => {
         status="ready"
         issues={[]}
         onJump={() => undefined}
+        onRewriteIssue={() => undefined}
         onRetry={() => undefined}
         onClose={() => undefined}
       />,
@@ -202,6 +204,7 @@ describe("整册审稿对话框", () => {
         status="error"
         error="这份草稿暂时无法审稿：页数或内容超出了单次请求的上限"
         onJump={() => undefined}
+        onRewriteIssue={() => undefined}
         onRetry={() => undefined}
         onClose={() => undefined}
       />,

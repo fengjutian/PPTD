@@ -6,7 +6,7 @@ import {
 } from "../../core/commands/layout-capacity";
 import { describeTitleSkeleton, findRepeatedTitlePatterns, analyzeTitle } from "../../core/content/title-quality";
 import { sanitizeBlocks } from "../../services/ai-draft-content";
-import { splitBodyItems, type AiDraft, type ContentBlock, type SlideBrief } from "../../services/ai-service";
+import { splitBodyItems, type AiDraft, type ContentBlock, type ContentCheck, type ContentCheckKind, type SlideBrief } from "../../services/ai-service";
 import { visualAssetIssues } from "./visual-asset-review";
 
 export type DraftSlide = AiDraft["slides"][number];
@@ -65,6 +65,40 @@ export const blockTypeLabels: Record<ContentBlock["type"], string> = {
   comparison: "对比",
   "table-data": "表格",
 };
+
+export const checkKindLabels: Record<ContentCheckKind, string> = {
+  fact: "事实",
+  number: "数字",
+  citation: "来源",
+};
+
+export const checkStatusLabels: Record<ContentCheck["status"], string> = {
+  unverified: "待核实",
+  verified: "已核实",
+};
+
+/** 这一页还有多少处没核实。 */
+export function unverifiedCheckCount(slide: DraftSlide): number {
+  return (slide.checks ?? []).filter((check) => check.status === "unverified").length;
+}
+
+/**
+ * 内容块重排或删除后，把核实标记挂到新的位置。
+ *
+ * 标记按块下标保存，所以块一动就必须跟着动：否则"第 3 个要点待核实"会在
+ * 删掉一条之后指向另一条完全不相干的内容。返回 undefined 表示那个块没了，
+ * 标记也跟着删掉。
+ */
+export function remapChecks(
+  checks: readonly ContentCheck[],
+  remap: (oldIndex: number) => number | undefined,
+): ContentCheck[] {
+  return checks.flatMap((check) => {
+    if (check.blockIndex === undefined) return [check];
+    const next = remap(check.blockIndex);
+    return next === undefined ? [] : [{ ...check, blockIndex: next }];
+  });
+}
 
 export function countCharacters(text: string): number {
   return [...text.replace(/\s/g, "")].length;
@@ -208,6 +242,7 @@ export type ReviewIssueKind =
   | "table-ragged"
   | "templated-title"
   | "repeated-title-pattern"
+  | "unverified-claims"
   | "image-text-request"
   | "image-empty-prompt"
   | "image-on-structured-page"
@@ -318,6 +353,19 @@ export function reviewIssues(draft: AiDraft): ReviewIssue[] {
       kind: "repeated-title-pattern",
       indexes: [...new Set(repeated.flatMap((group) => group.indexes))],
       message: `有 ${repeated.length} 组标题句式重复，建议打散：${detail}`,
+      blocking: false,
+    });
+  }
+  // 待核实不是错误：内容照旧可以确认，但它值得在确认前再提醒一次。
+  const unverified = draft.slides.flatMap((slide, index) =>
+    (slide.checks ?? []).some((check) => check.status === "unverified") ? [index] : [],
+  );
+  if (unverified.length > 0) {
+    const count = draft.slides.reduce((sum, slide) => sum + unverifiedCheckCount(slide), 0);
+    issues.push({
+      kind: "unverified-claims",
+      indexes: unverified,
+      message: `还有 ${count} 处内容待核实`,
       blocking: false,
     });
   }

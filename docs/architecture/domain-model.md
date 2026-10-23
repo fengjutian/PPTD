@@ -377,6 +377,8 @@ Level A 映射：
 - 页面尺寸与顺序来自 `p:sldSz`、`p:sldIdLst`。
 - 文本段落 → 换行，run 样式 → `TextElementStyle`/`TextRun`；标题/正文占位符绑定 `contentRef`。
 - 图片 → `ImageElement`（data URL、crop、alt）；基础形状 → `ShapeElement`/`LineElement`；基础表格 → `table-data` 内容块 + `TableElement`。
+- 顶层组合 → 按 `chOff`/`chExt` 展平成员坐标，并生成 `SlideGroup`；嵌套组合、组合旋转/翻转不保留。
+- 单序列图表 → `ChartElement` + 每个分类一个 `metric` 内容块；多序列只取第一个，其他图表类型报告后跳过。
 - 主题色/字体写入 `document.theme`；演讲备注写入 `content.speakerNotes`。
 - 导入页 `content.status = "review"`，保证导出预检提示未审核；导入后是未保存的新项目，必须另存为 `.pptd`。
 

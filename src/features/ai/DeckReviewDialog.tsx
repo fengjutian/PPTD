@@ -15,6 +15,8 @@ export interface DeckReviewDialogProps {
   issues?: DeckReviewIssue[];
   error?: string;
   onJump: (slideIndex: number) => void;
+  /** 把这条问题变成一次带要求的单页重写；写回仍要人确认。 */
+  onRewriteIssue: (issue: DeckReviewIssue) => void;
   onRetry: () => void;
   onClose: () => void;
 }
@@ -22,10 +24,19 @@ export interface DeckReviewDialogProps {
 /**
  * 整册语义审稿。
  *
- * 它只出问题清单：每条都能跳到对应页面，但没有任何"自动修好"的按钮。
+ * 它只出问题清单：每条都能跳到对应页面，也能交给单页重写去处理，但没有任何
+ * "自动修好"的按钮——重写结果仍然要人在对照后确认。
  * 事实真假和数字来源不在评审范围内，提示词里已经写明。
  */
-export function DeckReviewDialog({ status, issues, error, onJump, onRetry, onClose }: DeckReviewDialogProps) {
+export function DeckReviewDialog({
+  status,
+  issues,
+  error,
+  onJump,
+  onRewriteIssue,
+  onRetry,
+  onClose,
+}: DeckReviewDialogProps) {
   const running = status === "running";
 
   return (
@@ -81,9 +92,14 @@ export function DeckReviewDialog({ status, issues, error, onJump, onRetry, onClo
                   <span className="deck-review-kind">{ISSUE_KIND_LABELS[issue.kind]}</span>
                 </div>
                 <p>{issue.message}</p>
-                <button type="button" className="link-action" onClick={() => onJump(issue.slideIndex)}>
-                  定位到第 {issue.slideIndex + 1} 页
-                </button>
+                <div className="deck-review-actions">
+                  <button type="button" className="link-action" onClick={() => onJump(issue.slideIndex)}>
+                    定位到第 {issue.slideIndex + 1} 页
+                  </button>
+                  <button type="button" className="link-action" onClick={() => onRewriteIssue(issue)}>
+                    让 AI 按这条建议重写
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

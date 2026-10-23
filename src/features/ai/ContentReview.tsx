@@ -4,6 +4,7 @@ import {
   CheckCheck,
   CircleAlert,
   Copy,
+  Loader2,
   Mic,
   Plus,
   Redo2,
@@ -17,9 +18,11 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { AiDraft, AiVisualAssetIntent, ContentBlock } from "../../services/ai-service";
+import type { AiDraft, AiVisualAssetIntent, ContentBlock, ContentCheck, ContentCheckKind } from "../../services/ai-service";
 import {
   blockTypeLabels,
+  checkKindLabels,
+  checkStatusLabels,
   countCharacters,
   densityLabels,
   draftMetrics,
@@ -35,6 +38,7 @@ import {
   TABLE_REVIEW_MAX_ROWS,
   tableBlockOversized,
   tableCellKeyAction,
+  unverifiedCheckCount,
   visualIntentLabels,
   visualAssetRoleLabels,
   type AiDraftSaveState,
@@ -42,6 +46,19 @@ import {
 } from "./content-review";
 
 export type SlideField = "title" | "body" | "speakerNotes";
+
+/**
+ * 当前活动页的画面描述候选。
+ *
+ * 配图描述是"这一页要一张什么样的图"的意图，不是图片本身；候选只在活动页的
+ * 配图折叠区里出现，选中即写入配图意图（source: "user"）。
+ */
+export type ImagePromptAssist = {
+  index: number;
+  status: "running" | "ready" | "error";
+  candidates?: string[];
+  error?: string;
+};
 
 /**
  * What the reviewed copy does to the page it will be laid out on.
@@ -83,7 +100,14 @@ export type ContentReviewProps = {
   onSlideFieldChange: (index: number, field: SlideField, value: string) => void;
   /** 这一页的配图意图变了。审核阶段是唯一还没花钱生成图片的时机。 */
   onSlideVisualAssetChange: (index: number, intent: AiVisualAssetIntent) => void;
-  onSlideBlocksChange: (index: number, blocks: ContentBlock[], separateHistory?: boolean) => void;
+  onSlideBlocksChange: (
+    index: number,
+    blocks: ContentBlock[],
+    separateHistory?: boolean,
+    blockRemap?: (oldIndex: number) => number | undefined,
+  ) => void;
+  /** 这一页的核实标记。标记是人工动作，AI 不替人确认事实。 */
+  onSlideChecksChange: (index: number, checks: ContentCheck[]) => void;
   onSlideReviewedChange: (index: number, reviewed: boolean) => void;
   onReviewAllSlides: () => void;
   onAddSlide: (afterIndex: number) => void;
@@ -102,6 +126,11 @@ export type ContentReviewProps = {
   onSplitSlide: (index: number) => void;
   /** 通读全稿，只给内容层的问题清单。 */
   onReviewDeck: () => void;
+  /** 当前活动页的画面描述候选。 */
+  imagePromptAssist?: ImagePromptAssist;
+  /** 让 AI 按这一页的内容拟画面描述。 */
+  onSuggestImagePrompts: (index: number) => void;
+  onDismissImagePrompts: () => void;
   onUndo: () => void;
   onRedo: () => void;
 };
@@ -481,15 +510,20 @@ function TableEditor({
 function BlockEditor({
   slideIndex,
   blocks,
+  checks,
   notes,
   onChange,
+  onChecksChange,
 }: {
   slideIndex: number;
   blocks: ContentBlock[];
+  checks: ContentCheck[];
   notes: readonly SlideCapacityNote[];
-  onChange: (blocks: ContentBlock[], separateHistory?: boolean) => void;
+  onChange: (blocks: ContentBlock[], separateHistory?: boolean, blockRemap?: (oldIndex: number) => number | undefined) => void;
+  onChecksChange: (checks: ContentCheck[]) => void;
 }) {
   const [pendingDelete, setPendingDelete] = useState<number | undefined>(undefined);
+  const [markingBlock, setMarkingBlock] = useState<number | undefined>(undefined);
   const [addType, setAddType] = useState<ContentBlock["type"]>("paragraph");
   const replace = (index: number, block: ContentBlock) =>
     onChange(blocks.map((current, currentIndex) => (currentIndex === index ? block : current)));
@@ -497,6 +531,8 @@ function BlockEditor({
     onChange(
       blocks.filter((_, currentIndex) => currentIndex !== index),
       true,
+      // 被删掉的块，它的核实标记也一起消失；后面的块整体前移一位。
+      (oldIndex) => (oldIndex === index ? undefined : oldIndex > index ? oldIndex - 1 : oldIndex),
     );
     setPendingDelete(undefined);
   };
@@ -506,10 +542,29 @@ function BlockEditor({
     const next = [...blocks];
     const [moved] = next.splice(index, 1);
     next.splice(destination, 0, moved!);
-    onChange(next, true);
+    onChange(next, true, (oldIndex) =>
+      oldIndex === index ? destination : oldIndex === destination ? index : oldIndex,
+    );
     setPendingDelete(undefined);
   };
   const pageLabel = `第 ${slideIndex + 1} 页`;
+  const checkFor = (index: number) => checks.find((check) => check.blockIndex === index);
+  const setCheck = (index: number, kind: ContentCheckKind) => {
+    onChecksChange([
+      ...checks.filter((check) => check.blockIndex !== index),
+      { blockIndex: index, kind, status: "unverified" },
+    ]);
+    setMarkingBlock(undefined);
+  };
+  const toggleCheck = (check: ContentCheck) =>
+    onChecksChange(
+      checks.map((current) =>
+        current === check
+          ? { ...current, status: current.status === "verified" ? "unverified" : "verified" }
+          : current,
+      ),
+    );
+  const removeCheck = (check: ContentCheck) => onChecksChange(checks.filter((current) => current !== check));
   const addBlock = () => {
     const next: ContentBlock =
       addType === "paragraph"
@@ -531,6 +586,7 @@ function BlockEditor({
     <div className="block-editor">
       {blocks.map((block, index) => {
         const typeLabel = blockTypeLabels[block.type];
+        const check = checkFor(index);
         return (
           <section
             className={`block-row ${block.type}`}
@@ -558,6 +614,49 @@ function BlockEditor({
                 >
                   <ArrowDown />
                 </button>
+              </span>
+              <span className="block-check">
+                {check ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`check-chip ${check.status}`}
+                      title="点击切换核实状态"
+                      aria-pressed={check.status === "verified"}
+                      onClick={() => toggleCheck(check)}
+                    >
+                      {checkKindLabels[check.kind]} · {checkStatusLabels[check.status]}
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-action"
+                      aria-label={`删除${pageLabel}的${typeLabel}核实标记`}
+                      onClick={() => removeCheck(check)}
+                    >
+                      <X />
+                    </button>
+                  </>
+                ) : markingBlock === index ? (
+                  <span className="check-kind-menu" role="group" aria-label={`${pageLabel}的${typeLabel}核实类型`}>
+                    {(["fact", "number", "citation"] as const).map((kind) => (
+                      <button key={kind} type="button" className="link-action" onClick={() => setCheck(index, kind)}>
+                        {checkKindLabels[kind]}
+                      </button>
+                    ))}
+                    <button type="button" className="link-action" onClick={() => setMarkingBlock(undefined)}>
+                      取消
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="link-action check-add"
+                    aria-label={`标记${pageLabel}的${typeLabel}待核实`}
+                    onClick={() => setMarkingBlock(index)}
+                  >
+                    待核实
+                  </button>
+                )}
               </span>
               {pendingDelete === index ? (
                 <span className="block-delete-confirm" role="group" aria-label={`确认删除${pageLabel}的${typeLabel}`}>
@@ -721,6 +820,7 @@ export function ContentReview({
   onSlideFieldChange,
   onSlideVisualAssetChange,
   onSlideBlocksChange,
+  onSlideChecksChange,
   onSlideReviewedChange,
   onReviewAllSlides,
   onAddSlide,
@@ -734,6 +834,9 @@ export function ContentReview({
   onWriteNotes,
   onSplitSlide,
   onReviewDeck,
+  imagePromptAssist,
+  onSuggestImagePrompts,
+  onDismissImagePrompts,
   onUndo,
   onRedo,
 }: ContentReviewProps) {
@@ -1048,6 +1151,7 @@ export function ContentReview({
             const edited = Boolean(originalDraft && (!original || isSlideEdited(slide, original)));
             const canUndoRestore = Boolean(slide.id && restoreUndoSlideIds.includes(slide.id));
             const confirmingDelete = Boolean(slide.id && pendingPageDelete === slide.id);
+            const unverified = unverifiedCheckCount(slide);
             return (
               <article
                 id={`draft-slide-${index}`}
@@ -1089,6 +1193,7 @@ export function ContentReview({
                   <div className="draft-slide-tools">
                     <span className="draft-slide-status-line">
                       {slideStat.characters} 字 · {slideStat.points} 条要点
+                      {unverified > 0 && <b className="draft-unverified-badge">{unverified} 处待核实</b>}
                       {edited && <b className="draft-edited-badge">已修改</b>}
                     </span>
                     <div className="draft-page-actions" role="group" aria-label={`第 ${index + 1} 页页面操作`}>
@@ -1331,6 +1436,53 @@ export function ContentReview({
                       <p className="visual-asset-hint">
                         只描述画面本身，不要写标题或正文文字——生成的文字在演示里几乎总是错的。
                       </p>
+                      <div className="visual-asset-ai">
+                        <button
+                          type="button"
+                          className="link-action"
+                          disabled={!slide.plan.visualAsset.enabled || regenerating}
+                          title="按这一页的内容给两个画面描述候选；选中即写入，可撤销"
+                          onClick={() => onSuggestImagePrompts(index)}
+                        >
+                          <Wand2 />
+                          AI 写画面描述
+                        </button>
+                        {imagePromptAssist?.index === index && (
+                          <div className="visual-asset-suggestions" aria-live="polite">
+                            {imagePromptAssist.status === "running" && (
+                              <p>
+                                <Loader2 className="spin" />
+                                正在按这一页的内容想画面…
+                              </p>
+                            )}
+                            {imagePromptAssist.status === "error" && (
+                              <p className="visual-asset-error" role="alert">
+                                {imagePromptAssist.error}
+                              </p>
+                            )}
+                            {imagePromptAssist.candidates?.map((candidate, candidateIndex) => (
+                              <button
+                                key={candidateIndex}
+                                type="button"
+                                className="visual-asset-suggestion"
+                                onClick={() => {
+                                  onSlideVisualAssetChange(index, {
+                                    ...slide.plan.visualAsset!,
+                                    prompt: candidate,
+                                    source: "user",
+                                  });
+                                  onDismissImagePrompts();
+                                }}
+                              >
+                                {candidate}
+                              </button>
+                            ))}
+                            <button type="button" className="link-action" onClick={onDismissImagePrompts}>
+                              收起
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       {imageIssues.length > 0 && (
                         <ul className="visual-asset-issues" aria-label={`第 ${index + 1} 页的配图问题`}>
                           {imageIssues.map((issue, issueIndex) => (
@@ -1349,8 +1501,12 @@ export function ContentReview({
                   <BlockEditor
                     slideIndex={index}
                     blocks={slide.blocks}
+                    checks={slide.checks ?? []}
                     notes={notes}
-                    onChange={(blocks, separateHistory) => onSlideBlocksChange(index, blocks, separateHistory)}
+                    onChange={(blocks, separateHistory, blockRemap) =>
+                      onSlideBlocksChange(index, blocks, separateHistory, blockRemap)
+                    }
+                    onChecksChange={(checks) => onSlideChecksChange(index, checks)}
                   />
                 ) : (
                   <label className="draft-body-field">

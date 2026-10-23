@@ -1,17 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
-import { buildReplaceAllEdits, findTextMatches, replaceOccurrence, type TextMatch } from "../../core/commands";
+import {
+  buildReplaceAllEdits,
+  editKey,
+  findTextMatches,
+  matchIsLocked,
+  matchKey,
+  replaceOccurrence,
+  toReplaceEdit,
+  type TextMatch,
+} from "../../core/commands";
 import { useEditorStore } from "../../store/editor-store";
 
 /**
  * The find-and-replace bar.
  *
- * The search runs over the text elements of the whole deck. A result jumps to
- * its page and selects the element, so the canvas shows the match in context;
- * the result list carries the exact snippet because selecting an element alone
- * does not say which occurrence matched. Replacing one or all writes through
- * `replace-text-edits`, which keeps each replacement one undo step and routes
- * content-bound copy through the same rules as typing in the inspector.
+ * The search runs over every place the deck shows copy: text elements, table
+ * cells, chart labels and values, speaker notes and the document title. A
+ * result jumps to its page and selects the object, so the canvas shows the
+ * match in context; the result list carries the exact snippet because selecting
+ * an object alone does not say which occurrence matched. Replacing one or all
+ * writes through `replace-text-edits`, which keeps each replacement one undo
+ * step and routes every target through the same rules as its single-target
+ * command.
  */
 export function FindReplaceBar({ onClose }: { onClose: () => void }) {
   const document = useEditorStore((state) => state.document);
@@ -35,9 +46,17 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
   const jumpTo = (next: number) => {
     const match = matches[next];
     if (!match) return;
-    selectSlide(match.slideId);
-    selectElement(match.elementId);
     setIndex(next);
+    // 标题没有画布位置，跳到它只会弹出一个重命名框；结果行本身已经给出
+    // 完整标题，替换也直接生效，所以这里只更新状态，不打断输入。
+    if (match.kind === "document-title") {
+      setStatus("文档标题：替换会直接改写项目标题");
+      return;
+    }
+    // selectSlide 会清空选择；备注结果因此回到页面属性栏，那里才是备注的
+    // 编辑入口。文本、表格和图表再选回具体对象。
+    selectSlide(match.slideId);
+    if (match.kind !== "speaker-notes") selectElement(match.elementId);
   };
 
   const move = (direction: 1 | -1) => {
@@ -48,10 +67,7 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
   const replaceOne = () => {
     const match = matches[index];
     if (!match) return;
-    const target = document.slides
-      .find((slide) => slide.id === match.slideId)
-      ?.elements.find((element) => element.id === match.elementId);
-    if (target?.type === "text" && target.locked) {
+    if (matchIsLocked(document, match)) {
       setStatus("对象已锁定，先解锁再替换");
       return;
     }
@@ -60,11 +76,8 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
       setStatus("替换内容与原文相同");
       return;
     }
-    execute({
-      type: "replace-text-edits",
-      edits: [{ slideId: match.slideId, elementId: match.elementId, text: nextText }],
-    });
-    setStatus("已替换 1 处");
+    execute({ type: "replace-text-edits", edits: [toReplaceEdit(match, nextText)] });
+    setStatus(`已替换 1 处（${targetLabel(match)}）`);
   };
 
   const replaceAll = () => {
@@ -73,11 +86,13 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
       setStatus(matches.length > 0 ? "替换内容与原文相同" : "没有可替换的内容");
       return;
     }
-    const editedElements = new Set(edits.map((edit) => `${edit.slideId}:${edit.elementId}`));
-    const replaced = matches.filter((match) => editedElements.has(`${match.slideId}:${match.elementId}`)).length;
+    const edited = new Set(edits.map(editKey));
+    const replaced = matches.filter((match) => edited.has(matchKey(match))).length;
     const skipped = matches.length - replaced;
     execute({ type: "replace-text-edits", edits });
-    setStatus(`已替换 ${replaced} 处（${edits.length} 个文本框）${skipped > 0 ? `，跳过 ${skipped} 处锁定文本` : ""}`);
+    setStatus(
+      `已替换 ${replaced} 处（${edits.length} 个位置）${skipped > 0 ? `，跳过 ${skipped} 处锁定对象` : ""}`,
+    );
   };
 
   return (

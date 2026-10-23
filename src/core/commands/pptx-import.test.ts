@@ -30,6 +30,7 @@ function deck(overrides: Partial<ImportedDeck> = {}): ImportedDeck {
         title: "季度复盘",
         body: "收入增长 12%",
         speakerNotes: "先讲结论",
+        groups: [[0, 2]],
         elements: [
           {
             type: "text",
@@ -66,6 +67,17 @@ function deck(overrides: Partial<ImportedDeck> = {}): ImportedDeck {
             rotationMilliDegree: 0,
             header: ["项目", "数值"],
             rows: [["样本量", "38万"]],
+          },
+          {
+            type: "chart",
+            frame: { x: 4_572_000, y: 3_657_600, width: 4_572_000, height: 2_743_200 },
+            rotationMilliDegree: 0,
+            kind: "column",
+            categories: ["一月", "二月"],
+            values: [12, 18],
+            colors: ["#3366CC"],
+            showLegend: false,
+            showValues: true,
           },
         ],
       },
@@ -106,6 +118,20 @@ describe("importedDeckToDocument", () => {
       const block = slide.content.blocks?.find((candidate) => candidate.id === table.contentBlockId);
       expect(block).toMatchObject({ type: "table-data", header: ["项目", "数值"], rows: [["样本量", "38万"]] });
     }
+    const group = slide.groups?.[0];
+    expect(group?.elementIds).toEqual([title!.id, table!.id]);
+    const chart = slide.elements.find((element) => element.type === "chart");
+    expect(chart?.type).toBe("chart");
+    if (chart?.type === "chart") {
+      expect(chart.kind).toBe("column");
+      expect(chart.style.showValueLabels).toBe(true);
+      const metrics = slide.content.blocks?.filter((block) => block.type === "metric") ?? [];
+      expect(metrics.map((block) => (block.type === "metric" ? `${block.label}=${block.value}` : ""))).toEqual([
+        "一月=12",
+        "二月=18",
+      ]);
+    }
+    expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
   });
 
   it("falls back to a readable page title when the slide has none", () => {

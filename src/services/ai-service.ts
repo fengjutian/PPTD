@@ -128,6 +128,22 @@ const legacySlidePlan = {
   visualIntent: "structured-text" as const,
   density: "medium" as const,
 };
+
+/**
+ * 一处需要核实的说法。
+ *
+ * 核实是人的动作：AI 不能确认事实真假，所以这里只记录"谁标记了什么、核没核"，
+ * 不记录模型的判断。`blockIndex` 指内容块；缺省表示整页级（例如标题里的判断）。
+ */
+export const contentCheckKindSchema = z.enum(["fact", "number", "citation"]);
+export const contentCheckSchema = z.object({
+  blockIndex: z.number().int().min(0).optional(),
+  kind: contentCheckKindSchema,
+  status: z.enum(["unverified", "verified"]).default("unverified"),
+});
+export type ContentCheck = z.infer<typeof contentCheckSchema>;
+export type ContentCheckKind = z.infer<typeof contentCheckKindSchema>;
+
 export const aiDraftSchema = z.object({
   title: z.string().min(1).max(200),
   presentationBrief: presentationBriefSchema,
@@ -141,6 +157,8 @@ export const aiDraftSchema = z.object({
         reviewed: z.boolean().optional(),
         plan: slidePlanSchema.default(legacySlidePlan),
         blocks: z.array(contentBlockSchema).max(20).default([]),
+        // 旧草稿没有这个字段：缺省即"这一页没有核实标记"。
+        checks: z.array(contentCheckSchema).max(20).optional(),
       }),
     )
     .min(1),
@@ -627,6 +645,8 @@ export function describeAiError(error: unknown): string {
   if (detail.includes("AI_TITLES_EMPTY")) return "AI 没有给出可用的标题候选，请重试";
   if (detail.includes("AI_NOTES_JSON_INVALID")) return "AI 返回的演讲备注不是完整 JSON，请重试";
   if (detail.includes("AI_NOTES_EMPTY")) return "AI 没有写出可用的演讲备注，请重试";
+  if (detail.includes("AI_IMAGE_PROMPTS_JSON_INVALID")) return "AI 返回的画面描述不是完整 JSON，请重试";
+  if (detail.includes("AI_IMAGE_PROMPTS_EMPTY")) return "AI 没有给出可用的画面描述，请重试";
   if (detail.includes("AI_SPLIT_JSON_INVALID")) return "AI 返回的拆页结果不是完整 JSON，请重试";
   if (detail.includes("AI_SPLIT_EMPTY")) return "AI 拆出的页面没有内容，请重试";
   if (detail.includes("AI_SPLIT_TITLE_DUPLICATE")) return "AI 拆出的两页标题相同，请重试";
@@ -960,6 +980,26 @@ export async function writeSpeakerNotes(input: SlideAiContext): Promise<string> 
   const notes = parsed.speakerNotes.trim();
   if (!notes) throw new Error("AI_NOTES_EMPTY");
   return notes;
+}
+
+const imagePromptsResponseSchema = z.object({
+  // 空白候选在下面被剔掉；schema 只负责形状，空值走 AI_IMAGE_PROMPTS_EMPTY。
+  prompts: z.array(z.string().max(300)).min(1).max(6),
+});
+
+/**
+ * 给这一页拟几个画面描述。
+ *
+ * 只返回候选；写回时由界面把它设成 `source: "user"` 的配图意图，
+ * 这样它才压得住设计阶段自己的建议（ADR 0036）。
+ */
+export async function suggestImagePrompts(input: SlideAiContext): Promise<string[]> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("suggest_image_prompts", { request: { ...input, model, provider } });
+  const parsed = parseAiResponse(imagePromptsResponseSchema, raw, "配图描述候选");
+  const prompts = [...new Set(parsed.prompts.map((prompt) => prompt.trim()).filter(Boolean))];
+  if (prompts.length === 0) throw new Error("AI_IMAGE_PROMPTS_EMPTY");
+  return prompts.slice(0, 4);
 }
 
 const splitPageSchema = z.object({

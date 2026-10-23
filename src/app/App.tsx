@@ -105,7 +105,7 @@ import { useMarqueeSelection } from "../features/editor/use-marquee-selection";
 import { fitZoom } from "../core/rendering/viewport";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
-import { ContentReview } from "../features/ai/ContentReview";
+import { ContentReview, type ImagePromptAssist } from "../features/ai/ContentReview";
 import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
 import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
 import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
@@ -115,6 +115,7 @@ import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
 import {
   countSlidePoints,
   draftMetrics,
+  remapChecks,
   resolveActiveSlideIndex,
   reviewIssues,
   slideCapacityNotes,
@@ -145,11 +146,13 @@ import {
   reviewDeckContent,
   rewritePresentationSlide,
   splitSlideContent,
+  suggestImagePrompts,
   suggestSlideTitles,
   writeSpeakerNotes,
   type AiDraft,
   type AiGenerationProgress,
   type AiVisualAssetIntent,
+  type ContentCheck,
   type DeckReviewIssue,
   type SlideRewriteSuggestion,
   type SplitSlidePage,
@@ -824,6 +827,8 @@ export function App() {
     status: "editing" | "running" | "ready" | "error";
     proposal?: SlideRewriteSuggestion;
     error?: string;
+    /** 从审稿问题进来时预填的改写要求；对话框关闭即丢弃。 */
+    instruction?: string;
   };
   const [slideRewrite, setSlideRewrite] = useState<SlideRewriteState>();
   const slideRewriteRef = useRef<SlideRewriteState | undefined>(undefined);
@@ -850,6 +855,10 @@ export function App() {
   /** 单页 AI 操作的请求号与后端任务号；关掉对话框后在途响应作废。 */
   const assistRequestId = useRef(0);
   const assistTaskId = useRef(0);
+  /** 配图描述候选是行内的，只跟着活动页走，因此用自己的请求号。 */
+  const [imagePromptAssist, setImagePromptAssist] = useState<ImagePromptAssist>();
+  const imagePromptRequestId = useRef(0);
+  const imagePromptTaskId = useRef(0);
   const [aiPolishing, setAiPolishing] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
   const [agentWorkflow, setAgentWorkflow] = useState(initialAgentWorkflow);
@@ -1844,15 +1853,14 @@ export function App() {
     return slide ? slideCapacityNotes(slide, index).map((note) => note.message) : [];
   };
 
-  const runSlideRewrite = async (instruction: string) => {
-    const target = slideRewriteRef.current;
+  const runSlideRewriteFor = async (index: number, instruction: string) => {
     const draft = aiDraftRef.current;
-    const slide = target ? draft?.slides[target.index] : undefined;
-    if (!target || !draft || !slide) return;
+    const slide = draft?.slides[index];
+    if (!draft || !slide) return;
     const requestId = ++slideRewriteRequestId.current;
     const taskId = ++slideRewriteTaskId.current;
-    setSlideRewrite((current) => (current ? { ...current, status: "running", error: undefined } : current));
-    setTaskStatus(`AI 正在重写第 ${target.index + 1} 页…`);
+    setSlideRewrite((current) => ({ index, status: "running", error: undefined, instruction: current?.instruction }));
+    setTaskStatus(`AI 正在重写第 ${index + 1} 页…`);
     try {
       const suggestion = await rewritePresentationSlide({
         // 主题优先用生成时那句需求；老数据没有主题时退回整册标题。
@@ -1860,7 +1868,7 @@ export function App() {
         deckTitle: draft.title,
         // 标题是整册的事实来源：模型据此避免与相邻页重复，但不得改写标题。
         outline: draft.slides.map((item) => item.title),
-        slideIndex: target.index,
+        slideIndex: index,
         slide: {
           title: slide.title,
           body: slide.body,
@@ -1869,24 +1877,54 @@ export function App() {
           blocks: slide.blocks,
         },
         instruction: instruction.trim() || undefined,
-        capacityNotes: capacityNoteMessages(target.index),
+        capacityNotes: capacityNoteMessages(index),
         taskId,
       });
       if (requestId !== slideRewriteRequestId.current) return;
-      setSlideRewrite({ index: target.index, status: "ready", proposal: suggestion });
-      setTaskStatus(`AI 已给出第 ${target.index + 1} 页的新版本，对照后确认替换`);
+      setSlideRewrite((current) => ({
+        index,
+        status: "ready",
+        proposal: suggestion,
+        instruction: current?.instruction,
+      }));
+      setTaskStatus(`AI 已给出第 ${index + 1} 页的新版本，对照后确认替换`);
     } catch (error) {
       if (requestId !== slideRewriteRequestId.current) return;
       setSlideRewrite((current) => ({
-        index: target.index,
+        index,
         status: "error",
         error: describeAiError(error),
         // 失败不该抹掉上一版候选：用户可能就想用那一版。
         proposal: current?.proposal,
+        instruction: current?.instruction,
       }));
     } finally {
       void endAiGeneration(taskId).catch(() => undefined);
     }
+  };
+
+  const runSlideRewrite = async (instruction: string) => {
+    const target = slideRewriteRef.current;
+    if (!target) return;
+    await runSlideRewriteFor(target.index, instruction);
+  };
+
+  /**
+   * 审稿问题直接变成一次带要求的重写：打开重写对话框、预填要求并立即生成。
+   * 结果仍然要人对照后确认，审稿本身不改任何文字。
+   */
+  const rewriteFromDeckReviewIssue = (issue: DeckReviewIssue) => {
+    const slide = aiDraftRef.current?.slides[issue.slideIndex];
+    if (!slide) return;
+    if (!slide.title.trim()) {
+      setTaskStatus("这一页还没有标题，先补全标题再重写");
+      return;
+    }
+    const instruction = `按这条审稿意见重写本页，改的是内容而不只是措辞：${issue.message}`;
+    setDeckReview(undefined);
+    selectAiDraftSlide(issue.slideIndex);
+    setSlideRewrite({ index: issue.slideIndex, status: "editing", instruction });
+    void runSlideRewriteFor(issue.slideIndex, instruction);
   };
 
   /**
@@ -2006,6 +2044,38 @@ export function App() {
     }
   };
 
+  /**
+   * 配图描述候选走行内展示，不弹对话框：它就长在画面描述输入框下面。
+   * 写入时把 source 设为 user，这样它压得住设计阶段自己的建议。
+   */
+  const runImagePromptAssist = async (index: number) => {
+    const context = slideAiContext(index);
+    if (!context) return;
+    const requestId = ++imagePromptRequestId.current;
+    const taskId = ++imagePromptTaskId.current;
+    setImagePromptAssist({ index, status: "running" });
+    setTaskStatus(`AI 正在为第 ${index + 1} 页想画面…`);
+    try {
+      const candidates = await suggestImagePrompts({ ...context, taskId });
+      if (requestId !== imagePromptRequestId.current) return;
+      setImagePromptAssist({ index, status: "ready", candidates });
+      setTaskStatus(`AI 给了第 ${index + 1} 页 ${candidates.length} 个画面描述候选`);
+    } catch (error) {
+      if (requestId !== imagePromptRequestId.current) return;
+      setImagePromptAssist({ index, status: "error", error: describeAiError(error) });
+    } finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+    }
+  };
+
+  const dismissImagePrompts = () => {
+    if (imagePromptAssist?.status === "running") {
+      imagePromptRequestId.current += 1;
+      void cancelAiGeneration(imagePromptTaskId.current).catch(() => undefined);
+    }
+    setImagePromptAssist(undefined);
+  };
+
   const runDeckReview = async () => {
     const draft = aiDraftRef.current;
     if (!draft) return;
@@ -2120,6 +2190,12 @@ export function App() {
   useEffect(() => {
     slideAssistRef.current = slideAssist;
   }, [slideAssist]);
+  // 换页就收起配图候选：行内候选只属于当前这一页。
+  useEffect(() => {
+    imagePromptRequestId.current += 1;
+    void cancelAiGeneration(imagePromptTaskId.current).catch(() => undefined);
+    setImagePromptAssist(undefined);
+  }, [activeDraftSlideIndex]);
   useEffect(() => {
     aiTopicRef.current = aiTopic;
   }, [aiTopic]);
@@ -2394,17 +2470,57 @@ export function App() {
     }));
   };
 
-  const updateAiBlocks = (index: number, blocks: AiDraft["slides"][number]["blocks"], separateHistory = false) => {
+  const updateAiBlocks = (
+    index: number,
+    blocks: AiDraft["slides"][number]["blocks"],
+    separateHistory = false,
+    blockRemap?: (oldIndex: number) => number | undefined,
+  ) => {
     forgetRestoreBackup(index);
     updateAiDraftWithHistory(
       `slide:${index}:blocks`,
       (draft) => ({
         ...draft,
         slides: draft.slides.map((slide, slideIndex) =>
-          slideIndex === index ? { ...slide, blocks, body: bodyFromBlocks(blocks), reviewed: false } : slide,
+          slideIndex === index
+            ? {
+                ...slide,
+                blocks,
+                body: bodyFromBlocks(blocks),
+                // 块重排或删除时，挂在块上的核实标记跟着走；否则会指向别的内容。
+                checks: blockRemap && slide.checks ? remapChecks(slide.checks, blockRemap) : slide.checks,
+                reviewed: false,
+              }
+            : slide,
         ),
       }),
       !separateHistory,
+    );
+  };
+
+  /**
+   * 标记核实状态。
+   *
+   * 标记本身不改文字，但"新增一处待核实"意味着这一页还没核完，所以把它退回
+   * 待审核；全部核实完则不会自动重新审核，仍要人点一次"已审核"。
+   */
+  const updateAiChecks = (index: number, checks: ContentCheck[]) => {
+    forgetRestoreBackup(index);
+    updateAiDraftWithHistory(
+      `slide:${index}:checks`,
+      (draft) => ({
+        ...draft,
+        slides: draft.slides.map((slide, slideIndex) =>
+          slideIndex === index
+            ? {
+                ...slide,
+                checks,
+                reviewed: checks.some((check) => check.status === "unverified") ? false : slide.reviewed,
+              }
+            : slide,
+        ),
+      }),
+      false,
     );
   };
 
@@ -4723,6 +4839,7 @@ export function App() {
                 onSlideFieldChange={updateAiSlide}
                 onSlideVisualAssetChange={updateAiVisualAsset}
                 onSlideBlocksChange={updateAiBlocks}
+                onSlideChecksChange={updateAiChecks}
                 onSlideReviewedChange={updateAiSlideReviewed}
                 onReviewAllSlides={reviewAllAiSlides}
                 onAddSlide={addAiSlide}
@@ -4736,6 +4853,9 @@ export function App() {
                 onWriteNotes={(index) => void runNotesAssist(index)}
                 onSplitSlide={(index) => void runSplitAssist(index)}
                 onReviewDeck={() => void runDeckReview()}
+                imagePromptAssist={imagePromptAssist}
+                onSuggestImagePrompts={(index) => void runImagePromptAssist(index)}
+                onDismissImagePrompts={dismissImagePrompts}
                 onUndo={undoAiContent}
                 onRedo={redoAiContent}
               />
@@ -5998,6 +6118,7 @@ export function App() {
           status={slideRewrite.status}
           proposal={slideRewrite.proposal}
           error={slideRewrite.error}
+          defaultInstruction={slideRewrite.instruction}
           onGenerate={(instruction) => void runSlideRewrite(instruction)}
           onApply={applySlideRewrite}
           onClose={closeSlideRewrite}
@@ -6050,6 +6171,7 @@ export function App() {
           issues={deckReview.issues}
           error={deckReview.error}
           onJump={jumpToDeckReviewIssue}
+          onRewriteIssue={rewriteFromDeckReviewIssue}
           onRetry={() => void runDeckReview()}
           onClose={closeDeckReview}
         />

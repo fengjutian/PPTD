@@ -3,11 +3,13 @@ import {
   createSlide,
   emu,
   refreshContentHashes,
+  type ChartKind,
   type ImageCrop,
   type PresentationDocument,
   type ShapeElement,
   type Slide,
   type SlideElement,
+  type SlideGroup,
   type SupportedImageMimeType,
   type TextElementStyle,
   type TextRun,
@@ -19,7 +21,7 @@ export interface ImportReport {
   format: "pptx" | "ppt";
   compatibility: "A" | "B" | "C";
   slideCount: number;
-  counts: { text: number; image: number; shape: number; table: number };
+  counts: { text: number; image: number; shape: number; table: number; chart?: number };
   unsupported: Array<{ slideIndex: number; kind: string; detail: string }>;
   warnings: string[];
   assets: { extracted: number; skipped: number; bytes: number };
@@ -40,6 +42,8 @@ export interface ImportedSlide {
   body?: string;
   speakerNotes: string;
   elements: ImportedElement[];
+  /** Indexes into `elements` for each imported selection group. */
+  groups?: number[][];
 }
 
 export type ImportedElement =
@@ -88,6 +92,17 @@ export type ImportedElement =
       rotationMilliDegree: number;
       header: string[];
       rows: string[][];
+    }
+  | {
+      type: "chart";
+      frame: ImportedFrame;
+      rotationMilliDegree: number;
+      kind: ChartKind;
+      categories: string[];
+      values: number[];
+      colors: string[];
+      showLegend: boolean;
+      showValues: boolean;
     };
 
 export interface ImportedFrame {
@@ -200,6 +215,36 @@ function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): 
         },
       };
     }
+    if (element.type === "chart") {
+      const contentBlockIds = element.categories.map((category, categoryIndex) => {
+        const block = {
+          id: crypto.randomUUID(),
+          type: "metric" as const,
+          label: category || `分类 ${categoryIndex + 1}`,
+          value: chartValue(element.values[categoryIndex] ?? 0),
+        };
+        blocks.push(block);
+        return block.id;
+      });
+      return {
+        id: crypto.randomUUID() as never,
+        type: "chart" as const,
+        contentBlockIds,
+        kind: element.kind,
+        frame: frameOf(element.frame),
+        rotationMilliDegree: element.rotationMilliDegree,
+        locked: false,
+        origin: "user" as const,
+        style: {
+          fontFamily: imported.theme?.minorFont ?? "Microsoft YaHei",
+          fontSizePt: 12,
+          textColor: themeColor(imported, "tx1", "#17181c"),
+          seriesColors: element.colors.length > 0 ? element.colors : [themeColor(imported, "accent1", "#3366CC")],
+          showLegend: element.showLegend,
+          showValueLabels: element.showValues,
+        },
+      };
+    }
     if (element.type === "text") {
       const style: TextElementStyle = {
         fontFamily: element.style.fontFamily,
@@ -298,13 +343,23 @@ function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): 
     speakerNotes: slide.speakerNotes,
     status: "review" as const,
   };
+  const groups: SlideGroup[] = (slide.groups ?? [])
+    .map((indexes) => [...new Set(indexes)].map((elementIndex) => elements[elementIndex]?.id))
+    .filter((ids): ids is NonNullable<(typeof ids)[number]>[] => ids.length >= 2 && ids.every(Boolean))
+    .map((elementIds) => ({ id: crypto.randomUUID(), elementIds }));
   return {
     ...base,
     background,
     content,
     elements,
+    ...(groups.length > 0 ? { groups } : {}),
     layoutId: undefined,
   };
+}
+
+function chartValue(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
 }
 
 function frameOf(frame: ImportedFrame) {

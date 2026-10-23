@@ -150,6 +150,10 @@ export function ImportReportDialog({
               {report.counts.shape} / {report.counts.table}
             </dd>
           </div>
+          <div>
+            <dt>图表</dt>
+            <dd>{report.counts.chart ?? 0}</dd>
+          </div>
         </dl>
         {issues.length > 0 && (
           <div className="import-report-issues">

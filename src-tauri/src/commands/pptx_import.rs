@@ -137,6 +137,8 @@ pub struct ImportedSlide {
     pub body: Option<String>,
     pub speaker_notes: String,
     pub elements: Vec<ImportedElement>,
+    /// Indexes into `elements` for each imported selection group.
+    pub groups: Vec<Vec<usize>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -222,6 +224,16 @@ pub enum ImportedElement {
         header: Vec<String>,
         rows: Vec<Vec<String>>,
     },
+    Chart {
+        frame: ImportedFrame,
+        rotation_milli_degree: i64,
+        kind: String,
+        categories: Vec<String>,
+        values: Vec<f64>,
+        colors: Vec<String>,
+        show_legend: bool,
+        show_values: bool,
+    },
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -231,6 +243,7 @@ pub struct ImportCounts {
     pub image: usize,
     pub shape: usize,
     pub table: usize,
+    pub chart: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -735,6 +748,68 @@ fn parse_color(node: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option<Stri
     None
 }
 
+#[derive(Clone, Copy)]
+struct GroupTransform {
+    scale_x: f64,
+    scale_y: f64,
+    translate_x: f64,
+    translate_y: f64,
+    rotated: bool,
+}
+
+fn group_transform(group: Node<'_, '_>) -> Option<GroupTransform> {
+    let group_shape = child(group, "grpSpPr")?;
+    let transform = child(group_shape, "xfrm")?;
+    let offset = child(transform, "off")?;
+    let extent = child(transform, "ext")?;
+    let child_offset = child(transform, "chOff")?;
+    let child_extent = child(transform, "chExt")?;
+    let x = parse_i64(offset, "x")? as f64;
+    let y = parse_i64(offset, "y")? as f64;
+    let width = parse_i64(extent, "cx")? as f64;
+    let height = parse_i64(extent, "cy")? as f64;
+    let child_x = parse_i64(child_offset, "x")? as f64;
+    let child_y = parse_i64(child_offset, "y")? as f64;
+    let child_width = parse_i64(child_extent, "cx")? as f64;
+    let child_height = parse_i64(child_extent, "cy")? as f64;
+    if child_width.abs() < 1.0 || child_height.abs() < 1.0 {
+        return None;
+    }
+    let scale_x = width / child_width;
+    let scale_y = height / child_height;
+    Some(GroupTransform {
+        scale_x,
+        scale_y,
+        translate_x: x - child_x * scale_x,
+        translate_y: y - child_y * scale_y,
+        rotated: parse_i64(transform, "rot").unwrap_or(0) != 0
+            || transform.attribute("flipH") == Some("1")
+            || transform.attribute("flipV") == Some("1"),
+    })
+}
+
+fn apply_group_transform(element: &mut ImportedElement, transform: GroupTransform) {
+    let scale_x = transform.scale_x.abs().max(0.01);
+    let scale_y = transform.scale_y.abs().max(0.01);
+    let frame = match element {
+        ImportedElement::Text { frame, style, .. } => {
+            // Group scaling also scales the type; keeping the original point size
+            // would make text spill out of a shrunk group.
+            style.font_size_pt = (style.font_size_pt * scale_x.min(scale_y)).clamp(1.0, 400.0);
+            frame
+        }
+        ImportedElement::Image { frame, .. }
+        | ImportedElement::Shape { frame, .. }
+        | ImportedElement::Line { frame, .. }
+        | ImportedElement::Table { frame, .. }
+        | ImportedElement::Chart { frame, .. } => frame,
+    };
+    frame.x = (frame.x as f64 * transform.scale_x + transform.translate_x).round() as i64;
+    frame.y = (frame.y as f64 * transform.scale_y + transform.translate_y).round() as i64;
+    frame.width = ((frame.width as f64 * scale_x).round() as i64).max(1);
+    frame.height = ((frame.height as f64 * scale_y).round() as i64).max(1);
+}
+
 fn parse_frame(shape: Node<'_, '_>) -> Option<ImportedFrame> {
     let transform = descendant(shape, "xfrm")?;
     let offset = child(transform, "off")?;
@@ -866,45 +941,75 @@ fn parse_slide(
         match node.tag_name().name() {
             "sp" => {
                 if let Some(element) = parse_shape(index, node, &layout_frames, theme, report) {
-                    report.counts.text +=
-                        usize::from(matches!(element, ImportedElement::Text { .. }));
-                    report.counts.shape +=
-                        usize::from(matches!(element, ImportedElement::Shape { .. }));
-                    if let Some(value) = text_content(&element) {
-                        if slide.title.is_none()
-                            && content_ref(&element).as_deref() == Some("title")
-                        {
-                            slide.title = Some(value.clone());
-                        }
-                        if slide.body.is_none() && content_ref(&element).as_deref() == Some("body")
-                        {
-                            slide.body = Some(value);
-                        }
-                    }
-                    slide.elements.push(element);
+                    push_element(&mut slide, element, report);
                 }
             }
             "pic" => {
                 if let Some(element) =
                     parse_picture(index, node, part, &rels, archive, media_cache, report)?
                 {
-                    report.counts.image += 1;
-                    slide.elements.push(element);
+                    push_element(&mut slide, element, report);
                 }
             }
             "graphicFrame" => {
-                if let Some(element) = parse_graphic_frame(index, node, report) {
-                    report.counts.table += 1;
-                    slide.elements.push(element);
+                if let Some(element) =
+                    parse_graphic_frame(index, node, part, &rels, archive, report)
+                {
+                    push_element(&mut slide, element, report);
                 }
             }
             "cxnSp" => {
                 if let Some(element) = parse_connector(node, &layout_frames, theme) {
-                    report.counts.shape += 1;
-                    slide.elements.push(element);
+                    push_element(&mut slide, element, report);
                 }
             }
-            "grpSp" => report.unsupported(index, "group", "组合形状未导入"),
+            "grpSp" => {
+                let transform = group_transform(node);
+                if transform.map(|value| value.rotated).unwrap_or(false) {
+                    report.unsupported(index, "group-rotation", "组合旋转/翻转未保留");
+                }
+                let start = slide.elements.len();
+                for child_node in node.children().filter(Node::is_element) {
+                    if slide.elements.len() >= MAX_ELEMENTS_PER_SLIDE {
+                        report.unsupported(index, "slide", "单页对象超过上限");
+                        break;
+                    }
+                    let element = match child_node.tag_name().name() {
+                        "sp" => parse_shape(index, child_node, &layout_frames, theme, report),
+                        "pic" => parse_picture(
+                            index,
+                            child_node,
+                            part,
+                            &rels,
+                            archive,
+                            media_cache,
+                            report,
+                        )?,
+                        "graphicFrame" => {
+                            parse_graphic_frame(index, child_node, part, &rels, archive, report)
+                        }
+                        "cxnSp" => parse_connector(child_node, &layout_frames, theme),
+                        "grpSp" => {
+                            report.unsupported(index, "group-nested", "嵌套组合未导入");
+                            None
+                        }
+                        "nvGrpSpPr" | "grpSpPr" | "extLst" => None,
+                        other => {
+                            report.unsupported(index, other, "组合内未支持的对象类型");
+                            None
+                        }
+                    };
+                    if let Some(mut element) = element {
+                        if let Some(transform) = transform {
+                            apply_group_transform(&mut element, transform);
+                        }
+                        push_element(&mut slide, element, report);
+                    }
+                }
+                if slide.elements.len().saturating_sub(start) >= 2 {
+                    slide.groups.push((start..slide.elements.len()).collect());
+                }
+            }
             "nvGrpSpPr" | "grpSpPr" | "extLst" => {}
             other => report.unsupported(index, other, "未支持的对象类型"),
         }
@@ -914,6 +1019,23 @@ fn parse_slide(
         slide.speaker_notes = notes;
     }
     Ok(slide)
+}
+
+fn push_element(slide: &mut ImportedSlide, element: ImportedElement, report: &mut DeckReport) {
+    report.counts.text += usize::from(matches!(element, ImportedElement::Text { .. }));
+    report.counts.image += usize::from(matches!(element, ImportedElement::Image { .. }));
+    report.counts.shape += usize::from(matches!(element, ImportedElement::Shape { .. }));
+    report.counts.table += usize::from(matches!(element, ImportedElement::Table { .. }));
+    report.counts.chart += usize::from(matches!(element, ImportedElement::Chart { .. }));
+    if let Some(value) = text_content(&element) {
+        if slide.title.is_none() && content_ref(&element).as_deref() == Some("title") {
+            slide.title = Some(value.clone());
+        }
+        if slide.body.is_none() && content_ref(&element).as_deref() == Some("body") {
+            slide.body = Some(value);
+        }
+    }
+    slide.elements.push(element);
 }
 
 fn text_content(element: &ImportedElement) -> Option<String> {
@@ -1386,15 +1508,16 @@ fn parse_picture(
 fn parse_graphic_frame(
     index: usize,
     frame_node: Node<'_, '_>,
+    part: &str,
+    rels: &HashMap<String, Rel>,
+    archive: &mut ZipArchive<File>,
     report: &mut DeckReport,
 ) -> Option<ImportedElement> {
+    if let Some(chart_node) = descendant(frame_node, "chart") {
+        return parse_chart_frame(index, frame_node, chart_node, part, rels, archive, report);
+    }
     let Some(table) = descendant(frame_node, "tbl") else {
-        let kind = if descendant(frame_node, "chart").is_some() {
-            "chart"
-        } else {
-            "graphicFrame"
-        };
-        report.unsupported(index, kind, "图表或嵌入图形未导入");
+        report.unsupported(index, "graphicFrame", "嵌入图形未导入");
         return None;
     };
     report.warning(format!("第 {} 页表格按默认表格样式导入", index + 1));
@@ -1476,6 +1599,184 @@ fn truncate_chars(value: String, max: usize) -> String {
     } else {
         value.chars().take(max).collect()
     }
+}
+
+struct ParsedChart {
+    kind: String,
+    categories: Vec<String>,
+    values: Vec<f64>,
+    colors: Vec<String>,
+    show_legend: bool,
+    show_values: bool,
+    series_count: usize,
+}
+
+fn parse_chart_frame(
+    index: usize,
+    frame_node: Node<'_, '_>,
+    chart_node: Node<'_, '_>,
+    part: &str,
+    rels: &HashMap<String, Rel>,
+    archive: &mut ZipArchive<File>,
+    report: &mut DeckReport,
+) -> Option<ImportedElement> {
+    let Some(relation_id) = relationship_attr(chart_node, "id") else {
+        report.unsupported(index, "chart", "图表关系缺失");
+        return None;
+    };
+    let Some(rel) = rels.get(relation_id) else {
+        report.unsupported(index, "chart", "图表关系未找到");
+        return None;
+    };
+    if rel.external {
+        report.unsupported(index, "chart", "外部图表关系已跳过");
+        return None;
+    }
+    let target = resolve_target(part, &rel.target);
+    let Some(xml) = read_xml(archive, &target).ok().flatten() else {
+        report.unsupported(index, "chart", "图表 XML 缺失");
+        return None;
+    };
+    let mut parsed = match parse_chart_xml(&xml) {
+        Ok(parsed) => parsed,
+        Err(message) => {
+            report.unsupported(index, "chart", &message);
+            return None;
+        }
+    };
+    if parsed.series_count > 1 {
+        report.unsupported(index, "chart-multi-series", "多序列图表只导入第一个序列");
+    }
+    if parsed.values.len() > 32 {
+        parsed.values.truncate(32);
+        parsed.categories.truncate(32);
+        report.unsupported(index, "chart-size", "图表超过 32 个数据点，超出部分未导入");
+    }
+    let frame = parse_frame(frame_node).unwrap_or(ImportedFrame {
+        x: 914_400,
+        y: 2_286_000,
+        width: 5_486_400,
+        height: 3_200_400,
+    });
+    Some(ImportedElement::Chart {
+        frame,
+        rotation_milli_degree: rotation_milli_degree(frame_node),
+        kind: parsed.kind,
+        categories: parsed.categories,
+        values: parsed.values,
+        colors: parsed.colors,
+        show_legend: parsed.show_legend,
+        show_values: parsed.show_values,
+    })
+}
+
+fn parse_chart_xml(xml: &str) -> Result<ParsedChart, String> {
+    let document = Document::parse(xml).map_err(|_| "图表 XML 无效".to_string())?;
+    let root = document.root_element();
+    let chart = descendant(root, "chart").ok_or("图表缺少 chart 节点")?;
+    let plot = descendant(chart, "plotArea").ok_or("图表缺少绘图区")?;
+    let (kind, chart_type) = if let Some(bar) = descendant(plot, "barChart") {
+        let direction = child(bar, "barDir")
+            .and_then(|node| node.attribute("val"))
+            .unwrap_or("col");
+        (if direction == "bar" { "bar" } else { "column" }, bar)
+    } else if let Some(line) = descendant(plot, "lineChart") {
+        ("line", line)
+    } else if let Some(pie) = descendant(plot, "pieChart") {
+        ("pie", pie)
+    } else {
+        return Err("图表类型未支持".into());
+    };
+    let series: Vec<Node<'_, '_>> = chart_type
+        .children()
+        .filter(|node| node.has_tag_name("ser"))
+        .collect();
+    if series.is_empty() {
+        return Err("图表没有数据序列".into());
+    }
+    let first = series[0];
+    let categories = chart_categories(first);
+    let mut values = chart_values(first);
+    if values.is_empty() {
+        return Err("图表没有缓存数值".into());
+    }
+    let mut categories = if categories.len() >= values.len() {
+        categories
+    } else {
+        let mut padded = categories;
+        while padded.len() < values.len() {
+            padded.push(format!("分类 {}", padded.len() + 1));
+        }
+        padded
+    };
+    values.truncate(categories.len());
+    categories.truncate(values.len());
+    let colors = child(first, "spPr")
+        .and_then(|shape| parse_color(shape, &None))
+        .into_iter()
+        .collect();
+    let show_legend = descendant(chart, "legend").is_some();
+    let show_values = descendant(first, "showVal")
+        .and_then(|node| node.attribute("val"))
+        .map(|value| value == "1")
+        .unwrap_or(false);
+    Ok(ParsedChart {
+        kind: kind.into(),
+        categories,
+        values,
+        colors,
+        show_legend,
+        show_values,
+        series_count: series.len(),
+    })
+}
+
+fn chart_categories(series: Node<'_, '_>) -> Vec<String> {
+    let Some(categories) = child(series, "cat") else {
+        return Vec::new();
+    };
+    let container = descendant(categories, "multiLvlStrCache")
+        .and_then(|cache| child(cache, "lvl"))
+        .unwrap_or(categories);
+    let mut points: Vec<(i64, String)> = container
+        .descendants()
+        .filter(|node| node.has_tag_name("pt"))
+        .map(|point| {
+            let index = point
+                .attribute("idx")
+                .and_then(|value| value.parse::<i64>().ok())
+                .unwrap_or(0);
+            let text = descendant(point, "v")
+                .and_then(|value| value.text())
+                .unwrap_or_default()
+                .to_string();
+            (index, truncate_chars(text, 200))
+        })
+        .collect();
+    points.sort_by_key(|(index, _)| *index);
+    points.into_iter().map(|(_, text)| text).collect()
+}
+
+fn chart_values(series: Node<'_, '_>) -> Vec<f64> {
+    let Some(values) = child(series, "val") else {
+        return Vec::new();
+    };
+    let mut points: Vec<(i64, f64)> = values
+        .descendants()
+        .filter(|node| node.has_tag_name("pt"))
+        .filter_map(|point| {
+            let index = point
+                .attribute("idx")
+                .and_then(|value| value.parse::<i64>().ok())
+                .unwrap_or(0);
+            let value = descendant(point, "v")
+                .and_then(|value| value.text())
+                .and_then(|value| value.parse::<f64>().ok())?;
+            Some((index, value))
+        })
+        .collect();
+    points.sort_by_key(|(index, _)| *index);
+    points.into_iter().map(|(_, value)| value).collect()
 }
 
 fn cell_text(cell: Node<'_, '_>) -> String {
@@ -1593,12 +1894,59 @@ mod tests {
                         </a:tbl>
                     </a:graphicData></a:graphic>
                 </p:graphicFrame>
+                <p:grpSp>
+                    <p:grpSpPr>
+                        <a:xfrm>
+                            <a:off x="0" y="0"/><a:ext cx="200" cy="200"/>
+                            <a:chOff x="0" y="0"/><a:chExt cx="100" cy="100"/>
+                        </a:xfrm>
+                    </p:grpSpPr>
+                    <p:sp>
+                        <p:spPr><a:xfrm><a:off x="10" y="10"/><a:ext cx="20" cy="20"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr>
+                    </p:sp>
+                    <p:sp>
+                        <p:spPr><a:xfrm><a:off x="30" y="30"/><a:ext cx="20" cy="20"/></a:xfrm><a:prstGeom prst="ellipse"/></p:spPr>
+                    </p:sp>
+                </p:grpSp>
+                <p:graphicFrame>
+                    <p:nvGraphicFramePr><p:cNvPr id="5" name="Chart"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+                    <p:xfrm><a:off x="914400" y="5029200"/><a:ext cx="4572000" cy="1828800"/></p:xfrm>
+                    <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+                        <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId3"/>
+                    </a:graphicData></a:graphic>
+                </p:graphicFrame>
             </p:spTree></p:cSld>
         </p:sld>"#;
         let slide_rels = r#"<?xml version="1.0" encoding="UTF-8"?>
         <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
             <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+            <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/>
         </Relationships>"#;
+        let chart = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <c:chart>
+                <c:plotArea>
+                    <c:barChart>
+                        <c:barDir val="col"/>
+                        <c:ser>
+                            <c:idx val="0"/>
+                            <c:spPr><a:solidFill><a:srgbClr val="3366CC"/></a:solidFill></c:spPr>
+                            <c:dLbls><c:showVal val="1"/></c:dLbls>
+                            <c:cat><c:strRef><c:strCache>
+                                <c:pt idx="0"><c:v>一月</c:v></c:pt>
+                                <c:pt idx="1"><c:v>二月</c:v></c:pt>
+                            </c:strCache></c:strRef></c:cat>
+                            <c:val><c:numRef><c:numCache>
+                                <c:pt idx="0"><c:v>12</c:v></c:pt>
+                                <c:pt idx="1"><c:v>18</c:v></c:pt>
+                            </c:numCache></c:numRef></c:val>
+                        </c:ser>
+                    </c:barChart>
+                    <c:legend/>
+                </c:plotArea>
+            </c:chart>
+        </c:chartSpace>"#;
         let theme = r#"<?xml version="1.0" encoding="UTF-8"?>
         <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Theme">
             <a:themeElements>
@@ -1629,6 +1977,7 @@ mod tests {
             ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
             ("ppt/theme/theme1.xml", theme.as_bytes()),
             ("ppt/media/image1.png", png.as_slice()),
+            ("ppt/charts/chart1.xml", chart.as_bytes()),
         ] {
             zip.start_file(name, options).expect("start file");
             zip.write_all(contents).expect("write file");
@@ -1647,6 +1996,41 @@ mod tests {
         assert_eq!(slide.speaker_notes, "");
         assert_eq!(imported.report.counts.image, 1);
         assert_eq!(imported.report.counts.table, 1);
+        assert_eq!(imported.report.counts.chart, 1);
+        match slide
+            .elements
+            .iter()
+            .find(|element| matches!(element, ImportedElement::Chart { .. }))
+        {
+            Some(ImportedElement::Chart {
+                categories,
+                values,
+                kind,
+                colors,
+                show_values,
+                ..
+            }) => {
+                assert_eq!(categories, &["一月", "二月"]);
+                assert_eq!(values, &[12.0, 18.0]);
+                assert_eq!(kind, "column");
+                assert_eq!(colors.first().map(String::as_str), Some("#3366CC"));
+                assert!(*show_values);
+            }
+            _ => panic!("chart expected"),
+        }
+        assert_eq!(slide.groups.len(), 1);
+        let group = &slide.groups[0];
+        assert_eq!(group.len(), 2);
+        match &slide.elements[group[0]] {
+            ImportedElement::Shape { frame, shape, .. } => {
+                assert_eq!(frame.x, 20);
+                assert_eq!(frame.y, 20);
+                assert_eq!(frame.width, 40);
+                assert_eq!(frame.height, 40);
+                assert_eq!(shape, "rectangle");
+            }
+            _ => panic!("grouped shape expected"),
+        }
         assert!(slide.elements.iter().any(|element| matches!(element, ImportedElement::Image { data_url, .. } if data_url.starts_with("data:image/png;base64,"))));
         assert!(slide.elements.iter().any(|element| matches!(element, ImportedElement::Table { header, rows, .. } if header == &["项目", "数值"] && rows[0][1] == "38万")));
         assert_eq!(
@@ -1716,6 +2100,14 @@ mod tests {
         let value = serde_json::to_value(table).expect("json");
         assert_eq!(value["type"], "table");
         assert_eq!(value["header"][0], "a");
+
+        let slide = ImportedSlide {
+            index: 0,
+            groups: vec![vec![0, 1]],
+            ..Default::default()
+        };
+        let value = serde_json::to_value(slide).expect("json");
+        assert_eq!(value["groups"][0][1], 1);
     }
 
     #[test]
@@ -1727,6 +2119,50 @@ mod tests {
         assert!(!registry.is_cancelled("b"));
         registry.release("a");
         assert!(!registry.is_cancelled("a"));
+    }
+
+    #[test]
+    fn composes_group_child_coordinates_into_slide_space() {
+        let xml = r#"
+            <p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <p:grpSpPr>
+                    <a:xfrm>
+                        <a:off x="1000" y="2000"/><a:ext cx="2000" cy="4000"/>
+                        <a:chOff x="0" y="0"/><a:chExt cx="1000" cy="2000"/>
+                    </a:xfrm>
+                </p:grpSpPr>
+                <p:sp>
+                    <p:spPr><a:xfrm><a:off x="10" y="20"/><a:ext cx="100" cy="200"/></a:xfrm></p:spPr>
+                </p:sp>
+            </p:grpSp>
+        "#;
+        let document = Document::parse(xml).expect("xml");
+        let transform = group_transform(document.root_element()).expect("transform");
+        let mut element = ImportedElement::Shape {
+            frame: ImportedFrame {
+                x: 10,
+                y: 20,
+                width: 100,
+                height: 200,
+            },
+            rotation_milli_degree: 0,
+            shape: "rectangle".into(),
+            fill: "#FFFFFF".into(),
+            stroke: "#000000".into(),
+            stroke_width_pt: 1.0,
+            radius_pt: 0.0,
+        };
+        apply_group_transform(&mut element, transform);
+        match element {
+            ImportedElement::Shape { frame, .. } => {
+                assert_eq!(frame.x, 1020);
+                assert_eq!(frame.y, 2040);
+                assert_eq!(frame.width, 200);
+                assert_eq!(frame.height, 400);
+            }
+            _ => panic!("shape expected"),
+        }
     }
 
     #[test]
