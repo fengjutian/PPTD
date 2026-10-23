@@ -4,12 +4,16 @@ import type { ImportReport } from "../../core/commands/pptx-import";
 export function ImportModeDialog({
   fileName,
   busy,
+  progress,
+  onCancelImport,
   onClose,
   onImportContent,
   onExtractTemplate,
 }: {
   fileName: string;
   busy: boolean;
+  progress?: { current: number; total: number };
+  onCancelImport?: () => void;
   onClose: () => void;
   onImportContent: () => void;
   onExtractTemplate: () => void;
@@ -58,9 +62,29 @@ export function ImportModeDialog({
           </button>
         </div>
         {busy && (
-          <p className="import-mode-progress" role="status">
-            正在解析文件并生成可编辑页面，请稍候…
-          </p>
+          <div className="import-mode-progress" role="status">
+            <span>
+              {progress && progress.total > 0
+                ? `正在解析第 ${progress.current} / ${progress.total} 页…`
+                : "正在解析文件并生成可编辑页面，请稍候…"}
+            </span>
+            {progress && (
+              <div
+                className="import-progress-track"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={progress.total || 1}
+                aria-valuenow={progress.current}
+              >
+                <i style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }} />
+              </div>
+            )}
+            {onCancelImport && (
+              <button type="button" className="secondary-action" onClick={onCancelImport}>
+                取消导入
+              </button>
+            )}
+          </div>
         )}
       </section>
     </div>

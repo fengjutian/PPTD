@@ -993,6 +993,8 @@ export async function splitSlideContent(
       title: page.title.trim(),
       body: bodyFromBlocks(blocks),
       speakerNotes: page.speakerNotes.trim(),
+      // 拆页不带配图意图：图要不要配由设计阶段判断，第一页沿用原页的意图。
+      plan: { ...page.plan, visualAsset: undefined },
       blocks,
     };
   });

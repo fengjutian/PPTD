@@ -15,6 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .manage(ai::CancelRegistry::default())
+        .manage(commands::pptx_import::ImportCancellation::default())
         .setup(|app| {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
@@ -67,6 +68,7 @@ pub fn run() {
             commands::project_file::convert_legacy_ppt,
             commands::project_file::import_pptx_template,
             commands::pptx_import::import_pptx_content,
+            commands::pptx_import::cancel_pptx_import,
             commands::project_file::list_pptx_templates,
             commands::project_file::get_pptx_template_preview,
             commands::project_file::render_pptx_template_layouts,

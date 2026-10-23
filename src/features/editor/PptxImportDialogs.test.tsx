@@ -33,6 +33,23 @@ describe("PPTX import dialogs", () => {
     expect(markup).not.toContain("Level B");
   });
 
+  it("shows page progress and offers cancellation while parsing", () => {
+    const markup = renderToStaticMarkup(
+      <ImportModeDialog
+        fileName="deck.pptx"
+        busy
+        progress={{ current: 1, total: 4 }}
+        onCancelImport={() => undefined}
+        onClose={() => undefined}
+        onImportContent={() => undefined}
+        onExtractTemplate={() => undefined}
+      />,
+    );
+    expect(markup).toContain("第 1 / 4 页");
+    expect(markup).toContain("取消导入");
+    expect(markup).toContain('role="progressbar"');
+  });
+
   it("shows counts, skipped objects and the review/save warning", () => {
     const markup = renderToStaticMarkup(
       <ImportReportDialog

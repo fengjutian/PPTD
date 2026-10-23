@@ -13,11 +13,13 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use roxmltree::{Document, Node};
 use serde::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
+use tauri::{AppHandle, Emitter, State};
 use zip::ZipArchive;
 
 const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
@@ -32,6 +34,80 @@ const DEFAULT_PAGE_WIDTH: i64 = 12_192_000;
 const DEFAULT_PAGE_HEIGHT: i64 = 6_858_000;
 
 const REL_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+/// Tracks which import requests the user has cancelled.
+///
+/// The reader checks between pages, which is enough to stop a large deck before
+/// it spends time on the remaining slides without making the XML parser
+/// re-entrant or cancellable mid-node.
+#[derive(Default, Clone)]
+pub struct ImportCancellation {
+    cancelled: Arc<Mutex<HashSet<String>>>,
+}
+
+impl ImportCancellation {
+    fn begin(&self, request_id: &str) {
+        if let Ok(mut set) = self.cancelled.lock() {
+            set.remove(request_id);
+        }
+    }
+
+    fn cancel(&self, request_id: &str) {
+        if let Ok(mut set) = self.cancelled.lock() {
+            set.insert(request_id.to_string());
+        }
+    }
+
+    fn is_cancelled(&self, request_id: &str) -> bool {
+        self.cancelled
+            .lock()
+            .map(|set| set.contains(request_id))
+            .unwrap_or(false)
+    }
+
+    fn release(&self, request_id: &str) {
+        if let Ok(mut set) = self.cancelled.lock() {
+            set.remove(request_id);
+        }
+    }
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportProgress {
+    request_id: String,
+    current: usize,
+    total: usize,
+    stage: String,
+}
+
+struct ImportSession {
+    app: AppHandle,
+    request_id: String,
+    cancellation: ImportCancellation,
+}
+
+impl ImportSession {
+    fn check(&self) -> Result<(), String> {
+        if self.cancellation.is_cancelled(&self.request_id) {
+            Err("PPTX_IMPORT_CANCELLED".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn progress(&self, current: usize, total: usize) {
+        let _ = self.app.emit(
+            "pptx-import-progress",
+            ImportProgress {
+                request_id: self.request_id.clone(),
+                current,
+                total,
+                stage: "slides".into(),
+            },
+        );
+    }
+}
 
 #[derive(Debug, Serialize, Clone, Copy, Default)]
 #[serde(rename_all = "camelCase")]
@@ -258,13 +334,43 @@ impl DeckReport {
 
 /// Import the content of a `.pptx` into a neutral, editor-agnostic structure.
 #[tauri::command]
-pub async fn import_pptx_content(path: String) -> Result<ImportedDeck, String> {
-    tauri::async_runtime::spawn_blocking(move || import_sync(Path::new(&path)))
-        .await
-        .map_err(|error| format!("PPTX_IMPORT_TASK_FAILED: {error}"))?
+pub async fn import_pptx_content(
+    app: AppHandle,
+    cancellation: State<'_, ImportCancellation>,
+    path: String,
+    request_id: String,
+) -> Result<ImportedDeck, String> {
+    let cancellation = cancellation.inner().clone();
+    cancellation.begin(&request_id);
+    let session_registry = cancellation.clone();
+    let session_id = request_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let session = ImportSession {
+            app,
+            request_id: session_id,
+            cancellation: session_registry,
+        };
+        import_sync(Path::new(&path), Some(&session))
+    })
+    .await;
+    cancellation.release(&request_id);
+    match result {
+        Ok(value) => value,
+        Err(error) => Err(format!("PPTX_IMPORT_TASK_FAILED: {error}")),
+    }
 }
 
-fn import_sync(source: &Path) -> Result<ImportedDeck, String> {
+/// Ask a running import to stop after the current page.
+#[tauri::command]
+pub fn cancel_pptx_import(
+    cancellation: State<'_, ImportCancellation>,
+    request_id: String,
+) -> Result<(), String> {
+    cancellation.cancel(&request_id);
+    Ok(())
+}
+
+fn import_sync(source: &Path, session: Option<&ImportSession>) -> Result<ImportedDeck, String> {
     let source = validate_source(source)?;
     let file = File::open(&source).map_err(|error| format!("PPTX_IMPORT_OPEN_FAILED: {error}"))?;
     let mut archive =
@@ -287,7 +393,16 @@ fn import_sync(source: &Path) -> Result<ImportedDeck, String> {
     let mut media_cache: HashMap<String, (String, String)> = HashMap::new();
     let mut slides = Vec::new();
 
+    let total_slides = slide_relations.len();
+    if let Some(session) = session {
+        session.check()?;
+        session.progress(0, total_slides);
+    }
+
     for (index, relation_id) in slide_relations.iter().enumerate() {
+        if let Some(session) = session {
+            session.check()?;
+        }
         let Some(rel) = presentation_rels.get(relation_id) else {
             report.unsupported(index, "slide", "页面关系缺失");
             continue;
@@ -311,6 +426,9 @@ fn import_sync(source: &Path) -> Result<ImportedDeck, String> {
             &mut report,
         )?;
         slides.push(slide);
+        if let Some(session) = session {
+            session.progress(index + 1, total_slides);
+        }
     }
 
     if slides.is_empty() {
@@ -1525,7 +1643,7 @@ mod tests {
         zip.finish().expect("finish");
 
         let before = fs::read(&path).expect("read source before");
-        let imported = import_sync(&path).expect("import");
+        let imported = import_sync(&path, None).expect("import");
         let after = fs::read(&path).expect("read source after");
         assert_eq!(before, after, "import must not modify its source");
         assert_eq!(imported.page_size.width, 12_192_000);
@@ -1605,6 +1723,19 @@ mod tests {
         let value = serde_json::to_value(table).expect("json");
         assert_eq!(value["type"], "table");
         assert_eq!(value["header"][0], "a");
+    }
+
+    #[test]
+    fn cancellation_is_scoped_to_one_request() {
+        let registry = ImportCancellation::default();
+        registry.begin("a");
+        registry.begin("b");
+        assert!(!registry.is_cancelled("a"));
+        registry.cancel("a");
+        assert!(registry.is_cancelled("a"));
+        assert!(!registry.is_cancelled("b"));
+        registry.release("a");
+        assert!(!registry.is_cancelled("a"));
     }
 
     #[test]

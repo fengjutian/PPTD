@@ -583,9 +583,39 @@ button {
   cursor: default;
 }
 .import-mode-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin: 14px 0 0;
   color: #8fd3b6;
   font-size: 12px;
+}
+.import-progress-track {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #34363c;
+}
+.import-progress-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ppt-accent);
+  transition: width 160ms ease;
+}
+.import-mode-progress .secondary-action {
+  align-self: flex-end;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #3b3d44;
+  border-radius: 6px;
+  color: #d8d9dd;
+  background: #26282d;
+  font-size: 11px;
+  cursor: pointer;
+}
+.import-mode-progress .secondary-action:hover {
+  border-color: var(--ppt-accent);
 }
 .upload-dialog.import-report-dialog {
   width: min(600px, calc(100vw - 48px));

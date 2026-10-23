@@ -180,7 +180,12 @@ import {
   type TemplateAnalysis,
   type TemplateRecord,
 } from "../services/project-files";
-import { importPptxContent } from "../services/pptx-import";
+import {
+  cancelPptxImport,
+  importPptxContent,
+  listenPptxImportProgress,
+  type PptxImportProgress,
+} from "../services/pptx-import";
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
@@ -760,6 +765,8 @@ export function App() {
     document: PresentationDocument;
     report: ImportReport;
   }>();
+  const [importProgress, setImportProgress] = useState<PptxImportProgress>();
+  const [importRequestId, setImportRequestId] = useState<string>();
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
   const setTaskStatus = (text?: string) =>
     setMessage(
@@ -1293,20 +1300,46 @@ export function App() {
   const handleImportContent = async () => {
     const selection = importChoice;
     if (!selection) return;
+    const requestId = crypto.randomUUID();
+    setImportRequestId(requestId);
+    setImportProgress({ requestId, current: 0, total: 0, stage: "slides" });
     setImportBusy(true);
     setTaskStatus("正在解析 PPTX 内容…");
+    let unlisten: (() => void) | undefined;
     try {
+      try {
+        unlisten = await listenPptxImportProgress((progress) => {
+          if (progress.requestId === requestId) setImportProgress(progress);
+        });
+      } catch {
+        // Progress is optional; the import still works if the event bridge is unavailable.
+      }
       const pptxPath = selection.format === "ppt" ? await convertLegacyPpt(selection.path) : selection.path;
-      const imported = await importPptxContent(pptxPath);
+      const imported = await importPptxContent(pptxPath, requestId);
       const document = importedDeckToDocument(imported);
       setImportPreview({ fileName: selection.name, document, report: imported.report });
       setImportChoice(undefined);
       setTaskStatus(`已解析 ${imported.report.slideCount} 页，请确认导入报告`);
     } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
       setImportChoice(undefined);
-      setTaskStatus(`导入失败：${error instanceof Error ? error.message : String(error)}`);
+      setTaskStatus(raw.includes("PPTX_IMPORT_CANCELLED") ? "已取消导入，当前项目未改变" : `导入失败：${raw}`);
     } finally {
+      unlisten?.();
+      setImportProgress(undefined);
+      setImportRequestId(undefined);
       setImportBusy(false);
+    }
+  };
+
+  const handleCancelImport = async () => {
+    const requestId = importRequestId;
+    if (!requestId) return;
+    setTaskStatus("正在取消导入…");
+    try {
+      await cancelPptxImport(requestId);
+    } catch (error) {
+      setTaskStatus(`取消失败：${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -5822,6 +5855,8 @@ export function App() {
         <ImportModeDialog
           fileName={importChoice.name}
           busy={importBusy}
+          progress={importProgress}
+          onCancelImport={() => void handleCancelImport()}
           onClose={() => {
             setImportChoice(undefined);
             setTaskStatus("已取消打开");
