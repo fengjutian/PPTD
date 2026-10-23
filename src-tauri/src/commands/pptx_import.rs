@@ -1203,13 +1203,16 @@ fn parse_picture(
         width: 3_657_600,
         height: 2_743_200,
     });
-    let alt_text = picture
-        .descendants()
-        .find(|node| node.has_tag_name("cNvPr"))
-        .and_then(|node| node.attribute("descr"))
-        .filter(|value| !value.is_empty())
-        .unwrap_or("导入的图片")
-        .to_string();
+    let alt_text = truncate_chars(
+        picture
+            .descendants()
+            .find(|node| node.has_tag_name("cNvPr"))
+            .and_then(|node| node.attribute("descr"))
+            .filter(|value| !value.is_empty())
+            .unwrap_or("导入的图片")
+            .to_string(),
+        500,
+    );
     let crop = picture
         .descendants()
         .find(|node| node.has_tag_name("srcRect"))
@@ -1272,23 +1275,32 @@ fn parse_graphic_frame(
         width: 4_572_000,
         height: 1_828_800,
     });
-    let columns = table
+    let declared_columns = table
         .descendants()
         .filter(|node| node.has_tag_name("gridCol"))
         .count();
-    if columns == 0 {
+    if declared_columns == 0 {
         report.unsupported(index, "table", "表格没有列");
         return None;
     }
+    let columns = declared_columns.min(8);
+    if declared_columns > 8 {
+        report.unsupported(index, "table-size", "表格超过 8 列，超出部分未导入");
+    }
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut merged = false;
+    let mut truncated = false;
     for row in table.children().filter(|node| node.has_tag_name("tr")) {
+        if rows.len() >= 31 {
+            truncated = true;
+            break;
+        }
         let mut cells = Vec::new();
         for cell in row.children().filter(|node| node.has_tag_name("tc")) {
             if cell.attribute("gridSpan").is_some() || cell.attribute("rowSpan").is_some() {
                 merged = true;
             }
-            cells.push(cell_text(cell));
+            cells.push(truncate_chars(cell_text(cell), 500));
         }
         while cells.len() < columns {
             cells.push(String::new());
@@ -1298,6 +1310,9 @@ fn parse_graphic_frame(
     }
     if merged {
         report.unsupported(index, "table-merge", "合并单元格已按普通单元格导入");
+    }
+    if truncated {
+        report.unsupported(index, "table-size", "表格超过 30 行，超出部分未导入");
     }
     if rows.is_empty() {
         return None;
@@ -1310,16 +1325,28 @@ fn parse_graphic_frame(
             if value.trim().is_empty() {
                 format!("列 {}", column + 1)
             } else {
-                value
+                truncate_chars(value, 200)
             }
         })
         .collect();
+    if rows.is_empty() {
+        rows.push(vec![String::new(); columns]);
+    }
+    rows.truncate(30);
     Some(ImportedElement::Table {
         frame,
         rotation_milli_degree: 0,
         header,
         rows,
     })
+}
+
+fn truncate_chars(value: String, max: usize) -> String {
+    if value.chars().count() <= max {
+        value
+    } else {
+        value.chars().take(max).collect()
+    }
 }
 
 fn cell_text(cell: Node<'_, '_>) -> String {
@@ -1497,6 +1524,41 @@ mod tests {
                 .and_then(|theme| theme.major_font.as_deref()),
             Some("Aptos Display")
         );
+    }
+
+    #[test]
+    fn rejects_archive_entries_that_escape_the_package() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("hostile.pptx");
+        let file = File::create(&path).expect("create");
+        let mut zip = zip::ZipWriter::new(file);
+        zip.start_file("../evil.xml", SimpleFileOptions::default())
+            .expect("start");
+        zip.write_all(b"<x/>").expect("write");
+        zip.finish().expect("finish");
+
+        let file = File::open(&path).expect("open");
+        let mut archive = ZipArchive::new(file).expect("archive");
+        assert_eq!(
+            validate_archive(&mut archive),
+            Err("PPTX_ARCHIVE_ENTRY_PATH_INVALID".into())
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn probes_a_generated_export() {
+        let path = std::env::var("PPTD_IMPORT_SAMPLE")
+            .unwrap_or_else(|_| "../../.tmp/out/recipe-data.pptx".to_string());
+        if !Path::new(&path).exists() {
+            return;
+        }
+        let imported = import_sync(Path::new(&path)).expect("import sample");
+        println!("slides={} report={:?}", imported.slides.len(), imported.report);
+        assert!(!imported.slides.is_empty());
     }
 
     #[test]

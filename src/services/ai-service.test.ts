@@ -797,6 +797,32 @@ describe("多页草稿的分批编排", () => {
     expect(request.request).toMatchObject({ model: expect.any(String), provider: expect.any(String) });
   });
 
+  it("模型只给内容块时，正文按块重算", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "rewrite_presentation_slide") {
+        return { slide: { blocks: [{ type: "paragraph", text: "只给了块，没给正文" }] } };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const suggestion = await rewritePresentationSlide({
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["标题"],
+      slideIndex: 0,
+      slide: {
+        title: "标题",
+        body: "",
+        speakerNotes: "",
+        plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+        blocks: [],
+      },
+    });
+
+    expect(suggestion.body).toBe("只给了块，没给正文");
+    expect(suggestion.speakerNotes).toBe("");
+  });
+
   it("模型没给内容块时，用正文还原一种块", async () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "rewrite_presentation_slide") return { slide: { body: "第一行\n第二行", speakerNotes: "" } };

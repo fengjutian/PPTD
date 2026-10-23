@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { presentationDocumentSchema } from "../document-model";
 import { importedDeckToDocument, type ImportedDeck } from "./pptx-import";
 
 function deck(overrides: Partial<ImportedDeck> = {}): ImportedDeck {
@@ -76,6 +77,7 @@ function deck(overrides: Partial<ImportedDeck> = {}): ImportedDeck {
 describe("importedDeckToDocument", () => {
   it("maps a Level A deck into a review document without inventing content", () => {
     const document = importedDeckToDocument(deck());
+    expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
     expect(document.title).toBe("季度复盘");
     expect(document.pageSize).toEqual({ width: 12_192_000, height: 6_858_000 });
     const slide = document.slides[0]!;

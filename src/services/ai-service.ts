@@ -622,6 +622,7 @@ export function describeAiError(error: unknown): string {
   if (detail.includes("AI_JSON_INVALID")) return "AI 返回的完整草稿不是有效 JSON，请重新生成";
   if (detail.includes("AI_REWRITE_JSON_INVALID")) return "AI 返回的本页重写结果不是完整 JSON，请重新生成";
   if (detail.includes("AI_REWRITE_EMPTY")) return "AI 没有返回可用的正文，请重新生成";
+  if (detail.includes("AI_REWRITE_REQUEST_INVALID")) return "这一页暂时无法重写：请先补全页面标题";
   if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED"))
     return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
   if (detail.includes("AI_VISION_REVIEW_FAILED"))
@@ -835,7 +836,7 @@ export async function polishPresentationTopic(topic: string): Promise<string> {
  * 任务，二者都不该被一次"换个写法"改掉。
  */
 const slideRewriteSchema = z.object({
-  body: z.string().max(4000),
+  body: z.string().max(4000).default(""),
   speakerNotes: z.string().max(4000).default(""),
   blocks: z.array(contentBlockSchema).max(20).default([]),
 });
