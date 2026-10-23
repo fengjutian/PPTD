@@ -3,6 +3,7 @@ export type EditorShortcut =
   | "redo"
   | "duplicate-element"
   | "copy-element"
+  | "cut-element"
   | "paste-element"
   | "delete-element"
   | "nudge-left"
@@ -50,6 +51,7 @@ export function resolveEditorShortcut(input: ShortcutInput): EditorShortcut | nu
   if (modifier && key === "i") return "toggle-italic";
   if (modifier && key === "u") return "toggle-underline";
   if (modifier && key === "c") return "copy-element";
+  if (modifier && key === "x") return "cut-element";
   if (modifier && key === "v") return "paste-element";
   if (modifier && key === "]") return "layer-forward";
   if (modifier && key === "[") return "layer-backward";

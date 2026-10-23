@@ -603,6 +603,13 @@ export type DocumentCommand =
     }
   | { type: "distribute-elements"; slideId: SlideId; elementIds: ElementId[]; axis: "horizontal" | "vertical" }
   | { type: "move-elements"; slideId: SlideId; elementIds: ElementId[]; dx: Emu; dy: Emu }
+  | {
+      type: "paste-elements";
+      slideId: SlideId;
+      elements: SlideElement[];
+      /** The diagonal shift of this paste, so repeated pastes do not stack. */
+      offsetEmu?: Emu;
+    }
   | { type: "transform-element"; slideId: SlideId; elementId: ElementId; frame: RectEmu; rotationMilliDegree: number }
   | { type: "move-element"; slideId: SlideId; elementId: ElementId; x: Emu; y: Emu }
   | { type: "set-text-style"; slideId: SlideId; elementId: ElementId; style: Partial<TextElementStyle> }
@@ -1002,6 +1009,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "align-elements":
     case "distribute-elements":
     case "move-elements":
+    case "paste-elements":
       return "design";
     case "edit-text": {
       if (!document) return "content";
@@ -3585,6 +3593,33 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
 
   const slide = document.slides.find((item) => item.id === command.slideId);
   if (!slide) throw new Error("SLIDE_NOT_FOUND");
+
+  if (command.type === "paste-elements") {
+    if (command.elements.length === 0 || command.elements.length > 200) throw new Error("PASTE_ELEMENTS_INVALID");
+    const offset = command.offsetEmu ?? inches(0.2);
+    if (!Number.isFinite(offset) || Math.abs(offset) > inches(10)) throw new Error("PASTE_ELEMENTS_INVALID");
+    // A table or chart is a view of content blocks on its own page. Pasting it
+    // onto a page without those blocks would create a dangling reference the
+    // exporter cannot resolve, so the command refuses instead of pasting a
+    // broken object. Text is safe: the copy becomes decorative and loses its
+    // block binding in `copyElementForPaste`.
+    for (const element of command.elements) {
+      if (element.type === "table" && !findTableBlock(slide, element.contentBlockId))
+        throw new Error("PASTE_REQUIRES_CONTENT_BLOCK");
+      if (element.type === "chart" && element.contentBlockIds.some((blockId) => !findMetricBlock(slide, blockId)))
+        throw new Error("PASTE_REQUIRES_CONTENT_BLOCK");
+    }
+    const copies = command.elements.map((element) => {
+      const copy = copyElementForPaste(element, offset);
+      copy.origin = "user";
+      // A pasted object is a fresh edit target; the source's lock is not a
+      // property of the copy.
+      copy.locked = false;
+      return copy;
+    });
+    slide.elements.push(...copies);
+    return;
+  }
 
   if (command.type === "set-text-style-elements") {
     assertTextStyle(command.style);

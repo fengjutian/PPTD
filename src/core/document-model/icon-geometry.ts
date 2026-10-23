@@ -21,7 +21,8 @@ export type IconPathPoint =
     }
   | { close: true };
 
-const ICON_GRID = 24;
+/** The viewBox size every built-in icon is drawn on. */
+export const ICON_GRID = 24;
 /** The cubic approximation of a quarter circle. */
 const KAPPA = 0.5522847498307936;
 
@@ -118,7 +119,7 @@ function outlinePath(data: string): IconPathPoint[] {
       command = token;
       index += 1;
     } else if (!command) {
-      break;
+      throw new Error("ICON_PATH_INVALID");
     }
     const relative = command === command.toLowerCase();
     const prior = previous;
@@ -173,10 +174,7 @@ function outlinePath(data: string): IconPathPoint[] {
         break;
       }
       case "S": {
-        const c1 =
-          prior === "C" || prior === "S"
-            ? { x: 2 * x - lastCubic!.x, y: 2 * y - lastCubic!.y }
-            : { x, y };
+        const c1 = prior === "C" || prior === "S" ? { x: 2 * x - lastCubic!.x, y: 2 * y - lastCubic!.y } : { x, y };
         const c2 = { x: relative ? x + next() : next(), y: relative ? y + next() : next() };
         const to = { x: relative ? x + next() : next(), y: relative ? y + next() : next() };
         cubicTo(c1, c2, to);
@@ -195,8 +193,7 @@ function outlinePath(data: string): IconPathPoint[] {
         break;
       }
       case "T": {
-        const control =
-          prior === "Q" || prior === "T" ? { x: 2 * x - lastQuad!.x, y: 2 * y - lastQuad!.y } : { x, y };
+        const control = prior === "Q" || prior === "T" ? { x: 2 * x - lastQuad!.x, y: 2 * y - lastQuad!.y } : { x, y };
         const to = { x: relative ? x + next() : next(), y: relative ? y + next() : next() };
         const c1 = { x: x + (2 / 3) * (control.x - x), y: y + (2 / 3) * (control.y - y) };
         const c2 = { x: to.x + (2 / 3) * (control.x - to.x), y: to.y + (2 / 3) * (control.y - to.y) };
@@ -316,12 +313,7 @@ function arcToCubics(
   const cy = sinPhi * cxp + cosPhi * cyp + (from.y + to.y) / 2;
 
   const startAngle = vectorAngle(1, 0, (x1 - cxp) / rx, (y1 - cyp) / ry);
-  let delta = vectorAngle(
-    (x1 - cxp) / rx,
-    (y1 - cyp) / ry,
-    (-x1 - cxp) / rx,
-    (-y1 - cyp) / ry,
-  );
+  let delta = vectorAngle((x1 - cxp) / rx, (y1 - cyp) / ry, (-x1 - cxp) / rx, (-y1 - cyp) / ry);
   if (!sweep && delta > 0) delta -= 2 * Math.PI;
   if (sweep && delta < 0) delta += 2 * Math.PI;
 
@@ -362,13 +354,7 @@ function ellipsePoint(
   };
 }
 
-function ellipseDerivative(
-  rx: number,
-  ry: number,
-  cosPhi: number,
-  sinPhi: number,
-  angle: number,
-): Vec {
+function ellipseDerivative(rx: number, ry: number, cosPhi: number, sinPhi: number, angle: number): Vec {
   const cosAngle = Math.cos(angle);
   const sinAngle = Math.sin(angle);
   return {

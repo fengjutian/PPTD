@@ -7,6 +7,7 @@ import {
   Circle,
   CircleAlert,
   CircleCheck,
+  ClipboardPaste,
   Copy,
   Download,
   FilePlus2,
@@ -30,6 +31,7 @@ import {
   RotateCcw,
   Save,
   SaveAll,
+  Scissors,
   Settings,
   Sparkles,
   Square,
@@ -43,6 +45,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EMU_PER_INCH,
   emu,
+  inches,
   type ElementId,
   type DocumentId,
   type RectEmu,
@@ -796,7 +799,23 @@ export function App() {
   const [aiImageBusy, setAiImageBusy] = useState(false);
   /** AI 配图失败的原因，对话框里如实显示。 */
   const [aiImageError, setAiImageError] = useState<string>();
-  const clipboardElementIds = useRef<ElementId[]>([]);
+  /**
+   * The in-app clipboard.
+   *
+   * The objects are kept as the immutable document snapshots they were copied
+   * from, so a later edit cannot change the clipboard. `pastes` shifts each
+   * paste further from the source instead of stacking every copy on one spot.
+   */
+  const [clipboard, setClipboard] = useState<{ elements: SlideElement[]; pastes: number }>({
+    elements: [],
+    pastes: 0,
+  });
+  // The clipboard belongs to one document: its objects may reference assets of
+  // the project they came from. Switching projects clears it instead of letting
+  // a paste create a picture whose asset is not in the new project.
+  useEffect(() => {
+    setClipboard({ elements: [], pastes: 0 });
+  }, [document.id]);
   const gridEnabled = useCanvasGuidesStore((s) => s.gridEnabled);
   const gridSnapEnabled = useCanvasGuidesStore((s) => s.gridSnapEnabled);
   const snapEnabled = useCanvasGuidesStore((s) => s.snapEnabled);
@@ -833,6 +852,66 @@ export function App() {
     [activeSlide.elements, selectedElementIds],
   );
   const formatPainterStyle = useFormatPainterStore((state) => state.style);
+
+  /**
+   * Copies the unlocked selection into the in-app clipboard. Cutting is the same
+   * snapshot followed by one delete command, so the whole cut is one undo step.
+   *
+   * There is no system clipboard integration yet; the status message says so
+   * implicitly by anchoring paste to Ctrl+V inside the editor. This is the
+   * documented downgrade required by TRS 4.4.4.
+   */
+  const copySelection = useCallback(
+    (cut = false) => {
+      const elements = activeSlide.elements.filter(
+        (element) => selectedElementIds.includes(element.id) && !element.locked,
+      );
+      if (elements.length === 0) {
+        setTaskStatus("没有可复制的对象");
+        return;
+      }
+      setClipboard({ elements, pastes: 0 });
+      if (cut) {
+        execute({
+          type: "delete-elements",
+          slideId: activeSlide.id,
+          elementIds: elements.map((element) => element.id),
+        });
+        setTaskStatus(elements.length > 1 ? `已剪切 ${elements.length} 个对象` : "已剪切对象");
+        return;
+      }
+      setTaskStatus(
+        elements.length > 1 ? `已复制 ${elements.length} 个对象，可用 Ctrl+V 粘贴` : "已复制对象，可用 Ctrl+V 粘贴",
+      );
+    },
+    [activeSlide.elements, activeSlide.id, execute, selectedElementIds],
+  );
+
+  const pasteSelection = useCallback(() => {
+    if (clipboard.elements.length === 0) {
+      setTaskStatus("剪贴板里还没有对象，先复制或剪切");
+      return;
+    }
+    // Repeated pastes step away from the source instead of covering each other.
+    const offset = emu(inches(0.2) * (clipboard.pastes + 1));
+    try {
+      execute({
+        type: "paste-elements",
+        slideId: activeSlide.id,
+        elements: clipboard.elements,
+        offsetEmu: offset,
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : String(error);
+      setTaskStatus(
+        code === "PASTE_REQUIRES_CONTENT_BLOCK" ? "表格或图表只能在包含其内容块的页面粘贴" : `粘贴失败：${code}`,
+      );
+      return;
+    }
+    setClipboard((current) => ({ ...current, pastes: current.pastes + 1 }));
+    setTaskStatus(clipboard.elements.length > 1 ? `已粘贴 ${clipboard.elements.length} 个对象` : "已粘贴对象");
+  }, [activeSlide.id, clipboard.elements, clipboard.pastes, execute]);
+
   const activeGuides = useCanvasGuidesStore((s) => s.guidesBySlide[activeSlideId]) ?? [];
   const addGuide = (axis: "x" | "y", position: number) => addGuideToSlide(activeSlide.id, axis, emu(position));
   const scale = (CANVAS_WIDTH / document.pageSize.width) * zoom;
@@ -2485,30 +2564,18 @@ export function App() {
         return;
       }
       if (shortcut === "copy-element") {
-        if (selectedElementIds.length === 0) return;
         event.preventDefault();
-        // 剪贴板记的是这一组对象的 id，粘贴时按当时的位置重新复制。
-        clipboardElementIds.current = [...selectedElementIds];
-        setTaskStatus(
-          selectedElementIds.length > 1
-            ? `已复制 ${selectedElementIds.length} 个对象，可用 Ctrl+V 粘贴`
-            : "已复制对象，可用 Ctrl+V 粘贴",
-        );
+        copySelection(false);
+        return;
+      }
+      if (shortcut === "cut-element") {
+        event.preventDefault();
+        copySelection(true);
         return;
       }
       if (shortcut === "paste-element") {
-        const sourceIds = clipboardElementIds.current;
-        if (!sourceIds || sourceIds.length === 0) {
-          setTaskStatus("没有可粘贴的对象");
-          return;
-        }
-        const available = sourceIds.filter((id) => activeSlide.elements.some((element) => element.id === id));
-        if (available.length === 0) {
-          setTaskStatus("剪贴板中的对象不在当前页面");
-          return;
-        }
         event.preventDefault();
-        execute({ type: "duplicate-elements", slideId: activeSlide.id, elementIds: available });
+        pasteSelection();
         return;
       }
       if (shortcut === "copy-format") {
@@ -2599,6 +2666,8 @@ export function App() {
     document.pageSize.height,
     document.pageSize.width,
     execute,
+    copySelection,
+    pasteSelection,
     redo,
     redoStack.length,
     selected,
@@ -2977,20 +3046,34 @@ export function App() {
             </ToolButton>
             <span className="separator" />
             <ToolButton
-              label="复制所选对象"
-              caption="复制对象"
+              label="剪切所选对象（Ctrl+X）"
+              caption="剪切"
               disabled={
                 selectedElementIds.length === 0 ||
                 selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
               }
-              onClick={() => {
-                const elementIds = selectedElementIds.filter(
-                  (id) => !activeSlide.elements.find((item) => item.id === id)?.locked,
-                );
-                if (elementIds.length) execute({ type: "duplicate-elements", slideId: activeSlide.id, elementIds });
-              }}
+              onClick={() => copySelection(true)}
+            >
+              <Scissors />
+            </ToolButton>
+            <ToolButton
+              label="复制所选对象（Ctrl+C）"
+              caption="复制"
+              disabled={
+                selectedElementIds.length === 0 ||
+                selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
+              }
+              onClick={() => copySelection(false)}
             >
               <Copy />
+            </ToolButton>
+            <ToolButton
+              label="粘贴剪贴板对象（Ctrl+V）"
+              caption="粘贴"
+              disabled={clipboard.elements.length === 0}
+              onClick={pasteSelection}
+            >
+              <ClipboardPaste />
             </ToolButton>
             <ToolButton
               label="删除所选对象"

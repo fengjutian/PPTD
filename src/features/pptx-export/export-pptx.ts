@@ -7,6 +7,7 @@ import {
   resolveTableData,
   tableColumnAlignsRight,
   iconOutline,
+  ICON_GRID,
   textFragments,
   type ChartElement,
   type ImageCrop,
@@ -418,9 +419,13 @@ export async function buildPptx(
         // SVG picture support writes the SVG bytes into the PNG fallback part
         // as well; PowerPoint then refuses the whole package. Native geometry
         // has no image part at all and stays editable after export.
+        // The source SVG strokes on a 24-unit grid, so its width has to scale
+        // with the frame; a fixed 2pt line made a small badge icon visibly
+        // heavier than the same icon on the canvas.
+        const strokeWidthPt = ((element.style.strokeWidth ?? 2) * position.w * 72) / ICON_GRID;
         slide.addShape(CUSTOM_GEOMETRY, {
           ...position,
-          line: { color: color(element.style.color), width: element.style.strokeWidth ?? 2 },
+          line: { color: color(element.style.color), width: strokeWidthPt },
           points: iconOutline(element.name, position.w, position.h),
         });
       } else {

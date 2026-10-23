@@ -103,7 +103,12 @@ export const useEditorStore = create<EditorState>((set) => ({
       // Design edits on the selected element must not drop the selection, otherwise
       // handles disappear after a drag and repeated keyboard nudges stop working.
       let selectedElementIds = state.selectedElementIds;
-      if (command.type === "add-text" || command.type === "add-shape" || command.type === "add-image" || command.type === "add-line") {
+      if (
+        command.type === "add-text" ||
+        command.type === "add-shape" ||
+        command.type === "add-image" ||
+        command.type === "add-line"
+      ) {
         selectedElementIds = [document.slides.find((slide) => slide.id === command.slideId)!.elements.at(-1)!.id];
       }
       if (command.type === "duplicate-element") {
@@ -123,6 +128,12 @@ export const useEditorStore = create<EditorState>((set) => ({
         const slide = document.slides.find((item) => item.id === command.slideId)!;
         const copies = slide.elements.filter((item) => !before.has(item.id)).map((item) => item.id);
         if (copies.length > 0) selectedElementIds = copies;
+      }
+      if (command.type === "paste-elements") {
+        // Pasting appends the fresh copies; selecting them makes the new objects
+        // visible and immediately editable.
+        const slide = document.slides.find((item) => item.id === command.slideId)!;
+        selectedElementIds = slide.elements.slice(-command.elements.length).map((item) => item.id);
       }
       if (command.type === "set-element-lock") selectedElementIds = [command.elementId];
       if (command.type === "delete-element")

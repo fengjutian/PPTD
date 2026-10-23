@@ -8,18 +8,7 @@
  * icon that is saved today keeps its shape after a reload.
  */
 export type BuiltinIconName =
-  | "book"
-  | "mountain"
-  | "water"
-  | "sun"
-  | "moon"
-  | "target"
-  | "chart"
-  | "users"
-  | "bulb"
-  | "flag"
-  | "heart"
-  | "leaf";
+  "book" | "mountain" | "water" | "sun" | "moon" | "target" | "chart" | "users" | "bulb" | "flag" | "heart" | "leaf";
 
 export interface IconDefinition {
   /** Stroked sub-paths on a 24×24 grid. */
@@ -29,19 +18,11 @@ export interface IconDefinition {
 
 export const BUILTIN_ICONS: Record<BuiltinIconName, IconDefinition> = {
   book: {
-    paths: [
-      "M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z",
-      "M4 20.5V5.5",
-      "M8 7h8",
-      "M8 11h6",
-    ],
+    paths: ["M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z", "M4 20.5V5.5", "M8 7h8", "M8 11h6"],
   },
   mountain: { paths: ["M3 19l6-10 4 6 3-4 5 8z"] },
   water: {
-    paths: [
-      "M3 11c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
-      "M3 16c2-2 4-2 6 0s4 2 6 0 4-2 6 0",
-    ],
+    paths: ["M3 11c2-2 4-2 6 0s4 2 6 0 4-2 6 0", "M3 16c2-2 4-2 6 0s4 2 6 0 4-2 6 0"],
   },
   sun: {
     paths: [
@@ -70,11 +51,7 @@ export const BUILTIN_ICONS: Record<BuiltinIconName, IconDefinition> = {
     circles: [{ cx: 9, cy: 8, r: 3 }],
   },
   bulb: {
-    paths: [
-      "M9 18h6",
-      "M10 21h4",
-      "M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1.2.9 2.1h5.2c0-.9.3-1.6.9-2.1A6 6 0 0 0 12 3z",
-    ],
+    paths: ["M9 18h6", "M10 21h4", "M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1.2.9 2.1h5.2c0-.9.3-1.6.9-2.1A6 6 0 0 0 12 3z"],
   },
   flag: { paths: ["M5 21V4", "M5 4h11l-1.5 3L16 10H5"] },
   heart: { paths: ["M12 20s-7-4.3-7-9a3.8 3.8 0 0 1 7-2 3.8 3.8 0 0 1 7 2c0 4.7-7 9-7 9z"] },
@@ -92,12 +69,6 @@ export function iconSvgMarkup(name: BuiltinIconName, color: string, strokeWidth 
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" ` +
     `stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${circles}${paths}</svg>`
   );
-}
-
-export function iconSvgDataUrl(name: BuiltinIconName, color: string, strokeWidth = 2): string {
-  const markup = iconSvgMarkup(name, color, strokeWidth);
-  const base64 = typeof btoa === "function" ? btoa(unescape(encodeURIComponent(markup))) : Buffer.from(markup).toString("base64");
-  return `data:image/svg+xml;base64,${base64}`;
 }
 
 /**

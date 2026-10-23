@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_ICONS, iconForText, iconSvgDataUrl, iconSvgMarkup, type BuiltinIconName } from "./icons";
+import { BUILTIN_ICONS, iconForText, iconSvgMarkup, type BuiltinIconName } from "./icons";
 
 const NAMES = Object.keys(BUILTIN_ICONS) as BuiltinIconName[];
 
@@ -15,11 +15,6 @@ describe("built-in icons", () => {
       expect(markup).toContain('stroke="#2F6B5F"');
       expect(markup).toContain("<path");
     }
-  });
-
-  it("writes a data url the exporter can embed", () => {
-    const url = iconSvgDataUrl("book", "#1E2A32");
-    expect(url.startsWith("data:image/svg+xml;base64,")).toBe(true);
   });
 
   it("maps explicit nouns to icons and leaves prose alone", () => {
