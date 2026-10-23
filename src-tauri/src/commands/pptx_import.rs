@@ -794,6 +794,7 @@ fn parse_slide(
                 }
             }
             "grpSp" => report.unsupported(index, "group", "组合形状未导入"),
+            "nvGrpSpPr" | "grpSpPr" | "extLst" => {}
             other => report.unsupported(index, other, "未支持的对象类型"),
         }
     }
