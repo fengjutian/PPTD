@@ -45,3 +45,11 @@ pub fn upsert_recent_project(
 ) -> Result<Vec<RecentProjectEntry>, String> {
     database.upsert_recent_project(&entry)
 }
+
+#[tauri::command]
+pub fn remove_recent_project(
+    database: State<'_, Database>,
+    path: String,
+) -> Result<Vec<RecentProjectEntry>, String> {
+    database.remove_recent_project(&path)
+}

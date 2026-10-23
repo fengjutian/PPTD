@@ -301,6 +301,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         if (options.isCancelled()) throw new Error("AI_GENERATION_CANCELLED");
         options.onProgress?.(`第 ${iteration} 轮视觉评审：导出并渲染真实 PPTX`, 94);
         realRenderFailure = undefined;
+        // 本轮还没有产出任何评审结论。渲染失败时不能用上一轮的覆盖数字
+        // 描述这一轮，否则会出现“未完成，但覆盖 7/7 页”的矛盾报告。
+        reviewedSlideCount = 0;
+        reviewSlideCount = 0;
         const document = options.buildDocument(current);
         // 优先评审真实导出的 PPTX。画布渲染是近似值：PowerPoint 自行断行，
         // 字体度量与估算略有出入，图表和表格更是由 PowerPoint 自己画的。

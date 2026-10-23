@@ -68,3 +68,8 @@ export async function saveRecentProject(entry: RecentProjectEntry): Promise<Rece
   requireDesktopRuntime();
   return invoke<RecentProjectEntry[]>("upsert_recent_project", { entry });
 }
+
+export async function removeRecentProject(path: string): Promise<RecentProjectEntry[]> {
+  requireDesktopRuntime();
+  return invoke<RecentProjectEntry[]>("remove_recent_project", { path });
+}

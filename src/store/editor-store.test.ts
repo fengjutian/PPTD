@@ -29,6 +29,17 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
   });
 
+  it("renames a project as one undoable content transaction", () => {
+    const original = useEditorStore.getState().document.title;
+    useEditorStore.getState().execute({ type: "rename-document", title: "季度复盘" });
+    expect(useEditorStore.getState().document.title).toBe("季度复盘");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 1, design: 0 });
+
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().document.title).toBe(original);
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
+  });
+
   it("treats duplicating a slide as one content and design transaction", () => {
     const slideId = useEditorStore.getState().activeSlideId;
     useEditorStore.getState().execute({ type: "duplicate-slide", slideId });

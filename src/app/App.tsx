@@ -11,6 +11,7 @@ import {
   Download,
   Eye,
   FilePlus2,
+  FilePenLine,
   FolderClock,
   FileUp,
   Grid2x2,
@@ -28,6 +29,7 @@ import {
   Redo2,
   RotateCcw,
   Save,
+  SaveAll,
   Settings,
   Sparkles,
   Square,
@@ -42,6 +44,7 @@ import {
   EMU_PER_INCH,
   emu,
   type ElementId,
+  type DocumentId,
   type RectEmu,
   type Slide,
   type SlideElement,
@@ -79,7 +82,7 @@ import { AiImageDialog } from "../features/editor/AiImageDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
 import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
-import { loadRecentProjects, type RecentProjectEntry } from "../services/app-database";
+import { loadRecentProjects, removeRecentProject, type RecentProjectEntry } from "../services/app-database";
 import {
   briefsFromDraft,
   cancelAiGeneration,
@@ -1030,6 +1033,71 @@ export function App() {
       void refreshRecentProjects();
     } catch (error) {
       setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const handleSaveAs = async () => {
+    if (savingRef.current || !isDesktopRuntime()) return;
+    savingRef.current = true;
+    setSaving(true);
+    setTaskStatus("正在另存项目…");
+    try {
+      const result = await saveProject(document);
+      if (!result) {
+        setTaskStatus("另存为已取消");
+        return;
+      }
+      setProjectPath(result.path);
+      setImageProjectPath(result.path);
+      setProjectMtime(result.modifiedAt ?? undefined);
+      setSavedRevision(document.revisions.document);
+      await clearRecovery();
+      await refreshRecentProjects();
+      setTaskStatus(
+        result.report.missingAssets.length > 0
+          ? `项目已另存，但 ${result.report.missingAssets.length} 张图片资源缺失，请检查模板`
+          : "项目已另存",
+      );
+    } catch (error) {
+      setTaskStatus(`另存失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const handleRenameProject = () => {
+    const title = window.prompt("输入新的项目标题", document.title)?.trim();
+    if (!title || title === document.title) return;
+    execute({ type: "rename-document", title });
+    setTaskStatus("项目标题已修改，保存后写入项目文件");
+  };
+
+  const handleDuplicateProject = async () => {
+    if (savingRef.current || !isDesktopRuntime()) return;
+    const copy = structuredClone(document);
+    copy.id = crypto.randomUUID() as DocumentId;
+    copy.title = `${document.title} 副本`;
+    savingRef.current = true;
+    setSaving(true);
+    setTaskStatus("正在复制项目…");
+    try {
+      const result = await saveProject(copy);
+      if (!result) {
+        setTaskStatus("复制已取消");
+        return;
+      }
+      await refreshRecentProjects();
+      setTaskStatus(
+        result.report.missingAssets.length > 0
+          ? `项目副本已创建，但 ${result.report.missingAssets.length} 张图片资源缺失`
+          : "项目副本已创建，当前仍编辑原项目",
+      );
+    } catch (error) {
+      setTaskStatus(`复制失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -2258,6 +2326,15 @@ export function App() {
             <ToolButton label={saving ? "正在保存" : "保存项目"} onClick={handleSave} disabled={saving}>
               <Save />
             </ToolButton>
+            <ToolButton label="另存为" onClick={handleSaveAs} disabled={saving || !isDesktopRuntime()}>
+              <SaveAll />
+            </ToolButton>
+            <ToolButton label="重命名项目" onClick={handleRenameProject} disabled={saving}>
+              <FilePenLine />
+            </ToolButton>
+            <ToolButton label="复制项目" onClick={handleDuplicateProject} disabled={saving || !isDesktopRuntime()}>
+              <Copy />
+            </ToolButton>
             <span className="separator" />
             <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}>
               <Undo2 />
@@ -2995,19 +3072,36 @@ export function App() {
             ) : (
               <div className="ai-history">
                 {recentProjects.map((entry) => (
-                  <button
-                    type="button"
-                    key={entry.path}
-                    disabled={entry.missing}
-                    title={entry.path}
-                    onClick={() => void handleOpenRecent(entry)}
-                  >
-                    <FolderClock />
-                    <div>
-                      <strong>{entry.title}</strong>
-                      <span>{entry.missing ? "文件已移动或删除" : entry.path}</span>
-                    </div>
-                  </button>
+                  <div key={entry.path} className="recent-project-row">
+                    <button
+                      type="button"
+                      className="recent-project-open"
+                      disabled={entry.missing}
+                      title={entry.path}
+                      onClick={() => void handleOpenRecent(entry)}
+                    >
+                      <FolderClock />
+                      <div>
+                        <strong>{entry.title}</strong>
+                        <span>{entry.missing ? "文件已移动或删除" : entry.path}</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      className="recent-project-remove"
+                      aria-label={`从最近项目移除 ${entry.title}`}
+                      title="仅从最近项目移除，不删除文件"
+                      onClick={() => {
+                        void removeRecentProject(entry.path)
+                          .then(setRecentProjects)
+                          .catch((error: unknown) =>
+                            setTaskStatus(`移除失败：${error instanceof Error ? error.message : String(error)}`),
+                          );
+                      }}
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

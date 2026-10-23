@@ -375,6 +375,7 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
 
 export type DocumentCommand =
   | { type: "add-slide" }
+  | { type: "rename-document"; title: string }
   | { type: "apply-ai-draft"; title: string; slides: AiSlideDraft[] }
   | {
       type: "apply-ai-designed-draft";
@@ -730,6 +731,8 @@ function makeRoomForAsset(slide: Slide, textArea: NormalizedRect, pageSize: { wi
 
 export function commandDomain(command: DocumentCommand, document?: PresentationDocument): ChangeDomain | null {
   switch (command.type) {
+    case "rename-document":
+      return "content";
     case "set-slide":
       return null;
     case "set-slide-background":
@@ -938,6 +941,12 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
 
 export function applyCommand(document: PresentationDocument, command: DocumentCommand): void {
   if (command.type === "set-slide") return;
+  if (command.type === "rename-document") {
+    const title = command.title.trim();
+    if (!title || title.length > 512) throw new Error("DOCUMENT_TITLE_INVALID");
+    document.title = title;
+    return;
+  }
   if (command.type === "add-slide") {
     document.slides.push(createSlide(document.slides.length + 1));
     return;

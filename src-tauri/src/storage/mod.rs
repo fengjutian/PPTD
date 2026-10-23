@@ -313,6 +313,16 @@ impl Database {
         drop(connection);
         self.load_recent_projects()
     }
+
+    pub fn remove_recent_project(&self, path: &str) -> Result<Vec<RecentProjectEntry>, String> {
+        validate_recent_project_path(path)?;
+        let connection = self.lock()?;
+        connection
+            .execute("DELETE FROM recent_projects WHERE path = ?1", [path])
+            .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        drop(connection);
+        self.load_recent_projects()
+    }
 }
 
 fn migrate(connection: &mut Connection) -> Result<(), String> {
@@ -428,15 +438,25 @@ fn validate_recent_project(entry: &RecentProjectEntry) -> Result<(), String> {
     if entry.project_id.trim().is_empty() || entry.project_id.chars().count() > 128 {
         return Err("RECENT_PROJECT_ID_INVALID".into());
     }
-    let path = Path::new(&entry.path);
-    if !path.is_absolute() || path.extension().and_then(|value| value.to_str()) != Some("pptd") {
-        return Err("RECENT_PROJECT_PATH_INVALID".into());
-    }
+    validate_recent_project_path(&entry.path)?;
     if entry.title.trim().is_empty() || entry.title.chars().count() > 512 {
         return Err("RECENT_PROJECT_TITLE_INVALID".into());
     }
     if entry.created_at < 0 || entry.modified_at < 0 || entry.last_opened_at < 0 {
         return Err("RECENT_PROJECT_TIMESTAMP_INVALID".into());
+    }
+    Ok(())
+}
+
+fn validate_recent_project_path(value: &str) -> Result<(), String> {
+    let path = Path::new(value);
+    if !path.is_absolute()
+        || !path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("pptd"))
+    {
+        return Err("RECENT_PROJECT_PATH_INVALID".into());
     }
     Ok(())
 }
@@ -716,5 +736,18 @@ mod tests {
         };
         assert_eq!(database.load_settings().expect("load"), Some(settings()));
         assert!(database.load_recent_projects().expect("recent").is_empty());
+    }
+
+    #[test]
+    fn removing_a_recent_project_only_removes_its_index_row() {
+        let database = Database::open_in_memory().expect("database");
+        let path = std::env::temp_dir().join("pptd-recent-remove.pptd");
+        database
+            .upsert_recent_project(&recent_project(&path.to_string_lossy(), 1))
+            .expect("save");
+        let entries = database
+            .remove_recent_project(&path.to_string_lossy())
+            .expect("remove");
+        assert!(entries.is_empty());
     }
 }

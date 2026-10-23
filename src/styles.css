@@ -522,6 +522,53 @@ button {
   border-color: var(--ppt-accent);
   background: #242126;
 }
+.recent-project-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.recent-project-row button {
+  border: 1px solid #34363d;
+  border-radius: 8px;
+  color: #aeb2ba;
+  background: #202126;
+  cursor: pointer;
+}
+.recent-project-row button:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+  background: #242126;
+}
+.recent-project-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+.recent-project-open {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 9px;
+  padding: 12px;
+  text-align: left;
+}
+.recent-project-open > svg,
+.recent-project-remove > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--ppt-accent-hover);
+}
+.recent-project-open strong,
+.recent-project-open span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recent-project-remove {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
 .ai-history > button > svg {
   width: 17px;
   height: 17px;

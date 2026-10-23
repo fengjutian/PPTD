@@ -8,6 +8,16 @@ import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 import { VISUAL_ASSET_REQUEST_SIZE } from "./visual-asset";
 
 describe("document commands", () => {
+  it("renames the presentation in the content domain", () => {
+    const source = createDocument();
+    const result = produce(source, (draft) => applyCommand(draft, { type: "rename-document", title: "  新项目名  " }));
+    expect(result.title).toBe("新项目名");
+    expect(commandDomain({ type: "rename-document", title: "新项目名" })).toBe("content");
+    expect(() => produce(source, (draft) => applyCommand(draft, { type: "rename-document", title: "   " }))).toThrow(
+      "DOCUMENT_TITLE_INVALID",
+    );
+  });
+
   it("keeps design commands out of content", () => {
     const source = createDocument();
     const slide = source.slides[0]!;
