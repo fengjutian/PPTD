@@ -9,7 +9,6 @@ import {
   CircleCheck,
   Copy,
   Download,
-  Eye,
   FilePlus2,
   FilePenLine,
   FolderClock,
@@ -695,6 +694,7 @@ export function App() {
   /** 后端取消用的生成任务号；一次生成任务内的所有请求共享它。 */
   const aiTaskId = useRef(0);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
+  const [themeDrawerOpen, setThemeDrawerOpen] = useState(false);
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const [templatePreview, setTemplatePreview] = useState<string | null>();
   const [templateAnalysis, setTemplateAnalysis] = useState<TemplateAnalysis>();
@@ -2158,6 +2158,7 @@ export function App() {
   const handleSelectTemplate = async (template: TemplateRecord) => {
     setThemePresetId("");
     setSelectedTemplate(template);
+    setThemeDrawerOpen(true);
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
     setTemplateLayoutRenders([]);
@@ -2191,6 +2192,7 @@ export function App() {
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
     setTemplateLayoutRenders([]);
+    setThemeDrawerOpen(true);
   };
 
   useEffect(() => {
@@ -2881,177 +2883,130 @@ export function App() {
           </header>
           <div className="feature-scroll">
             <section className="template-content">
-              <div className="template-browser">
-                <div className="theme-source-panel template-library">
-                  <div className="template-library-heading">
-                    <div>
-                      <strong>内置主题</strong>
-                      <span>{THEME_PRESETS.length} 套</span>
-                    </div>
-                  </div>
-                  <ThemePresetPicker value={themePresetId} onChange={handleSelectThemePreset} disabled={designBusy} />
-                  <div className="extracted-theme-heading">
-                    <strong>从 PPT 抽取</strong>
-                    <span>{templateLibrary.length} 个</span>
-                  </div>
-                  <div className="extracted-theme-list">
-                    {templateLibrary.map((template) => (
-                      <button
-                        type="button"
-                        className={`template-card${selectedTemplate?.id === template.id ? " active" : ""}`}
-                        key={template.id}
-                        onClick={() => void handleSelectTemplate(template)}
-                      >
-                        <Palette />
-                        <span>
-                          <strong>{template.name}</strong>
-                          <small>
-                            {(template.size / 1024 / 1024).toFixed(2)} MB ·{" "}
-                            {new Date(template.importedAt).toLocaleString("zh-CN")}
-                          </small>
-                        </span>
-                        {selectedTemplate?.id === template.id && <Check />}
-                      </button>
-                    ))}
-                  </div>
-                  {templateLibrary.length === 0 && (
-                    <button type="button" className="theme-extract-empty" onClick={() => setTemplateUploadOpen(true)}>
-                      <FileUp />
-                      <span>
-                        <strong>上传 PPTX 抽取主题</strong>
-                        <small>提取主题色、标题/正文字体、母版与页面版式</small>
-                      </span>
-                    </button>
-                  )}
-                </div>
-                <div className="template-preview-panel">
-                  <div className="template-preview-heading">
-                    <strong>
-                      <Eye />
-                      主题预览
-                    </strong>
-                    <span>{selectedThemePreset?.name ?? selectedTemplate?.name ?? "请选择主题"}</span>
-                  </div>
-                  {selectedThemePreset ? (
-                    <div
-                      className="theme-preset-preview"
-                      style={
-                        {
-                          "--theme-primary": selectedThemePreset.theme.colors.find((color) => color.name === "primary")?.value,
-                          "--theme-accent": selectedThemePreset.theme.colors.find((color) => color.name === "accent")?.value,
-                          "--theme-muted": selectedThemePreset.theme.colors.find((color) => color.name === "muted")?.value,
-                          "--theme-surface": selectedThemePreset.theme.colors.find((color) => color.name === "surface")?.value,
-                          "--theme-major-font": selectedThemePreset.theme.majorFont,
-                          "--theme-minor-font": selectedThemePreset.theme.minorFont,
-                        } as React.CSSProperties
-                      }
-                    >
-                      <span className="theme-preview-kicker">PPTD · THEME SYSTEM</span>
-                      <div>
-                        <h2>{selectedThemePreset.name}</h2>
-                        <p>让内容层级、字体与色彩保持一致</p>
-                      </div>
-                      <div className="theme-preview-bars"><i /><i /><i /></div>
-                      <small>{selectedThemePreset.description}</small>
-                    </div>
-                  ) : (
-                    <div className="template-preview-stage">
-                      {templatePreviewBusy ? (
-                      <span>正在解析模板…</span>
-                    ) : templatePreview ? (
-                      <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} />
-                    ) : selectedTemplate ? (
-                      <span>此 PPTX 没有内嵌封面预览</span>
-                    ) : (
-                      <span>选择左侧主题后查看预览</span>
-                    )}
-                    </div>
-                  )}
-                  {selectedThemePreset && (
-                    <div className="theme-preset-details">
-                      <div>
-                        <strong>字体组合</strong>
-                        <span>{selectedThemePreset.theme.majorFont} · {selectedThemePreset.theme.minorFont}</span>
-                      </div>
-                      <div className="template-color-row" aria-label="主题色">
-                        {selectedThemePreset.theme.colors.map((color) => (
-                          <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {templateAnalysis && (
-                    <div className="template-analysis">
-                      <div className="template-analysis-grid">
-                        <span>
-                          <b>{templateAnalysis.slideCount}</b>页面
-                        </span>
-                        <span>
-                          <b>{templateAnalysis.masterCount}</b>母版
-                        </span>
-                        <span>
-                          <b>{templateAnalysis.layoutCount}</b>版式
-                        </span>
-                        <span>
-                          <b>{templateAnalysis.themeCount}</b>主题
-                        </span>
-                      </div>
-                      <dl>
-                        <div>
-                          <dt>页面尺寸</dt>
-                          <dd>
-                            {templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu
-                              ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in`
-                              : "未定义"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>标题字体</dt>
-                          <dd>{templateAnalysis.majorFont || "未定义"}</dd>
-                        </div>
-                        <div>
-                          <dt>正文字体</dt>
-                          <dd>{templateAnalysis.minorFont || "未定义"}</dd>
-                        </div>
-                      </dl>
-                      {templateAnalysis.themeColors.length > 0 && (
-                        <div className="template-color-row" aria-label="主题色">
-                          {templateAnalysis.themeColors.map((color) => (
-                            <span
-                              key={color.name}
-                              title={`${color.name} ${color.value}`}
-                              style={{ backgroundColor: color.value }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      <div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>
-                      {templateAnalysis.slides.length > 0 && (
-                        <div className="template-slide-summaries">
-                          <strong>页面结构</strong>
-                          <div>
-                            {templateAnalysis.slides.map((slide) => (
-                              <article key={slide.index}>
-                                <b>{String(slide.index).padStart(2, "0")}</b>
-                                <span>
-                                  <strong>{slide.title}</strong>
-                                  <small>
-                                    {slide.textCount} 文本 · {slide.imageCount} 图片 · {slide.shapeCount} 形状
-                                    {slide.layout ? ` · ${slide.layout}` : ""}
-                                  </small>
-                                </span>
-                              </article>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+              <div className="theme-gallery-heading">
+                <div><strong>内置主题</strong><span>{THEME_PRESETS.length} 套可用</span></div>
+                <p>点击卡片查看完整配色、字体和适用场景</p>
+              </div>
+              <ThemePresetPicker value={themePresetId} onChange={handleSelectThemePreset} disabled={designBusy} />
+              <div className="theme-gallery-heading extracted">
+                <div><strong>从 PPT 抽取的主题</strong><span>{templateLibrary.length} 套</span></div>
+                <p>保留来源文件的设计语言，并展示可解析范围</p>
+              </div>
+              <div className="theme-card-grid extracted-theme-grid">
+                {templateLibrary.map((template) => (
+                  <button
+                    type="button"
+                    className={`theme-card extracted${selectedTemplate?.id === template.id ? " active" : ""}`}
+                    key={template.id}
+                    onClick={() => void handleSelectTemplate(template)}
+                  >
+                    <span className="theme-card-art extracted-art"><FileUp /><i /><i /></span>
+                    <strong>{template.name}</strong>
+                    <small>从 PPTX 抽取的主题、母版与版式</small>
+                    <span className="theme-card-fonts">
+                      {(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleDateString("zh-CN")}
+                    </span>
+                  </button>
+                ))}
+                <button type="button" className="theme-card theme-upload-card" onClick={() => setTemplateUploadOpen(true)}>
+                  <span className="theme-card-art upload-art"><FileUp /></span>
+                  <strong>从 PPT 抽取主题</strong>
+                  <small>上传 PPTX，提取主题色、字体、母版和页面版式</small>
+                  <span className="theme-card-fonts">支持 .pptx · 最大 512 MB</span>
+                </button>
               </div>
             </section>
           </div>
         </main>
+      )}
+
+      {activeView === "theme" && themeDrawerOpen && (selectedThemePreset || selectedTemplate) && (
+        <div
+          className="theme-drawer-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setThemeDrawerOpen(false);
+          }}
+        >
+          <aside className="theme-drawer" role="dialog" aria-modal="true" aria-labelledby="theme-drawer-title">
+            <div className="theme-drawer-heading">
+              <div>
+                <span>{selectedThemePreset ? "内置主题" : "PPT 抽取主题"}</span>
+                <h2 id="theme-drawer-title">{selectedThemePreset?.name ?? selectedTemplate?.name}</h2>
+              </div>
+              <button type="button" aria-label="关闭主题详情" onClick={() => setThemeDrawerOpen(false)}><X /></button>
+            </div>
+            <div className="theme-drawer-scroll">
+              {selectedThemePreset ? (
+                <>
+                  <div
+                    className="theme-preset-preview"
+                    style={
+                      {
+                        "--theme-primary": selectedThemePreset.theme.colors.find((color) => color.name === "primary")?.value,
+                        "--theme-accent": selectedThemePreset.theme.colors.find((color) => color.name === "accent")?.value,
+                        "--theme-muted": selectedThemePreset.theme.colors.find((color) => color.name === "muted")?.value,
+                        "--theme-surface": selectedThemePreset.theme.colors.find((color) => color.name === "surface")?.value,
+                        "--theme-major-font": selectedThemePreset.theme.majorFont,
+                        "--theme-minor-font": selectedThemePreset.theme.minorFont,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <span className="theme-preview-kicker">PPTD · THEME SYSTEM</span>
+                    <div><h2>{selectedThemePreset.name}</h2><p>让内容层级、字体与色彩保持一致</p></div>
+                    <div className="theme-preview-bars"><i /><i /><i /></div>
+                    <small>{selectedThemePreset.description}</small>
+                  </div>
+                  <section className="theme-drawer-section">
+                    <h3>主题说明</h3>
+                    <p>{selectedThemePreset.description}</p>
+                  </section>
+                  <section className="theme-drawer-section theme-token-details">
+                    <h3>设计令牌</h3>
+                    <dl>
+                      <div><dt>标题字体</dt><dd>{selectedThemePreset.theme.majorFont}</dd></div>
+                      <div><dt>正文字体</dt><dd>{selectedThemePreset.theme.minorFont}</dd></div>
+                    </dl>
+                    <div className="template-color-row" aria-label="主题色">
+                      {selectedThemePreset.theme.colors.map((color) => (
+                        <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />
+                      ))}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                <>
+                  <div className="template-preview-stage drawer-preview">
+                    {templatePreviewBusy ? <span>正在解析 PPT 主题…</span> : templatePreview ? (
+                      <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} />
+                    ) : <span>此 PPTX 没有内嵌封面预览</span>}
+                  </div>
+                  {templateAnalysis && (
+                    <div className="template-analysis drawer-analysis">
+                      <div className="template-analysis-grid">
+                        <span><b>{templateAnalysis.slideCount}</b>页面</span>
+                        <span><b>{templateAnalysis.masterCount}</b>母版</span>
+                        <span><b>{templateAnalysis.layoutCount}</b>版式</span>
+                        <span><b>{templateAnalysis.themeCount}</b>主题</span>
+                      </div>
+                      <dl>
+                        <div><dt>页面尺寸</dt><dd>{templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in` : "未定义"}</dd></div>
+                        <div><dt>标题字体</dt><dd>{templateAnalysis.majorFont || "未定义"}</dd></div>
+                        <div><dt>正文字体</dt><dd>{templateAnalysis.minorFont || "未定义"}</dd></div>
+                      </dl>
+                      {templateAnalysis.themeColors.length > 0 && <div className="template-color-row" aria-label="主题色">{templateAnalysis.themeColors.map((color) => <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />)}</div>}
+                      {templateAnalysis.warnings.length > 0 && <div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="theme-drawer-actions">
+              <button type="button" className="secondary-action" onClick={() => setThemeDrawerOpen(false)}>关闭</button>
+              <button type="button" className="primary-action" onClick={() => { setThemeDrawerOpen(false); setTaskStatus(`已选择主题：${selectedThemePreset?.name ?? selectedTemplate?.name}`); }}><Check />使用此主题</button>
+            </div>
+          </aside>
+        </div>
       )}
 
       {activeView === "settings" && (
