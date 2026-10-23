@@ -3,6 +3,7 @@ export * from "./factory";
 export * from "./schema";
 export * from "./repair";
 export * from "./content-hash";
+export * from "./content-version";
 export * from "./chart-data";
 export * from "./table-data";
 export * from "./icons";

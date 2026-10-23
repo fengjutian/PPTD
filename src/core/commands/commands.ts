@@ -26,6 +26,7 @@ import type {
 } from "../document-model";
 import {
   BUILTIN_ICONS,
+  captureContentVersion,
   createDocument,
   createSlide,
   iconForText,
@@ -3298,6 +3299,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       for (const element of slide.elements) element.origin = "generated";
       return slide;
     });
+    // Applying a reviewed draft is a confirmation act: keep the confirmed copy
+    // so a later edit can be compared with what the user actually approved.
+    captureContentVersion(document);
     return;
   }
   if (command.type === "duplicate-slide") {
@@ -3687,6 +3691,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // 复核闭环的另一半：内容被改过（changed）或人工退回（review）之后，
     // 用户确认这一页仍然是审过的版本，导出前置检查才会放行。
     slide.content.status = "approved";
+    // 只有确认才留下可追溯版本；同内容重复确认由 capture 自己跳过。
+    captureContentVersion(document);
     return;
   }
 

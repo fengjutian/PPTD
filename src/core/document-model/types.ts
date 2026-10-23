@@ -356,6 +356,31 @@ export interface Slide {
   layoutId?: string;
 }
 
+/** The reviewed content of one page at the moment it was confirmed. */
+export interface ContentVersionSlide {
+  slideId: SlideId;
+  title: string;
+  body: string;
+  blocks?: ContentBlock[];
+  speakerNotes: string;
+}
+
+/**
+ * A confirmed snapshot of the whole deck's content.
+ *
+ * It deliberately stores no elements, styles, backgrounds or status: a design
+ * change must not create a content version, and comparing versions should not
+ * report font or position changes as content review work.
+ */
+export interface ContentVersion {
+  id: string;
+  /** Content revision this snapshot was confirmed at. */
+  contentRevision: number;
+  /** Document revision this snapshot was confirmed at. */
+  documentRevision: number;
+  slides: ContentVersionSlide[];
+}
+
 export interface PresentationDocument {
   id: DocumentId;
   schemaVersion: SchemaVersion;
@@ -365,4 +390,6 @@ export interface PresentationDocument {
   slides: Slide[];
   theme?: DocumentTheme;
   layouts?: SlideLayoutSpec[];
+  /** Confirmed content snapshots, oldest first. Capped by the document model. */
+  contentVersions?: ContentVersion[];
 }

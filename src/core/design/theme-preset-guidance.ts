@@ -75,12 +75,13 @@ const GUIDANCE: Readonly<Record<string, ThemePresetGuidance>> = {
 };
 
 export function themePresetGuidance(id: string): ThemePresetGuidance {
+  const metadata = themePresetMetadata(id);
   return (
     GUIDANCE[id] ?? {
-      character: "清晰、统一、以内容层级为先。",
-      scenarios: ["通用演示"],
-      pageRhythm: "内容页与重点页交替，避免连续页面使用同一骨架。",
-      imageStyle: "选择与主题直接相关、构图简洁且不含文字的视觉素材。",
+      character: metadata.character,
+      scenarios: metadata.scenarios,
+      pageRhythm: metadata.pageRhythm,
+      imageStyle: metadata.imageStyle,
     }
   );
 }
@@ -88,6 +89,7 @@ export function themePresetGuidance(id: string): ThemePresetGuidance {
 /** A portable art-direction prompt for a design model or image-capable agent. */
 export function themePresetAiPrompt(preset: ThemePreset): string {
   const guidance = themePresetGuidance(preset.id);
+  const metadata = themePresetMetadata(preset.id);
   const colors = preset.theme.colors.map((color) => `${color.name}=${color.value}`).join("，");
   const styles = preset.theme.textStyles;
   return [
@@ -98,6 +100,10 @@ export function themePresetAiPrompt(preset: ThemePreset): string {
     `限定色板：${colors}。只使用这些颜色及其低透明度变体；不要使用纯黑或大面积近黑背景。`,
     `页面节奏：${guidance.pageRhythm}`,
     `图片方向：${guidance.imageStyle} 图片中不要生成文字、字母、数字或水印。`,
+    `推荐页面类型：${metadata.recommendedPageTypes.join("、")}；信息密度：${metadata.density}。`,
+    `字体回退：中文 ${metadata.fontFallbacks.eastAsian.join(" → ")}；西文 ${metadata.fontFallbacks.latin.join(" → ")}。`,
+    `图表系列色：${metadata.chartPalette.join("、")}。`,
+    `禁止组合：${metadata.forbiddenCombinations.join("；")}。`,
     "逐页先判断视觉叙事方式：结论、证据、对比、时序、框架、引语或场景，再选择相应构图；相邻页面避免连续使用相同骨架。",
     "封面与章节页可使用主题强调色背景，普通内容页使用浅色表面；每页必须有明确的第一视觉焦点，并保持足够留白和文字对比度。",
     "所有标题、正文、数字、引用、备注和页面顺序均为已审核内容：不得改写、概括、补充、删除或重新排序。空间不足时返回布局冲突，不得静默删减内容。",
@@ -106,4 +112,4 @@ export function themePresetAiPrompt(preset: ThemePreset): string {
 }
 
 import type { ThemePreset } from "./theme-presets";
-
+import { themePresetMetadata } from "./theme-preset-metadata";

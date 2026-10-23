@@ -126,6 +126,7 @@ import {
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
+import { themePresetMetadata } from "../core/design/theme-preset-metadata";
 import type { BuiltinIconName } from "../core/document-model";
 import { IconPicker } from "../features/editor/IconPicker";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
@@ -140,6 +141,12 @@ import { DisabledVisionReviewPort, TauriVisionReviewPort } from "../services/vis
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 import { renderRealPptxForReview } from "../features/pptx-export/render-real-pptx";
+import {
+  initialAgentWorkflow,
+  startAgentWorkflow,
+  transitionAgentWorkflow,
+  canTransitionAgentWorkflow,
+} from "../services/agent-workflow";
 import {
   resolveDocumentImages,
   setImageProjectPath,
@@ -332,8 +339,10 @@ const ElementView = memo(function ElementView({
     touchAction: "none",
     animationDuration: previewAnimation ? `${previewAnimation.durationMs}ms` : undefined,
     animationDelay: previewAnimation ? `${previewAnimation.delayMs}ms` : undefined,
-    "--pptd-animation-x": previewAnimation?.direction === "left" ? "-36px" : previewAnimation?.direction === "right" ? "36px" : "0",
-    "--pptd-animation-y": previewAnimation?.direction === "top" ? "-36px" : previewAnimation?.direction === "bottom" ? "36px" : "0",
+    "--pptd-animation-x":
+      previewAnimation?.direction === "left" ? "-36px" : previewAnimation?.direction === "right" ? "36px" : "0",
+    "--pptd-animation-y":
+      previewAnimation?.direction === "top" ? "-36px" : previewAnimation?.direction === "bottom" ? "36px" : "0",
   };
 
   /**
@@ -657,7 +666,9 @@ export function App() {
   const [inspectorWidth, setInspectorWidth] = useState(readInspectorWidth);
   const [message, setMessage] = useState<PageMessage>();
   const [leftTab, setLeftTab] = useState<"slides" | "layers">("slides");
-  const [editorRibbonTab, setEditorRibbonTab] = useState<"file" | "home" | "insert" | "design" | "arrange" | "animation" | "view">("home");
+  const [editorRibbonTab, setEditorRibbonTab] = useState<
+    "file" | "home" | "insert" | "design" | "arrange" | "animation" | "view"
+  >("home");
   const [animationPreviews, setAnimationPreviews] = useState<SlideAnimation[]>([]);
   const [selectedAnimationId, setSelectedAnimationId] = useState<string>();
   const animationPreviewTimers = useRef<number[]>([]);
@@ -708,6 +719,7 @@ export function App() {
   const [aiRegenerating, setAiRegenerating] = useState(false);
   const [aiPolishing, setAiPolishing] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
+  const [agentWorkflow, setAgentWorkflow] = useState(initialAgentWorkflow);
   /** 流式汇报的实时进度：正文分批并行，这里是各批汇总后的结果。 */
   const [aiStreamProgress, setAiStreamProgress] = useState<{ pages: number; received: number }>();
   const aiRequestId = useRef(0);
@@ -737,6 +749,9 @@ export function App() {
     /** 视觉评审留下的结构化结论，用于在报告里逐条展示模型建议。 */
     visualReview?: VisualReview;
     visualReviewCoverage?: { reviewed: number; total: number };
+    contactSheet?: string;
+    deckReview?: VisualReview;
+    reviewReuse?: { reviewed: number; reused: number };
   }>();
   const [designQualityReportOpen, setDesignQualityReportOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -1273,6 +1288,7 @@ export function App() {
       // 真正中断后端在途请求，否则模型会继续生成一份没人要的草稿。
       void cancelAiGeneration(aiTaskId.current).catch(() => undefined);
       setTaskStatus("已取消 AI 内容生成");
+      setAgentWorkflow((state) => transitionAgentWorkflow(state, "cancelled"));
       return;
     }
     if (aiSlideCount === "" || aiSlideCount < 1) {
@@ -1285,6 +1301,7 @@ export function App() {
     aiTaskId.current += 1;
     const taskId = aiTaskId.current;
     setAiBusy(true);
+    setAgentWorkflow((state) => transitionAgentWorkflow(startAgentWorkflow(state), "planning"));
     setAiDraft(undefined);
     aiContentUndo.current = [];
     aiContentRedo.current = [];
@@ -1301,6 +1318,7 @@ export function App() {
         if (requestId !== aiRequestId.current || progress.taskId !== taskId) return;
         setAiStreamProgress(mergeStreamProgress(totals, progress));
       }).catch(() => undefined);
+      setAgentWorkflow((state) => transitionAgentWorkflow(state, "generating-content"));
       const draft = withSlideIds(
         await generatePresentationDraft(aiTopic, requestedSlideCount, {
           onProgress: (progress) => {
@@ -1318,6 +1336,7 @@ export function App() {
       aiContentCoalesce.current = undefined;
       setAiContentHistoryRevision((value) => value + 1);
       setAiDraft(draft);
+      setAgentWorkflow((state) => transitionAgentWorkflow(state, "reviewing-content"));
       setActiveHistoryId(id);
       selectAiDraftSlide(0);
       setAiSaveState("saved");
@@ -1332,6 +1351,7 @@ export function App() {
     } catch (error) {
       if (requestId !== aiRequestId.current) return;
       const detail = describeAiError(error);
+      setAgentWorkflow((state) => transitionAgentWorkflow(state, "failed", { error: detail }));
       setTaskStatus(`AI 内容生成失败：${detail}`);
       if ("Notification" in window && Notification.permission === "granted")
         new Notification("PPTD · AI 生成失败", { body: detail });
@@ -1949,6 +1969,11 @@ export function App() {
     designTaskId.current += 1;
     const taskId = designTaskId.current;
     setDesignBusy(true);
+    setAgentWorkflow((state) => {
+      const prepared =
+        state.stage === "reviewing-content" ? state : transitionAgentWorkflow(startAgentWorkflow(state), "planning");
+      return transitionAgentWorkflow(prepared, "generating-design");
+    });
     setDesignProgress({ percent: 8, label: "正在准备内容与模板数据" });
     // Design generation is a background task. Closing the modal here releases
     // the workspace immediately; progress and cancellation remain available in
@@ -2133,13 +2158,28 @@ export function App() {
           : new DisabledVisionReviewPort(),
         taskId,
         isCancelled: () => designCancelRef.current,
-        onProgress: (label, percent) => setDesignProgress({ percent, label }),
+        onProgress: (label, percent) => {
+          setDesignProgress({ percent, label });
+          const stage = label.includes("修复")
+            ? "repairing"
+            : label.includes("视觉评审")
+              ? "visual-review"
+              : "deterministic-quality";
+          setAgentWorkflow((state) =>
+            canTransitionAgentWorkflow(state.stage, stage) ? transitionAgentWorkflow(state, stage, { label }) : state,
+          );
+        },
         // 评审优先看导出后的真实 PPTX。本机没有 PowerPoint 时这一项会失败，
         // 质检阶段自己降级到画布预览渲染并在报告里说明。
         renderRealPptxForReview,
       });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       const finalDocument = stage.document;
+      setAgentWorkflow((state) =>
+        canTransitionAgentWorkflow(state.stage, "ready-to-export")
+          ? transitionAgentWorkflow(state, "ready-to-export")
+          : state,
+      );
       const visualNote = stage.notes.join("；");
       // 质量门未过时文档照常产出：问题被逐条列出，PPT 不会因为报错而消失。
       replaceDocument(finalDocument, "both");
@@ -2178,6 +2218,9 @@ export function App() {
           notes: stage.notes,
           visualReview: stage.visualReview,
           visualReviewCoverage: stage.visualReviewCoverage,
+          contactSheet: stage.contactSheet,
+          deckReview: stage.deckReview,
+          reviewReuse: stage.reviewReuse,
         });
         setDesignQualityReportOpen(false);
         setTaskStatus(
@@ -2198,9 +2241,17 @@ export function App() {
       window.clearInterval(progressTimer);
       const message = error instanceof Error ? error.message : String(error);
       if (message === "AI_GENERATION_CANCELLED" || message.includes("AI_REQUEST_CANCELLED")) {
+        setAgentWorkflow((state) =>
+          canTransitionAgentWorkflow(state.stage, "cancelled") ? transitionAgentWorkflow(state, "cancelled") : state,
+        );
         setDesignProgress({ percent: 0, label: "已取消生成" });
         setTaskStatus("已取消 AI 设计生成");
       } else {
+        setAgentWorkflow((state) =>
+          canTransitionAgentWorkflow(state.stage, "failed")
+            ? transitionAgentWorkflow(state, "failed", { error: describeAiError(error) })
+            : state,
+        );
         setDesignProgress({ percent: 0, label: "生成失败，请重试" });
         setTaskStatus(`AI 设计生成失败：${describeAiError(error)}`);
       }
@@ -2400,11 +2451,15 @@ export function App() {
 
   const selectedThemePreset = findThemePreset(themePresetId);
   const selectedThemeGuidance = selectedThemePreset ? themePresetGuidance(selectedThemePreset.id) : undefined;
+  const selectedThemeMetadata = selectedThemePreset ? themePresetMetadata(selectedThemePreset.id) : undefined;
   const selectedThemeAiPrompt = selectedThemePreset ? themePresetAiPrompt(selectedThemePreset) : undefined;
   const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
-  const selectedAnimations = selected ? (activeSlide.animations ?? []).filter((animation) => animation.elementId === selected.id) : [];
-  const selectedAnimation = selectedAnimations.find((animation) => animation.id === selectedAnimationId) ?? selectedAnimations.at(-1);
+  const selectedAnimations = selected
+    ? (activeSlide.animations ?? []).filter((animation) => animation.elementId === selected.id)
+    : [];
+  const selectedAnimation =
+    selectedAnimations.find((animation) => animation.id === selectedAnimationId) ?? selectedAnimations.at(-1);
   const selectedAnimationIndex = selectedAnimation
     ? (activeSlide.animations ?? []).findIndex((animation) => animation.id === selectedAnimation.id)
     : -1;
@@ -2428,7 +2483,10 @@ export function App() {
     window.requestAnimationFrame(() => {
       setAnimationPreviews([selectedAnimation]);
       animationPreviewTimers.current = [
-        window.setTimeout(() => setAnimationPreviews([]), selectedAnimation.durationMs + selectedAnimation.delayMs + 120),
+        window.setTimeout(
+          () => setAnimationPreviews([]),
+          selectedAnimation.durationMs + selectedAnimation.delayMs + 120,
+        ),
       ];
     });
   };
@@ -2440,18 +2498,22 @@ export function App() {
     let previousStart = 0;
     let previousEnd = 0;
     animations.forEach((animation, index) => {
-      const sequenceStart = index === 0
-        ? 0
-        : animation.start === "with-previous"
-          ? previousStart
-          : animation.start === "after-previous"
-            ? previousEnd
-            : previousEnd + 250;
+      const sequenceStart =
+        index === 0
+          ? 0
+          : animation.start === "with-previous"
+            ? previousStart
+            : animation.start === "after-previous"
+              ? previousEnd
+              : previousEnd + 250;
       const visibleStart = sequenceStart;
       const visibleEnd = sequenceStart + animation.delayMs + animation.durationMs + 80;
       animationPreviewTimers.current.push(
         window.setTimeout(() => {
-          setAnimationPreviews((current) => [...current.filter((item) => item.elementId !== animation.elementId), animation]);
+          setAnimationPreviews((current) => [
+            ...current.filter((item) => item.elementId !== animation.elementId),
+            animation,
+          ]);
           setSelectedAnimationId(animation.id);
         }, visibleStart),
         window.setTimeout(() => {
@@ -2461,10 +2523,12 @@ export function App() {
       previousStart = sequenceStart;
       previousEnd = Math.max(previousEnd, sequenceStart + animation.delayMs + animation.durationMs);
     });
-    animationPreviewTimers.current.push(window.setTimeout(() => {
-      animationPreviewTimers.current = [];
-      setAnimationPreviews([]);
-    }, previousEnd + 350));
+    animationPreviewTimers.current.push(
+      window.setTimeout(() => {
+        animationPreviewTimers.current = [];
+        setAnimationPreviews([]);
+      }, previousEnd + 350),
+    );
   };
 
   return (
@@ -2475,15 +2539,17 @@ export function App() {
       {activeView === "editor" && (
         <header className="topbar" data-ribbon-tab={editorRibbonTab}>
           <nav className="ribbon-tabs" aria-label="编辑功能区">
-            {([
-              ["file", "文件"],
-              ["home", "开始"],
-              ["insert", "插入"],
-              ["design", "设计"],
-              ["arrange", "排列"],
-              ["animation", "动画"],
-              ["view", "视图"],
-            ] as const).map(([id, label]) => (
+            {(
+              [
+                ["file", "文件"],
+                ["home", "开始"],
+                ["insert", "插入"],
+                ["design", "设计"],
+                ["arrange", "排列"],
+                ["animation", "动画"],
+                ["view", "视图"],
+              ] as const
+            ).map(([id, label]) => (
               <button
                 type="button"
                 key={id}
@@ -2499,7 +2565,12 @@ export function App() {
             <ToolButton label="新建项目" caption="新建" onClick={handleNew}>
               <FilePlus2 />
             </ToolButton>
-            <ToolButton label="打开或导入 PPTD、PPTX、PPT" caption="打开" onClick={handleOpenOrImport} disabled={!isDesktopRuntime()}>
+            <ToolButton
+              label="打开或导入 PPTD、PPTX、PPT"
+              caption="打开"
+              onClick={handleOpenOrImport}
+              disabled={!isDesktopRuntime()}
+            >
               <FileUp />
             </ToolButton>
             <ToolButton
@@ -2513,7 +2584,12 @@ export function App() {
             >
               <FolderClock />
             </ToolButton>
-            <ToolButton label={saving ? "正在保存" : "保存项目"} caption={saving ? "保存中" : "保存"} onClick={handleSave} disabled={saving}>
+            <ToolButton
+              label={saving ? "正在保存" : "保存项目"}
+              caption={saving ? "保存中" : "保存"}
+              onClick={handleSave}
+              disabled={saving}
+            >
               <Save />
             </ToolButton>
             <ToolButton label="另存为" caption="另存" onClick={handleSaveAs} disabled={saving || !isDesktopRuntime()}>
@@ -2522,7 +2598,12 @@ export function App() {
             <ToolButton label="重命名项目" caption="重命名" onClick={handleRenameProject} disabled={saving}>
               <FilePenLine />
             </ToolButton>
-            <ToolButton label="复制项目" caption="副本" onClick={handleDuplicateProject} disabled={saving || !isDesktopRuntime()}>
+            <ToolButton
+              label="复制项目"
+              caption="副本"
+              onClick={handleDuplicateProject}
+              disabled={saving || !isDesktopRuntime()}
+            >
               <Copy />
             </ToolButton>
           </div>
@@ -2537,19 +2618,33 @@ export function App() {
             <ToolButton label="新建幻灯片" caption="新建页面" onClick={() => execute({ type: "add-slide" })}>
               <Plus />
             </ToolButton>
-            <ToolButton label="复制当前幻灯片" caption="复制页面" onClick={() => execute({ type: "duplicate-slide", slideId: activeSlide.id })}>
+            <ToolButton
+              label="复制当前幻灯片"
+              caption="复制页面"
+              onClick={() => execute({ type: "duplicate-slide", slideId: activeSlide.id })}
+            >
               <Copy />
             </ToolButton>
-            <ToolButton label="删除当前幻灯片" caption="删除页面" disabled={document.slides.length <= 1} onClick={() => execute({ type: "delete-slide", slideId: activeSlide.id })}>
+            <ToolButton
+              label="删除当前幻灯片"
+              caption="删除页面"
+              disabled={document.slides.length <= 1}
+              onClick={() => execute({ type: "delete-slide", slideId: activeSlide.id })}
+            >
               <Trash2 />
             </ToolButton>
             <span className="separator" />
             <ToolButton
               label="复制所选对象"
               caption="复制对象"
-              disabled={selectedElementIds.length === 0 || selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)}
+              disabled={
+                selectedElementIds.length === 0 ||
+                selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
+              }
               onClick={() => {
-                const elementIds = selectedElementIds.filter((id) => !activeSlide.elements.find((item) => item.id === id)?.locked);
+                const elementIds = selectedElementIds.filter(
+                  (id) => !activeSlide.elements.find((item) => item.id === id)?.locked,
+                );
                 if (elementIds.length) execute({ type: "duplicate-elements", slideId: activeSlide.id, elementIds });
               }}
             >
@@ -2558,9 +2653,14 @@ export function App() {
             <ToolButton
               label="删除所选对象"
               caption="删除对象"
-              disabled={selectedElementIds.length === 0 || selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)}
+              disabled={
+                selectedElementIds.length === 0 ||
+                selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
+              }
               onClick={() => {
-                const elementIds = selectedElementIds.filter((id) => !activeSlide.elements.find((item) => item.id === id)?.locked);
+                const elementIds = selectedElementIds.filter(
+                  (id) => !activeSlide.elements.find((item) => item.id === id)?.locked,
+                );
                 if (elementIds.length) execute({ type: "delete-elements", slideId: activeSlide.id, elementIds });
               }}
             >
@@ -2676,62 +2776,118 @@ export function App() {
             <ToolButton
               label="复制所选对象"
               disabled={!selected || selected.locked}
-              onClick={() => selected && execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: selected.id })}
+              onClick={() =>
+                selected && execute({ type: "duplicate-element", slideId: activeSlide.id, elementId: selected.id })
+              }
             >
               <Copy />
             </ToolButton>
             <ToolButton
               label="上移一层"
-              disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) >= activeSlide.elements.length - 1}
-              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.indexOf(selected) + 1 })}
+              disabled={
+                !selected ||
+                selected.locked ||
+                activeSlide.elements.indexOf(selected) >= activeSlide.elements.length - 1
+              }
+              onClick={() =>
+                selected &&
+                execute({
+                  type: "reorder-element",
+                  slideId: activeSlide.id,
+                  elementId: selected.id,
+                  toIndex: activeSlide.elements.indexOf(selected) + 1,
+                })
+              }
             >
               <ArrowUp />
             </ToolButton>
             <ToolButton
               label="下移一层"
               disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) <= 0}
-              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.indexOf(selected) - 1 })}
+              onClick={() =>
+                selected &&
+                execute({
+                  type: "reorder-element",
+                  slideId: activeSlide.id,
+                  elementId: selected.id,
+                  toIndex: activeSlide.elements.indexOf(selected) - 1,
+                })
+              }
             >
               <ArrowDown />
             </ToolButton>
             <ToolButton
               label="置于顶层"
-              disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) >= activeSlide.elements.length - 1}
-              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: activeSlide.elements.length - 1 })}
+              disabled={
+                !selected ||
+                selected.locked ||
+                activeSlide.elements.indexOf(selected) >= activeSlide.elements.length - 1
+              }
+              onClick={() =>
+                selected &&
+                execute({
+                  type: "reorder-element",
+                  slideId: activeSlide.id,
+                  elementId: selected.id,
+                  toIndex: activeSlide.elements.length - 1,
+                })
+              }
             >
               <ArrowUp />
             </ToolButton>
             <ToolButton
               label="置于底层"
               disabled={!selected || selected.locked || activeSlide.elements.indexOf(selected) <= 0}
-              onClick={() => selected && execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: 0 })}
+              onClick={() =>
+                selected &&
+                execute({ type: "reorder-element", slideId: activeSlide.id, elementId: selected.id, toIndex: 0 })
+              }
             >
               <ArrowDown />
             </ToolButton>
             <ToolButton
               label="删除所选对象"
               disabled={!selected || selected.locked}
-              onClick={() => selected && execute({ type: "delete-element", slideId: activeSlide.id, elementId: selected.id })}
+              onClick={() =>
+                selected && execute({ type: "delete-element", slideId: activeSlide.id, elementId: selected.id })
+              }
             >
               <Trash2 />
             </ToolButton>
           </div>
           <div className="toolbar-group animation-tools">
-            <ToolButton label="预览当前动画" caption="预览" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>
+            <ToolButton
+              label="预览当前动画"
+              caption="预览"
+              disabled={!selectedAnimation}
+              onClick={previewSelectedAnimation}
+            >
               <MousePointer2 />
             </ToolButton>
-            <ToolButton label="按顺序预览本页动画" caption="播放全部" disabled={!(activeSlide.animations?.length)} onClick={previewSlideAnimations}>
+            <ToolButton
+              label="按顺序预览本页动画"
+              caption="播放全部"
+              disabled={!activeSlide.animations?.length}
+              onClick={previewSlideAnimations}
+            >
               <Play />
             </ToolButton>
-            <ToolButton label="停止动画预览" caption="停止" disabled={!animationPreviews.length} onClick={stopAnimationPreview}>
+            <ToolButton
+              label="停止动画预览"
+              caption="停止"
+              disabled={!animationPreviews.length}
+              onClick={stopAnimationPreview}
+            >
               <Square />
             </ToolButton>
             <span className="separator" />
-            {([
-              ["appear", "出现"],
-              ["fade", "淡化"],
-              ["fly-in", "飞入"],
-            ] as const).map(([effect, label]) => (
+            {(
+              [
+                ["appear", "出现"],
+                ["fade", "淡化"],
+                ["fly-in", "飞入"],
+              ] as const
+            ).map(([effect, label]) => (
               <ToolButton
                 key={effect}
                 label={`添加${label}动画`}
@@ -2761,11 +2917,16 @@ export function App() {
             <ToolButton
               label="删除所选对象的最后一个动画"
               caption="删除动画"
-              disabled={!selected || !(activeSlide.animations ?? []).some((animation) => animation.elementId === selected.id)}
+              disabled={
+                !selected || !(activeSlide.animations ?? []).some((animation) => animation.elementId === selected.id)
+              }
               onClick={() => {
                 if (!selected) return;
-                const animation = [...(activeSlide.animations ?? [])].reverse().find((item) => item.elementId === selected.id);
-                if (animation) execute({ type: "remove-animation", slideId: activeSlide.id, animationId: animation.id });
+                const animation = [...(activeSlide.animations ?? [])]
+                  .reverse()
+                  .find((item) => item.elementId === selected.id);
+                if (animation)
+                  execute({ type: "remove-animation", slideId: activeSlide.id, animationId: animation.id });
               }}
             >
               <Trash2 />
@@ -2776,7 +2937,14 @@ export function App() {
                   开始
                   <select
                     value={selectedAnimation.start}
-                    onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { start: event.target.value as typeof selectedAnimation.start } })}
+                    onChange={(event) =>
+                      execute({
+                        type: "set-animation",
+                        slideId: activeSlide.id,
+                        animationId: selectedAnimation.id,
+                        changes: { start: event.target.value as typeof selectedAnimation.start },
+                      })
+                    }
                   >
                     <option value="on-click">单击时</option>
                     <option value="with-previous">与上一动画同时</option>
@@ -2785,18 +2953,53 @@ export function App() {
                 </label>
                 <label>
                   时长
-                  <input type="number" min="0.1" max="60" step="0.1" value={selectedAnimation.durationMs / 1000} onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { durationMs: Math.round(Number(event.target.value) * 1000) } })} />
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="60"
+                    step="0.1"
+                    value={selectedAnimation.durationMs / 1000}
+                    onChange={(event) =>
+                      execute({
+                        type: "set-animation",
+                        slideId: activeSlide.id,
+                        animationId: selectedAnimation.id,
+                        changes: { durationMs: Math.round(Number(event.target.value) * 1000) },
+                      })
+                    }
+                  />
                 </label>
                 <label>
                   延迟
-                  <input type="number" min="0" max="60" step="0.1" value={selectedAnimation.delayMs / 1000} onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { delayMs: Math.round(Number(event.target.value) * 1000) } })} />
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="0.1"
+                    value={selectedAnimation.delayMs / 1000}
+                    onChange={(event) =>
+                      execute({
+                        type: "set-animation",
+                        slideId: activeSlide.id,
+                        animationId: selectedAnimation.id,
+                        changes: { delayMs: Math.round(Number(event.target.value) * 1000) },
+                      })
+                    }
+                  />
                 </label>
                 {selectedAnimation.effect === "fly-in" && (
                   <label>
                     方向
                     <select
                       value={selectedAnimation.direction}
-                      onChange={(event) => execute({ type: "set-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, changes: { direction: event.target.value as SlideAnimation["direction"] } })}
+                      onChange={(event) =>
+                        execute({
+                          type: "set-animation",
+                          slideId: activeSlide.id,
+                          animationId: selectedAnimation.id,
+                          changes: { direction: event.target.value as SlideAnimation["direction"] },
+                        })
+                      }
                     >
                       <option value="left">从左侧</option>
                       <option value="right">从右侧</option>
@@ -2810,15 +3013,31 @@ export function App() {
                     type="button"
                     title="动画前移"
                     disabled={selectedAnimationIndex <= 0}
-                    onClick={() => execute({ type: "move-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, toIndex: selectedAnimationIndex - 1 })}
+                    onClick={() =>
+                      execute({
+                        type: "move-animation",
+                        slideId: activeSlide.id,
+                        animationId: selectedAnimation.id,
+                        toIndex: selectedAnimationIndex - 1,
+                      })
+                    }
                   >
                     <ArrowUp />
                   </button>
                   <button
                     type="button"
                     title="动画后移"
-                    disabled={selectedAnimationIndex < 0 || selectedAnimationIndex >= (activeSlide.animations?.length ?? 0) - 1}
-                    onClick={() => execute({ type: "move-animation", slideId: activeSlide.id, animationId: selectedAnimation.id, toIndex: selectedAnimationIndex + 1 })}
+                    disabled={
+                      selectedAnimationIndex < 0 || selectedAnimationIndex >= (activeSlide.animations?.length ?? 0) - 1
+                    }
+                    onClick={() =>
+                      execute({
+                        type: "move-animation",
+                        slideId: activeSlide.id,
+                        animationId: selectedAnimation.id,
+                        toIndex: selectedAnimationIndex + 1,
+                      })
+                    }
                   >
                     <ArrowDown />
                   </button>
@@ -3028,21 +3247,28 @@ export function App() {
                   <ol className="animation-sequence-list">
                     {activeSlide.animations!.map((animation, index) => {
                       const target = activeSlide.elements.find((element) => element.id === animation.elementId);
-                      const targetName = target?.type === "text"
-                        ? target.text.trim().slice(0, 18) || "文本框"
-                        : target?.type === "image"
-                          ? "图片"
-                          : target?.type === "chart"
-                            ? "图表"
-                            : target?.type === "table"
-                              ? "表格"
-                              : target?.type === "line"
-                                ? "线条"
-                                : target?.type === "icon"
-                                  ? "图标"
-                                  : "形状";
-                      const effectName = animation.effect === "appear" ? "出现" : animation.effect === "fade" ? "淡化" : "飞入";
-                      const startName = animation.start === "on-click" ? "单击时" : animation.start === "with-previous" ? "与上一动画同时" : "上一动画之后";
+                      const targetName =
+                        target?.type === "text"
+                          ? target.text.trim().slice(0, 18) || "文本框"
+                          : target?.type === "image"
+                            ? "图片"
+                            : target?.type === "chart"
+                              ? "图表"
+                              : target?.type === "table"
+                                ? "表格"
+                                : target?.type === "line"
+                                  ? "线条"
+                                  : target?.type === "icon"
+                                    ? "图标"
+                                    : "形状";
+                      const effectName =
+                        animation.effect === "appear" ? "出现" : animation.effect === "fade" ? "淡化" : "飞入";
+                      const startName =
+                        animation.start === "on-click"
+                          ? "单击时"
+                          : animation.start === "with-previous"
+                            ? "与上一动画同时"
+                            : "上一动画之后";
                       return (
                         <li key={animation.id}>
                           <button
@@ -3055,8 +3281,13 @@ export function App() {
                           >
                             <span className="animation-order-badge">{index + 1}</span>
                             <span className="animation-sequence-copy">
-                              <strong>{effectName} · {targetName}</strong>
-                              <small>{startName} · {(animation.durationMs / 1000).toFixed(1)} 秒{animation.delayMs ? ` · 延迟 ${(animation.delayMs / 1000).toFixed(1)} 秒` : ""}</small>
+                              <strong>
+                                {effectName} · {targetName}
+                              </strong>
+                              <small>
+                                {startName} · {(animation.durationMs / 1000).toFixed(1)} 秒
+                                {animation.delayMs ? ` · 延迟 ${(animation.delayMs / 1000).toFixed(1)} 秒` : ""}
+                              </small>
                             </span>
                           </button>
                         </li>
@@ -3067,14 +3298,20 @@ export function App() {
               </div>
               <div className="animation-pane-footer">
                 <div className="animation-preview-actions">
-                  <button type="button" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>预览所选</button>
-                  <button type="button" disabled={!(activeSlide.animations?.length)} onClick={previewSlideAnimations}>播放全部</button>
-                  <button type="button" disabled={!animationPreviews.length} onClick={stopAnimationPreview}>停止</button>
+                  <button type="button" disabled={!selectedAnimation} onClick={previewSelectedAnimation}>
+                    预览所选
+                  </button>
+                  <button type="button" disabled={!activeSlide.animations?.length} onClick={previewSlideAnimations}>
+                    播放全部
+                  </button>
+                  <button type="button" disabled={!animationPreviews.length} onClick={stopAnimationPreview}>
+                    停止
+                  </button>
                 </div>
                 <button
                   type="button"
                   className="danger"
-                  disabled={!(activeSlide.animations?.length)}
+                  disabled={!activeSlide.animations?.length}
                   onClick={() => execute({ type: "clear-slide-animations", slideId: activeSlide.id })}
                 >
                   清除本页动画
@@ -3120,6 +3357,9 @@ export function App() {
                 <i />
                 <span>3 上传模板</span>
               </div>
+              <span className="agent-workflow-status" aria-live="polite">
+                {agentWorkflow.label}
+              </span>
               {aiDraft && (
                 <div className="draft-header-actions">
                   {aiDraftBlockingIssues.length > 0 && (
@@ -3303,25 +3543,33 @@ export function App() {
                 <i />
                 <span className="active">3 选择主题</span>
               </div>
+              <span className="agent-workflow-status" aria-live="polite">
+                {agentWorkflow.label}
+              </span>
               <button
                 type="button"
                 className="primary-action header-upload-button"
                 onClick={() => setTemplateUploadOpen(true)}
               >
-                <FileUp />
-                从 PPT 抽取主题
+                <FileUp />从 PPT 抽取主题
               </button>
             </div>
           </header>
           <div className="feature-scroll">
             <section className="template-content">
               <div className="theme-gallery-heading">
-                <div><strong>内置主题</strong><span>{THEME_PRESETS.length} 套可用</span></div>
+                <div>
+                  <strong>内置主题</strong>
+                  <span>{THEME_PRESETS.length} 套可用</span>
+                </div>
                 <p>点击卡片查看完整配色、字体和适用场景</p>
               </div>
               <ThemePresetPicker value={themePresetId} onChange={handleSelectThemePreset} disabled={designBusy} />
               <div className="theme-gallery-heading extracted">
-                <div><strong>从 PPT 抽取的主题</strong><span>{templateLibrary.length} 套</span></div>
+                <div>
+                  <strong>从 PPT 抽取的主题</strong>
+                  <span>{templateLibrary.length} 套</span>
+                </div>
                 <p>保留来源文件的设计语言，并展示可解析范围</p>
               </div>
               <div className="theme-card-grid extracted-theme-grid">
@@ -3332,16 +3580,27 @@ export function App() {
                     key={template.id}
                     onClick={() => void handleSelectTemplate(template)}
                   >
-                    <span className="theme-card-art extracted-art"><FileUp /><i /><i /></span>
+                    <span className="theme-card-art extracted-art">
+                      <FileUp />
+                      <i />
+                      <i />
+                    </span>
                     <strong>{template.name}</strong>
                     <small>从 PPTX 抽取的主题、母版与版式</small>
                     <span className="theme-card-fonts">
-                      {(template.size / 1024 / 1024).toFixed(2)} MB · {new Date(template.importedAt).toLocaleDateString("zh-CN")}
+                      {(template.size / 1024 / 1024).toFixed(2)} MB ·{" "}
+                      {new Date(template.importedAt).toLocaleDateString("zh-CN")}
                     </span>
                   </button>
                 ))}
-                <button type="button" className="theme-card theme-upload-card" onClick={() => setTemplateUploadOpen(true)}>
-                  <span className="theme-card-art upload-art"><FileUp /></span>
+                <button
+                  type="button"
+                  className="theme-card theme-upload-card"
+                  onClick={() => setTemplateUploadOpen(true)}
+                >
+                  <span className="theme-card-art upload-art">
+                    <FileUp />
+                  </span>
                   <strong>从 PPT 抽取主题</strong>
                   <small>上传 PPTX，提取主题色、字体、母版和页面版式</small>
                   <span className="theme-card-fonts">支持 .pptx · 最大 512 MB</span>
@@ -3366,7 +3625,9 @@ export function App() {
                 <span>{selectedThemePreset ? "内置主题" : "PPT 抽取主题"}</span>
                 <h2 id="theme-drawer-title">{selectedThemePreset?.name ?? selectedTemplate?.name}</h2>
               </div>
-              <button type="button" aria-label="关闭主题详情" onClick={() => setThemeDrawerOpen(false)}><X /></button>
+              <button type="button" aria-label="关闭主题详情" onClick={() => setThemeDrawerOpen(false)}>
+                <X />
+              </button>
             </div>
             <div className="theme-drawer-scroll">
               {selectedThemePreset ? (
@@ -3375,18 +3636,29 @@ export function App() {
                     className="theme-preset-preview"
                     style={
                       {
-                        "--theme-primary": selectedThemePreset.theme.colors.find((color) => color.name === "primary")?.value,
-                        "--theme-accent": selectedThemePreset.theme.colors.find((color) => color.name === "accent")?.value,
-                        "--theme-muted": selectedThemePreset.theme.colors.find((color) => color.name === "muted")?.value,
-                        "--theme-surface": selectedThemePreset.theme.colors.find((color) => color.name === "surface")?.value,
+                        "--theme-primary": selectedThemePreset.theme.colors.find((color) => color.name === "primary")
+                          ?.value,
+                        "--theme-accent": selectedThemePreset.theme.colors.find((color) => color.name === "accent")
+                          ?.value,
+                        "--theme-muted": selectedThemePreset.theme.colors.find((color) => color.name === "muted")
+                          ?.value,
+                        "--theme-surface": selectedThemePreset.theme.colors.find((color) => color.name === "surface")
+                          ?.value,
                         "--theme-major-font": selectedThemePreset.theme.majorFont,
                         "--theme-minor-font": selectedThemePreset.theme.minorFont,
                       } as React.CSSProperties
                     }
                   >
                     <span className="theme-preview-kicker">PPTD · THEME SYSTEM</span>
-                    <div><h2>{selectedThemePreset.name}</h2><p>让内容层级、字体与色彩保持一致</p></div>
-                    <div className="theme-preview-bars"><i /><i /><i /></div>
+                    <div>
+                      <h2>{selectedThemePreset.name}</h2>
+                      <p>让内容层级、字体与色彩保持一致</p>
+                    </div>
+                    <div className="theme-preview-bars">
+                      <i />
+                      <i />
+                      <i />
+                    </div>
                     <small>{selectedThemePreset.description}</small>
                   </div>
                   <section className="theme-drawer-section">
@@ -3398,7 +3670,9 @@ export function App() {
                     <div>
                       <h3>适用场景</h3>
                       <div className="theme-scenario-tags">
-                        {selectedThemeGuidance?.scenarios.map((scenario) => <span key={scenario}>{scenario}</span>)}
+                        {selectedThemeGuidance?.scenarios.map((scenario) => (
+                          <span key={scenario}>{scenario}</span>
+                        ))}
                       </div>
                     </div>
                     <div>
@@ -3409,15 +3683,40 @@ export function App() {
                       <h3>图片建议</h3>
                       <p>{selectedThemeGuidance?.imageStyle}</p>
                     </div>
+                    {selectedThemeMetadata && (
+                      <div>
+                        <h3>设计约束</h3>
+                        <p>
+                          密度 {selectedThemeMetadata.density}；推荐页面：
+                          {selectedThemeMetadata.recommendedPageTypes.join("、")}
+                        </p>
+                        <p>避免：{selectedThemeMetadata.forbiddenCombinations.join("；")}</p>
+                      </div>
+                    )}
                   </section>
                   <section className="theme-drawer-section theme-token-details">
                     <h3>设计令牌</h3>
                     <dl>
-                      <div><dt>标题字体</dt><dd>{selectedThemePreset.theme.majorFont}</dd></div>
-                      <div><dt>正文字体</dt><dd>{selectedThemePreset.theme.minorFont}</dd></div>
-                      <div><dt>封面字号</dt><dd>{selectedThemePreset.theme.textStyles?.display?.fontSizePt ?? "—"} pt</dd></div>
-                      <div><dt>页标题字号</dt><dd>{selectedThemePreset.theme.textStyles?.title?.fontSizePt ?? "—"} pt</dd></div>
-                      <div><dt>正文字号</dt><dd>{selectedThemePreset.theme.textStyles?.body?.fontSizePt ?? "—"} pt</dd></div>
+                      <div>
+                        <dt>标题字体</dt>
+                        <dd>{selectedThemePreset.theme.majorFont}</dd>
+                      </div>
+                      <div>
+                        <dt>正文字体</dt>
+                        <dd>{selectedThemePreset.theme.minorFont}</dd>
+                      </div>
+                      <div>
+                        <dt>封面字号</dt>
+                        <dd>{selectedThemePreset.theme.textStyles?.display?.fontSizePt ?? "—"} pt</dd>
+                      </div>
+                      <div>
+                        <dt>页标题字号</dt>
+                        <dd>{selectedThemePreset.theme.textStyles?.title?.fontSizePt ?? "—"} pt</dd>
+                      </div>
+                      <div>
+                        <dt>正文字号</dt>
+                        <dd>{selectedThemePreset.theme.textStyles?.body?.fontSizePt ?? "—"} pt</dd>
+                      </div>
                     </dl>
                     <div className="theme-color-spec" aria-label="主题色">
                       {selectedThemePreset.theme.colors.map((color) => (
@@ -3428,6 +3727,22 @@ export function App() {
                         </div>
                       ))}
                     </div>
+                    {selectedThemeMetadata && (
+                      <dl>
+                        <div>
+                          <dt>中文回退</dt>
+                          <dd>{selectedThemeMetadata.fontFallbacks.eastAsian.join(" → ")}</dd>
+                        </div>
+                        <div>
+                          <dt>西文回退</dt>
+                          <dd>{selectedThemeMetadata.fontFallbacks.latin.join(" → ")}</dd>
+                        </div>
+                        <div>
+                          <dt>图表色板</dt>
+                          <dd>{selectedThemeMetadata.chartPalette.join("、")}</dd>
+                        </div>
+                      </dl>
+                    )}
                   </section>
                   <section className="theme-drawer-section theme-ai-prompt">
                     <div className="theme-ai-prompt-heading">
@@ -3446,7 +3761,8 @@ export function App() {
                           );
                         }}
                       >
-                        <Copy />复制提示词
+                        <Copy />
+                        复制提示词
                       </button>
                     </div>
                     <pre>{selectedThemeAiPrompt}</pre>
@@ -3455,33 +3771,82 @@ export function App() {
               ) : (
                 <>
                   <div className="template-preview-stage drawer-preview">
-                    {templatePreviewBusy ? <span>正在解析 PPT 主题…</span> : templatePreview ? (
+                    {templatePreviewBusy ? (
+                      <span>正在解析 PPT 主题…</span>
+                    ) : templatePreview ? (
                       <img src={templatePreview} alt={`${selectedTemplate?.name ?? "PPT"} 封面预览`} />
-                    ) : <span>此 PPTX 没有内嵌封面预览</span>}
+                    ) : (
+                      <span>此 PPTX 没有内嵌封面预览</span>
+                    )}
                   </div>
                   {templateAnalysis && (
                     <div className="template-analysis drawer-analysis">
                       <div className="template-analysis-grid">
-                        <span><b>{templateAnalysis.slideCount}</b>页面</span>
-                        <span><b>{templateAnalysis.masterCount}</b>母版</span>
-                        <span><b>{templateAnalysis.layoutCount}</b>版式</span>
-                        <span><b>{templateAnalysis.themeCount}</b>主题</span>
+                        <span>
+                          <b>{templateAnalysis.slideCount}</b>页面
+                        </span>
+                        <span>
+                          <b>{templateAnalysis.masterCount}</b>母版
+                        </span>
+                        <span>
+                          <b>{templateAnalysis.layoutCount}</b>版式
+                        </span>
+                        <span>
+                          <b>{templateAnalysis.themeCount}</b>主题
+                        </span>
                       </div>
                       <dl>
-                        <div><dt>页面尺寸</dt><dd>{templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in` : "未定义"}</dd></div>
-                        <div><dt>标题字体</dt><dd>{templateAnalysis.majorFont || "未定义"}</dd></div>
-                        <div><dt>正文字体</dt><dd>{templateAnalysis.minorFont || "未定义"}</dd></div>
+                        <div>
+                          <dt>页面尺寸</dt>
+                          <dd>
+                            {templateAnalysis.slideWidthEmu && templateAnalysis.slideHeightEmu
+                              ? `${(templateAnalysis.slideWidthEmu / EMU_PER_INCH).toFixed(2)} × ${(templateAnalysis.slideHeightEmu / EMU_PER_INCH).toFixed(2)} in`
+                              : "未定义"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>标题字体</dt>
+                          <dd>{templateAnalysis.majorFont || "未定义"}</dd>
+                        </div>
+                        <div>
+                          <dt>正文字体</dt>
+                          <dd>{templateAnalysis.minorFont || "未定义"}</dd>
+                        </div>
                       </dl>
-                      {templateAnalysis.themeColors.length > 0 && <div className="template-color-row" aria-label="主题色">{templateAnalysis.themeColors.map((color) => <span key={color.name} title={`${color.name} ${color.value}`} style={{ backgroundColor: color.value }} />)}</div>}
-                      {templateAnalysis.warnings.length > 0 && <div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>}
+                      {templateAnalysis.themeColors.length > 0 && (
+                        <div className="template-color-row" aria-label="主题色">
+                          {templateAnalysis.themeColors.map((color) => (
+                            <span
+                              key={color.name}
+                              title={`${color.name} ${color.value}`}
+                              style={{ backgroundColor: color.value }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {templateAnalysis.warnings.length > 0 && (
+                        <div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>
+                      )}
                     </div>
                   )}
                 </>
               )}
             </div>
             <div className="theme-drawer-actions">
-              <button type="button" className="secondary-action" onClick={() => setThemeDrawerOpen(false)}>关闭</button>
-              <button type="button" className="primary-action" onClick={() => { setThemeDrawerOpen(false); setTaskStatus(`已选择主题：${selectedThemePreset?.name ?? selectedTemplate?.name}`); }}><Check />使用此主题</button>
+              <button type="button" className="secondary-action" onClick={() => setThemeDrawerOpen(false)}>
+                关闭
+              </button>
+              <button
+                type="button"
+                className="primary-action"
+                onClick={() => {
+                  setThemeDrawerOpen(false);
+                  setTaskStatus(`已选择主题：${selectedThemePreset?.name ?? selectedTemplate?.name}`);
+                }}
+              >
+                <Check />
+                使用此主题
+              </button>
             </div>
           </aside>
         </div>
@@ -3645,11 +4010,7 @@ export function App() {
                   <p>使用内置主题，或从已有 PPT 抽取设计语言，AI 不会改动已确认内容。</p>
                 </div>
               </div>
-              <button
-                type="button"
-                aria-label="关闭模板选择窗口"
-                onClick={() => setTemplatePickerOpen(false)}
-              >
+              <button type="button" aria-label="关闭模板选择窗口" onClick={() => setTemplatePickerOpen(false)}>
                 <X />
               </button>
             </div>
@@ -3685,7 +4046,10 @@ export function App() {
                               <i key={slot} style={{ background: color(slot) }} />
                             ))}
                           </span>
-                          <span><strong>{preset.name}</strong><small>{preset.description}</small></span>
+                          <span>
+                            <strong>{preset.name}</strong>
+                            <small>{preset.description}</small>
+                          </span>
                           {preset.id === recommendedThemePreset.id && <em>内容匹配</em>}
                           {themePresetId === preset.id && <Check />}
                         </button>
@@ -3699,31 +4063,33 @@ export function App() {
                     <span>{templateLibrary.length} 套</span>
                   </div>
                   <div className="template-picker-upload-list">
-                  {templateLibrary.map((template) => (
-                    <button
-                      type="button"
-                      disabled={designBusy}
-                      className={`template-card${selectedTemplate?.id === template.id ? " active" : ""}`}
-                      key={template.id}
-                      onClick={() => void handleSelectTemplate(template, false)}
-                    >
-                      <FileUp />
-                      <span>
-                        <strong>{template.name}</strong>
-                        <small>
-                          {(template.size / 1024 / 1024).toFixed(2)} MB ·{" "}
-                          {new Date(template.importedAt).toLocaleString("zh-CN")}
-                        </small>
-                      </span>
-                      {selectedTemplate?.id === template.id && <Check />}
-                    </button>
-                  ))}
+                    {templateLibrary.map((template) => (
+                      <button
+                        type="button"
+                        disabled={designBusy}
+                        className={`template-card${selectedTemplate?.id === template.id ? " active" : ""}`}
+                        key={template.id}
+                        onClick={() => void handleSelectTemplate(template, false)}
+                      >
+                        <FileUp />
+                        <span>
+                          <strong>{template.name}</strong>
+                          <small>
+                            {(template.size / 1024 / 1024).toFixed(2)} MB ·{" "}
+                            {new Date(template.importedAt).toLocaleString("zh-CN")}
+                          </small>
+                        </span>
+                        {selectedTemplate?.id === template.id && <Check />}
+                      </button>
+                    ))}
                     {templateLibrary.length === 0 && <div className="template-empty">尚未抽取 PPT 主题</div>}
                   </div>
                 </section>
               </div>
               <div className="template-preview-panel">
-                <div className={`template-preview-stage ${designBusy ? "generating" : ""}${themePresetId ? " preset-selected" : ""}`}>
+                <div
+                  className={`template-preview-stage ${designBusy ? "generating" : ""}${themePresetId ? " preset-selected" : ""}`}
+                >
                   {designBusy ? (
                     <div className="design-progress" role="status" aria-live="polite">
                       <Sparkles />
@@ -3747,18 +4113,29 @@ export function App() {
                       className="theme-preset-preview picker-preset-preview"
                       style={
                         {
-                          "--theme-primary": pickerThemePreset.theme.colors.find((color) => color.name === "primary")?.value,
-                          "--theme-accent": pickerThemePreset.theme.colors.find((color) => color.name === "accent")?.value,
-                          "--theme-muted": pickerThemePreset.theme.colors.find((color) => color.name === "muted")?.value,
-                          "--theme-surface": pickerThemePreset.theme.colors.find((color) => color.name === "surface")?.value,
+                          "--theme-primary": pickerThemePreset.theme.colors.find((color) => color.name === "primary")
+                            ?.value,
+                          "--theme-accent": pickerThemePreset.theme.colors.find((color) => color.name === "accent")
+                            ?.value,
+                          "--theme-muted": pickerThemePreset.theme.colors.find((color) => color.name === "muted")
+                            ?.value,
+                          "--theme-surface": pickerThemePreset.theme.colors.find((color) => color.name === "surface")
+                            ?.value,
                           "--theme-major-font": pickerThemePreset.theme.majorFont,
                           "--theme-minor-font": pickerThemePreset.theme.minorFont,
                         } as React.CSSProperties
                       }
                     >
                       <span className="theme-preview-kicker">PPTD · {pickerThemePreset.name}</span>
-                      <div><h2>{aiDraft?.title ?? pickerThemePreset.name}</h2><p>{pickerThemeGuidance.character}</p></div>
-                      <div className="theme-preview-bars"><i /><i /><i /></div>
+                      <div>
+                        <h2>{aiDraft?.title ?? pickerThemePreset.name}</h2>
+                        <p>{pickerThemeGuidance.character}</p>
+                      </div>
+                      <div className="theme-preview-bars">
+                        <i />
+                        <i />
+                        <i />
+                      </div>
                       <small>{pickerThemeGuidance.pageRhythm}</small>
                     </div>
                   ) : templatePreviewBusy ? (
@@ -3774,35 +4151,44 @@ export function App() {
                 {themePresetId ? (
                   <div className="picker-theme-details">
                     <div className="theme-scenario-tags">
-                      {pickerThemeGuidance.scenarios.map((scenario) => <span key={scenario}>{scenario}</span>)}
+                      {pickerThemeGuidance.scenarios.map((scenario) => (
+                        <span key={scenario}>{scenario}</span>
+                      ))}
                     </div>
-                    <p><strong>图片建议：</strong>{pickerThemeGuidance.imageStyle}</p>
-                    <p><strong>AI 设计：</strong>将使用该主题的 7 色色板、字体层级和页面节奏，且不会改动已审核内容。</p>
+                    <p>
+                      <strong>图片建议：</strong>
+                      {pickerThemeGuidance.imageStyle}
+                    </p>
+                    <p>
+                      <strong>AI 设计：</strong>将使用该主题的 7 色色板、字体层级和页面节奏，且不会改动已审核内容。
+                    </p>
                   </div>
-                ) : templateAnalysis && (
-                  <div className="template-picker-summary">
-                    <span>{templateAnalysis.slideCount} 页面</span>
-                    <span>{templateAnalysis.layoutCount} 版式</span>
-                    <span>{templateAnalysis.themeCount} 主题</span>
-                  </div>
+                ) : (
+                  templateAnalysis && (
+                    <div className="template-picker-summary">
+                      <span>{templateAnalysis.slideCount} 页面</span>
+                      <span>{templateAnalysis.layoutCount} 版式</span>
+                      <span>{templateAnalysis.themeCount} 主题</span>
+                    </div>
+                  )
                 )}
               </div>
             </div>
             <div className="upload-dialog-actions">
-              <button
-                type="button"
-                className="secondary-action"
-                onClick={() => setTemplatePickerOpen(false)}
-              >
+              <button type="button" className="secondary-action" onClick={() => setTemplatePickerOpen(false)}>
                 {designBusy ? "转至后台" : "取消"}
               </button>
               <button
                 type="button"
                 className="primary-action"
-                disabled={(!themePresetId && (!selectedTemplate || !templateAnalysis)) || templatePreviewBusy || designBusy}
+                disabled={
+                  (!themePresetId && (!selectedTemplate || !templateAnalysis)) || templatePreviewBusy || designBusy
+                }
                 onClick={() => void generateFromDraft(themePresetId ? "preset" : "template")}
               >
-                {designBusy ? `${designProgress.percent}%` : `使用${themePresetId ? `「${pickerThemePreset.name}」` : "抽取主题"}生成 PPT`}
+                {designBusy
+                  ? `${designProgress.percent}%`
+                  : `使用${themePresetId ? `「${pickerThemePreset.name}」` : "抽取主题"}生成 PPT`}
                 {!designBusy && <ArrowRight />}
               </button>
             </div>
@@ -3866,6 +4252,25 @@ export function App() {
             {designQualityReport.visualReview && (
               <div className="design-quality-visual">
                 <h3>视觉评审建议</h3>
+                {designQualityReport.contactSheet && (
+                  <figure className="design-quality-contact-sheet">
+                    <img src={designQualityReport.contactSheet} alt="整册页面缩略图总览" />
+                    <figcaption>整册 Contact Sheet · 检查页面节奏、深浅分布、主题一致性、重复版式与前后跳变</figcaption>
+                  </figure>
+                )}
+                {designQualityReport.deckReview && (
+                  <p className="design-quality-notes">
+                    整册总览：一致性 {designQualityReport.deckReview.consistencyScore}、重复控制{" "}
+                    {designQualityReport.deckReview.repetitionScore ?? "未评"}、主题匹配{" "}
+                    {designQualityReport.deckReview.themeFitScore ?? "未评"}
+                  </p>
+                )}
+                {designQualityReport.reviewReuse && (
+                  <p className="design-quality-notes">
+                    本轮定点复检 {designQualityReport.reviewReuse.reviewed} 页，复用{" "}
+                    {designQualityReport.reviewReuse.reused} 页既有评审结论
+                  </p>
+                )}
                 {designQualityReport.visualReviewCoverage && (
                   <p className="design-quality-notes">
                     已评审 {designQualityReport.visualReviewCoverage.reviewed}/
@@ -4010,7 +4415,10 @@ export function App() {
       {designBusy && !templatePickerOpen && (
         <aside className="background-task-card" role="status" aria-live="polite" aria-label="AI 设计后台任务">
           <div className="background-task-heading">
-            <span><Sparkles /><strong>AI 正在后台生成 PPT</strong></span>
+            <span>
+              <Sparkles />
+              <strong>AI 正在后台生成 PPT</strong>
+            </span>
             <b>{designProgress.percent}%</b>
           </div>
           <p>{designProgress.label}</p>
@@ -4024,7 +4432,9 @@ export function App() {
             <i style={{ width: `${designProgress.percent}%` }} />
           </div>
           <div className="background-task-actions">
-            <button type="button" onClick={() => setTemplatePickerOpen(true)}>查看任务</button>
+            <button type="button" onClick={() => setTemplatePickerOpen(true)}>
+              查看任务
+            </button>
             <button
               type="button"
               className="danger"
@@ -4043,12 +4453,19 @@ export function App() {
       {designQualityReport && !designQualityReportOpen && !designBusy && (
         <aside className="background-task-card complete" role="status" aria-live="polite">
           <div className="background-task-heading">
-            <span><CircleCheck /><strong>PPT 已生成，质检报告可查看</strong></span>
+            <span>
+              <CircleCheck />
+              <strong>PPT 已生成，质检报告可查看</strong>
+            </span>
           </div>
           <p>生成结果已保留，当前操作不会被打断。</p>
           <div className="background-task-actions">
-            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>查看质检报告</button>
-            <button type="button" onClick={() => setDesignQualityReport(undefined)}>稍后处理</button>
+            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>
+              查看质检报告
+            </button>
+            <button type="button" onClick={() => setDesignQualityReport(undefined)}>
+              稍后处理
+            </button>
           </div>
         </aside>
       )}
@@ -4081,11 +4498,7 @@ export function App() {
               第 {document.slides.indexOf(activeSlide) + 1} / {document.slides.length} 页
             </span>
             {activeView === "editor" && (
-              <ContentReviewStatus
-                slideId={activeSlide.id}
-                status={activeSlide.content.status}
-                onCommand={execute}
-              />
+              <ContentReviewStatus slideId={activeSlide.id} status={activeSlide.content.status} onCommand={execute} />
             )}
             <span>{countLabel}</span>
             <span>{revisionLabel}</span>

@@ -46,6 +46,22 @@ describe("PPTX export", () => {
     expect(result.report.warnings.some((warning) => warning.includes("尚未完成审核"))).toBe(true);
   });
 
+  it("reports animations that the static PPTX cannot carry", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, {
+      type: "add-animation",
+      slideId: slide.id,
+      elementId: slide.elements[0]!.id,
+      animation: { effect: "fade", start: "on-click", durationMs: 500, delayMs: 0, direction: "none" },
+    });
+
+    const result = await buildPptx(document);
+
+    expect(result.report.issues.some((issue) => issue.code === "animation-not-exported")).toBe(true);
+    expect(result.report.warnings.some((warning) => warning.includes("不写入原生动画"))).toBe(true);
+  });
+
   it("honors an already-aborted export signal before building the package", async () => {
     const controller = new AbortController();
     controller.abort();

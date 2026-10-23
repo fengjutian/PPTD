@@ -79,6 +79,12 @@ export interface DesignQualityStageResult {
    * 未达标、覆盖不完整或整体失败。调用方不能用确定性质检通过代替这一项。
    */
   visualPassed?: boolean;
+  /** 最终采用轮次的整册缩略图墙，可直接在报告中展示。 */
+  contactSheet?: string;
+  /** 只看整册缩略图所得的节奏、一致性和主题结论。 */
+  deckReview?: VisualReview;
+  /** 最终采用轮次中逐页评审的请求与复用数量。 */
+  reviewReuse?: { reviewed: number; reused: number };
 }
 
 /** 取消不是失败：取消必须一路向上抛出，不能被降级逻辑吞掉。 */
@@ -150,6 +156,9 @@ type ReviewRound = {
   deckUnavailable?: string;
   source?: "真实 PPTX" | "画布预览";
   realRenderFailure?: string;
+  contactSheet?: string;
+  deckReview?: VisualReview;
+  reviewReuse?: { reviewed: number; reused: number };
 };
 
 /**
@@ -320,6 +329,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   /** 评审最终留下的结构化结论，随结果一起返回给界面。 */
   let visualReview: VisualReview | undefined;
   let visualReviewCoverage: { reviewed: number; total: number } | undefined;
+  let contactSheet: string | undefined;
+  let finalDeckReview: VisualReview | undefined;
+  let reviewReuse: { reviewed: number; reused: number } | undefined;
 
   try {
     const aligned = await runVisualAlignmentLoop<AiSlideDesign[]>({
@@ -551,12 +563,22 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           signatures,
           reviews: collected,
         };
+        const requestedThisRound = plans.reduce(
+          (total, plan) => total + (plan.kind === "full" || plan.kind === "subset" ? plan.indexes.length : 0),
+          0,
+        );
         reviewRounds.set(iteration, {
           coverage: { reviewed: reviewedSlideCount, total: reviewSlideCount },
           partialReason: partialReviewReason,
           deckUnavailable: deckReviewUnavailable,
           source: reviewSource === "真实 PPTX" ? "真实 PPTX" : "画布预览",
           realRenderFailure,
+          contactSheet: render.contactSheet,
+          deckReview: overviewReview,
+          reviewReuse: {
+            reviewed: requestedThisRound,
+            reused: Math.max(0, render.slides.length - requestedThisRound),
+          },
         });
         if (reviews.length === 0) throw outcomes.find((outcome) => outcome.status === "rejected")?.reason;
         return mergeReviews(reviews, overviewReview);
@@ -606,6 +628,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     const finalRound = reviewRounds.get(aligned.bestIteration);
     const finalCoverage = finalRound?.coverage ?? { reviewed: reviewedSlideCount, total: reviewSlideCount };
     visualReviewCoverage = finalCoverage;
+    contactSheet = finalRound?.contactSheet;
+    finalDeckReview = finalRound?.deckReview;
+    reviewReuse = finalRound?.reviewReuse;
     visualPassed =
       aligned.stopReason === "target-reached" &&
       finalCoverage.total > 0 &&
@@ -647,6 +672,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
       // 总览评审失败时跨页一致性由逐页批次代答，这不是等价结论，必须说明。
       degraded = true;
       notes.push(`整册总览评审不可用，跨页一致性退回逐页批次评分（${finalRound.deckUnavailable.slice(0, 200)}）`);
+    }
+    if (reviewReuse && reviewReuse.reused > 0) {
+      notes.push(`定点复检上传 ${reviewReuse.reviewed} 页，复用 ${reviewReuse.reused} 页既有结论`);
     }
     if (finalCoverage.total > 0 && finalCoverage.reviewed < finalCoverage.total) {
       degraded = true;
@@ -761,5 +789,18 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         : "质量门未能完成检查，问题清单不完整",
     );
   }
-  return { designs, document, notes, issues, passed, degraded, visualReview, visualReviewCoverage, visualPassed };
+  return {
+    designs,
+    document,
+    notes,
+    issues,
+    passed,
+    degraded,
+    visualReview,
+    visualReviewCoverage,
+    visualPassed,
+    contactSheet,
+    deckReview: finalDeckReview,
+    reviewReuse,
+  };
 }

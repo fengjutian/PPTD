@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
+import { MAX_CONTENT_VERSIONS } from "./content-version";
 
-export const CURRENT_SCHEMA_VERSION = 13 as const;
+export const CURRENT_SCHEMA_VERSION = 14 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -233,6 +234,21 @@ const contentBlockSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+const contentVersionSlideSchema = z.object({
+  slideId: z.string().uuid(),
+  title: z.string(),
+  body: z.string(),
+  blocks: z.array(contentBlockSchema).max(64).optional(),
+  speakerNotes: z.string(),
+});
+
+const contentVersionSchema = z.object({
+  id: z.string().uuid(),
+  contentRevision: z.number().int().nonnegative(),
+  documentRevision: z.number().int().nonnegative(),
+  slides: z.array(contentVersionSlideSchema).min(1).max(500),
+});
+
 const slideSchema = z.object({
   id: z.string().uuid(),
   background: z.string(),
@@ -289,6 +305,7 @@ const baseDocumentSchema = z.object({
   slides: z.array(slideSchema).min(1),
   theme: themeSchema.optional(),
   layouts: z.array(slideLayoutSchema).max(200).optional(),
+  contentVersions: z.array(contentVersionSchema).max(MAX_CONTENT_VERSIONS).optional(),
 });
 
 type DocumentShape = z.infer<typeof baseDocumentSchema>;
@@ -367,6 +384,11 @@ const versionElevenDocumentSchema = baseDocumentSchema
 
 const versionTwelveDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(12) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionThirteenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(13) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
@@ -449,6 +471,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // The link is optional, so older documents keep every card as plain text and
   // simply cannot be edited through the structured metric fields.
   12: (document) => ({ ...versionTwelveDocumentSchema.parse(document), schemaVersion: 13 }),
+  // Version 14 stores confirmed content snapshots. An older document has no
+  // history yet; the first confirmation creates the first version.
+  13: (document) => ({ ...versionThirteenDocumentSchema.parse(document), schemaVersion: 14 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

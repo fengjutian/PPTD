@@ -17,7 +17,8 @@ export type ExportIssueCode =
   | "missing-alt-text"
   | "duplicate-id"
   | "invalid-chart-data"
-  | "invalid-table-data";
+  | "invalid-table-data"
+  | "animation-not-exported";
 
 export type ExportIssueSeverity = "error" | "warning";
 
@@ -72,6 +73,17 @@ export async function validatePresentationForExport(
         code: "content-not-approved",
         severity: "warning",
         message: `第 ${slideIndex + 1} 页内容状态为 ${slide.content.status}，尚未完成审核`,
+        slideIndex,
+      });
+    }
+    if (slide.animations && slide.animations.length > 0) {
+      // The exporter writes static slides. Silently dropping the timeline would
+      // make the deck look broken in front of an audience, so the report has to
+      // say it page by page instead of leaving the user to discover it.
+      issues.push({
+        code: "animation-not-exported",
+        severity: "warning",
+        message: `第 ${slideIndex + 1} 页有 ${slide.animations.length} 个动画，当前导出不写入原生动画，放映时会直接显示最终画面`,
         slideIndex,
       });
     }
