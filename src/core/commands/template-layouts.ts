@@ -11,6 +11,7 @@
 import type { BackgroundRange } from "../rendering/contrast";
 import type { AiComposition, AiDensityTarget, AiEmphasis, AiPalette } from "./design-intent";
 import type { AiVisualAsset } from "./visual-asset";
+import type { AiVisualNarrative } from "./visual-narrative";
 
 export interface AiNormalizedRect {
   x: number;
@@ -63,6 +64,8 @@ export interface AiSlideDesign {
    * it, so this is an intent and never a command.
    */
   composition?: AiComposition;
+  /** The page's communication strategy; layout and coordinates remain deterministic. */
+  visualNarrative?: AiVisualNarrative;
   /** Which level of the hierarchy carries the weight of the page. */
   emphasis?: AiEmphasis;
   /** How much white space the page is willing to spend. */

@@ -26,6 +26,12 @@ export const visualReviewSchema = z.object({
   alignmentScore: z.number().min(0).max(100),
   readabilityScore: z.number().min(0).max(100),
   consistencyScore: z.number().min(0).max(100),
+  /** Whole-deck cadence: penalizes repeated skeletons and backgrounds. */
+  repetitionScore: z.number().min(0).max(100).optional(),
+  /** Fitness between the visual language and the subject/audience. */
+  themeFitScore: z.number().min(0).max(100).optional(),
+  /** Strength and clarity of the first visual anchor on each page. */
+  visualFocusScore: z.number().min(0).max(100).optional(),
   /**
    * 逐页评分。逐页批次每个被检查页应有一条；整册总览不产生逐页评分。
    *
@@ -40,6 +46,7 @@ export const visualReviewSchema = z.object({
         hierarchyScore: z.number().min(0).max(100),
         alignmentScore: z.number().min(0).max(100),
         readabilityScore: z.number().min(0).max(100),
+        visualFocusScore: z.number().min(0).max(100).optional(),
       }),
     )
     .max(100)
@@ -57,6 +64,8 @@ export const visualReviewSchema = z.object({
           "misalignment",
           "excessive-empty-space",
           "repetitive-layout",
+          "theme-mismatch",
+          "weak-visual-focus",
         ]),
         elementIds: z.array(z.string()).default([]),
         suggestion: z.string().min(1).max(500),
@@ -113,6 +122,8 @@ const visualIssueKinds = [
   "misalignment",
   "excessive-empty-space",
   "repetitive-layout",
+  "theme-mismatch",
+  "weak-visual-focus",
 ] as const;
 const visualLayouts = ["cover", "title-body", "split", "cards", "quote", "section", "summary"] as const;
 type NormalizedRegion = VisualReview["slideGuidance"][number]["safeRegion"];
@@ -155,6 +166,11 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     number | undefined
   >;
   if (scoreKeys.some((key) => scores[key] === undefined)) throw new Error("AI_VISION_RESPONSE_UNREPAIRABLE");
+  const optionalScores = {
+    repetitionScore: normalizeScore(input.repetitionScore),
+    themeFitScore: normalizeScore(input.themeFitScore),
+    visualFocusScore: normalizeScore(input.visualFocusScore),
+  };
 
   // 逐页评分只保留本轮实际检查过的页；非法分数、越界页和重复页都丢弃，
   // 不用默认分补位。缺失时下游退回批次级口径。
@@ -167,6 +183,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     const hierarchy = normalizeScore(candidate.hierarchyScore);
     const alignment = normalizeScore(candidate.alignmentScore);
     const readability = normalizeScore(candidate.readabilityScore);
+    const visualFocus = normalizeScore(candidate.visualFocusScore);
     if (overall === undefined || hierarchy === undefined || alignment === undefined || readability === undefined)
       continue;
     slideScoresByIndex.set(candidate.slideIndex, {
@@ -175,6 +192,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
       hierarchyScore: hierarchy,
       alignmentScore: alignment,
       readabilityScore: readability,
+      ...(visualFocus === undefined ? {} : { visualFocusScore: visualFocus }),
     });
   }
   const slideScores = [...slideScoresByIndex.values()].sort((left, right) => left.slideIndex - right.slideIndex);
@@ -251,7 +269,13 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
   // `title-body` layout, which the rule-based repair then applied as if the
   // model had asked for it. Missing guidance must stay missing.
   const slideGuidance = [...guidanceBySlide.values()].sort((left, right) => left.slideIndex - right.slideIndex);
-  return visualReviewSchema.parse({ ...scores, issues, slideScores, slideGuidance });
+  return visualReviewSchema.parse({
+    ...scores,
+    ...Object.fromEntries(Object.entries(optionalScores).filter(([, value]) => value !== undefined)),
+    issues,
+    slideScores,
+    slideGuidance,
+  });
 }
 export const visualRepairPlanSchema = z.object({
   repairs: z.array(

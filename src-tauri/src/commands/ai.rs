@@ -290,12 +290,15 @@ pub async fn review_presentation_visuals(
 【评分标准】
 - hierarchyScore、alignmentScore、readabilityScore：按整套观感给出，不要因为个别页在缩略图上太小看不清就大幅扣分。
 - consistencyScore：整套模板语言、颜色、字体、背景节奏和页面角色是否跨页一致，同时避免所有页面完全同构。这是本模式最重要的分数。
-- overallScore：整套视觉完成度，不是五项简单平均。
+- repetitionScore：整册对构图、背景和卡片骨架的重复控制；机械复用越多分数越低。
+- themeFitScore：视觉语言与主题、受众和场景的匹配程度；企业科技风用于古典文学等明显错位必须扣分。
+- visualFocusScore：整册各页是否普遍具有明确的第一视觉入口。
+- overallScore：整套视觉完成度，不是各项简单平均。
 
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。slideGuidance 必须为空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[],"slideGuidance":[],"slideScores":[]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"issues":[],"slideGuidance":[],"slideScores":[]}}
 
 【本次整套视觉目标】
 {goal}
@@ -356,14 +359,17 @@ pub async fn review_presentation_visuals(
 - alignmentScore：关键元素是否共享稳定轴线；列宽、卡片边界、间距和基线是否一致；不得仅因非关键装饰不完全对称而扣分。
 - readabilityScore：文字与背景对比是否充分，字号和行长是否适合演示，是否存在拥挤、异常换行或背景干扰。
 - consistencyScore：模板语言、颜色、字体、圆角、线条、背景节奏和页面角色是否跨页一致，同时避免所有页面完全同构。
-- overallScore：综合视觉完成度，不是五项简单平均；严重遮挡、正文越界或无法阅读时不得高于 59。
+- repetitionScore：构图、背景和组件是否机械重复；没有整册总览时只评价本批。
+- themeFitScore：视觉语言是否匹配演示主题、受众和场景。
+- visualFocusScore：每页是否有明确的第一视觉入口，避免所有元素同权。
+- overallScore：综合视觉完成度，不是各项简单平均；严重遮挡、正文越界或无法阅读时不得高于 59。
 评分锚点：90–100 可直接交付；80–89 基本专业但有少量明显问题；70–79 可读但设计感不足；60–69 存在多项结构问题；0–59 有严重可读性或布局错误。
 单页只有一个文本块、且内容区保留超过 40% 连续空白时，overallScore 不得高于 69，并必须报告 excessive-empty-space。
 
 【问题分类和严重程度】
 - error：文字被遮挡或越界、对比度导致难以阅读、标题正文层级失效、内容覆盖 Logo/页脚、严重失衡或明显错误版式。
 - warning：页面略显单调、留白不理想、背景重复、局部节奏或对齐仍可提升，但不妨碍阅读。
-- issue 只能是 weak-hierarchy、poor-contrast、visual-imbalance、background-conflict、misalignment、excessive-empty-space、repetitive-layout。
+- issue 只能是 weak-hierarchy、poor-contrast、visual-imbalance、background-conflict、misalignment、excessive-empty-space、repetitive-layout、theme-mismatch、weak-visual-focus。
 - suggestion 必须描述设计动作，例如“将内容区移至右侧留白并保持标题左轴”，不得提出改写正文。
 
 【slideGuidance 规则】
@@ -376,13 +382,13 @@ pub async fn review_presentation_visuals(
 
 【slideScores 规则】
 1. 每个被检查页面必须恰好输出一条 slideScores，slideIndex 与 slideGuidance 一致。
-2. overallScore、hierarchyScore、alignmentScore、readabilityScore 都是该页自己的分数，不是整批平均，也不是整套分数。
+2. overallScore、hierarchyScore、alignmentScore、readabilityScore、visualFocusScore 都是该页自己的分数，不是整批平均，也不是整套分数。
 3. 一致性是整套指标，不放进 slideScores；不要输出 consistencyScore。
 
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。所有被检查页面的索引必须来自 {indexes}。elementIds 无法从图片确认时返回空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题和主要内容移动到右侧留白区，并保持共同左轴"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}],"slideScores":[{{"slideIndex":0,"overallScore":85,"hierarchyScore":84,"alignmentScore":90,"readabilityScore":88}}]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题和主要内容移动到右侧留白区，并保持共同左轴"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}],"slideScores":[{{"slideIndex":0,"overallScore":85,"hierarchyScore":84,"alignmentScore":90,"readabilityScore":88,"visualFocusScore":84}}]}}
 
 【本次整套视觉目标】
 {goal}
@@ -970,7 +976,18 @@ pub async fn generate_presentation_design(
 4. 连续长段落用 stacked；两组并列信息用 columns。
 5. 不得用构图掩盖内容不足，也不得用构图承载装不下的内容。
 
-五、配色角色
+五、视觉叙事方式
+先决定页面如何让观众理解内容，再选择版式和构图。visualNarrative 必须是：
+- statement：用一个核心结论建立焦点；适合封面、章节和收束页。
+- evidence：用数据、指标、事实或案例证明结论。
+- comparison：通过左右、前后或正反并置建立差异。
+- chronology：沿时间、步骤或因果顺序推进。
+- framework：把并列概念组织成结构、系统或方法框架。
+- quotation：让原文或引语成为视觉中心。
+- scene：用人物、环境或象征性画面承载叙事，通常需要配图。
+视觉叙事不允许改写内容，也不允许输出坐标。相邻页面应有叙事变化，但结构化块的真实语义优先。
+
+六、配色角色
 颜色不能自由发挥，必须从模板色板里选角色。角色取值：
 - surface：模板最浅的表面色。
 - surface-alt：模板的第二层浅表面色。
@@ -982,7 +999,7 @@ pub async fn generate_presentation_design(
 
 palette 对象按 background、accent、title、body 四个位置各选一个角色。四个角色可以不同，例如封面用 surface 背景配 accent-2 强调，章节页用 primary 背景配 inverse 文字。
 
-六、视觉素材
+七、视觉素材
 一页没有配图，就只剩文字和矩形。因此要在合适的地方给出配图意图。visualAsset 对象：
 - enabled：这一页是否配图，只能是布尔值。
 - prompt：画面描述，写画面本身（"一座明亮的现代化数据中心，几何线条构成的上升箭头"），不要写标题或正文文字，生成图里的文字几乎总是错的。
@@ -997,18 +1014,18 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 3. 要点超过 4 条的页面不配图：图会挤掉正文。
 4. prompt 只描述画面，不要出现文字、字母或数字。
 
-七、输出合同
+八、输出合同
 1. 仅输出一个合法 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
 2. slides 数量必须与输入内容页数完全一致，顺序必须一致。
 3. 所有颜色必须为六位十六进制格式，例如 #1A2B3C。
 4. layout 只能是 cover、title-body、split、cards、quote、section、summary 之一。
-5. 每页必须提供 layout、composition、emphasis、densityTarget、palette、background、accent、titleColor 和 bodyColor。
+5. 每页必须提供 layout、visualNarrative、composition、emphasis、densityTarget、palette、background、accent、titleColor 和 bodyColor。
 6. 不得输出坐标、字号、正文或装饰元素；这些由确定性排版引擎生成。
 
 严格输出结构：
-{"slides":[{"layout":"cover","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","visualAsset":{"enabled":true,"prompt":"一座明亮的现代化数据中心，几何线条构成的上升箭头","role":"hero"}}]}"##;
+{"slides":[{"layout":"cover","visualNarrative":"statement","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","visualAsset":{"enabled":true,"prompt":"一座明亮的现代化数据中心，几何线条构成的上升箭头","role":"hero"}}]}"##;
     let user_prompt = format!(
-        "请依据 SlideBrief 为以下演示文稿选择逐页版式、构图、层级、密度和配色角色。SlideBrief 是页面目的、结论、视觉意图和密度的事实来源；不要跳过或改写它。\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、版式匹配 visualIntent 和 density、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
+        "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度和配色角色。SlideBrief 是页面目的、结论、视觉意图和密度的事实来源；不要跳过或改写它。\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
     );
     let body = ChatRequest {
         model,

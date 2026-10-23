@@ -84,6 +84,7 @@ describe("设计质检阶段", () => {
     // 没有评审就没有结论：不能留下一个空的 VisualReview 冒充"已评审，无问题"。
     expect(result.visualReview).toBeUndefined();
     expect(result.visualReviewCoverage).toBeUndefined();
+    expect(result.visualPassed).toBe(false);
   });
 
   it("设置关闭视觉评审时说清楚这是主动选择，不把未评审当成通过", async () => {
@@ -104,6 +105,8 @@ describe("设计质检阶段", () => {
     expect(result.notes.join("；")).toContain("本次未做视觉评审");
     expect(result.visualReview).toBeUndefined();
     expect(result.visualReviewCoverage).toBeUndefined();
+    // 用户主动关闭是选择，不是评审失败：界面不应因此弹报告。
+    expect(result.visualPassed).toBeUndefined();
   });
 
   it("文稿超过评审上限时说明未做视觉评审，而不是笼统降级", async () => {
@@ -123,6 +126,7 @@ describe("设计质检阶段", () => {
 
     expect(result.notes.join("；")).toContain("本次未做视觉评审");
     expect(result.notes.join("；")).toContain("超过视觉评审上限");
+    expect(result.visualPassed).toBe(false);
   });
 
   it("单批评审失败时保留其他批次的结果，并报告覆盖范围", async () => {
@@ -891,6 +895,49 @@ describe("设计质检阶段", () => {
 
     expect(result.visualReview?.slideScores?.map((item) => item.slideIndex)).toEqual([0, 1, 2, 3, 4, 5, 6]);
     expect(result.visualReview?.slideScores?.[6]?.overallScore).toBe(96);
+    expect(result.visualPassed).toBe(true);
+  });
+
+  it("逐页低分会拉低整册评分，但不会单独授权改版", async () => {
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async () => ({
+          ...passingReview,
+          overallScore: 94,
+          hierarchyScore: 94,
+          slideScores: [
+            {
+              slideIndex: 0,
+              overallScore: 70,
+              hierarchyScore: 70,
+              alignmentScore: 95,
+              readabilityScore: 95,
+            },
+          ],
+          issues: [],
+        }),
+        planRepairs: async () => ({ repairs: [] }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+    });
+
+    // 批次的 94 分不能盖过同一批里第 1 页的 70 分。
+    expect(result.visualReview?.overallScore).toBe(70);
+    expect(result.visualReview?.hierarchyScore).toBe(70);
+    expect(result.visualPassed).toBe(false);
+    expect(result.notes.join("；")).toContain("逐页评分低于目标");
+    expect(result.notes.join("；")).toContain("第 1 页（总分 70、层级 70）");
+    // 没有具体问题就不改版：低分只影响结论和报告，不授权自动修复。
+    expect(result.notes.join("；")).toContain("no-change");
+    expect(result.designs[0]!.layout).toBe("title-body");
   });
 
   it("真实渲染不可用时降级到画布预览，并说清楚原因", async () => {

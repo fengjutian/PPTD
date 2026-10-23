@@ -153,6 +153,8 @@ const visualIssueLabels: Record<VisualReview["issues"][number]["issue"], string>
   misalignment: "元素未对齐",
   "excessive-empty-space": "留白过多",
   "repetitive-layout": "版式重复",
+  "theme-mismatch": "主题不匹配",
+  "weak-visual-focus": "视觉焦点不清",
 };
 /** The narrowest and the widest the property panel may be dragged to. */
 const INSPECTOR_MIN_WIDTH = 220;
@@ -2007,7 +2009,11 @@ export function App() {
             : undefined,
         // The theme of the template travels with the design, so the exported
         // deck keeps the typography and the palette of the template.
-        themePresetId: themePresetId || undefined,
+        // `preset` may have been inferred from the topic without the user
+        // clicking the recommendation. Persist the preset actually used, not
+        // only the picker state, or the generated document loses its fonts and
+        // cultural visual language at this boundary.
+        themePresetId: preset?.id ?? (themePresetId || undefined),
         templateTheme: preset
           ? undefined
           : {
@@ -2067,7 +2073,10 @@ export function App() {
       // 过了，也只代表看过的页没问题。报告必须留下，让用户看到覆盖范围。
       const coverage = stage.visualReviewCoverage;
       const visualCoverageIncomplete = coverage !== undefined && coverage.reviewed < coverage.total;
-      if (stage.passed && !visualCoverageIncomplete) {
+      // 视觉评审跑过但没达标（或整体失败）时，确定性质检通过也不代表稿子
+      // 视觉上没问题。必须把报告留下，不能只闪一条状态就进入编辑器。
+      const visualBelowTarget = stage.visualPassed === false;
+      if (stage.passed && !visualCoverageIncomplete && !visualBelowTarget) {
         setDesignQualityReport(undefined);
         setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
         setActiveView("editor");
@@ -2078,7 +2087,11 @@ export function App() {
         // 由用户决定先调整还是稍后处理。
         setDesignProgress({
           percent: 100,
-          label: stage.passed ? "生成完成，视觉评审未覆盖全部页面" : "生成完成，存在待调整的排版问题",
+          label: !stage.passed
+            ? "生成完成，存在待调整的排版问题"
+            : visualCoverageIncomplete
+              ? "生成完成，视觉评审未覆盖全部页面"
+              : "生成完成，视觉评审未达到目标",
         });
         setDesignQualityReport({
           templateName: deckName,
@@ -2094,9 +2107,15 @@ export function App() {
         setTaskStatus(
           stage.issues.length > 0
             ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
-            : visualCoverageIncomplete && coverage
-              ? `PPT 已生成，但视觉评审只覆盖 ${coverage.reviewed}/${coverage.total} 页`
-              : `PPT 已生成，但质检未完成：${stage.notes.join("；")}`,
+            : !stage.passed
+              ? `PPT 已生成，但质检未完成：${stage.notes.join("；")}`
+              : visualCoverageIncomplete && coverage
+                ? `PPT 已生成，但视觉评审只覆盖 ${coverage.reviewed}/${coverage.total} 页`
+                : visualBelowTarget
+                  ? stage.visualReview
+                    ? `PPT 已生成，但视觉评审未达到目标（${stage.visualReview.overallScore} 分）`
+                    : "PPT 已生成，但视觉评审未完成"
+                  : `PPT 已生成，但质检未完成：${stage.notes.join("；")}`,
         );
       }
     } catch (error) {
@@ -3364,7 +3383,11 @@ export function App() {
                 </p>
               )}
             {designQualityReport.issues.length === 0 ? (
-              <div className="template-empty">质量门没有给出具体问题，但检查未完成。</div>
+              <div className="template-empty">
+                {designQualityReport.visualReview
+                  ? "确定性质量门没有列出问题，视觉评审结论见下方。"
+                  : "质量门没有给出具体问题，但检查未完成。"}
+              </div>
             ) : (
               <ul className="export-report-list">
                 {designQualityReport.issues.map((issue, index) => (
@@ -3391,7 +3414,10 @@ export function App() {
                     {designQualityReport.visualReview.hierarchyScore}、对齐{" "}
                     {designQualityReport.visualReview.alignmentScore}、可读性{" "}
                     {designQualityReport.visualReview.readabilityScore}、一致性{" "}
-                    {designQualityReport.visualReview.consistencyScore}）
+                    {designQualityReport.visualReview.consistencyScore}、重复控制{" "}
+                    {designQualityReport.visualReview.repetitionScore ?? "未评"}、主题匹配{" "}
+                    {designQualityReport.visualReview.themeFitScore ?? "未评"}、视觉焦点{" "}
+                    {designQualityReport.visualReview.visualFocusScore ?? "未评"}）
                   </p>
                 )}
                 {designQualityReport.visualReview.issues.length === 0 ? (

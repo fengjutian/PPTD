@@ -78,6 +78,7 @@ import {
   type CompositionFacts,
 } from "./design-intent";
 import { planDeckCompositions } from "./deck-composition";
+import { narrativeComposition } from "./visual-narrative";
 import {
   isVisualAssetRole,
   planManualVisualAssetLayout,
@@ -1145,7 +1146,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         ),
         layout: design.layout,
       };
-      return { facts, requested: design.composition };
+      return {
+        facts,
+        requested:
+          design.composition && design.composition !== "auto"
+            ? design.composition
+            : design.visualNarrative
+              ? narrativeComposition(design.visualNarrative)
+              : design.composition,
+      };
     });
     const deckPlan = planDeckCompositions(pageFacts);
     // The layout of every page is decided as a sequence: the deck should rotate
@@ -1186,9 +1195,12 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         ? {
             ...baseDesign,
             accent: paletteOf("accent") ?? baseDesign.accent,
-            background: paletteOf("surface") ?? baseDesign.background,
-            titleColor: paletteOf("primary") ?? baseDesign.titleColor,
-            bodyColor: paletteOf("muted") ?? baseDesign.bodyColor,
+            // Palette-aware AI designs have already been constrained to this
+            // preset. Preserve their dark/light page rhythm. Legacy/manual
+            // designs without roles keep the preset's safe defaults.
+            background: baseDesign.palette ? baseDesign.background : (paletteOf("surface") ?? baseDesign.background),
+            titleColor: baseDesign.palette ? baseDesign.titleColor : (paletteOf("primary") ?? baseDesign.titleColor),
+            bodyColor: baseDesign.palette ? baseDesign.bodyColor : (paletteOf("muted") ?? baseDesign.bodyColor),
           }
         : baseDesign;
       const slide = createSlide(index + 1);

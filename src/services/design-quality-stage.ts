@@ -70,8 +70,15 @@ export interface DesignQualityStageResult {
    * 调用方不能把"没有结论"当成"检查通过"。
    */
   visualReview?: VisualReview;
-  /** 最后一轮评审实际覆盖的页数与总页数。未评审时为空。 */
+  /** 最终采用的评审轮次实际覆盖的页数与总页数。未评审时为空。 */
   visualReviewCoverage?: { reviewed: number; total: number };
+  /**
+   * 视觉评审是否达到目标且覆盖全部页面。
+   *
+   * `undefined` 表示没有运行（例如用户关闭了视觉评审）；`false` 表示运行了但
+   * 未达标、覆盖不完整或整体失败。调用方不能用确定性质检通过代替这一项。
+   */
+  visualPassed?: boolean;
 }
 
 /** 取消不是失败：取消必须一路向上抛出，不能被降级逻辑吞掉。 */
@@ -85,15 +92,37 @@ function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualR
   const slideScores = [
     ...new Map(reviews.flatMap((item) => item.slideScores ?? []).map((item) => [item.slideIndex, item])).values(),
   ].sort((left, right) => left.slideIndex - right.slideIndex);
+  // 批次分是模型对一批页的整体判断，不能盖过它自己给出的低分页。把逐页
+  // 分数也放进最小值，弱页才不会因为同批其他页好看而被静默放行。逐页分数
+  // 仍然不单独授权修复：修复只由具体问题（issues）触发。
+  const minimumScore = (key: "overallScore" | "hierarchyScore" | "alignmentScore" | "readabilityScore") =>
+    Math.min(...reviews.map((item) => item[key]), ...slideScores.map((item) => item[key]));
   return {
-    overallScore: Math.min(...reviews.map((item) => item.overallScore)),
-    hierarchyScore: Math.min(...reviews.map((item) => item.hierarchyScore)),
-    alignmentScore: Math.min(...reviews.map((item) => item.alignmentScore)),
-    readabilityScore: Math.min(...reviews.map((item) => item.readabilityScore)),
+    overallScore: minimumScore("overallScore"),
+    hierarchyScore: minimumScore("hierarchyScore"),
+    alignmentScore: minimumScore("alignmentScore"),
+    readabilityScore: minimumScore("readabilityScore"),
     // Cross-page consistency is only observable from the deck overview. Take it
     // from the batch that actually saw the contact sheet; other batches only
     // compared themselves.
     consistencyScore: overview?.consistencyScore ?? Math.min(...reviews.map((item) => item.consistencyScore)),
+    ...(overview?.repetitionScore !== undefined || reviews.some((item) => item.repetitionScore !== undefined)
+      ? {
+          repetitionScore:
+            overview?.repetitionScore ??
+            Math.min(...reviews.map((item) => item.repetitionScore ?? item.consistencyScore)),
+        }
+      : {}),
+    ...(overview?.themeFitScore !== undefined || reviews.some((item) => item.themeFitScore !== undefined)
+      ? {
+          themeFitScore:
+            overview?.themeFitScore ??
+            Math.min(...reviews.map((item) => item.themeFitScore ?? item.consistencyScore)),
+        }
+      : {}),
+    ...(reviews.some((item) => item.visualFocusScore !== undefined)
+      ? { visualFocusScore: Math.min(...reviews.map((item) => item.visualFocusScore ?? item.hierarchyScore)) }
+      : {}),
     issues: reviews.flatMap((item) => item.issues),
     slideGuidance: reviews.flatMap((item) => item.slideGuidance),
     ...(slideScores.length > 0 ? { slideScores } : {}),
@@ -252,6 +281,8 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   const notes: string[] = [];
   let designs = options.initialDesigns;
   let degraded = false;
+  /** 视觉评审是否达标；没有运行（例如用户关闭）时保持 undefined。 */
+  let visualPassed: boolean | undefined;
   const renderForReview = options.renderForReview ?? renderPresentationForVisualReview;
   const inspect = options.inspectContrast ?? inspectRenderedTextContrast;
   /** 评审实际看到的画面来自哪里。 */
@@ -576,12 +607,42 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     const finalRound = reviewRounds.get(aligned.bestIteration);
     const finalCoverage = finalRound?.coverage ?? { reviewed: reviewedSlideCount, total: reviewSlideCount };
     visualReviewCoverage = finalCoverage;
+    visualPassed =
+      aligned.stopReason === "target-reached" &&
+      finalCoverage.total > 0 &&
+      finalCoverage.reviewed === finalCoverage.total;
     notes.push(`视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`);
     // 评分和建议是评审留下的结构化结论。用户既要能看到它，也要知道它来自
     // 哪一轮、覆盖了多少页，避免把"评审过了"理解成"页面一定好看"。
     notes.push(
-      `视觉评审最终评分 ${aligned.review.overallScore}（层级 ${aligned.review.hierarchyScore}、对齐 ${aligned.review.alignmentScore}、可读性 ${aligned.review.readabilityScore}、一致性 ${aligned.review.consistencyScore}），剩余 ${aligned.review.issues.length} 处建议`,
+      `视觉评审最终评分 ${aligned.review.overallScore}（层级 ${aligned.review.hierarchyScore}、对齐 ${aligned.review.alignmentScore}、可读性 ${aligned.review.readabilityScore}、一致性 ${aligned.review.consistencyScore}、重复控制 ${aligned.review.repetitionScore ?? "未评"}、主题匹配 ${aligned.review.themeFitScore ?? "未评"}、视觉焦点 ${aligned.review.visualFocusScore ?? "未评"}），剩余 ${aligned.review.issues.length} 处建议`,
     );
+    // 逐页低分会拉低整册评分，但分数本身不是修复授权。把低分页列出来，
+    // 避免用户只看到总分下降却不知道是哪一页、也避免误以为系统已经改过它。
+    const weakPages = (aligned.review.slideScores ?? []).filter(
+      (score) =>
+        score.overallScore < options.goal.minimumScores.overall ||
+        score.hierarchyScore < options.goal.minimumScores.hierarchy ||
+        score.alignmentScore < options.goal.minimumScores.alignment ||
+        score.readabilityScore < options.goal.minimumScores.readability,
+    );
+    if (weakPages.length > 0) {
+      const details = weakPages
+        .slice(0, 3)
+        .map((score) => {
+          const failed: string[] = [];
+          if (score.overallScore < options.goal.minimumScores.overall) failed.push(`总分 ${score.overallScore}`);
+          if (score.hierarchyScore < options.goal.minimumScores.hierarchy) failed.push(`层级 ${score.hierarchyScore}`);
+          if (score.alignmentScore < options.goal.minimumScores.alignment) failed.push(`对齐 ${score.alignmentScore}`);
+          if (score.readabilityScore < options.goal.minimumScores.readability)
+            failed.push(`可读性 ${score.readabilityScore}`);
+          return `第 ${score.slideIndex + 1} 页（${failed.join("、")}）`;
+        })
+        .join("；");
+      notes.push(
+        `${weakPages.length} 页逐页评分低于目标：${details}${weakPages.length > 3 ? "…" : ""}；自动修复只处理评审给出的具体问题，没有因为分数单独改版`,
+      );
+    }
     if (aligned.reverted) notes.push("最后一轮修复没有提升评分，已保留评分更高的设计");
     if (finalRound?.deckUnavailable) {
       // 总览评审失败时跨页一致性由逐页批次代答，这不是等价结论，必须说明。
@@ -606,7 +667,8 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   } catch (error) {
     if (isGenerationCancelled(error)) throw error;
     degraded = true;
-    const reason = describeVisualReviewFailure(error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    const reason = describeVisualReviewFailure(message);
     notes.push(`视觉评审降级：${reason}`);
     // 降级后最容易被误解成"检查过了没问题"：必须明确说出这次到底评审了多少。
     notes.push(
@@ -614,6 +676,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         ? "本次未做视觉评审"
         : `视觉评审未完成，只覆盖了 ${reviewedSlideCount}/${reviewSlideCount} 页`,
     );
+    // 用户主动关闭视觉评审不算“未达标”，但任何一次尝试后的失败都不能
+    // 让界面走完全通过的静默路径。
+    if (!message.includes("AI_VISION_DISABLED")) visualPassed = false;
     options.onProgress?.("视觉评审不可用，继续用确定性校验", 96);
   }
 
@@ -697,5 +762,5 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         : "质量门未能完成检查，问题清单不完整",
     );
   }
-  return { designs, document, notes, issues, passed, degraded, visualReview, visualReviewCoverage };
+  return { designs, document, notes, issues, passed, degraded, visualReview, visualReviewCoverage, visualPassed };
 }
