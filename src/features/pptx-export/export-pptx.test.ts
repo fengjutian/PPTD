@@ -34,6 +34,20 @@ function templateDocument(): PresentationDocument {
 }
 
 describe("PPTX export", () => {
+  it("reports editor groups as flattened native objects", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-text", slideId: slide.id });
+    applyCommand(document, {
+      type: "group-elements",
+      slideId: slide.id,
+      elementIds: slide.elements.slice(0, 2).map((element) => element.id),
+    });
+    const result = await buildPptx(document);
+    expect(result.report.issues.some((issue) => issue.code === "group-not-exported")).toBe(true);
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("writes a changed page size into the presentation part", async () => {
     const document = createDocument();
     applyCommand(document, { type: "set-page-size", pageSize: pageSizeFromInches(10, 7.5)! });

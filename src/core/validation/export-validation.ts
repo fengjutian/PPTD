@@ -18,7 +18,8 @@ export type ExportIssueCode =
   | "duplicate-id"
   | "invalid-chart-data"
   | "invalid-table-data"
-  | "animation-not-exported";
+  | "animation-not-exported"
+  | "group-not-exported";
 
 export type ExportIssueSeverity = "error" | "warning";
 
@@ -84,6 +85,18 @@ export async function validatePresentationForExport(
         code: "animation-not-exported",
         severity: "warning",
         message: `第 ${slideIndex + 1} 页有 ${slide.animations.length} 个动画，当前导出不写入原生动画，放映时会直接显示最终画面`,
+        slideIndex,
+      });
+    }
+
+    if (slide.groups && slide.groups.length > 0) {
+      // Groups are editor-side selection metadata. The exporter writes their
+      // members as ordinary native objects, so the result stays editable but is
+      // no longer a PowerPoint group. Say so instead of pretending otherwise.
+      issues.push({
+        code: "group-not-exported",
+        severity: "warning",
+        message: `第 ${slideIndex + 1} 页有 ${slide.groups.length} 个分组，导出后成员仍是原生可编辑对象，但 PowerPoint 中不再成组`,
         slideIndex,
       });
     }

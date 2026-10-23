@@ -182,9 +182,11 @@ export interface DesignTokens {
 - `apply-ai-designed-draft` 的 `designConcept` 与配方分派；没有概念/配方/模板页继续走旧分支。
 - Rust `generate_deck_concepts`、TS `generateDeckConcepts`、逐页设计提示词的 `recipe/variant/focal`，App 生成链路与降级。
 - 真实 PowerPoint 渲染：编辑式四卡页替换为编号栏、五条要点页替换为非对称分栏，文件可打开，文字/形状为原生对象。
-- `vitest run` 903 项通过，`tsc --noEmit` 与 `npm run build` 通过。
+- `vitest run` 931 项通过，`tsc --noEmit` 与 `npm run build` 通过。
 
 P2a 已开始：`cover-statement`、`data-story`、`image-led` 已实现并接入 `editorial` 预设。封面使用大标题、副标题和几何强调块；指标页使用 1–3 个大数字 + 标签；图页把图片扩到右半页，文字收在左侧，并由配方重设图片框与裁剪。
+
+主题方向不再只用于展示：`themeDirectionForPreset()` 把主题元数据整理成 `ThemeDirection`，随 `generate_deck_concepts` 和 `generate_presentation_design` 两条请求传入；提示词明确“硬规则 > 模板 > 主题方向 > 模型偏好”。质量报告用 `auditThemeDirection()` 标出“已接入 / 部分生效 / 未接入”，并列出当前 recipe 无法承接的图片语言（例如拼贴）。
 
 仍未完成：
 

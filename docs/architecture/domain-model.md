@@ -338,3 +338,32 @@ interface SlideAnimation {
 `duplicate-animation` 复制一条动画（新 id、相同效果/计时/开始方式/方向）并插到源动画之后，一次撤销；锁定元素拒绝复制。预览通过 `animation-${effect}` 类与 CSS 关键帧实现，属于临时 UI 状态，不改变 revision、保存状态或撤销栈。
 
 效果枚举从 3 种扩到 9 种、阶段扩为三值，使持久化格式升到第 16 版；`15 → 16` 迁移只改版本号，旧动画（全部为进入）保持有效，固定样例见 `v16-document.json`。PPTX 仍不写入原生动画，导出报告逐页说明。详见 [0050 动画阶段由效果派生](decisions/0050-animation-phase-from-effect.md)。
+
+## 21. 编辑期选择组（V0.2 已实现）
+
+分组是页面级设计元数据，不是嵌套元素：
+
+```ts
+interface SlideGroup {
+  id: string;
+  elementIds: ElementId[];
+}
+
+interface Slide {
+  // ...
+  groups?: SlideGroup[];
+}
+```
+
+成员仍平铺在 `slide.elements` 中，保持原有 Z 序；渲染、导出、内容同步和动画都不需要递归。组的作用是选择：store 的 `selectElement`、`toggleElement`、`selectElements` 把任一成员展开成整组，移动、对齐、分布、锁定和删除因此沿用既有多选命令。
+
+不变量由命令和 Schema 共同保证：
+
+- 组合至少两个、全部存在、全部未锁定、均不属于现有组。
+- 组 id 全局唯一，一个元素只能属于一个组，成员必须存在于同一页。
+- 删除成员后丢弃整组；`relayout-slide` 清空分组；`duplicate-slide` 不继承分组（元素 id 已重新生成）。
+- 组合/取消组合是设计域命令，各一个撤销项。
+
+PptxGenJS 没有分组 API，导出把成员写成独立原生对象，preflight 逐页给出 `group-not-exported` 提示；原生 `<p:grpSp>` 导出属于 TASK-GROUP-002。
+
+新增可选 `groups` 使持久化格式升到第 17 版；`16 → 17` 迁移不伪造分组，固定样例见 `v17-document.json`。详见 [0051 编辑期选择组与导出展平](decisions/0051-editor-selection-groups.md)。

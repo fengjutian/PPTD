@@ -9,20 +9,26 @@
 export interface AiProviderDescriptor {
   id: string;
   label: string;
+  /** 英文界面使用的展示名；没有时回退到 `label`。 */
+  labelEn?: string;
   baseUrl: string;
   defaultModel: string;
   models: readonly string[];
   modelNotes: Readonly<Record<string, string>>;
+  /** 英文界面使用的模型说明；没有对应项时回退到 `modelNotes`。 */
+  modelNotesEn?: Readonly<Record<string, string>>;
 }
 
 export const AI_PROVIDERS: readonly AiProviderDescriptor[] = [
   {
     id: "minimax",
     label: "MiniMax 中国区",
+    labelEn: "MiniMax (China)",
     baseUrl: "https://api.minimaxi.com/v1/text/chatcompletion_v2",
     defaultModel: "MiniMax-M3",
     models: ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
     modelNotes: { "MiniMax-M3": "最新旗舰", "MiniMax-M2.7-highspeed": "高速版" },
+    modelNotesEn: { "MiniMax-M3": "Latest flagship", "MiniMax-M2.7-highspeed": "High-speed" },
   },
 ];
 

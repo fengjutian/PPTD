@@ -1,7 +1,13 @@
-import { Check, KeyRound, Palette, PlugZap, Trash2, Type } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
+import {
+  createTranslator,
+  UI_LANGUAGE_OPTIONS,
+  type UiLanguage,
+  type UiMessageKey,
+} from "../../services/i18n";
 import {
   defaultSettings,
   loadSettings,
@@ -10,19 +16,40 @@ import {
   UI_FONT_OPTIONS,
   type AppSettings,
   type AppTheme,
+  type AppUiFont,
 } from "../../services/settings";
 
-const THEME_OPTIONS: { id: AppTheme; label: string }[] = [
-  { id: "dark", label: "深色" },
-  { id: "light", label: "浅色" },
-  { id: "amber", label: "橙黄" },
-  { id: "green", label: "绿色" },
-  { id: "blue", label: "蓝色" },
-  { id: "system", label: "跟随系统" },
+const THEME_OPTIONS: ReadonlyArray<{ id: AppTheme; labelKey: UiMessageKey }> = [
+  { id: "dark", labelKey: "settings.theme.dark" },
+  { id: "light", labelKey: "settings.theme.light" },
+  { id: "amber", labelKey: "settings.theme.amber" },
+  { id: "green", labelKey: "settings.theme.green" },
+  { id: "blue", labelKey: "settings.theme.blue" },
+  { id: "system", labelKey: "settings.theme.system" },
 ];
 
-export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) => void }) {
-  const [activeTab, setActiveTab] = useState<"model" | "appearance" | "font">("model");
+const FONT_LABEL_KEYS: Record<AppUiFont, UiMessageKey> = {
+  sans: "settings.font.sans.label",
+  song: "settings.font.song.label",
+  hei: "settings.font.hei.label",
+  mono: "settings.font.mono.label",
+};
+
+const FONT_NOTE_KEYS: Record<AppUiFont, UiMessageKey> = {
+  sans: "settings.font.sans.note",
+  song: "settings.font.song.note",
+  hei: "settings.font.hei.note",
+  mono: "settings.font.mono.note",
+};
+
+export interface SettingsWorkspaceProps {
+  language: UiLanguage;
+  onLanguageChange: (language: UiLanguage) => void;
+  onMessage: (message: string) => void;
+}
+
+export function SettingsWorkspace({ language, onLanguageChange, onMessage }: SettingsWorkspaceProps) {
+  const [activeTab, setActiveTab] = useState<"model" | "appearance" | "font" | "language">("model");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [apiKey, setApiKey] = useState("");
   const [configured, setConfigured] = useState(false);
@@ -30,6 +57,8 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
   const [testState, setTestState] = useState<{ kind: "success" | "error"; message: string }>();
   const [installedFonts, setInstalledFonts] = useState<Record<string, boolean>>({});
   const provider = findAiProvider(settings.aiProviderId);
+  const t = useMemo(() => createTranslator(language), [language]);
+  const providerLabel = language === "en" ? (provider.labelEn ?? provider.label) : provider.label;
   useEffect(() => {
     let active = true;
     void loadSettings()
@@ -60,15 +89,16 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
       await saveSettings(settings);
       setApiKey("");
       setConfigured(configured || Boolean(apiKey.trim()));
-      onMessage("设置已保存");
+      onLanguageChange(settings.uiLanguage);
+      onMessage(t("settings.message.saved"));
     } catch (error) {
       const detail =
         error instanceof Error && error.message === "DESKTOP_RUNTIME_REQUIRED"
-          ? "浏览器预览模式不保存设置，请使用桌面端"
+          ? t("settings.message.browserPreview")
           : error instanceof Error
             ? error.message
             : String(error);
-      onMessage(`设置保存失败：${detail}`);
+      onMessage(t("settings.message.saveFailed", { detail }));
     } finally {
       setBusy(false);
     }
@@ -78,7 +108,7 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
     try {
       await deleteAiKey(settings.aiProviderId);
       setConfigured(false);
-      onMessage(`${provider.label} API Key 已删除`);
+      onMessage(t("settings.message.keyDeleted", { provider: providerLabel }));
     } finally {
       setBusy(false);
     }
@@ -95,7 +125,9 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
       setTestState({ kind: "success", message });
       onMessage(message);
     } catch (error) {
-      const message = `连接失败：${error instanceof Error ? error.message : String(error)}`;
+      const message = t("settings.model.testFailed", {
+        detail: error instanceof Error ? error.message : String(error),
+      });
       setTestState({ kind: "error", message });
       onMessage(message);
     } finally {
@@ -110,7 +142,7 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
   };
   return (
     <div className="settings-page">
-      <div className="settings-tabs" role="tablist" aria-label="设置分类">
+      <div className="settings-tabs" role="tablist" aria-label={t("settings.title")}>
         <button
           type="button"
           role="tab"
@@ -119,7 +151,7 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
           onClick={() => setActiveTab("model")}
         >
           <KeyRound />
-          模型服务
+          {t("settings.tabs.model")}
         </button>
         <button
           type="button"
@@ -129,7 +161,7 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
           onClick={() => setActiveTab("appearance")}
         >
           <Palette />
-          应用外观
+          {t("settings.tabs.appearance")}
         </button>
         <button
           type="button"
@@ -139,7 +171,17 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
           onClick={() => setActiveTab("font")}
         >
           <Type />
-          字体
+          {t("settings.tabs.font")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "language"}
+          className={activeTab === "language" ? "active" : ""}
+          onClick={() => setActiveTab("language")}
+        >
+          <Languages />
+          {t("settings.tabs.language")}
         </button>
       </div>
       {activeTab === "model" && (
@@ -147,22 +189,22 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
           <div className="settings-section-heading">
             <KeyRound />
             <div>
-              <h2>AI 模型服务</h2>
-              <p>选择生成结构化演示文稿内容所用的厂商与模型。</p>
+              <h2>{t("settings.model.title")}</h2>
+              <p>{t("settings.model.description")}</p>
             </div>
           </div>
           <label>
-            服务商
+            {t("settings.model.provider")}
             <select value={settings.aiProviderId} onChange={(event) => selectProvider(event.target.value)}>
               {AI_PROVIDERS.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.label}
+                  {language === "en" ? (item.labelEn ?? item.label) : item.label}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            模型
+            {t("settings.model.model")}
             <select
               value={settings.aiModel}
               onChange={(event) => {
@@ -170,12 +212,18 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
                 setTestState(undefined);
               }}
             >
-              {provider.models.map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                  {provider.modelNotes[model] ? `（${provider.modelNotes[model]}）` : ""}
-                </option>
-              ))}
+              {provider.models.map((model) => {
+                const note =
+                  language === "en"
+                    ? (provider.modelNotesEn?.[model] ?? provider.modelNotes[model])
+                    : provider.modelNotes[model];
+                return (
+                  <option key={model} value={model}>
+                    {model}
+                    {note ? (language === "en" ? ` (${note})` : `（${note}）`) : ""}
+                  </option>
+                );
+              })}
             </select>
           </label>
           <label className="settings-toggle">
@@ -185,18 +233,19 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
               onChange={(event) => setSettings({ ...settings, visionReviewEnabled: event.target.checked })}
             />
             <span>
-              <strong>允许视觉评审</strong>
-              <em>
-                生成时把页面渲染图发送给当前模型服务检查排版。关闭后不再上传任何渲染图，只做确定性排版校验，视觉评分与建议将不可用。
-              </em>
+              <strong>{t("settings.model.visionReview")}</strong>
+              <em>{t("settings.model.visionReviewHelp")}</em>
             </span>
           </label>
           <label>
-            API 地址
+            {t("settings.model.apiBaseUrl")}
             <input value={provider.baseUrl} readOnly />
           </label>
           <label>
-            API Key <span className={configured ? "configured" : ""}>{configured ? "已安全配置" : "未配置"}</span>
+            {t("settings.model.apiKey")}{" "}
+            <span className={configured ? "configured" : ""}>
+              {configured ? t("settings.model.configured") : t("settings.model.notConfigured")}
+            </span>
             <input
               type="password"
               value={apiKey}
@@ -204,12 +253,14 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
                 setApiKey(event.target.value);
                 setTestState(undefined);
               }}
-              placeholder={configured ? "留空则使用已保存的 Key" : `输入 ${provider.label} API Key`}
+              placeholder={
+                configured
+                  ? t("settings.model.apiKeySavedPlaceholder")
+                  : t("settings.model.apiKeyPlaceholder", { provider: providerLabel })
+              }
             />
           </label>
-          <p className="field-help">
-            Key 保存在操作系统凭据库中，不进入项目文件或日志。测试会发送一条最小请求，可能产生少量 Token 消耗。
-          </p>
+          <p className="field-help">{t("settings.model.keyHelp")}</p>
           <div className="model-actions">
             <button
               type="button"
@@ -218,12 +269,12 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
               onClick={testConnection}
             >
               <PlugZap />
-              {busy ? "正在测试…" : "测试模型连通性"}
+              {busy ? t("settings.model.testing") : t("settings.model.test")}
             </button>
             {configured && (
               <button type="button" className="button-danger" disabled={busy} onClick={removeKey}>
                 <Trash2 />
-                删除 API Key
+                {t("settings.model.deleteKey")}
               </button>
             )}
           </div>
@@ -240,8 +291,8 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
           <div className="settings-section-heading">
             <Palette />
             <div>
-              <h2>应用主题</h2>
-              <p>只调整 PPTD 界面外观，不影响 PPT 模板和演示文稿设计。</p>
+              <h2>{t("settings.appearance.title")}</h2>
+              <p>{t("settings.appearance.description")}</p>
             </div>
           </div>
           <div className="theme-options">
@@ -253,7 +304,7 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
                 onClick={() => setSettings({ ...settings, theme: option.id })}
               >
                 <i className={`theme-swatch ${option.id}`} />
-                <span>{option.label}</span>
+                <span>{t(option.labelKey)}</span>
                 {settings.theme === option.id && <Check />}
               </button>
             ))}
@@ -265,8 +316,8 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
           <div className="settings-section-heading">
             <Type />
             <div>
-              <h2>界面字体</h2>
-              <p>只调整 PPTD 界面的排版字体，不影响 PPT 模板与导出文稿里的字体。</p>
+              <h2>{t("settings.font.title")}</h2>
+              <p>{t("settings.font.description")}</p>
             </div>
           </div>
           <div className="font-options">
@@ -280,27 +331,58 @@ export function SettingsWorkspace({ onMessage }: { onMessage: (message: string) 
                   onClick={() => setSettings({ ...settings, uiFont: option.id })}
                 >
                   <span className="font-card-head">
-                    <strong>{option.label}</strong>
-                    {installed === false && <em className="font-badge missing">未安装</em>}
+                    <strong>{t(FONT_LABEL_KEYS[option.id])}</strong>
+                    {installed === false && <em className="font-badge missing">{t("settings.font.missing")}</em>}
                     {settings.uiFont === option.id && <Check />}
                   </span>
                   <span className="font-sample" style={{ fontFamily: option.stack }}>
-                    思源宋体示例 ABC 0123
+                    {t("settings.font.sample")}
                   </span>
-                  <span className="font-note">{option.note}</span>
+                  <span className="font-note">{t(FONT_NOTE_KEYS[option.id])}</span>
                 </button>
               );
             })}
           </div>
-          <p className="field-help">
-            PPTD 不内置字体文件。选择未安装的字体时会自动回退到系统同类字体；如需使用思源宋体，请先在操作系统中安装
-            Source Han Serif。
-          </p>
+          <p className="field-help">{t("settings.font.help")}</p>
+        </section>
+      )}
+      {activeTab === "language" && (
+        <section className="settings-card" role="tabpanel">
+          <div className="settings-section-heading">
+            <Languages />
+            <div>
+              <h2>{t("settings.language.title")}</h2>
+              <p>{t("settings.language.description")}</p>
+            </div>
+          </div>
+          <div className="language-options" role="radiogroup" aria-label={t("settings.language.title")}>
+            {UI_LANGUAGE_OPTIONS.map((option) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={settings.uiLanguage === option.id}
+                key={option.id}
+                className={settings.uiLanguage === option.id ? "active" : ""}
+                onClick={() => setSettings({ ...settings, uiLanguage: option.id })}
+              >
+                <span className="language-card-head">
+                  <strong>{option.name}</strong>
+                  {option.englishName !== option.name && (
+                    <em className="language-card-native">{option.englishName}</em>
+                  )}
+                  {settings.uiLanguage === option.id && <Check />}
+                </span>
+                <span className="language-card-sample">{option.sample}</span>
+                <span className="language-card-note">{t(option.noteKey)}</span>
+              </button>
+            ))}
+          </div>
+          <p className="field-help">{t("settings.language.help")}</p>
         </section>
       )}
       <div className="settings-actions">
         <button type="button" className="primary-action" disabled={busy || !settings.aiModel.trim()} onClick={save}>
-          {busy ? "保存中…" : "保存设置"}
+          {busy ? t("settings.actions.saving") : t("settings.actions.save")}
           <Check />
         </button>
       </div>

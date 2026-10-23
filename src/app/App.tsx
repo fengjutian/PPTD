@@ -132,7 +132,14 @@ import {
   type AiGenerationProgress,
   type AiVisualAssetIntent,
 } from "../services/ai-service";
-import { applyTheme, applyUiFont, defaultSettings, loadSettings } from "../services/settings";
+import {
+  applyTheme,
+  applyUiFont,
+  applyUiLanguage,
+  defaultSettings,
+  loadSettings,
+} from "../services/settings";
+import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
 import {
   analyzePptxTemplate,
@@ -744,6 +751,12 @@ export function App() {
         : undefined,
     );
   const [activeView, setActiveView] = useState<AppView>("editor");
+  /**
+   * 界面语言。它只影响 PPTD 自己的文案，不属于文档状态，因此不会改变
+   * revision，也不进入撤销栈。
+   */
+  const [uiLanguage, setUiLanguage] = useState<UiLanguage>("zh");
+  const t = useMemo(() => createTranslator(uiLanguage), [uiLanguage]);
   const [aiTopic, setAiTopic] = useState("");
   const [aiSlideCount, setAiSlideCount] = useState<number | "">(6);
   const [aiDraft, setAiDraft] = useState<AiDraft>();
@@ -1042,11 +1055,15 @@ export function App() {
       .then((settings) => {
         applyTheme(settings.theme);
         applyUiFont(settings.uiFont);
+        applyUiLanguage(settings.uiLanguage);
+        setUiLanguage(settings.uiLanguage);
       })
       .catch((error: unknown) => {
         const fallback = defaultSettings();
         applyTheme(fallback.theme);
         applyUiFont(fallback.uiFont);
+        applyUiLanguage(fallback.uiLanguage);
+        setUiLanguage(fallback.uiLanguage);
         setTaskStatus(`设置读取失败：${error instanceof Error ? error.message : String(error)}`);
       });
   }, []);
@@ -3422,6 +3439,7 @@ export function App() {
             <ArrangeToolbar
               slideId={activeSlide.id}
               selected={activeSlide.elements.filter((element) => selectedElementIds.includes(element.id))}
+              groups={activeSlide.groups}
               execute={execute}
             />
             <span className="separator" />
@@ -3661,44 +3679,44 @@ export function App() {
         </header>
       )}
 
-      <nav className="nav-rail" aria-label="主功能">
+      <nav className="nav-rail" aria-label={t("shell.navAria")}>
         <button
           className={activeView === "editor" ? "active" : ""}
           aria-current={activeView === "editor" ? "page" : undefined}
-          title="编辑器"
+          title={t("shell.editorTitle")}
           onClick={() => changeActiveView("editor")}
         >
           <LayoutDashboard />
-          <span>编辑</span>
+          <span>{t("shell.editor")}</span>
         </button>
         <button
           className={activeView === "ai" ? "active" : ""}
           aria-current={activeView === "ai" ? "page" : undefined}
-          title="AI 生成"
+          title={t("shell.aiTitle")}
           onClick={() => changeActiveView("ai")}
           disabled={!isDesktopRuntime()}
         >
           <Sparkles />
-          <span>AI</span>
+          <span>{t("shell.ai")}</span>
         </button>
         <button
           className={activeView === "theme" ? "active" : ""}
           aria-current={activeView === "theme" ? "page" : undefined}
-          title="主题模板"
+          title={t("shell.themeTitle")}
           onClick={() => changeActiveView("theme")}
         >
           <Palette />
-          <span>主题</span>
+          <span>{t("shell.theme")}</span>
         </button>
         <div className="nav-spacer" />
         <button
           className={activeView === "settings" ? "active" : ""}
           aria-current={activeView === "settings" ? "page" : undefined}
-          title="设置"
+          title={t("shell.settings")}
           onClick={() => changeActiveView("settings")}
         >
           <Settings />
-          <span>设置</span>
+          <span>{t("shell.settings")}</span>
         </button>
       </nav>
 
@@ -4509,8 +4527,8 @@ export function App() {
                   <section className="theme-drawer-section theme-ai-prompt">
                     <div className="theme-ai-prompt-heading">
                       <div>
-                        <h3>AI 主题提示词</h3>
-                        <p>可复制给设计 AI，约束字体、色板、页面节奏与内容边界。</p>
+                        <h3>AI 主题提示词（复制用）</h3>
+                        <p>内置生成会自动使用该主题的结构化方向；这段文本用于复制给外部 AI。</p>
                       </div>
                       <button
                         type="button"
@@ -4619,13 +4637,17 @@ export function App() {
             <div>
               <Settings />
               <div>
-                <h1>设置</h1>
-                <p>管理模型连接、安全凭据和 PPTD 应用外观</p>
+                <h1>{t("settings.title")}</h1>
+                <p>{t("settings.description")}</p>
               </div>
             </div>
           </header>
           <div className="feature-scroll">
-            <SettingsWorkspace onMessage={setTaskStatus} />
+            <SettingsWorkspace
+              language={uiLanguage}
+              onLanguageChange={setUiLanguage}
+              onMessage={setTaskStatus}
+            />
           </div>
         </main>
       )}

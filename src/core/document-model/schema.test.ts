@@ -14,7 +14,9 @@ import versionThirteenFixture from "./__fixtures__/v13-document.json";
 import versionFourteenFixture from "./__fixtures__/v14-document.json";
 import versionFifteenFixture from "./__fixtures__/v15-document.json";
 import versionSixteenFixture from "./__fixtures__/v16-document.json";
+import versionSeventeenFixture from "./__fixtures__/v17-document.json";
 import { createDocument } from "./factory";
+import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
 describe("presentation document schema", () => {
@@ -168,6 +170,51 @@ describe("presentation document schema", () => {
     const parsed = parsePresentationDocument(versionSixteenFixture);
     expect(parsed.slides[0]!.animations?.[0]).toMatchObject({ effect: "pulse", phase: "emphasis" });
     expect(versionSixteenFixture.schemaVersion).toBe(16);
+  });
+
+  it("migrates the fixed version 16 fixture without inventing groups", () => {
+    const migrated = parsePresentationDocument(versionSixteenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.groups).toBeUndefined();
+  });
+
+  it("keeps a selection group from a version 17 fixture", () => {
+    const parsed = parsePresentationDocument(versionSeventeenFixture);
+    expect(parsed.slides[0]!.groups).toHaveLength(1);
+    expect(parsed.slides[0]!.groups![0]!.elementIds).toHaveLength(2);
+    expect(versionSeventeenFixture.schemaVersion).toBe(17);
+  });
+
+  it("rejects a group with a missing member, duplicate membership or a repeated id", () => {
+    const missing = createDocument();
+    const missingSlide = missing.slides[0]!;
+    missingSlide.groups = [
+      { id: crypto.randomUUID(), elementIds: [missingSlide.elements[0]!.id, crypto.randomUUID() as never] },
+    ];
+    expect(() => presentationDocumentSchema.parse(missing)).toThrow();
+
+    const overlapping = createDocument();
+    const overlapSlide = overlapping.slides[0]!;
+    applyCommand(overlapping, { type: "add-text", slideId: overlapSlide.id });
+    applyCommand(overlapping, { type: "add-text", slideId: overlapSlide.id });
+    const [first, second, third] = overlapSlide.elements;
+    overlapSlide.groups = [
+      { id: crypto.randomUUID(), elementIds: [first!.id, second!.id] },
+      { id: crypto.randomUUID(), elementIds: [first!.id, third!.id] },
+    ];
+    expect(() => presentationDocumentSchema.parse(overlapping)).toThrow();
+
+    const repeated = createDocument();
+    const repeatedSlide = repeated.slides[0]!;
+    applyCommand(repeated, { type: "add-text", slideId: repeatedSlide.id });
+    applyCommand(repeated, { type: "add-text", slideId: repeatedSlide.id });
+    const [a, b, c] = repeatedSlide.elements;
+    const groupId = crypto.randomUUID();
+    repeatedSlide.groups = [
+      { id: groupId, elementIds: [a!.id, b!.id] },
+      { id: groupId, elementIds: [b!.id, c!.id] },
+    ];
+    expect(() => presentationDocumentSchema.parse(repeated)).toThrow();
   });
 
   it("accepts the new effects and rejects a phase that contradicts the effect", () => {

@@ -658,7 +658,7 @@ P2 再决定放在文档 `design` 侧还是项目旁路；无论放哪，都不�
 - 3 个指标的 data-story 页已渲染：大数字、标签、每条指标绑定 `contentBlockRef`，可直接编辑数值。
 - image-led 页已渲染：图片占右半页，文字收在左侧；配方返回 `imageFrame`，命令层重设图片框并重算裁剪。
 - 主题方向已从 `themePresetMetadata` / `themePresetGuidance` 结构化后传给概念与逐页设计请求；报告会标出“已接入 / 部分生效 / 未接入”。`creative-orange` 这类包含拼贴的方向会显示“部分生效”，因为当前 recipe 没有拼贴构图。
-- 全量 `vitest run` 903 项通过；`tsc --noEmit`、`npm run build` 通过。
+- 全量 `vitest run` 931 项通过；`tsc --noEmit`、`npm run build` 通过。
 
 实现时的两处合同细化：
 

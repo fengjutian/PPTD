@@ -1,6 +1,7 @@
 import { loadStoredAppSettings, saveStoredAppSettings } from "./app-database";
 import { DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-providers";
 import { isFontInstalled } from "./font-availability";
+import { isUiLanguage, type UiLanguage } from "./i18n";
 
 export type AppTheme = "dark" | "light" | "system" | "amber" | "green" | "blue";
 /** PPTD 界面字体，只影响界面排版，不改变 PPT 模板与导出文稿的字体。 */
@@ -8,6 +9,8 @@ export type AppUiFont = "sans" | "song" | "hei" | "mono";
 export interface AppSettings {
   theme: AppTheme;
   uiFont: AppUiFont;
+  /** PPTD 界面语言，不改变演示文稿内容和导出结果。 */
+  uiLanguage: UiLanguage;
   aiProviderId: string;
   aiModel: string;
   /**
@@ -70,6 +73,7 @@ export function defaultSettings(): AppSettings {
   return {
     theme: "dark",
     uiFont: "sans",
+    uiLanguage: "zh",
     aiProviderId: provider.id,
     aiModel: provider.defaultModel,
     visionReviewEnabled: true,
@@ -83,22 +87,26 @@ export async function loadSettings(): Promise<AppSettings> {
   const provider = findAiProvider(stored.aiProviderId);
   const theme = THEMES.includes(stored.theme as AppTheme) ? (stored.theme as AppTheme) : fallback.theme;
   const uiFont = UI_FONTS.includes(stored.uiFont as AppUiFont) ? (stored.uiFont as AppUiFont) : fallback.uiFont;
+  // 老库没有语言字段时保持中文，升级不会突然改变界面语言。
+  const uiLanguage = isUiLanguage(stored.uiLanguage) ? stored.uiLanguage : fallback.uiLanguage;
   const aiModel = provider.models.includes(stored.aiModel) ? stored.aiModel : provider.defaultModel;
   // 老库没有这个字段：只有显式 false 才关闭，缺省保持允许。
   const visionReviewEnabled = stored.visionReviewEnabled !== false;
-  return { theme, uiFont, aiProviderId: provider.id, aiModel, visionReviewEnabled };
+  return { theme, uiFont, uiLanguage, aiProviderId: provider.id, aiModel, visionReviewEnabled };
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
   await saveStoredAppSettings({
     theme: settings.theme,
     uiFont: settings.uiFont,
+    uiLanguage: settings.uiLanguage,
     aiProviderId: settings.aiProviderId,
     aiModel: settings.aiModel,
     visionReviewEnabled: settings.visionReviewEnabled,
   });
   applyTheme(settings.theme);
   applyUiFont(settings.uiFont);
+  applyUiLanguage(settings.uiLanguage);
 }
 
 export function applyTheme(theme: AppTheme): void {
@@ -120,6 +128,13 @@ export function applyUiFont(font: AppUiFont): void {
   const option = UI_FONT_OPTIONS.find((item) => item.id === font);
   if (!option) return;
   document.documentElement.style.setProperty("--app-font-family", option.stack);
+}
+
+/** 同步无障碍与拼写检查所依赖的文档语言；界面文案由 i18n 字典单独切换。 */
+export function applyUiLanguage(language: UiLanguage): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.lang = language === "en" ? "en" : "zh-CN";
+  document.documentElement.dataset.language = language;
 }
 
 /** 探测本机是否装有该界面字体：任一候选字体族可用即视为已安装。 */

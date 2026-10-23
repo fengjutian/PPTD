@@ -11,6 +11,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 export interface StoredAppSettings {
   theme: string;
   uiFont: string;
+  /** PPTD 界面语言。老库没有这个字段时按中文处理。 */
+  uiLanguage?: string;
   aiProviderId: string;
   aiModel: string;
   /** 是否允许把页面渲染图发送给模型服务。老库没有这个字段时按允许处理。 */

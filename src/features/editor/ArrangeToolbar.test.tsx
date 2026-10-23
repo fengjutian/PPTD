@@ -64,4 +64,32 @@ describe("arrange toolbar", () => {
     expect(tag(markup, "左对齐（相对所选对象）")).toContain("disabled");
     expect(tag(markup, "锁定所选对象")).not.toContain("disabled");
   });
+
+  it("groups a free selection and offers ungroup for a grouped one", () => {
+    const free = elements(2);
+    const freeMarkup = renderToStaticMarkup(
+      <ArrangeToolbar slideId={SLIDE_ID} selected={free} execute={() => undefined} />,
+    );
+    expect(tag(freeMarkup, "组合所选对象")).not.toContain("disabled");
+    expect(tag(freeMarkup, "取消组合")).toContain("disabled");
+
+    const grouped = elements(2);
+    const groupedMarkup = renderToStaticMarkup(
+      <ArrangeToolbar
+        slideId={SLIDE_ID}
+        selected={grouped}
+        groups={[{ id: "group-1", elementIds: grouped.map((element) => element.id) }]}
+        execute={() => undefined}
+      />,
+    );
+    expect(tag(groupedMarkup, "组合所选对象")).toContain("disabled");
+    expect(tag(groupedMarkup, "取消组合")).not.toContain("disabled");
+  });
+
+  it("needs at least two objects to group", () => {
+    const markup = renderToStaticMarkup(
+      <ArrangeToolbar slideId={SLIDE_ID} selected={elements(1)} execute={() => undefined} />,
+    );
+    expect(tag(markup, "组合所选对象")).toContain("disabled");
+  });
 });

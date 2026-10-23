@@ -62,6 +62,20 @@ function pruneSelection(selected: ElementId[], document: PresentationDocument): 
   return next.length === selected.length ? selected : next;
 }
 
+/**
+ * Expands a click on a grouped object to its whole group.
+ *
+ * Groups are page metadata; the canvas still renders and stores each element
+ * separately. Expanding here makes every existing multi-selection command
+ * (move, align, distribute, delete, lock) work on the group without a second
+ * command path.
+ */
+function groupedSelection(document: PresentationDocument, slideId: SlideId, elementId: ElementId): ElementId[] {
+  const slide = document.slides.find((candidate) => candidate.id === slideId);
+  const group = slide?.groups?.find((candidate) => candidate.elementIds.includes(elementId));
+  return group ? [...group.elementIds] : [elementId];
+}
+
 export const useEditorStore = create<EditorState>((set) => ({
   document: initial,
   activeSlideId: initial.slides[0]!.id,
@@ -202,14 +216,25 @@ export const useEditorStore = create<EditorState>((set) => ({
     }),
 
   selectSlide: (activeSlideId) => set({ activeSlideId, selectedElementIds: [] }),
-  selectElement: (elementId) => set({ selectedElementIds: elementId ? [elementId] : [] }),
-  toggleElement: (elementId) =>
+  selectElement: (elementId) =>
     set((state) => ({
-      selectedElementIds: state.selectedElementIds.includes(elementId)
-        ? state.selectedElementIds.filter((id) => id !== elementId)
-        : [...state.selectedElementIds, elementId],
+      selectedElementIds: elementId ? groupedSelection(state.document, state.activeSlideId, elementId) : [],
     })),
-  selectElements: (elementIds) => set({ selectedElementIds: [...new Set(elementIds)] }),
+  toggleElement: (elementId) =>
+    set((state) => {
+      const group = groupedSelection(state.document, state.activeSlideId, elementId);
+      const allSelected = group.every((id) => state.selectedElementIds.includes(id));
+      if (allSelected) {
+        return { selectedElementIds: state.selectedElementIds.filter((id) => !group.includes(id)) };
+      }
+      return { selectedElementIds: [...new Set([...state.selectedElementIds, ...group])] };
+    }),
+  selectElements: (elementIds) =>
+    set((state) => ({
+      selectedElementIds: [
+        ...new Set(elementIds.flatMap((id) => groupedSelection(state.document, state.activeSlideId, id))),
+      ],
+    })),
 
   undo: () =>
     set((state) => {

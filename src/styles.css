@@ -6980,8 +6980,67 @@ button {
   line-height: 1.5;
   color: #858a93;
 }
+.language-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.language-options button {
+  min-height: 142px;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 18px;
+  border: 1px solid #3b3d44;
+  border-radius: 9px;
+  color: #cfd2d8;
+  background: #191a1e;
+  cursor: pointer;
+  text-align: left;
+}
+.language-options button:hover {
+  border-color: #666a73;
+  background: #24262b;
+}
+.language-options button.active {
+  border-color: var(--ppt-accent);
+  color: #fff;
+  background: #31211e;
+}
+.language-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.language-card-head strong {
+  font-size: 17px;
+  font-weight: 600;
+}
+.language-card-native {
+  font-size: 11px;
+  font-style: normal;
+  color: #858a93;
+}
+.language-card-head svg {
+  width: 17px;
+  height: 17px;
+  margin-left: auto;
+  color: var(--ppt-accent-hover);
+}
+.language-card-sample {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #e9ebee;
+}
+.language-card-note {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #858a93;
+}
 @media (max-width: 900px) {
-  .font-options {
+  .font-options,
+  .language-options {
     grid-template-columns: 1fr;
   }
 }
@@ -7557,10 +7616,26 @@ button {
   background: #fff1ed;
   border-color: var(--ppt-accent);
 }
-:root[data-theme="light"] .font-sample {
+:root[data-theme="light"] .language-options button {
+  color: #34383f;
+  background: #f4f5f7;
+  border-color: #cfd3d9;
+}
+:root[data-theme="light"] .language-options button:hover {
+  background: #e9ebee;
+}
+:root[data-theme="light"] .language-options button.active {
+  color: #7d2d1d;
+  background: #fff1ed;
+  border-color: var(--ppt-accent);
+}
+:root[data-theme="light"] .font-sample,
+:root[data-theme="light"] .language-card-sample {
   color: #24272c;
 }
-:root[data-theme="light"] .font-note {
+:root[data-theme="light"] .font-note,
+:root[data-theme="light"] .language-card-note,
+:root[data-theme="light"] .language-card-native {
   color: #747a84;
 }
 :root[data-theme="light"] .font-badge {
@@ -8103,10 +8178,26 @@ button {
   background: #fbeedb;
   border-color: var(--ppt-accent);
 }
-:root[data-theme="amber"] .font-sample {
+:root[data-theme="amber"] .language-options button {
+  color: #3d342a;
+  background: #f7efe1;
+  border-color: #ded1bb;
+}
+:root[data-theme="amber"] .language-options button:hover {
+  background: #f0e7d8;
+}
+:root[data-theme="amber"] .language-options button.active {
+  color: #8a4f0e;
+  background: #fbeedb;
+  border-color: var(--ppt-accent);
+}
+:root[data-theme="amber"] .font-sample,
+:root[data-theme="amber"] .language-card-sample {
   color: #322b22;
 }
-:root[data-theme="amber"] .font-note {
+:root[data-theme="amber"] .font-note,
+:root[data-theme="amber"] .language-card-note,
+:root[data-theme="amber"] .language-card-native {
   color: #6f6557;
 }
 :root[data-theme="amber"] .font-badge {
@@ -8600,10 +8691,26 @@ button {
   background: #e6f2ec;
   border-color: var(--ppt-accent);
 }
-:root[data-theme="green"] .font-sample {
+:root[data-theme="green"] .language-options button {
+  color: #323130;
+  background: #f3f2f1;
+  border-color: #d2d0ce;
+}
+:root[data-theme="green"] .language-options button:hover {
+  background: #edebe9;
+}
+:root[data-theme="green"] .language-options button.active {
+  color: #107c41;
+  background: #e6f2ec;
+  border-color: var(--ppt-accent);
+}
+:root[data-theme="green"] .font-sample,
+:root[data-theme="green"] .language-card-sample {
   color: #323130;
 }
-:root[data-theme="green"] .font-note {
+:root[data-theme="green"] .font-note,
+:root[data-theme="green"] .language-card-note,
+:root[data-theme="green"] .language-card-native {
   color: #605e5c;
 }
 :root[data-theme="green"] .font-badge {
@@ -9097,10 +9204,26 @@ button {
   background: #e8eff8;
   border-color: var(--ppt-accent);
 }
-:root[data-theme="blue"] .font-sample {
+:root[data-theme="blue"] .language-options button {
+  color: #323130;
+  background: #f3f2f1;
+  border-color: #d2d0ce;
+}
+:root[data-theme="blue"] .language-options button:hover {
+  background: #edebe9;
+}
+:root[data-theme="blue"] .language-options button.active {
+  color: #1f4c8b;
+  background: #e8eff8;
+  border-color: var(--ppt-accent);
+}
+:root[data-theme="blue"] .font-sample,
+:root[data-theme="blue"] .language-card-sample {
   color: #323130;
 }
-:root[data-theme="blue"] .font-note {
+:root[data-theme="blue"] .font-note,
+:root[data-theme="blue"] .language-card-note,
+:root[data-theme="blue"] .language-card-native {
   color: #605e5c;
 }
 :root[data-theme="blue"] .font-badge {

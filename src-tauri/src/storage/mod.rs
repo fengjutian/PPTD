@@ -16,6 +16,8 @@ const MAX_TOPIC_CHARS: usize = 4000;
 const MAX_DRAFT_BYTES: usize = 4 * 1024 * 1024;
 /// 旧库里没有 ui_font 键时使用的界面字体。
 const DEFAULT_UI_FONT: &str = "sans";
+/// 旧库里没有 ui_language 键时使用的界面语言。
+const DEFAULT_UI_LANGUAGE: &str = "zh";
 
 /// Persisted application preferences. The AI key never enters this table; it
 /// lives in the operating system credential store.
@@ -25,6 +27,9 @@ pub struct StoredAppSettings {
     pub theme: String,
     #[serde(default = "default_ui_font")]
     pub ui_font: String,
+    /// PPTD 界面语言。老库或旧前端没有这个字段时保持中文。
+    #[serde(default = "default_ui_language")]
+    pub ui_language: String,
     pub ai_provider_id: String,
     pub ai_model: String,
     /// 是否允许把页面渲染图发送给模型服务做视觉评审。缺省为允许，老库升级后
@@ -35,6 +40,10 @@ pub struct StoredAppSettings {
 
 fn default_ui_font() -> String {
     DEFAULT_UI_FONT.to_string()
+}
+
+fn default_ui_language() -> String {
+    DEFAULT_UI_LANGUAGE.to_string()
 }
 
 fn default_vision_review_enabled() -> bool {
@@ -110,6 +119,9 @@ impl Database {
         // 字体键是后加的，老库里没有时回落到默认字体，不让整份设置读不出来。
         let ui_font =
             read_setting(&connection, "ui_font")?.unwrap_or_else(|| DEFAULT_UI_FONT.to_string());
+        // 语言键同样是后加的，缺省为中文，避免升级后界面突然变成英文。
+        let ui_language = read_setting(&connection, "ui_language")?
+            .unwrap_or_else(|| DEFAULT_UI_LANGUAGE.to_string());
         // 视觉评审开关同理：缺省为开启，只有显式写入 false 才关闭。
         let vision_review_enabled = read_setting(&connection, "vision_review_enabled")?
             .map(|value| value == "true")
@@ -118,6 +130,7 @@ impl Database {
             (Some(theme), Some(ai_provider_id), Some(ai_model)) => Ok(Some(StoredAppSettings {
                 theme,
                 ui_font,
+                ui_language,
                 ai_provider_id,
                 ai_model,
                 vision_review_enabled,
@@ -136,6 +149,7 @@ impl Database {
         for (key, value) in [
             ("theme", settings.theme.as_str()),
             ("ui_font", settings.ui_font.as_str()),
+            ("ui_language", settings.ui_language.as_str()),
             ("ai_provider_id", settings.ai_provider_id.as_str()),
             ("ai_model", settings.ai_model.as_str()),
             (
@@ -398,6 +412,9 @@ fn validate_settings(settings: &StoredAppSettings) -> Result<(), String> {
     if !matches!(settings.ui_font.as_str(), "sans" | "song" | "hei" | "mono") {
         return Err("SETTINGS_UI_FONT_INVALID".into());
     }
+    if !matches!(settings.ui_language.as_str(), "zh" | "en") {
+        return Err("SETTINGS_UI_LANGUAGE_INVALID".into());
+    }
     if settings.ai_provider_id.trim().is_empty()
         || settings.ai_provider_id.chars().count() > MAX_PROVIDER_ID_CHARS
     {
@@ -478,6 +495,7 @@ mod tests {
         StoredAppSettings {
             theme: "light".into(),
             ui_font: "song".into(),
+            ui_language: "zh".into(),
             ai_provider_id: "minimax".into(),
             ai_model: "MiniMax-M3".into(),
             vision_review_enabled: true,
@@ -527,6 +545,45 @@ mod tests {
             database.save_settings(&invalid).unwrap_err(),
             "SETTINGS_UI_FONT_INVALID"
         );
+    }
+
+    #[test]
+    fn rejects_invalid_ui_language() {
+        let database = Database::open_in_memory().expect("database");
+        let invalid = StoredAppSettings {
+            ui_language: "fr".into(),
+            ..settings()
+        };
+        assert_eq!(
+            database.save_settings(&invalid).unwrap_err(),
+            "SETTINGS_UI_LANGUAGE_INVALID"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_chinese_when_language_key_is_missing() {
+        let database = Database::open_in_memory().expect("database");
+        database.save_settings(&settings()).expect("save");
+        database
+            .connection
+            .lock()
+            .expect("lock")
+            .execute("DELETE FROM app_settings WHERE key = 'ui_language'", [])
+            .expect("delete");
+        let loaded = database.load_settings().expect("load").expect("settings");
+        assert_eq!(loaded.ui_language, DEFAULT_UI_LANGUAGE);
+    }
+
+    #[test]
+    fn persists_english_ui_language() {
+        let database = Database::open_in_memory().expect("database");
+        let english = StoredAppSettings {
+            ui_language: "en".into(),
+            ..settings()
+        };
+        database.save_settings(&english).expect("save");
+        let loaded = database.load_settings().expect("load").expect("settings");
+        assert_eq!(loaded.ui_language, "en");
     }
 
     #[test]

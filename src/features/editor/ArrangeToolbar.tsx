@@ -7,12 +7,14 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignVerticalDistributeCenter,
+  Group,
   Lock,
   LockOpen,
   RotateCw,
+  Ungroup,
 } from "lucide-react";
 import type { DocumentCommand } from "../../core/commands";
-import type { ElementId, SlideElement, SlideId } from "../../core/document-model";
+import type { ElementId, SlideElement, SlideGroup, SlideId } from "../../core/document-model";
 
 type HorizontalTarget = "left" | "center" | "right";
 type VerticalTarget = "top" | "middle" | "bottom";
@@ -21,6 +23,8 @@ interface ArrangeToolbarProps {
   slideId: SlideId;
   /** The selected objects, locked ones included. */
   selected: SlideElement[];
+  /** The page's selection groups; a group has no rendering of its own. */
+  groups?: SlideGroup[];
   execute: (command: DocumentCommand) => void;
 }
 
@@ -33,7 +37,7 @@ interface ArrangeToolbarProps {
  * (rotating a group about its centre would also move every frame), and lock is
  * a batch command so it stays one undo step.
  */
-export function ArrangeToolbar({ slideId, selected, execute }: ArrangeToolbarProps) {
+export function ArrangeToolbar({ slideId, selected, groups = [], execute }: ArrangeToolbarProps) {
   const editable = selected.filter((element) => !element.locked);
   const single = selected.length === 1 ? selected[0] : undefined;
   const elementIds = selected.map((element) => element.id) as ElementId[];
@@ -42,6 +46,11 @@ export function ArrangeToolbar({ slideId, selected, execute }: ArrangeToolbarPro
   // Aligning one object to itself is a no-op that would still add an undo
   // entry; a single object aligns to the page instead.
   const canAlign = single ? !single.locked : editable.length >= 2;
+  const selectedGroup = groups.find(
+    (group) => selected.length > 0 && selected.every((element) => group.elementIds.includes(element.id)),
+  );
+  const inAnyGroup = selected.some((element) => groups.some((group) => group.elementIds.includes(element.id)));
+  const canGroup = selected.length >= 2 && editable.length === selected.length && !inAnyGroup;
 
   const align = (horizontal?: HorizontalTarget, vertical?: VerticalTarget) => {
     if (editable.length === 0) return;
@@ -78,6 +87,16 @@ export function ArrangeToolbar({ slideId, selected, execute }: ArrangeToolbarPro
     execute({ type: "set-elements-lock", slideId, elementIds, locked: !lockedAll });
   };
 
+  const groupSelection = () => {
+    if (!canGroup) return;
+    execute({ type: "group-elements", slideId, elementIds });
+  };
+
+  const ungroupSelection = () => {
+    if (!selectedGroup) return;
+    execute({ type: "ungroup-elements", slideId, groupId: selectedGroup.id });
+  };
+
   const alignButton = (label: string, icon: React.ReactNode, onClick: () => void, disabled: boolean) => (
     <button
       type="button"
@@ -91,7 +110,27 @@ export function ArrangeToolbar({ slideId, selected, execute }: ArrangeToolbarPro
   );
 
   return (
-    <div className="arrange-extra-tools" role="group" aria-label="对齐、分布、旋转与锁定">
+    <div className="arrange-extra-tools" role="group" aria-label="组合、对齐、分布、旋转与锁定">
+      <div className="arrange-icon-group" role="group" aria-label="组合">
+        <button
+          type="button"
+          aria-label="组合所选对象"
+          title="组合所选对象（至少两个，且不能已属于其他组）"
+          disabled={!canGroup}
+          onClick={groupSelection}
+        >
+          <Group />
+        </button>
+        <button
+          type="button"
+          aria-label="取消组合"
+          title="取消组合"
+          disabled={!selectedGroup}
+          onClick={ungroupSelection}
+        >
+          <Ungroup />
+        </button>
+      </div>
       <div className="arrange-icon-group" role="group" aria-label="对齐">
         {alignButton("左对齐", <AlignStartVertical />, () => align("left"), !canAlign)}
         {alignButton("水平居中", <AlignCenterVertical />, () => align("center"), !canAlign)}
