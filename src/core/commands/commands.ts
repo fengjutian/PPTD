@@ -328,6 +328,18 @@ function markContentChanged(slide: Slide): void {
   if (slide.content.status === "approved") slide.content.status = "changed";
 }
 
+/** The design fields a content version snapshots, without its content. */
+function slideDesignOf(slide: Slide) {
+  return {
+    background: slide.background,
+    elements: slide.elements,
+    ...(slide.animations ? { animations: slide.animations } : {}),
+    ...(slide.transition ? { transition: slide.transition } : {}),
+    ...(slide.groups ? { groups: slide.groups } : {}),
+    ...(slide.layoutId ? { layoutId: slide.layoutId } : {}),
+  };
+}
+
 /**
  * Scales one object with the page when the user explicitly asks for it.
  *
@@ -811,7 +823,7 @@ export type DocumentCommand =
     }
   | { type: "approve-slide-content"; slideId: SlideId }
   | { type: "reopen-slide-content"; slideId: SlideId }
-  | { type: "restore-content-version"; versionId: string };
+  | { type: "restore-content-version"; versionId: string; includeDesign?: boolean };
 
 /** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */ function assertTextStyle(
   style: Partial<TextElementStyle>,
@@ -1258,11 +1270,21 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       return "content";
     }
     case "restore-content-version": {
-      if (!document) return "content";
+      if (!document) return command.includeDesign ? "both" : "content";
       const version = document.contentVersions?.find((item) => item.id === command.versionId);
       // 找不到版本或页面集合不一致时交给 applyCommand 报稳定错误，不能当成空事务。
       if (!version) return "content";
-      return diffContentVersion(version, document).length === 0 ? null : "content";
+      const contentChanged = diffContentVersion(version, document).length > 0;
+      if (!command.includeDesign) return contentChanged ? "content" : null;
+      if (!version.design) return contentChanged ? "content" : null;
+      const designChanged = version.design.slides.some((snapshot) => {
+        const slide = document.slides.find((item) => item.id === snapshot.slideId);
+        if (!slide) return false;
+        const { slideId: _slideId, ...expected } = snapshot;
+        return JSON.stringify(slideDesignOf(slide)) !== JSON.stringify(expected);
+      });
+      if (contentChanged && designChanged) return "both";
+      return designChanged ? "design" : contentChanged ? "content" : null;
     }
     case "add-text":
     case "add-line":
@@ -3986,6 +4008,31 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     }
     const order = new Map(version.slides.map((item, index) => [item.slideId, index]));
     document.slides.sort((left, right) => order.get(left.id)! - order.get(right.id)!);
+    if (command.includeDesign) {
+      const design = version.design;
+      if (!design) throw new Error("CONTENT_VERSION_DESIGN_MISSING");
+      if (design.slides.length !== document.slides.length) throw new Error("CONTENT_VERSION_DESIGN_PAGE_SET_MISMATCH");
+      document.pageSize = structuredClone(design.pageSize);
+      if (design.theme) document.theme = structuredClone(design.theme);
+      else delete document.theme;
+      if (design.layouts) document.layouts = structuredClone(design.layouts);
+      else delete document.layouts;
+      const designById = new Map(design.slides.map((snapshot) => [snapshot.slideId, snapshot]));
+      for (const page of document.slides) {
+        const snapshot = designById.get(page.id);
+        if (!snapshot) throw new Error("CONTENT_VERSION_DESIGN_PAGE_SET_MISMATCH");
+        page.background = snapshot.background;
+        page.elements = structuredClone(snapshot.elements);
+        if (snapshot.animations) page.animations = structuredClone(snapshot.animations);
+        else delete page.animations;
+        if (snapshot.transition) page.transition = structuredClone(snapshot.transition);
+        else delete page.transition;
+        if (snapshot.groups) page.groups = structuredClone(snapshot.groups);
+        else delete page.groups;
+        if (snapshot.layoutId) page.layoutId = snapshot.layoutId;
+        else delete page.layoutId;
+      }
+    }
     return;
   }
 

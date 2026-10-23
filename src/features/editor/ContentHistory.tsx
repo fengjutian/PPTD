@@ -89,16 +89,30 @@ function SlideDiff({ diff, currentIndex }: { diff: ContentSlideDiff; currentInde
  * 恢复只回滚内容字段和页序，版式、对象和背景留在当前文稿里。页面集合
  * 发生变化时只允许查看差异，避免用一次内容恢复悄悄删掉或重建页面。
  */
+function designSignature(slide: PresentationDocument["slides"][number]) {
+  return JSON.stringify({
+    background: slide.background,
+    elements: slide.elements,
+    animations: slide.animations ?? null,
+    transition: slide.transition ?? null,
+    groups: slide.groups ?? null,
+    layoutId: slide.layoutId ?? null,
+  });
+}
+
 export function ContentHistory({
   document,
   onClose,
   onRestore,
+  onRestoreDesign,
 }: {
   document: PresentationDocument;
   onClose: () => void;
   onRestore: (versionId: string) => void;
+  onRestoreDesign: (versionId: string) => void;
 }) {
   const versions = document.contentVersions ?? [];
+  const reviewTraces = document.reviewTraces ?? [];
   const latestId = versions.at(-1)?.id;
   const [selectedId, setSelectedId] = useState<string | undefined>(latestId);
   const selected = versions.find((version) => version.id === selectedId) ?? versions.at(-1);
@@ -107,6 +121,20 @@ export function ContentHistory({
     selected !== undefined &&
     selected.slides.length === document.slides.length &&
     selected.slides.every((versionSlide) => document.slides.some((slide) => slide.id === versionSlide.slideId));
+  const designChangedPages =
+    selected?.design?.slides.filter((snapshot) => {
+      const slide = document.slides.find((candidate) => candidate.id === snapshot.slideId);
+      if (!slide) return false;
+      const expected = {
+        background: snapshot.background,
+        elements: snapshot.elements,
+        animations: snapshot.animations ?? null,
+        transition: snapshot.transition ?? null,
+        groups: snapshot.groups ?? null,
+        layoutId: snapshot.layoutId ?? null,
+      };
+      return designSignature(slide) !== JSON.stringify(expected);
+    }).length ?? 0;
 
   return (
     <div
@@ -127,7 +155,7 @@ export function ContentHistory({
             <History />
             <div>
               <h2 id="content-history-title">内容版本</h2>
-              <p>已确认内容的历史快照，可逐页对比，也可只恢复内容而不改动版式。</p>
+              <p>已确认内容的历史快照，可逐页对比；可只恢复内容，也可同时恢复当时的版式。</p>
             </div>
           </div>
           <button type="button" aria-label="关闭内容版本窗口" onClick={onClose}>
@@ -185,6 +213,17 @@ export function ContentHistory({
                     恢复此版本内容
                   </button>
                 )}
+                {selected?.design && designChangedPages > 0 && (
+                  <button
+                    type="button"
+                    className="content-history-restore"
+                    disabled={!restorable}
+                    title="同时恢复这个版本的背景、对象、动画、切换和页面尺寸"
+                    onClick={() => onRestoreDesign(selected.id)}
+                  >
+                    同时恢复版式（{designChangedPages} 页）
+                  </button>
+                )}
               </div>
               {selected && diff.length > 0 && !restorable && (
                 <p className="content-history-hint">
@@ -205,6 +244,26 @@ export function ContentHistory({
                 </ul>
               )}
             </div>
+          </div>
+        )}
+
+        {reviewTraces.length > 0 && (
+          <div className="content-history-traces">
+            <h3>AI 视觉评审记录</h3>
+            <ul>
+              {reviewTraces
+                .slice()
+                .reverse()
+                .map((trace) => (
+                  <li key={trace.id}>
+                    <strong>{trace.overallScore} 分</strong>
+                    <span>{new Date(trace.createdAt).toLocaleString("zh-CN")}</span>
+                    <span>
+                      {trace.issueCount} 条问题 · {trace.slides.length} 页有评分
+                    </span>
+                  </li>
+                ))}
+            </ul>
           </div>
         )}
       </section>

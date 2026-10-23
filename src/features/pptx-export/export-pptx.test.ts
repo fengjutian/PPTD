@@ -91,21 +91,53 @@ describe("PPTX export", () => {
     expect(result.report.issues.some((issue) => issue.code === "animation-not-exported")).toBe(false);
   });
 
-  it("reports effects that have no native timing node", async () => {
+  it("reports animations whose target has no native shape name", async () => {
     const document = createDocument();
     const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-chart", slideId: slide.id, kind: "column" });
+    const chart = slide.elements.find((element) => element.type === "chart");
+    if (!chart) throw new Error("expected chart");
     applyCommand(document, {
       type: "add-animation",
       slideId: slide.id,
-      elementId: slide.elements[0]!.id,
-      animation: { effect: "pulse", start: "on-click", durationMs: 500, delayMs: 0, direction: "none" },
+      elementId: chart.id,
+      animation: { effect: "fade", start: "on-click", durationMs: 500, delayMs: 0, direction: "none" },
     });
 
     const result = await buildPptx(document);
 
-    expect(result.report.issues.some((issue) => issue.code === "animation-not-exported")).toBe(true);
-    expect(result.report.warnings.some((warning) => warning.includes("没有原生导出"))).toBe(true);
     expect(result.report.nativeAnimationCount).toBe(0);
+    expect(result.report.nativeAnimationSkipped).toBe(1);
+    expect(result.report.warnings.some((warning) => warning.includes("缺少原生目标"))).toBe(true);
+  });
+
+  it("writes split, float-in, pulse and disappear as native effects", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    for (let index = 0; index < 4; index += 1) {
+      applyCommand(document, { type: "add-text", slideId: slide.id });
+    }
+    const effects = ["split", "float-in", "pulse", "disappear"] as const;
+    effects.forEach((effect, index) => {
+      applyCommand(document, {
+        type: "add-animation",
+        slideId: slide.id,
+        elementId: slide.elements[index]!.id,
+        animation: { effect, start: "on-click", durationMs: 600, delayMs: 0, direction: "none" },
+      });
+    });
+
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+
+    expect(result.report.nativeAnimationCount).toBe(4);
+    expect(result.report.nativeAnimationSkipped).toBe(0);
+    expect(slideXml).toContain("barn(inVertical)");
+    expect(slideXml).toContain('presetID="30"');
+    expect(slideXml).toContain("ppt_y+0.25");
+    expect(slideXml).toContain("<p:animScale>");
+    expect(slideXml).toContain('presetClass="exit"');
+    expect(slideXml).toContain('<p:strVal val="hidden"/>');
   });
 
   it("writes merged table cells as native grid spans", async () => {

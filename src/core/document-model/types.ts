@@ -478,6 +478,24 @@ export interface ContentVersionSlide {
  * change must not create a content version, and comparing versions should not
  * report font or position changes as content review work.
  */
+export interface ContentVersionDesignSlide {
+  slideId: SlideId;
+  background: string;
+  elements: SlideElement[];
+  animations?: SlideAnimation[];
+  transition?: SlideTransition;
+  groups?: SlideGroup[];
+  layoutId?: string;
+}
+
+/** The design state at the moment a content version was confirmed. */
+export interface ContentVersionDesign {
+  pageSize: { width: Emu; height: Emu };
+  theme?: DocumentTheme;
+  layouts?: SlideLayoutSpec[];
+  slides: ContentVersionDesignSlide[];
+}
+
 export interface ContentVersion {
   id: string;
   /** Content revision this snapshot was confirmed at. */
@@ -485,6 +503,18 @@ export interface ContentVersion {
   /** Document revision this snapshot was confirmed at. */
   documentRevision: number;
   slides: ContentVersionSlide[];
+  /** Design snapshot of the same moment; absent in versions created before v20. */
+  design?: ContentVersionDesign;
+}
+
+/** A persisted summary of one visual review, so it survives reopening. */
+export interface ReviewTrace {
+  id: string;
+  /** ISO timestamp of the review. */
+  createdAt: string;
+  overallScore: number;
+  issueCount: number;
+  slides: Array<{ slideIndex: number; overallScore: number }>;
 }
 
 export interface PresentationDocument {
@@ -498,4 +528,6 @@ export interface PresentationDocument {
   layouts?: SlideLayoutSpec[];
   /** Confirmed content snapshots, oldest first. Capped by the document model. */
   contentVersions?: ContentVersion[];
+  /** Visual review summaries, oldest first. Capped by the document model. */
+  reviewTraces?: ReviewTrace[];
 }

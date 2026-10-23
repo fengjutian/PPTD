@@ -3034,6 +3034,23 @@ export function App() {
           : state,
       );
       const visualNote = stage.notes.join("；");
+      // The review report used to live only in this session. Store its scores
+      // in the document so reopening the project still shows what was reviewed.
+      if (stage.visualReview) {
+        finalDocument.reviewTraces = [
+          ...(finalDocument.reviewTraces ?? []),
+          {
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+            overallScore: stage.visualReview.overallScore,
+            issueCount: stage.visualReview.issues.length,
+            slides: (stage.visualReview.slideScores ?? []).map((item) => ({
+              slideIndex: item.slideIndex,
+              overallScore: item.overallScore,
+            })),
+          },
+        ].slice(-20);
+      }
       // 质量门未过时文档照常产出：问题被逐条列出，PPT 不会因为报错而消失。
       replaceDocument(finalDocument, "both");
       const historyId = historyIdOverride ?? activeHistoryId;
@@ -3680,6 +3697,23 @@ export function App() {
               ? "恢复失败：版本不存在，可能已被撤销。"
               : `恢复失败：${code}`,
       );
+    }
+  };
+
+  const restoreContentVersionWithDesign = (versionId: string) => {
+    if (
+      !window.confirm(
+        "恢复这个版本会同时覆盖当前文稿的内容和版式（对象、背景、动画、切换、页面尺寸）。是否继续？",
+      )
+    )
+      return;
+    try {
+      execute({ type: "restore-content-version", versionId, includeDesign: true });
+      setContentHistoryOpen(false);
+      setTaskStatus("已同时恢复内容与版式。");
+    } catch (error) {
+      const code = error instanceof Error ? error.message : String(error);
+      setTaskStatus(`恢复失败：${code}`);
     }
   };
 
@@ -6101,6 +6135,7 @@ export function App() {
           document={document}
           onClose={() => setContentHistoryOpen(false)}
           onRestore={restoreContentVersion}
+          onRestoreDesign={restoreContentVersionWithDesign}
         />
       )}
 

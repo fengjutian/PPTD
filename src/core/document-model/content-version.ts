@@ -1,4 +1,9 @@
-import type { ContentVersion, ContentVersionSlide, PresentationDocument } from "./types";
+import type {
+  ContentVersion,
+  ContentVersionDesign,
+  ContentVersionSlide,
+  PresentationDocument,
+} from "./types";
 
 /** The cap keeps a long editing session from turning the project file into a log. */
 export const MAX_CONTENT_VERSIONS = 30;
@@ -74,6 +79,27 @@ export interface ContentVersionRevisions {
  * assume the caller is inside a transaction that is about to bump both counters;
  * callers that already know the final numbers can pass them explicitly.
  */
+/** A deep copy of every design field, so later edits cannot mutate the snapshot. */
+export function contentVersionDesign(document: PresentationDocument): ContentVersionDesign {
+  // The command runs inside an Immer draft. `structuredClone` rejects draft
+  // proxies with DataCloneError, so the snapshot is taken through JSON, which
+  // also drops `undefined` optional fields the schema does not need.
+  return JSON.parse(JSON.stringify({
+    pageSize: document.pageSize,
+    ...(document.theme ? { theme: document.theme } : {}),
+    ...(document.layouts ? { layouts: document.layouts } : {}),
+    slides: document.slides.map((slide) => ({
+      slideId: slide.id,
+      background: slide.background,
+      elements: slide.elements,
+      ...(slide.animations ? { animations: slide.animations } : {}),
+      ...(slide.transition ? { transition: slide.transition } : {}),
+      ...(slide.groups ? { groups: slide.groups } : {}),
+      ...(slide.layoutId ? { layoutId: slide.layoutId } : {}),
+    })),
+  })) as ContentVersionDesign;
+}
+
 export function captureContentVersion(
   document: PresentationDocument,
   revisions: ContentVersionRevisions = {
@@ -91,6 +117,7 @@ export function captureContentVersion(
     documentRevision: revisions.documentRevision,
     contentRevision: revisions.contentRevision,
     slides,
+    design: contentVersionDesign(document),
   };
   document.contentVersions = [...versions, version].slice(-MAX_CONTENT_VERSIONS);
   return true;

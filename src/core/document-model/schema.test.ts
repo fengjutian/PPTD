@@ -211,6 +211,15 @@ describe("presentation document schema", () => {
     expect(migrated.slides[0]!.elements[1]).toMatchObject({ type: "shape", shape: "rectangle" });
   });
 
+  it("keeps the design snapshot of a confirmed content version", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "approve-slide-content", slideId: slide.id });
+    const parsed = presentationDocumentSchema.parse(document);
+    expect(parsed.contentVersions?.[0]?.design?.slides[0]?.elements.length).toBeGreaterThan(0);
+    expect(parsed.contentVersions?.[0]?.design?.pageSize.width).toBe(document.pageSize.width);
+  });
+
   it("rejects table merges that leave the grid or overlap", () => {
     const outside = createDocument();
     outside.slides[0]!.content.blocks = [

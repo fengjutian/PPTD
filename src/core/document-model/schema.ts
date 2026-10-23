@@ -273,11 +273,62 @@ const contentVersionSlideSchema = z.object({
   speakerNotes: z.string(),
 });
 
+const animationSchema = z.object({
+  id: z.string().uuid(),
+  elementId: z.string().uuid(),
+  effect: z.enum(["appear", "fade", "fly-in", "float-in", "split", "wipe", "zoom", "pulse", "disappear"]),
+  phase: z.enum(["entrance", "emphasis", "exit"]),
+  start: z.enum(["on-click", "with-previous", "after-previous"]),
+  durationMs: z.number().int().min(100).max(60_000),
+  delayMs: z.number().int().min(0).max(60_000),
+  direction: z.enum(["none", "left", "right", "top", "bottom"]),
+});
+
+const transitionSchema = z.object({
+  kind: z.enum(["fade", "push", "wipe", "split"]),
+  speed: z.enum(["fast", "medium", "slow"]),
+  direction: z.enum(["left", "right", "up", "down"]).optional(),
+});
+
+const contentVersionDesignSchema = z.object({
+  pageSize: z.object({ width: positiveEmu, height: positiveEmu }),
+  theme: themeSchema.optional(),
+  layouts: z.array(slideLayoutSchema).max(200).optional(),
+  slides: z
+    .array(
+      z.object({
+        slideId: z.string().uuid(),
+        background: z.string(),
+        elements: z.array(
+          z.discriminatedUnion("type", [
+            textElement,
+            shapeElement,
+            lineElement,
+            iconElement,
+            imageElement,
+            chartElement,
+            tableElement,
+          ]),
+        ),
+        animations: z.array(animationSchema).max(500).optional(),
+        transition: transitionSchema.optional(),
+        groups: z
+          .array(z.object({ id: z.string().uuid(), elementIds: z.array(z.string().uuid()).min(2).max(200) }))
+          .max(100)
+          .optional(),
+        layoutId: z.string().uuid().optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+
 const contentVersionSchema = z.object({
   id: z.string().uuid(),
   contentRevision: z.number().int().nonnegative(),
   documentRevision: z.number().int().nonnegative(),
   slides: z.array(contentVersionSlideSchema).min(1).max(500),
+  design: contentVersionDesignSchema.optional(),
 });
 
 const slideSchema = z.object({
@@ -305,28 +356,8 @@ const slideSchema = z.object({
       tableElement,
     ]),
   ),
-  animations: z
-    .array(
-      z.object({
-        id: z.string().uuid(),
-        elementId: z.string().uuid(),
-        effect: z.enum(["appear", "fade", "fly-in", "float-in", "split", "wipe", "zoom", "pulse", "disappear"]),
-        phase: z.enum(["entrance", "emphasis", "exit"]),
-        start: z.enum(["on-click", "with-previous", "after-previous"]),
-        durationMs: z.number().int().min(100).max(60_000),
-        delayMs: z.number().int().min(0).max(60_000),
-        direction: z.enum(["none", "left", "right", "top", "bottom"]),
-      }),
-    )
-    .max(500)
-    .optional(),
-  transition: z
-    .object({
-      kind: z.enum(["fade", "push", "wipe", "split"]),
-      speed: z.enum(["fast", "medium", "slow"]),
-      direction: z.enum(["left", "right", "up", "down"]).optional(),
-    })
-    .optional(),
+  animations: z.array(animationSchema).max(500).optional(),
+  transition: transitionSchema.optional(),
   groups: z
     .array(
       z.object({
@@ -353,6 +384,18 @@ const baseDocumentSchema = z.object({
   theme: themeSchema.optional(),
   layouts: z.array(slideLayoutSchema).max(200).optional(),
   contentVersions: z.array(contentVersionSchema).max(MAX_CONTENT_VERSIONS).optional(),
+  reviewTraces: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        createdAt: z.string(),
+        overallScore: z.number(),
+        issueCount: z.number().int().nonnegative(),
+        slides: z.array(z.object({ slideIndex: z.number().int().nonnegative(), overallScore: z.number() })).max(500),
+      }),
+    )
+    .max(20)
+    .optional(),
 });
 
 type DocumentShape = z.infer<typeof baseDocumentSchema>;

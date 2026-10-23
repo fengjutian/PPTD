@@ -6880,6 +6880,34 @@ button {
 .content-history-dialog {
   width: min(860px, 100%);
 }
+.content-history-traces {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+}
+.content-history-traces h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #d8dae0;
+}
+.content-history-traces ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.content-history-traces li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  color: #8f939b;
+  font-size: 11px;
+}
+.content-history-traces li strong {
+  color: #e0b45a;
+}
 .content-history-body {
   display: grid;
   grid-template-columns: 190px minmax(0, 1fr);

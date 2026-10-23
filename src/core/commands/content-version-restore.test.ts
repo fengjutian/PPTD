@@ -32,6 +32,26 @@ function twoPageDocument(): { document: PresentationDocument; first: Slide; seco
 }
 
 describe("restoring a content version", () => {
+  it("restores the design snapshot when the caller asks for it", () => {
+    const { document, first, versionId } = twoPageDocument();
+    const originalFrame = { ...first.elements[0]!.frame };
+    applyCommand(document, { type: "add-shape", slideId: first.id, shape: "triangle" });
+    applyCommand(document, {
+      type: "move-element",
+      slideId: first.id,
+      elementId: first.elements[0]!.id,
+      x: inches(5),
+      y: inches(5),
+    });
+    first.background = "#000000";
+
+    applyCommand(document, { type: "restore-content-version", versionId, includeDesign: true });
+
+    expect(first.elements.some((element) => element.type === "shape")).toBe(false);
+    expect(first.elements[0]!.frame).toEqual(originalFrame);
+    expect(first.background).toBe("#ffffff");
+  });
+
   it("restores text, blocks, notes and page order without touching design", () => {
     const { document, first, second, versionId } = twoPageDocument();
     const shapeCount = first.elements.length;

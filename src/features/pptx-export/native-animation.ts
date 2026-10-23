@@ -42,6 +42,11 @@ function animEffect(id: number, shapeId: string, filter: string, duration: numbe
   return `<p:animEffect transition="in" filter="${filter}"><p:cBhvr><p:cTn id="${id}" dur="${duration}"/><p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl></p:cBhvr></p:animEffect>`;
 }
 
+/** Emphasis scale: grow, then return to the original size. */
+function animScale(id: number, shapeId: string, by: string, duration: number): string {
+  return `<p:animScale><p:cBhvr><p:cTn id="${id}" dur="${duration}" autoRev="1" fill="hold"/><p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl></p:cBhvr><p:by x="${by}" y="${by}"/></p:animScale>`;
+}
+
 /** One animated numeric attribute, from `from` to `to`. */
 function animValue(id: number, shapeId: string, attribute: string, from: string, to: string, duration: number): string {
   return `<p:anim calcmode="lin" valueType="num"><p:cBhvr additive="base"><p:cTn id="${id}" dur="${duration}" fill="hold"/><p:tgtEl><p:spTgt spid="${shapeId}"/></p:tgtEl><p:attrNameLst><p:attrName>${attribute}</p:attrName></p:attrNameLst></p:cBhvr><p:tavLst><p:tav tm="0"><p:val><p:strVal val="${from}"/></p:val></p:tav><p:tav tm="100000"><p:val><p:strVal val="${to}"/></p:val></p:tav></p:tavLst></p:anim>`;
@@ -110,6 +115,39 @@ function effectSpec(animation: SlideAnimation, shapeId: string, duration: number
           `${setVisible(nextId(), shapeId, true)}${animValue(nextId(), shapeId, "ppt_x", fromX, "#ppt_x", duration)}${animValue(nextId(), shapeId, "ppt_y", fromY, "#ppt_y", duration)}`,
       };
     }
+    case "split":
+      // PowerPoint writes Split as a barn-door clip; the default vertical
+      // split is the one the canvas preview shows.
+      return {
+        presetId: 16,
+        presetSubtype: 21,
+        presetClass: "entr",
+        children: (nextId) =>
+          `${setVisible(nextId(), shapeId, true)}${animEffect(nextId(), shapeId, "barn(inVertical)", duration)}`,
+      };
+    case "float-in":
+      // Float In is a short upward drift with a fade, not a motion path.
+      return {
+        presetId: 30,
+        presetSubtype: 0,
+        presetClass: "entr",
+        children: (nextId) =>
+          `${setVisible(nextId(), shapeId, true)}${animEffect(nextId(), shapeId, "fade", duration)}${animValue(nextId(), shapeId, "ppt_y", "#ppt_y+0.25", "#ppt_y", duration)}`,
+      };
+    case "pulse":
+      return {
+        presetId: 6,
+        presetSubtype: 0,
+        presetClass: "emph",
+        children: (nextId) => animScale(nextId(), shapeId, "105000", duration),
+      };
+    case "disappear":
+      return {
+        presetId: 1,
+        presetSubtype: 0,
+        presetClass: "exit",
+        children: (nextId) => setVisible(nextId(), shapeId, false),
+      };
     default:
       return undefined;
   }
