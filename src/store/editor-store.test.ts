@@ -237,6 +237,37 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.title).toBe("AI 生成文稿");
   });
 
+  it("confirms edited content as one undoable content transaction", () => {
+    const state = useEditorStore.getState();
+    const slideId = state.activeSlideId;
+    const title = state.document.slides[0]!.elements.find(
+      (element) => element.type === "text" && element.contentRef === "title",
+    )!;
+
+    useEditorStore.getState().execute({ type: "approve-slide-content", slideId });
+    expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("approved");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 1, design: 0 });
+
+    // Editing the approved title is a content change: the page needs review again.
+    useEditorStore.getState().execute({ type: "edit-text", slideId, elementId: title.id, text: "改过的标题" });
+    expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("changed");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 2, design: 0 });
+
+    // Confirming the edit closes the loop without touching the words.
+    useEditorStore.getState().execute({ type: "approve-slide-content", slideId });
+    expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("approved");
+    expect(useEditorStore.getState().document.slides[0]!.content.title).toBe("改过的标题");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 3, content: 3, design: 0 });
+
+    // Confirming an already confirmed page adds no undo entry.
+    useEditorStore.getState().execute({ type: "approve-slide-content", slideId });
+    expect(useEditorStore.getState().undoStack).toHaveLength(3);
+
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().document.slides[0]!.content.status).toBe("changed");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 2, design: 0 });
+  });
+
   it("keeps the template binding of a designed document", () => {
     // The generated pages carry a reference to the template layout they were
     // designed against. Dropping the layout registry would leave every

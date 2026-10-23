@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { produce } from "immer";
 import { applyCommand, commandDomain } from "./commands";
-import { createDocument } from "../document-model";
+import { createDocument, type SlideId } from "../document-model";
 
 /**
  * 内容复核闭环。
@@ -76,7 +76,7 @@ describe("content approval", () => {
   it("rejects an unknown page instead of silently doing nothing", () => {
     const document = createDocument();
     expect(() =>
-      applyCommand(document, { type: "approve-slide-content", slideId: "missing" as never }),
+      applyCommand(document, { type: "approve-slide-content", slideId: "missing" as SlideId }),
     ).toThrow("SLIDE_NOT_FOUND");
   });
 });
