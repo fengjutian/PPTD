@@ -979,7 +979,9 @@ export type SplitSlidePage = z.infer<typeof splitPageSchema>;
  * 两页都必须有内容块，否则拆出来的是"有标题没内容"的空页；两页标题也不能相同，
  * 否则大纲里会出现两个一样的页面。两种情况都按失败处理，让用户重试。
  */
-export async function splitSlideContent(input: SlideAiContext & { capacityNotes?: string[] }): Promise<SplitSlidePage[]> {
+export async function splitSlideContent(
+  input: SlideAiContext & { capacityNotes?: string[] },
+): Promise<SplitSlidePage[]> {
   const { provider, model } = await aiSelection();
   const raw = await invoke<unknown>("split_slide_content", { request: { ...input, model, provider } });
   const parsed = parseAiResponse(splitSlideResponseSchema, raw, "拆页结果");
@@ -1001,14 +1003,7 @@ export async function splitSlideContent(input: SlideAiContext & { capacityNotes?
 const deckReviewIssueSchema = z.object({
   slideIndex: z.number().int().min(0),
   severity: z.enum(["error", "warning"]),
-  kind: z.enum([
-    "duplicate",
-    "title-body-mismatch",
-    "broken-flow",
-    "overloaded",
-    "missing-conclusion",
-    "unclear",
-  ]),
+  kind: z.enum(["duplicate", "title-body-mismatch", "broken-flow", "overloaded", "missing-conclusion", "unclear"]),
   message: z.string().trim().min(1).max(300),
 });
 const deckReviewResponseSchema = z.object({ issues: z.array(deckReviewIssueSchema).max(20) });

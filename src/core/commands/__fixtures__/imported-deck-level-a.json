@@ -1,0 +1,118 @@
+{
+  "title": "导入往返样例",
+  "pageSize": { "width": 12192000, "height": 6858000 },
+  "theme": {
+    "majorFont": "Aptos Display",
+    "minorFont": "Aptos",
+    "colors": [
+      { "name": "dk1", "value": "#111111" },
+      { "name": "lt1", "value": "#FFFFFF" },
+      { "name": "accent1", "value": "#3366CC" }
+    ]
+  },
+  "report": {
+    "format": "pptx",
+    "compatibility": "A",
+    "slideCount": 2,
+    "counts": { "text": 2, "image": 1, "shape": 1, "table": 1 },
+    "unsupported": [],
+    "warnings": [],
+    "assets": { "extracted": 1, "skipped": 0, "bytes": 68 }
+  },
+  "slides": [
+    {
+      "index": 0,
+      "title": "导入往返样例",
+      "body": "文本、图片与表格都应保持可编辑",
+      "speakerNotes": "第一页备注",
+      "elements": [
+        {
+          "type": "text",
+          "frame": { "x": 914400, "y": 457200, "width": 7315200, "height": 914400 },
+          "rotationMilliDegree": 0,
+          "text": "导入往返样例",
+          "style": {
+            "fontFamily": "Aptos Display",
+            "fontSizePt": 40,
+            "color": "#111111",
+            "bold": true,
+            "italic": false,
+            "underline": false,
+            "strikethrough": false,
+            "align": "left",
+            "verticalAlign": "top",
+            "bullet": "none"
+          },
+          "runs": [],
+          "contentRef": "title"
+        },
+        {
+          "type": "text",
+          "frame": { "x": 914400, "y": 1600200, "width": 5486400, "height": 1371600 },
+          "rotationMilliDegree": 0,
+          "text": "文本、图片与表格都应保持可编辑",
+          "style": {
+            "fontFamily": "Aptos",
+            "fontSizePt": 20,
+            "color": "#333333",
+            "bold": false,
+            "italic": false,
+            "underline": false,
+            "strikethrough": false,
+            "align": "left",
+            "verticalAlign": "top",
+            "lineHeight": 1.2,
+            "bullet": "none"
+          },
+          "runs": [],
+          "contentRef": "body"
+        },
+        {
+          "type": "image",
+          "frame": { "x": 6858000, "y": 1600200, "width": 1828800, "height": 1828800 },
+          "rotationMilliDegree": 0,
+          "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=",
+          "mimeType": "image/png",
+          "altText": "一像素样例",
+          "crop": null
+        },
+        {
+          "type": "table",
+          "frame": { "x": 914400, "y": 3657600, "width": 5486400, "height": 1371600 },
+          "rotationMilliDegree": 0,
+          "header": ["项目", "数值"],
+          "rows": [["样本量", "38万"]]
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "title": "第二页",
+      "body": "",
+      "speakerNotes": "",
+      "elements": [
+        {
+          "type": "shape",
+          "frame": { "x": 914400, "y": 914400, "width": 3657600, "height": 1828800 },
+          "rotationMilliDegree": 0,
+          "shape": "rectangle",
+          "fill": "#E8F0FE",
+          "stroke": "#3366CC",
+          "strokeWidthPt": 1.5,
+          "radiusPt": 0
+        },
+        {
+          "type": "line",
+          "frame": { "x": 914400, "y": 3200400, "width": 4572000, "height": 0 },
+          "rotationMilliDegree": 0,
+          "direction": "horizontal",
+          "stroke": "#3366CC",
+          "strokeWidthPt": 1,
+          "dashed": false,
+          "startArrow": false,
+          "endArrow": true
+        }
+      ]
+    }
+  ]
+}
