@@ -42,7 +42,6 @@ import {
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EMU_PER_INCH,
-  createDocument,
   emu,
   type ElementId,
   type DocumentId,
@@ -86,7 +85,7 @@ import type { AiVisualAssetRole } from "../core/commands/visual-asset";
 import { AiImageDialog } from "../features/editor/AiImageDialog";
 import { bodyFromBlocks } from "../services/ai-draft-content";
 import { SettingsWorkspace } from "../features/settings/SettingsDialog";
-import { loadAiHistory, saveAiHistory, type AiHistoryEntry } from "../services/ai-history";
+import { loadAiHistory, saveAiHistory, saveAiPresentation, type AiHistoryEntry } from "../services/ai-history";
 import { loadRecentProjects, removeRecentProject, type RecentProjectEntry } from "../services/app-database";
 import {
   briefsFromDraft,
@@ -1663,39 +1662,23 @@ export function App() {
     setAiSaveState("saved");
   };
 
-  const openAiPresentation = (entry: AiHistoryEntry) => {
-    const matchesOpenDocument =
-      document.title === entry.draft.title &&
-      document.slides.length === entry.draft.slides.length &&
-      document.slides.every((slide, index) => {
-        const draftSlide = entry.draft.slides[index];
-        return (
-          draftSlide !== undefined &&
-          slide.content.title === draftSlide.title &&
-          slide.content.body === draftSlide.body &&
-          slide.content.speakerNotes === draftSlide.speakerNotes
-        );
-      });
-
-    if (!matchesOpenDocument) {
-      if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开这份 AI 文稿吗？")) return;
-      const generatedDocument = createDocument();
-      applyCommand(generatedDocument, {
-        type: "apply-ai-draft",
-        title: entry.draft.title,
-        slides: entry.draft.slides,
-      });
-      loadDocument(generatedDocument);
-      setProjectPath(undefined);
-      setProjectMtime(undefined);
-      setSavedRevision(generatedDocument.revisions.document);
-    } else {
-      selectSlide(document.slides[0]!.id);
+  const openAiPresentation = async (entry: AiHistoryEntry) => {
+    if (dirty && !window.confirm("当前项目还有未保存的修改，确定打开这份 AI 文稿吗？")) return;
+    if (!entry.presentation) {
+      openAiHistory(entry);
+      setTaskStatus("这份文稿还没有生成 PPT，正在开始生成…");
+      await generateFromDraft("preset", entry.draft, entry.id);
+      return;
     }
 
+    const generatedDocument = structuredClone(entry.presentation);
+    loadDocument(generatedDocument);
+    setProjectPath(undefined);
+    setProjectMtime(undefined);
+    setSavedRevision(generatedDocument.revisions.document);
     setActiveView("editor");
     setEditorSurface("canvas");
-    setTaskStatus("AI 文稿已打开，可继续编辑");
+    setTaskStatus("AI 生成的 PPT 已打开，可继续编辑");
   };
 
   const selectAiDraftSlide = (index: number) => {
@@ -2036,12 +2019,21 @@ export function App() {
     setTemplatePickerOpen(true);
   };
 
-  const generateFromDraft = async (mode: "template" | "preset" = "template") => {
-    if (!aiDraft) return;
+  const generateFromDraft = async (
+    mode: "template" | "preset" = "template",
+    draftOverride?: AiDraft,
+    historyIdOverride?: string,
+  ) => {
+    const sourceDraft = draftOverride ?? aiDraft;
+    if (!sourceDraft) return;
     if (mode === "template" && (!selectedTemplate || !templateAnalysis)) return;
+    const sourceRecommendedThemePreset =
+      findThemePreset(inferThemePresetId(sourceDraft.title.trim())) ?? defaultThemePreset();
     const preset =
       mode === "preset"
-        ? (findThemePreset(themePresetId || recommendedThemePreset.id) ?? defaultThemePreset())
+        ? (findThemePreset(
+            draftOverride ? sourceRecommendedThemePreset.id : themePresetId || sourceRecommendedThemePreset.id,
+          ) ?? defaultThemePreset())
         : undefined;
     const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
     const deckName = preset ? preset.name : selectedTemplate!.name;
@@ -2071,9 +2063,9 @@ export function App() {
     }, 900);
     try {
       setDesignProgress({ percent: 18, label: "正在规划逐页设计意图" });
-      const briefs = briefsFromDraft(aiDraft);
+      const briefs = briefsFromDraft(sourceDraft);
       setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
-      const design = await generatePresentationDesign(aiDraft, briefs, analysis, { taskId });
+      const design = await generatePresentationDesign(sourceDraft, briefs, analysis, { taskId });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       window.clearInterval(progressTimer);
       setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
@@ -2123,15 +2115,15 @@ export function App() {
       // 生成图片。图片生成失败只是少一张图，文稿照常成立。
       const assetPlan = planVisualAssets({
         designs: design.slides,
-        itemCounts: aiDraft.slides.map((slide) => countSlidePoints(slide)),
-        deterministicBlocks: aiDraft.slides.map((slide) =>
+        itemCounts: sourceDraft.slides.map((slide) => countSlidePoints(slide)),
+        deterministicBlocks: sourceDraft.slides.map((slide) =>
           (slide.blocks ?? []).some(
             (block) => block.type !== "paragraph" && block.type !== "bullet-list" && block.type !== "quote",
           ),
         ),
-        topic: aiDraft.title,
+        topic: sourceDraft.title,
         // 内容阶段产出的配图意图是用户审核过的，它优先于设计阶段的建议。
-        intents: aiDraft.slides.map((slide) => slide.plan?.visualAsset),
+        intents: sourceDraft.slides.map((slide) => slide.plan?.visualAsset),
       });
       const visualAssets = await generateDeckVisualAssets({
         decisions: assetPlan.decisions,
@@ -2139,8 +2131,8 @@ export function App() {
       });
       const generationCommand: DocumentCommand = {
         type: "apply-ai-designed-draft",
-        title: aiDraft.title,
-        slides: aiDraft.slides,
+        title: sourceDraft.title,
+        slides: sourceDraft.slides,
         designs: design.slides,
         pageSize: hasTemplateSize
           ? { width: emu(analysis.slideWidthEmu!), height: emu(analysis.slideHeightEmu!) }
@@ -2264,7 +2256,16 @@ export function App() {
       const visualNote = stage.notes.join("；");
       // 质量门未过时文档照常产出：问题被逐条列出，PPT 不会因为报错而消失。
       replaceDocument(finalDocument, "both");
+      const historyId = historyIdOverride ?? activeHistoryId;
+      if (historyId) {
+        const history = await saveAiPresentation(historyId, finalDocument);
+        setAiHistory(history);
+      }
       setTemplatePickerOpen(false);
+      setProjectPath(undefined);
+      setProjectMtime(undefined);
+      setActiveView("editor");
+      setEditorSurface("canvas");
       // 视觉评审只覆盖部分页面时不能走“完全通过”的静默路径：确定性质量门
       // 过了，也只代表看过的页没问题。报告必须留下，让用户看到覆盖范围。
       const coverage = stage.visualReviewCoverage;
@@ -3383,12 +3384,12 @@ export function App() {
                             type="button"
                             className="project-card-open"
                             title={entry.topic}
-                            onClick={() => openAiPresentation(entry)}
+                            onClick={() => void openAiPresentation(entry)}
                           >
                             <span className="project-card-preview ai" aria-hidden="true">
                               <span className="project-card-preview-brand">
                                 <Sparkles />
-                                AI 生成
+                                {entry.presentation ? "AI PPT" : "待生成"}
                               </span>
                               <strong>{entry.draft.title}</strong>
                               <small>{entry.slideCount} 页演示文稿</small>
@@ -3396,7 +3397,7 @@ export function App() {
                             <span className="project-card-copy">
                               <span className="project-card-title-row">
                                 <strong>{entry.draft.title}</strong>
-                                <em>{index === 0 ? "上次编辑" : "AI 草稿"}</em>
+                                <em>{entry.presentation ? (index === 0 ? "上次编辑" : "PPT") : "待生成"}</em>
                               </span>
                               <span>{entry.topic}</span>
                               <small>
