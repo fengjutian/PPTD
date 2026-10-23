@@ -9,6 +9,7 @@
  */
 
 import type { BackgroundRange } from "../rendering/contrast";
+import type { RecipeId } from "../design/deck-concept";
 import type { AiComposition, AiDensityTarget, AiEmphasis, AiPalette } from "./design-intent";
 import type { AiVisualAsset } from "./visual-asset";
 import type { AiVisualNarrative } from "./visual-narrative";
@@ -64,6 +65,16 @@ export interface AiSlideDesign {
    * it, so this is an intent and never a command.
    */
   composition?: AiComposition;
+  /**
+   * The deterministic page recipe that draws this page. Absent means legacy
+   * composition selection; an unknown or illegal recipe is refused and the
+   * renderer falls back to the legacy branch.
+   */
+  recipe?: RecipeId;
+  /** A recipe-local variant, for example a mirrored split. */
+  variant?: "left" | "right";
+  /** Which element the recipe should treat as the page's first visual entry. */
+  focal?: "title" | "index" | "body";
   /** The page's communication strategy; layout and coordinates remain deterministic. */
   visualNarrative?: AiVisualNarrative;
   /** Which level of the hierarchy carries the weight of the page. */

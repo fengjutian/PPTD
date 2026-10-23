@@ -32,6 +32,8 @@ describe("editor keyboard shortcuts", () => {
     expect(shortcut({ key: "ArrowDown" })).toBe("nudge-down");
     expect(shortcut({ key: "]", ctrlKey: true })).toBe("layer-forward");
     expect(shortcut({ key: "[", ctrlKey: true })).toBe("layer-backward");
+    expect(shortcut({ key: "f", ctrlKey: true })).toBe("find");
+    expect(shortcut({ key: "a", ctrlKey: true })).toBe("select-all");
   });
 
   it("maps the text format shortcuts without shadowing the clipboard", () => {

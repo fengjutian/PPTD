@@ -32,6 +32,7 @@ import {
   Save,
   SaveAll,
   Scissors,
+  Search,
   Settings,
   Sparkles,
   Square,
@@ -63,6 +64,7 @@ import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
+import { FindReplaceBar } from "../features/editor/FindReplaceBar";
 import { useFormatPainterStore } from "../store/format-painter";
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 import { ContentHistory } from "../features/editor/ContentHistory";
@@ -816,6 +818,8 @@ export function App() {
   useEffect(() => {
     setClipboard({ elements: [], pastes: 0 });
   }, [document.id]);
+  /** The find-and-replace bar is a display mode, so it never enters the document. */
+  const [findOpen, setFindOpen] = useState(false);
   const gridEnabled = useCanvasGuidesStore((s) => s.gridEnabled);
   const gridSnapEnabled = useCanvasGuidesStore((s) => s.gridSnapEnabled);
   const snapEnabled = useCanvasGuidesStore((s) => s.snapEnabled);
@@ -2538,6 +2542,7 @@ export function App() {
         useFormatPainterStore.getState().cancel();
         setTaskStatus("已退出格式刷");
       }
+      if (event.key === "Escape" && findOpen) setFindOpen(false);
       // 编辑快捷键只在编辑器视图生效。AI 审核页、主题页和设置页里 Delete /
       // Ctrl+Z 属于它们自己的交互，不能让隐藏的画布跟着动。
       if (activeView !== "editor") return;
@@ -2561,6 +2566,20 @@ export function App() {
         if (!redoStack.length) return;
         event.preventDefault();
         redo();
+        return;
+      }
+      if (shortcut === "find") {
+        if (editorSurface !== "canvas") return;
+        event.preventDefault();
+        setFindOpen(true);
+        return;
+      }
+      if (shortcut === "select-all") {
+        if (editorSurface !== "canvas") return;
+        event.preventDefault();
+        const ids = activeSlide.elements.filter((element) => !element.locked).map((element) => element.id);
+        selectElements(ids);
+        setTaskStatus(ids.length > 0 ? `已选择 ${ids.length} 个对象` : "本页没有可选对象");
         return;
       }
       if (shortcut === "copy-element") {
@@ -2668,6 +2687,9 @@ export function App() {
     execute,
     copySelection,
     pasteSelection,
+    editorSurface,
+    findOpen,
+    selectElements,
     redo,
     redoStack.length,
     selected,
@@ -3045,36 +3067,49 @@ export function App() {
               <Trash2 />
             </ToolButton>
             <span className="separator" />
-            <ToolButton
-              label="剪切所选对象（Ctrl+X）"
-              caption="剪切"
-              disabled={
-                selectedElementIds.length === 0 ||
-                selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
-              }
-              onClick={() => copySelection(true)}
-            >
-              <Scissors />
-            </ToolButton>
-            <ToolButton
-              label="复制所选对象（Ctrl+C）"
-              caption="复制"
-              disabled={
-                selectedElementIds.length === 0 ||
-                selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
-              }
-              onClick={() => copySelection(false)}
-            >
-              <Copy />
-            </ToolButton>
-            <ToolButton
-              label="粘贴剪贴板对象（Ctrl+V）"
-              caption="粘贴"
-              disabled={clipboard.elements.length === 0}
-              onClick={pasteSelection}
-            >
-              <ClipboardPaste />
-            </ToolButton>
+            <div className="quick-edit-tools" role="group" aria-label="剪贴板与查找">
+              <button
+                type="button"
+                aria-label="剪切所选对象"
+                title="剪切（Ctrl+X）"
+                disabled={
+                  selectedElementIds.length === 0 ||
+                  selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
+                }
+                onClick={() => copySelection(true)}
+              >
+                <Scissors />
+              </button>
+              <button
+                type="button"
+                aria-label="复制所选对象"
+                title="复制（Ctrl+C）"
+                disabled={
+                  selectedElementIds.length === 0 ||
+                  selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
+                }
+                onClick={() => copySelection(false)}
+              >
+                <Copy />
+              </button>
+              <button
+                type="button"
+                aria-label="粘贴剪贴板对象"
+                title="粘贴（Ctrl+V）"
+                disabled={clipboard.elements.length === 0}
+                onClick={pasteSelection}
+              >
+                <ClipboardPaste />
+              </button>
+              <button
+                type="button"
+                aria-label="查找和替换"
+                title="查找和替换（Ctrl+F）"
+                onClick={() => setFindOpen(true)}
+              >
+                <Search />
+              </button>
+            </div>
             <ToolButton
               label="删除所选对象"
               caption="删除对象"
@@ -5170,6 +5205,8 @@ export function App() {
           onRestore={restoreContentVersion}
         />
       )}
+
+      {editorCanvasOpen && findOpen && <FindReplaceBar onClose={() => setFindOpen(false)} />}
 
       {message && (
         <div className={`page-message ${message.kind}`} role="status" aria-live="polite">

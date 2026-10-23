@@ -65,6 +65,7 @@ import {
   type TemplateLayoutIntent,
 } from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
+import type { TextReplaceEdit } from "./text-search";
 import {
   CONTENT_REGION,
   DEFAULT_CONTENT_REGION,
@@ -74,6 +75,9 @@ import {
 } from "./layout-capacity";
 import { resolveTypeScale } from "../design/type-scale";
 import { findThemePreset } from "../design/theme-presets";
+import { deriveDesignTokens } from "../design/design-tokens";
+import type { DeckConcept } from "../design/deck-concept";
+import { consumptionProblem, selectRecipe } from "../layout/recipes/plan";
 import { coverCrop } from "../rendering/image-fit";
 import {
   DENSITY_FACTORS,
@@ -331,6 +335,59 @@ function findTableBlock(slide: Slide | undefined, blockId: string): TableBlock |
 }
 
 /**
+ * Whether changing this copy changes reviewed content.
+ *
+ * A title/body (including the legacy first element without a role) is content.
+ * A card bound to a metric is content too: the number is reviewed copy shown in
+ * more than one place. Everything else is a decorative text box.
+ */
+function textEditTouchesContent(slide: Slide, element: TextElement): boolean {
+  const metric = element.contentBlockRef ? findMetricBlock(slide, element.contentBlockRef.blockId) : undefined;
+  return (
+    element.contentRef === "title" ||
+    element.contentRef === "body" ||
+    (!element.contentRef && slide.elements[0]?.id === element.id) ||
+    Boolean(metric)
+  );
+}
+
+/**
+ * Writes one copy and keeps its content bindings in step.
+ *
+ * `edit-text` and the batch find/replace command both go through here, so a
+ * replacement updates the reviewed title/body/metric exactly like typing does,
+ * and both paths drop run fragments that would address the old copy.
+ */
+function applyTextEdit(slide: Slide, element: TextElement, text: string): void {
+  const blockRef = element.contentBlockRef;
+  const metric = blockRef ? findMetricBlock(slide, blockRef.blockId) : undefined;
+  // The block schema caps a metric field at 1,000 characters. Refusing the edit
+  // is better than saving a document that fails validation later.
+  if (metric && text.length > 1_000) throw new Error("CONTENT_TEXT_TOO_LONG");
+  element.text = text;
+  // The fragments address ranges of the old copy, so they would point at the
+  // wrong words once the copy changed. Dropping them keeps the emphasis honest
+  // instead of highlighting something the reviewer did not select.
+  element.runs = undefined;
+  if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id))
+    slide.content.title = text;
+  if (element.contentRef === "body") {
+    slide.content.body = text;
+    slide.content.blocks = text.trim()
+      ? [{ id: slide.content.blocks?.[0]?.id ?? crypto.randomUUID(), type: "paragraph", text }]
+      : [];
+  }
+  if (metric && blockRef) {
+    // A card is a view of the metric, not a second copy of it: typing in the
+    // card edits the reviewed number every other view reads.
+    if (blockRef.field === "value") metric.value = text;
+    else metric.label = text;
+    syncMetricText(slide, metric.id, blockRef.field, text);
+  }
+  if (textEditTouchesContent(slide, element)) markContentChanged(slide);
+}
+
+/**
  * Keeps every card text that renders the same metric field in step with the
  * block. A page may show one reviewed number twice; editing either copy must
  * not leave the other one claiming an older value.
@@ -535,6 +592,11 @@ export type DocumentCommand =
       title: string;
       slides: AiSlideDraft[];
       designs: AiSlideDesign[];
+      /**
+       * The deck-level design direction. Optional: a design without a concept
+       * keeps the legacy composition path byte-for-byte.
+       */
+      designConcept?: DeckConcept;
       pageSize?: { width: Emu; height: Emu };
       fontFamily?: string;
       bodyFontFamily?: string;
@@ -646,6 +708,7 @@ export type DocumentCommand =
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string }
+  | { type: "replace-text-edits"; edits: TextReplaceEdit[] }
   | { type: "set-speaker-notes"; slideId: SlideId; notes: string }
   | { type: "set-metric"; slideId: SlideId; blockId: string; field: "label" | "value"; value: string }
   | {
@@ -1028,6 +1091,20 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
         ? "content"
         : "design";
     }
+    case "replace-text-edits": {
+      if (!document) return "content";
+      let touchesContent = false;
+      let touchesDesign = false;
+      for (const edit of command.edits) {
+        const slide = document.slides.find((item) => item.id === edit.slideId);
+        const element = slide?.elements.find((item) => item.id === edit.elementId);
+        if (!slide || element?.type !== "text") continue;
+        if (textEditTouchesContent(slide, element)) touchesContent = true;
+        else touchesDesign = true;
+      }
+      if (touchesContent && touchesDesign) return "both";
+      return touchesDesign ? "design" : "content";
+    }
     case "set-speaker-notes":
       return "content";
     case "set-metric": {
@@ -1251,6 +1328,21 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const title = command.title.trim();
     if (!title || title.length > 512) throw new Error("DOCUMENT_TITLE_INVALID");
     document.title = title;
+    return;
+  }
+  if (command.type === "replace-text-edits") {
+    if (command.edits.length === 0 || command.edits.length > 500) throw new Error("TEXT_EDITS_INVALID");
+    // Resolve and validate every target before writing, so one bad id cannot
+    // leave the document half-replaced.
+    const resolved = command.edits.map((edit) => {
+      const targetSlide = document.slides.find((slide) => slide.id === edit.slideId);
+      const target = targetSlide?.elements.find((element) => element.id === edit.elementId);
+      if (!targetSlide || !target || target.type !== "text") throw new Error("TEXT_EDIT_TARGET_INVALID");
+      if (target.locked) throw new Error("ELEMENT_LOCKED");
+      if (edit.text.length > 20_000) throw new Error("CONTENT_TEXT_TOO_LONG");
+      return { slide: targetSlide, element: target, text: edit.text };
+    });
+    for (const edit of resolved) applyTextEdit(edit.slide, edit.element, edit.text);
     return;
   }
   if (command.type === "add-slide") {
@@ -1918,7 +2010,62 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (right <= left || bottom <= top) return box;
         return { x: left as Emu, y: top as Emu, width: (right - left) as Emu, height: (bottom - top) as Emu };
       };
-      if (design.layout === "cover" && !hasDeterministicBlock) {
+      // A concept page is drawn by a pure recipe before the legacy branch chain.
+      // The recipe only appends content elements; background artwork, scrim,
+      // footer, contrast repairs and visual repairs remain in the shared passes
+      // below. Every reviewed item is checked by `consumed`; a recipe that would
+      // drop copy throws instead of writing the page.
+      const recipePlan = (() => {
+        const concept = command.designConcept;
+        if (!concept || keepsArtwork) return undefined;
+        const selection = selectRecipe({
+          facts: compositionFacts,
+          concept,
+          requested: design.recipe,
+          options: {
+            hasArtwork: keepsArtwork,
+            hasAsset: Boolean(visualAsset) || Boolean(design.visualAsset?.enabled),
+          },
+        });
+        if (!selection.recipe) return undefined;
+        const pageIndex = command.pageContext?.index ?? index;
+        const pageTotal = command.pageContext?.total ?? command.slides.length;
+        const tokens = deriveDesignTokens(document.theme, document.pageSize, concept);
+        const plan = selection.recipe.plan({
+          content: slide.content,
+          facts: compositionFacts,
+          concept,
+          tokens,
+          colors: {
+            title: titleInk,
+            body: bodyInk,
+            accent: pageLuminance < 0.45 ? titleInk : design.accent,
+            background: slide.background,
+            rule: pageLuminance < 0.45 ? "#5F6B76" : "#E2E7EC",
+          },
+          frame: {
+            title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            content: frame(contentBox.x, contentBox.y, contentBox.width, contentBox.height),
+            safe: {
+              x: safeLeft,
+              y: safeTop,
+              width: safeRight - safeLeft,
+              height: safeBottom - safeTop,
+            },
+            page: { width: pageWidth, height: pageHeight },
+          },
+          page: { index: pageIndex, total: pageTotal },
+          ...(design.variant ? { variant: design.variant } : {}),
+          ...(design.focal ? { focal: design.focal } : {}),
+        });
+        if (!("elements" in plan)) return undefined;
+        const problem = consumptionProblem(plan, slide.content);
+        if (problem) throw new Error(`AI_DESIGN_CONTENT_LOSS: ${problem}`);
+        return plan;
+      })();
+      if (recipePlan) {
+        slide.elements.push(...recipePlan.elements);
+      } else if (design.layout === "cover" && !hasDeterministicBlock) {
         const coverTitle = safeFrame(recipeTitle, [0.1, 0.24, 0.78, 0.28], 0.25, 0.04);
         const coverBody = safeFrame(recipeContent, [0.1, 0.56, 0.72, 0.16], 0.25, 0.08);
         // A picture on the cover takes the right side of the page, so the
@@ -4227,36 +4374,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   }
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
-    const blockRef = element.contentBlockRef;
-    const metric = blockRef ? findMetricBlock(slide, blockRef.blockId) : undefined;
-    // The block schema caps a metric field at 1,000 characters. Refusing the
-    // edit is better than saving a document that fails validation later.
-    if (metric && command.text.length > 1_000) throw new Error("CONTENT_TEXT_TOO_LONG");
-    element.text = command.text;
-    // The fragments address ranges of the old copy, so they would point at the
-    // wrong words once the copy changed. Dropping them keeps the emphasis
-    // honest instead of highlighting something the reviewer did not select.
-    element.runs = undefined;
-    const contentBound =
-      element.contentRef === "title" ||
-      element.contentRef === "body" ||
-      Boolean(metric) ||
-      (!element.contentRef && slide.elements[0]?.id === element.id);
-    if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id))
-      slide.content.title = command.text;
-    if (element.contentRef === "body") {
-      slide.content.body = command.text;
-      slide.content.blocks = command.text.trim()
-        ? [{ id: slide.content.blocks?.[0]?.id ?? crypto.randomUUID(), type: "paragraph", text: command.text }]
-        : [];
-    }
-    if (metric && blockRef) {
-      // A card is a view of the metric, not a second copy of it: typing in the
-      // card edits the reviewed number every other view reads.
-      if (blockRef.field === "value") metric.value = command.text;
-      else metric.label = command.text;
-      syncMetricText(slide, metric.id, blockRef.field, command.text);
-    }
-    if (contentBound) markContentChanged(slide);
+    if (command.text.length > 20_000) throw new Error("CONTENT_TEXT_TOO_LONG");
+    applyTextEdit(slide, element, command.text);
   }
 }
