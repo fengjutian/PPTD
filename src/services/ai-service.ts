@@ -557,6 +557,9 @@ export function describeAiError(error: unknown): string {
   if (detail.includes("AI_OUTLINE_PAGE_INDEX_INVALID")) return "AI 返回的大纲页码不连续，请重新生成";
   if (detail.includes("AI_BATCH_SLIDE_COUNT_MISMATCH")) return "AI 返回的正文页数与大纲不一致，请重新生成";
   if (detail.includes("AI_SLIDE_COUNT_MISMATCH")) return "AI 返回的草稿页数与请求页数不一致，请重新生成";
+  if (detail.includes("AI_OUTLINE_JSON_INVALID")) return "AI 返回的演示大纲不是完整 JSON，请重新生成";
+  if (detail.includes("AI_BATCH_JSON_INVALID")) return "AI 返回的正文批次不是完整 JSON，请重新生成";
+  if (detail.includes("AI_JSON_INVALID")) return "AI 返回的完整草稿不是有效 JSON，请重新生成";
   if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED"))
     return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
   if (detail.includes("AI_VISION_REVIEW_FAILED"))

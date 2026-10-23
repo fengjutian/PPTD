@@ -550,7 +550,26 @@ fn strip_code_fence(content: &str) -> &str {
 
 /// 解析模型返回的 JSON，`invalid_code` 标记失败发生在哪个阶段。
 fn parse_json<T: DeserializeOwned>(content: &str, invalid_code: &str) -> Result<T, String> {
-    serde_json::from_str(content).map_err(|error| format!("{invalid_code}: {error}"))
+    let stripped = strip_code_fence(content);
+    let direct_error = match serde_json::from_str(stripped) {
+        Ok(value) => return Ok(value),
+        Err(error) => error,
+    };
+
+    // 推理模型可能先输出 <think>、一句说明或 Markdown 围栏，再给出 JSON。
+    // 从每个对象起点尝试反序列化，让 serde 自己处理字符串中的括号和转义；
+    // 仍然只有完整且类型正确的对象才能通过，绝不把任意文本当作领域数据。
+    for (offset, character) in stripped.char_indices() {
+        if character != '{' {
+            continue;
+        }
+        let mut values = serde_json::Deserializer::from_str(&stripped[offset..]).into_iter::<T>();
+        if let Some(Ok(value)) = values.next() {
+            return Ok(value);
+        }
+    }
+
+    Err(format!("{invalid_code}: {direct_error}"))
 }
 
 /// 一次性草稿生成用的提示词。
@@ -1165,6 +1184,28 @@ mod tests {
     #[test]
     fn removes_the_opening_fence_even_without_a_closing_one() {
         assert_eq!(strip_code_fence("```json\n{\"a\":1}"), "{\"a\":1}");
+    }
+
+    #[test]
+    fn parses_json_after_reasoning_and_before_trailing_explanation() {
+        let parsed = parse_json::<serde_json::Value>(
+            "<think>先规划页面结构，示例 {并非 JSON}。</think>\n```json\n{\"title\":\"销售分析\",\"pages\":[]}\n```\n以上是结果。",
+            "AI_OUTLINE_JSON_INVALID",
+        )
+        .expect("embedded JSON object should be extracted");
+
+        assert_eq!(parsed["title"], "销售分析");
+    }
+
+    #[test]
+    fn still_rejects_an_incomplete_json_object() {
+        let error = parse_json::<serde_json::Value>(
+            "正在生成：{\"title\":\"销售分析\"",
+            "AI_OUTLINE_JSON_INVALID",
+        )
+        .unwrap_err();
+
+        assert!(error.starts_with("AI_OUTLINE_JSON_INVALID:"));
     }
 
     #[test]
