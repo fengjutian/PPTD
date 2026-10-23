@@ -2142,6 +2142,29 @@ button {
 }
 .theme-color-spec small { color: #5c6875; font-size: 9px; }
 .theme-color-spec code { color: #89939d; font-family: ui-monospace, monospace; font-size: 8px; }
+.theme-ai-prompt-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.theme-ai-prompt-heading p { margin-top: 5px; }
+.theme-ai-prompt-heading button { flex: none; }
+.theme-ai-prompt-heading svg { width: 14px; }
+.theme-ai-prompt pre {
+  max-height: 260px;
+  margin: 14px 0 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid #dbe1e7;
+  border-radius: 8px;
+  color: #35424f;
+  background: #f6f8fa;
+  font-family: "Microsoft YaHei UI", sans-serif;
+  font-size: 10px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
 .drawer-preview { margin-bottom: 14px; }
 .drawer-analysis { margin-top: 0; }
 .theme-drawer-actions {

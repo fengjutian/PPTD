@@ -79,3 +79,25 @@ export function themePresetGuidance(id: string): ThemePresetGuidance {
   );
 }
 
+/** A portable art-direction prompt for a design model or image-capable agent. */
+export function themePresetAiPrompt(preset: ThemePreset): string {
+  const guidance = themePresetGuidance(preset.id);
+  const colors = preset.theme.colors.map((color) => `${color.name}=${color.value}`).join("，");
+  const styles = preset.theme.textStyles;
+  return [
+    `请使用「${preset.name}」主题为这套演示文稿做视觉设计。`,
+    `视觉气质：${guidance.character}`,
+    `适用语境：${guidance.scenarios.join("、")}。`,
+    `字体系统：标题使用 ${preset.theme.majorFont}，正文使用 ${preset.theme.minorFont}；封面标题约 ${styles?.display?.fontSizePt ?? 44}pt，页标题约 ${styles?.title?.fontSizePt ?? 30}pt，正文约 ${styles?.body?.fontSizePt ?? 16}pt。`,
+    `限定色板：${colors}。只使用这些颜色及其低透明度变体；不要使用纯黑或大面积近黑背景。`,
+    `页面节奏：${guidance.pageRhythm}`,
+    `图片方向：${guidance.imageStyle} 图片中不要生成文字、字母、数字或水印。`,
+    "逐页先判断视觉叙事方式：结论、证据、对比、时序、框架、引语或场景，再选择相应构图；相邻页面避免连续使用相同骨架。",
+    "封面与章节页可使用主题强调色背景，普通内容页使用浅色表面；每页必须有明确的第一视觉焦点，并保持足够留白和文字对比度。",
+    "所有标题、正文、数字、引用、备注和页面顺序均为已审核内容：不得改写、概括、补充、删除或重新排序。空间不足时返回布局冲突，不得静默删减内容。",
+    "文本、形状、图片、表格和图表应尽量保持为 PowerPoint 原生可编辑对象，不要把整页拍平成图片。",
+  ].join("\n");
+}
+
+import type { ThemePreset } from "./theme-presets";
+

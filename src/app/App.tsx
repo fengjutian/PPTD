@@ -121,7 +121,7 @@ import {
 } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
-import { themePresetGuidance } from "../core/design/theme-preset-guidance";
+import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
 import type { BuiltinIconName } from "../core/document-model";
 import { IconPicker } from "../features/editor/IconPicker";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
@@ -2189,10 +2189,10 @@ export function App() {
     }
   };
 
-  const handleSelectTemplate = async (template: TemplateRecord) => {
+  const handleSelectTemplate = async (template: TemplateRecord, showDetails = true) => {
     setThemePresetId("");
     setSelectedTemplate(template);
-    setThemeDrawerOpen(true);
+    setThemeDrawerOpen(showDetails);
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
     setTemplateLayoutRenders([]);
@@ -2220,13 +2220,13 @@ export function App() {
     }
   };
 
-  const handleSelectThemePreset = (presetId: string) => {
+  const handleSelectThemePreset = (presetId: string, showDetails = true) => {
     setThemePresetId(presetId);
     setSelectedTemplate(undefined);
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
     setTemplateLayoutRenders([]);
-    setThemeDrawerOpen(true);
+    setThemeDrawerOpen(showDetails);
   };
 
   useEffect(() => {
@@ -2359,6 +2359,9 @@ export function App() {
 
   const selectedThemePreset = findThemePreset(themePresetId);
   const selectedThemeGuidance = selectedThemePreset ? themePresetGuidance(selectedThemePreset.id) : undefined;
+  const selectedThemeAiPrompt = selectedThemePreset ? themePresetAiPrompt(selectedThemePreset) : undefined;
+  const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
+  const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
 
   return (
     <div
@@ -3032,6 +3035,28 @@ export function App() {
                       ))}
                     </div>
                   </section>
+                  <section className="theme-drawer-section theme-ai-prompt">
+                    <div className="theme-ai-prompt-heading">
+                      <div>
+                        <h3>AI 主题提示词</h3>
+                        <p>可复制给设计 AI，约束字体、色板、页面节奏与内容边界。</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary-action"
+                        onClick={() => {
+                          if (!selectedThemeAiPrompt) return;
+                          void navigator.clipboard.writeText(selectedThemeAiPrompt).then(
+                            () => setTaskStatus(`已复制「${selectedThemePreset.name}」AI 主题提示词`),
+                            () => setTaskStatus("复制失败，请手动选择提示词"),
+                          );
+                        }}
+                      >
+                        <Copy />复制提示词
+                      </button>
+                    </div>
+                    <pre>{selectedThemeAiPrompt}</pre>
+                  </section>
                 </>
               ) : (
                 <>
@@ -3253,15 +3278,50 @@ export function App() {
               </button>
             </div>
             <div className="template-picker-body">
-              <div className="template-library">
-                <div>
+              <div className="template-picker-sources">
+                <section>
+                  <div className="template-picker-section-heading">
+                    <strong>内置主题</strong>
+                    <span>{THEME_PRESETS.length} 套</span>
+                  </div>
+                  <div className="template-picker-preset-list">
+                    {THEME_PRESETS.map((preset) => {
+                      const color = (slot: string) => preset.theme.colors.find((item) => item.name === slot)?.value;
+                      return (
+                        <button
+                          type="button"
+                          disabled={designBusy}
+                          className={`template-picker-preset${themePresetId === preset.id ? " active" : ""}`}
+                          key={preset.id}
+                          onClick={() => handleSelectThemePreset(preset.id, false)}
+                          style={{ "--preset-accent": color("accent") } as React.CSSProperties}
+                        >
+                          <span className="template-picker-preset-colors" aria-hidden>
+                            {["surface", "accent", "accent2", "accent3"].map((slot) => (
+                              <i key={slot} style={{ background: color(slot) }} />
+                            ))}
+                          </span>
+                          <span><strong>{preset.name}</strong><small>{preset.description}</small></span>
+                          {preset.id === recommendedThemePreset.id && <em>内容匹配</em>}
+                          {themePresetId === preset.id && <Check />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+                <section>
+                  <div className="template-picker-section-heading">
+                    <strong>从 PPT 抽取</strong>
+                    <span>{templateLibrary.length} 套</span>
+                  </div>
+                  <div className="template-picker-upload-list">
                   {templateLibrary.map((template) => (
                     <button
                       type="button"
                       disabled={designBusy}
                       className={`template-card${selectedTemplate?.id === template.id ? " active" : ""}`}
                       key={template.id}
-                      onClick={() => void handleSelectTemplate(template)}
+                      onClick={() => void handleSelectTemplate(template, false)}
                     >
                       <FileUp />
                       <span>
@@ -3274,11 +3334,12 @@ export function App() {
                       {selectedTemplate?.id === template.id && <Check />}
                     </button>
                   ))}
-                </div>
-                {templateLibrary.length === 0 && <div className="template-empty">尚未上传 PPT，可直接使用下方内置主题</div>}
+                    {templateLibrary.length === 0 && <div className="template-empty">尚未抽取 PPT 主题</div>}
+                  </div>
+                </section>
               </div>
               <div className="template-preview-panel">
-                <div className={`template-preview-stage ${designBusy ? "generating" : ""}`}>
+                <div className={`template-preview-stage ${designBusy ? "generating" : ""}${themePresetId ? " preset-selected" : ""}`}>
                   {designBusy ? (
                     <div className="design-progress" role="status" aria-live="polite">
                       <Sparkles />
@@ -3307,6 +3368,25 @@ export function App() {
                         取消生成
                       </button>
                     </div>
+                  ) : themePresetId ? (
+                    <div
+                      className="theme-preset-preview picker-preset-preview"
+                      style={
+                        {
+                          "--theme-primary": pickerThemePreset.theme.colors.find((color) => color.name === "primary")?.value,
+                          "--theme-accent": pickerThemePreset.theme.colors.find((color) => color.name === "accent")?.value,
+                          "--theme-muted": pickerThemePreset.theme.colors.find((color) => color.name === "muted")?.value,
+                          "--theme-surface": pickerThemePreset.theme.colors.find((color) => color.name === "surface")?.value,
+                          "--theme-major-font": pickerThemePreset.theme.majorFont,
+                          "--theme-minor-font": pickerThemePreset.theme.minorFont,
+                        } as React.CSSProperties
+                      }
+                    >
+                      <span className="theme-preview-kicker">PPTD · {pickerThemePreset.name}</span>
+                      <div><h2>{aiDraft?.title ?? pickerThemePreset.name}</h2><p>{pickerThemeGuidance.character}</p></div>
+                      <div className="theme-preview-bars"><i /><i /><i /></div>
+                      <small>{pickerThemeGuidance.pageRhythm}</small>
+                    </div>
                   ) : templatePreviewBusy ? (
                     <span>正在解析模板…</span>
                   ) : templatePreview ? (
@@ -3317,7 +3397,15 @@ export function App() {
                     <span>选择左侧模板后查看预览</span>
                   )}
                 </div>
-                {templateAnalysis && (
+                {themePresetId ? (
+                  <div className="picker-theme-details">
+                    <div className="theme-scenario-tags">
+                      {pickerThemeGuidance.scenarios.map((scenario) => <span key={scenario}>{scenario}</span>)}
+                    </div>
+                    <p><strong>图片建议：</strong>{pickerThemeGuidance.imageStyle}</p>
+                    <p><strong>AI 设计：</strong>将使用该主题的 7 色色板、字体层级和页面节奏，且不会改动已审核内容。</p>
+                  </div>
+                ) : templateAnalysis && (
                   <div className="template-picker-summary">
                     <span>{templateAnalysis.slideCount} 页面</span>
                     <span>{templateAnalysis.layoutCount} 版式</span>
@@ -3337,19 +3425,11 @@ export function App() {
               </button>
               <button
                 type="button"
-                className="secondary-action"
-                disabled={designBusy || templatePreviewBusy}
-                onClick={() => void generateFromDraft("preset")}
-              >
-                使用内置主题 · {findThemePreset(themePresetId)?.name ?? recommendedThemePreset.name}
-              </button>
-              <button
-                type="button"
                 className="primary-action"
-                disabled={!selectedTemplate || !templateAnalysis || templatePreviewBusy || designBusy}
-                onClick={() => void generateFromDraft()}
+                disabled={(!themePresetId && (!selectedTemplate || !templateAnalysis)) || templatePreviewBusy || designBusy}
+                onClick={() => void generateFromDraft(themePresetId ? "preset" : "template")}
               >
-                {designBusy ? `${designProgress.percent}%` : "生成 PPT"}
+                {designBusy ? `${designProgress.percent}%` : `使用${themePresetId ? `「${pickerThemePreset.name}」` : "抽取主题"}生成 PPT`}
                 {!designBusy && <ArrowRight />}
               </button>
             </div>
