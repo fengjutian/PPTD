@@ -16,6 +16,7 @@ import {
   generatePresentationDraft,
   mergeStreamProgress,
   polishPresentationTopic,
+  rewritePresentationSlide,
   slideBriefsSchema,
   splitBodyItems,
   type AiGenerationProgress,
@@ -748,6 +749,98 @@ describe("多页草稿的分批编排", () => {
 
     await expect(polishPresentationTopic("做个季度复盘")).resolves.toContain("季度复盘");
     expect(vi.mocked(invoke).mock.calls.map((call) => call[0])).toEqual(["polish_presentation_topic"]);
+  });
+
+  it("单页重写只带这一页的事实，候选版本不写回草稿", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "rewrite_presentation_slide") {
+        return {
+          slide: {
+            body: "模型写的正文",
+            speakerNotes: " 先讲结论 ",
+            blocks: [{ type: "bullet-list", items: ["搜索广告仍是利润来源", "云业务首次全年盈利"] }],
+          },
+        };
+      }
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const suggestion = await rewritePresentationSlide({
+      topic: "Alphabet 2023 年报",
+      deckTitle: "Alphabet 2023 年报",
+      outline: ["封面", "广告基本盘稳固，云与 AI 重塑增长路径", "反垄断裁决与资本开支"],
+      slideIndex: 1,
+      slide: {
+        title: "广告基本盘稳固，云与 AI 重塑增长路径",
+        body: "旧正文",
+        speakerNotes: "旧备注",
+        plan: {
+          purpose: "说明两条业务线",
+          conclusion: "广告稳、云与 AI 增长",
+          visualIntent: "structured-text",
+          density: "medium",
+        },
+        blocks: [{ type: "paragraph", text: "旧正文" }],
+      },
+      instruction: "更精炼",
+      taskId: 7,
+    });
+
+    // 块才是渲染器真正画的东西；正文跟着块重算，审核页的计数才不会和画面分叉。
+    expect(suggestion.body).toBe("搜索广告仍是利润来源\n云业务首次全年盈利");
+    expect(suggestion.speakerNotes).toBe("先讲结论");
+    expect(suggestion.blocks).toHaveLength(1);
+    const request = vi.mocked(invoke).mock.calls.find((call) => call[0] === "rewrite_presentation_slide")?.[1] as {
+      request: Record<string, unknown>;
+    };
+    expect(request.request).toMatchObject({ slideIndex: 1, instruction: "更精炼", taskId: 7 });
+    expect(request.request).toMatchObject({ model: expect.any(String), provider: expect.any(String) });
+  });
+
+  it("模型没给内容块时，用正文还原一种块", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "rewrite_presentation_slide") return { slide: { body: "第一行\n第二行", speakerNotes: "" } };
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const suggestion = await rewritePresentationSlide({
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["标题"],
+      slideIndex: 0,
+      slide: {
+        title: "标题",
+        body: "",
+        speakerNotes: "",
+        plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+        blocks: [],
+      },
+    });
+
+    expect(suggestion.blocks).toEqual([{ type: "bullet-list", items: ["第一行", "第二行"] }]);
+  });
+
+  it("空结果不当作可替换的版本", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "rewrite_presentation_slide") return { slide: { body: "  ", speakerNotes: "", blocks: [] } };
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const error = await rewritePresentationSlide({
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["标题"],
+      slideIndex: 0,
+      slide: {
+        title: "标题",
+        body: "旧正文",
+        speakerNotes: "",
+        plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+        blocks: [],
+      },
+    }).catch((reason: unknown) => reason);
+
+    expect(describeAiError(error)).toBe("AI 没有返回可用的正文，请重新生成");
   });
 });
 

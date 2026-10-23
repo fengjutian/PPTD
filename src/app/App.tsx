@@ -98,6 +98,7 @@ import { fitZoom } from "../core/rendering/viewport";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview } from "../features/ai/ContentReview";
+import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
 import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
 import {
   countSlidePoints,
@@ -128,9 +129,11 @@ import {
   listenAiGenerationProgress,
   mergeStreamProgress,
   polishPresentationTopic,
+  rewritePresentationSlide,
   type AiDraft,
   type AiGenerationProgress,
   type AiVisualAssetIntent,
+  type SlideRewriteSuggestion,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
 import { createTranslator, type UiLanguage } from "../services/i18n";
@@ -778,6 +781,21 @@ export function App() {
   const [aiBusy, setAiBusy] = useState(false);
   /** 整份草稿重新生成的状态。它和开始页的生成互斥，因为两者都要占用 AI 任务号。 */
   const [aiRegenerating, setAiRegenerating] = useState(false);
+  /**
+   * 单页重写的状态。候选版本只活在这里：用户点"替换本页"之前，草稿不会被改动。
+   */
+  type SlideRewriteState = {
+    index: number;
+    status: "editing" | "running" | "ready" | "error";
+    proposal?: SlideRewriteSuggestion;
+    error?: string;
+  };
+  const [slideRewrite, setSlideRewrite] = useState<SlideRewriteState>();
+  const slideRewriteRef = useRef<SlideRewriteState | undefined>(undefined);
+  /** 让关掉对话框之后的在途响应失效。 */
+  const slideRewriteRequestId = useRef(0);
+  /** 后端取消本页重写用的任务号。 */
+  const slideRewriteTaskId = useRef(0);
   const [aiPolishing, setAiPolishing] = useState(false);
   const [aiProgress, setAiProgress] = useState<AiGenerationProgress>();
   const [agentWorkflow, setAgentWorkflow] = useState(initialAgentWorkflow);
@@ -1667,11 +1685,98 @@ export function App() {
     }
   };
 
+  /**
+   * 打开单页重写。此时还没有任何请求：用户可以先写一段改写要求，再决定要不要
+   * 花这一次调用。
+   */
+  const openSlideRewrite = (index: number) => {
+    if (!aiDraftRef.current || aiRegenerating) return;
+    setSlideRewrite({ index, status: "editing" });
+  };
+
+  /** 关掉对话框：在途请求要真正中断，否则窗口关了模型还在写。 */
+  const closeSlideRewrite = () => {
+    if (slideRewriteRef.current?.status === "running") {
+      slideRewriteRequestId.current += 1;
+      void cancelAiGeneration(slideRewriteTaskId.current).catch(() => undefined);
+    }
+    setSlideRewrite(undefined);
+  };
+
+  const runSlideRewrite = async (instruction: string) => {
+    const target = slideRewriteRef.current;
+    const draft = aiDraftRef.current;
+    const slide = target ? draft?.slides[target.index] : undefined;
+    if (!target || !draft || !slide) return;
+    const requestId = ++slideRewriteRequestId.current;
+    const taskId = ++slideRewriteTaskId.current;
+    setSlideRewrite({ ...target, status: "running", error: undefined });
+    setTaskStatus(`AI 正在重写第 ${target.index + 1} 页…`);
+    try {
+      const suggestion = await rewritePresentationSlide({
+        // 主题优先用生成时那句需求；老数据没有主题时退回整册标题。
+        topic: aiTopic.trim() || draft.title,
+        deckTitle: draft.title,
+        // 标题是整册的事实来源：模型据此避免与相邻页重复，但不得改写标题。
+        outline: draft.slides.map((item) => item.title),
+        slideIndex: target.index,
+        slide: {
+          title: slide.title,
+          body: slide.body,
+          speakerNotes: slide.speakerNotes,
+          plan: slide.plan,
+          blocks: slide.blocks,
+        },
+        instruction: instruction.trim() || undefined,
+        taskId,
+      });
+      if (requestId !== slideRewriteRequestId.current) return;
+      setSlideRewrite({ index: target.index, status: "ready", proposal: suggestion });
+      setTaskStatus(`AI 已给出第 ${target.index + 1} 页的新版本，对照后确认替换`);
+    } catch (error) {
+      if (requestId !== slideRewriteRequestId.current) return;
+      setSlideRewrite({ index: target.index, status: "error", error: describeAiError(error) });
+    } finally {
+      void endAiGeneration(taskId).catch(() => undefined);
+    }
+  };
+
+  /**
+   * 用候选版本替换这一页。它走的是普通的内容编辑：一个撤销项、页面回到待审核、
+   * AI 原稿仍可在"恢复 AI 原稿"里找回。
+   */
+  const applySlideRewrite = () => {
+    const target = slideRewriteRef.current;
+    const current = aiDraftRef.current;
+    const proposal = target?.proposal;
+    if (!target || !current || !proposal) return;
+    const index = target.index;
+    forgetRestoreBackup(index);
+    updateAiDraftWithHistory(
+      `slide:${index}:rewrite`,
+      (draft) => ({
+        ...draft,
+        slides: draft.slides.map((slide, slideIndex) =>
+          slideIndex === index
+            ? { ...slide, blocks: proposal.blocks, body: proposal.body, speakerNotes: proposal.speakerNotes, reviewed: false }
+            : slide,
+        ),
+      }),
+      false,
+    );
+    setSlideRewrite(undefined);
+    setTaskStatus(`已替换第 ${index + 1} 页，可用撤销回到替换前的版本`);
+  };
+
   // Refs mirror the latest draft so the exit path can save without waiting for
   // another render, and so a close inside the debounce window is not lost.
   useEffect(() => {
     aiDraftRef.current = aiDraft;
   }, [aiDraft]);
+  // 对话框的关闭、替换都读 ref：闭包里的状态可能还是上一帧的。
+  useEffect(() => {
+    slideRewriteRef.current = slideRewrite;
+  }, [slideRewrite]);
   useEffect(() => {
     aiTopicRef.current = aiTopic;
   }, [aiTopic]);
@@ -3069,6 +3174,8 @@ export function App() {
   };
 
   const editorCanvasOpen = activeView === "editor" && editorSurface === "canvas";
+  // 重写对话框跟着页面走：草稿被换掉时 slide 可能已经不存在，此时不渲染。
+  const rewriteSlide = slideRewrite && aiDraft ? aiDraft.slides[slideRewrite.index] : undefined;
   const projectHomeItems = [
     ...recentProjects.map((entry) => ({ kind: "project" as const, timestamp: entry.lastOpenedAt, entry })),
     ...aiHistory.map((entry) => ({ kind: "ai" as const, timestamp: Date.parse(entry.updatedAt), entry })),
@@ -3240,9 +3347,6 @@ export function App() {
             <TextFormatToolbar slideId={activeSlide.id} elements={selectedTextElements} execute={execute} />
           </div>
           <div className="toolbar-group insert-tools">
-            <ToolButton label="选择">
-              <MousePointer2 />
-            </ToolButton>
             <ToolButton label="文本" onClick={() => execute({ type: "add-text", slideId: activeSlide.id })}>
               <Type />
             </ToolButton>
@@ -4282,6 +4386,7 @@ export function App() {
                 onMoveSlide={moveAiSlide}
                 onRestoreSlide={restoreAiSlide}
                 onUndoRestore={undoRestoreAiSlide}
+                onRewriteSlide={openSlideRewrite}
                 onUndo={undoAiContent}
                 onRedo={redoAiContent}
               />
@@ -5506,6 +5611,21 @@ export function App() {
             </button>
           </div>
         </aside>
+      )}
+
+      {slideRewrite && rewriteSlide && (
+        <SlideRewriteDialog
+          slideIndex={slideRewrite.index}
+          title={rewriteSlide.title}
+          body={rewriteSlide.body}
+          speakerNotes={rewriteSlide.speakerNotes}
+          status={slideRewrite.status}
+          proposal={slideRewrite.proposal}
+          error={slideRewrite.error}
+          onGenerate={(instruction) => void runSlideRewrite(instruction)}
+          onApply={applySlideRewrite}
+          onClose={closeSlideRewrite}
+        />
       )}
 
       <footer className="statusbar">

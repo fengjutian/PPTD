@@ -4296,6 +4296,101 @@ button {
   background: #2a2022;
   font-size: 12px;
 }
+.slide-rewrite-dialog {
+  width: min(860px, 100%);
+}
+.slide-rewrite-current-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 18px 0 0;
+  font-size: 12px;
+}
+.slide-rewrite-current-title span {
+  opacity: 0.65;
+}
+.slide-rewrite-current-title strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+/* 对照区用半透明灰，深色与浅色主题下都不需要单独覆写。 */
+.slide-rewrite-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.slide-rewrite-compare > section {
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+  max-height: 340px;
+  padding: 12px;
+  border: 1px solid rgb(127 127 127 / 28%);
+  border-radius: 10px;
+  background: rgb(127 127 127 / 7%);
+  overflow: auto;
+}
+.slide-rewrite-compare header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.slide-rewrite-compare header span {
+  font-size: 12px;
+  font-weight: 600;
+}
+.slide-rewrite-compare header small {
+  font-size: 11px;
+  opacity: 0.65;
+}
+.slide-rewrite-lines {
+  display: grid;
+  gap: 6px;
+}
+.slide-rewrite-lines p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.slide-rewrite-notes {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgb(127 127 127 / 30%);
+}
+.slide-rewrite-notes span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  opacity: 0.65;
+}
+.slide-rewrite-notes p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.slide-rewrite-empty {
+  margin: 0;
+  font-size: 12px;
+  font-style: italic;
+  opacity: 0.5;
+}
+.slide-rewrite-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: auto 0;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.7;
+}
+.slide-rewrite-placeholder svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
 .spin {
   animation: pptd-spin 900ms linear infinite;
 }

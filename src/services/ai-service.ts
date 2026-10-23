@@ -10,6 +10,7 @@ import { contrastRatio as colorContrastRatio } from "../core/rendering/contrast"
 import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
+import { bodyFromBlocks, sanitizeBlocks } from "./ai-draft-content";
 
 export const narrativeStrategySchema = z.enum([
   "management-report",
@@ -619,6 +620,8 @@ export function describeAiError(error: unknown): string {
   if (detail.includes("AI_OUTLINE_JSON_INVALID")) return "AI 返回的演示大纲不是完整 JSON，请重新生成";
   if (detail.includes("AI_BATCH_JSON_INVALID")) return "AI 返回的正文批次不是完整 JSON，请重新生成";
   if (detail.includes("AI_JSON_INVALID")) return "AI 返回的完整草稿不是有效 JSON，请重新生成";
+  if (detail.includes("AI_REWRITE_JSON_INVALID")) return "AI 返回的本页重写结果不是完整 JSON，请重新生成";
+  if (detail.includes("AI_REWRITE_EMPTY")) return "AI 没有返回可用的正文，请重新生成";
   if (detail.includes("AI_VISUAL_QUALITY_GATE_FAILED"))
     return `生成结果未通过视觉质量检查。${detail.split(": ").slice(1).join(": ")}`;
   if (detail.includes("AI_VISION_REVIEW_FAILED"))
@@ -823,6 +826,83 @@ export async function polishPresentationTopic(topic: string): Promise<string> {
   const { provider, model } = await aiSelection();
   const raw = await invoke<unknown>("polish_presentation_topic", { request: { topic, model, provider } });
   return z.string().trim().min(1).max(4000).parse(raw);
+}
+
+/**
+ * 单页重写的结果。
+ *
+ * 合同里没有 title 和 plan：标题由已定稿的大纲决定，页面计划是这一页的沟通
+ * 任务，二者都不该被一次"换个写法"改掉。
+ */
+const slideRewriteSchema = z.object({
+  body: z.string().max(4000),
+  speakerNotes: z.string().max(4000).default(""),
+  blocks: z.array(contentBlockSchema).max(20).default([]),
+});
+const slideRewriteResponseSchema = z.object({ slide: slideRewriteSchema });
+
+/** 重写一页需要的事实：它是什么页、现在写了什么、用户想怎么改。 */
+export interface SlideRewriteInput {
+  topic: string;
+  deckTitle: string;
+  /** 整册页面标题，按顺序。模型据此避免与相邻页重复。 */
+  outline: string[];
+  slideIndex: number;
+  slide: {
+    title: string;
+    body: string;
+    speakerNotes: string;
+    plan: AiDraft["slides"][number]["plan"];
+    blocks: ContentBlock[];
+  };
+  /** 用户的改写要求，可空。 */
+  instruction?: string;
+  taskId?: number;
+}
+
+export interface SlideRewriteSuggestion {
+  body: string;
+  speakerNotes: string;
+  blocks: ContentBlock[];
+}
+
+/**
+ * 模型只给正文和备注；块是渲染器真正画出来的东西，所以块优先。
+ *
+ * 模型没有输出块时，用它给的正文还原成一种块，别让这一页在审核页上变成
+ * "有正文但没有内容块"的半成品。
+ */
+function normalizeSlideRewrite(slide: z.output<typeof slideRewriteSchema>): SlideRewriteSuggestion {
+  const blocks = sanitizeBlocks(slide.blocks);
+  if (blocks.length === 0) {
+    const text = slide.body.trim();
+    if (!text) throw new Error("AI_REWRITE_EMPTY");
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    blocks.push(
+      lines.length > 1
+        ? { type: "bullet-list", items: lines.map((line) => line.slice(0, 500)) }
+        : { type: "paragraph", text: text.slice(0, 2000) },
+    );
+  }
+  // body 是块的纯文本投影：两者必须一起重写，否则审核页的计数和渲染结果
+  // 会各说各话。
+  return { body: bodyFromBlocks(blocks), speakerNotes: slide.speakerNotes.trim(), blocks };
+}
+
+/**
+ * 让 AI 按这一页的标题和页面计划重写正文。
+ *
+ * 只返回候选版本，不写入草稿：用户在审核页对照新旧两版后自己决定是否替换。
+ */
+export async function rewritePresentationSlide(input: SlideRewriteInput): Promise<SlideRewriteSuggestion> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("rewrite_presentation_slide", { request: { ...input, model, provider } });
+  const parsed = parseAiResponse(slideRewriteResponseSchema, raw, "本页重写结果");
+  return normalizeSlideRewrite(parsed.slide);
 }
 
 export async function generateSlideBriefs(draft: AiDraft, taskId?: number): Promise<SlideBrief[]> {

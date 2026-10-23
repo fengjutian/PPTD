@@ -2,7 +2,13 @@ import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "luci
 import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
-import { createTranslator, UI_LANGUAGE_OPTIONS, type UiLanguage, type UiMessageKey } from "../../services/i18n";
+import {
+  createTranslator,
+  translate,
+  UI_LANGUAGE_OPTIONS,
+  type UiLanguage,
+  type UiMessageKey,
+} from "../../services/i18n";
 import {
   defaultSettings,
   loadSettings,
@@ -85,7 +91,8 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
       setApiKey("");
       setConfigured(configured || Boolean(apiKey.trim()));
       onLanguageChange(settings.uiLanguage);
-      onMessage(t("settings.message.saved"));
+      // 保存成功后界面可能已经切到另一种语言，提示也要用新语言。
+      onMessage(translate(settings.uiLanguage, "settings.message.saved"));
     } catch (error) {
       const detail =
         error instanceof Error && error.message === "DESKTOP_RUNTIME_REQUIRED"

@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Trash2,
   Undo2,
+  Wand2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
@@ -87,6 +88,8 @@ export type ContentReviewProps = {
   onMoveSlide: (index: number, destination: number) => void;
   onRestoreSlide: (index: number) => void;
   onUndoRestore: (index: number) => void;
+  /** 让 AI 按这一页的标题和页面计划重写正文；结果先对照，确认后才替换。 */
+  onRewriteSlide: (index: number) => void;
   onUndo: () => void;
   onRedo: () => void;
 };
@@ -714,6 +717,7 @@ export function ContentReview({
   onMoveSlide,
   onRestoreSlide,
   onUndoRestore,
+  onRewriteSlide,
   onUndo,
   onRedo,
 }: ContentReviewProps) {
@@ -1146,6 +1150,16 @@ export function ContentReview({
                         恢复 AI 原稿
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="link-action"
+                      disabled={regenerating}
+                      title="让 AI 按本页标题和页面计划重写正文与演讲备注；对照后确认才替换，替换可撤销"
+                      onClick={() => onRewriteSlide(index)}
+                    >
+                      <Wand2 />
+                      AI 重写本页
+                    </button>
                     <button
                       type="button"
                       className={`review-toggle ${slide.reviewed ? "reviewed" : ""}`}
