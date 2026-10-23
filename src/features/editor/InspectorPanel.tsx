@@ -1,4 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { ICON_LABELS, ICON_NAMES } from "./IconPicker";
+import { IconGlyph } from "./IconView";
 import {
   AlignCenterHorizontal,
   AlignLeft,
@@ -677,6 +679,69 @@ export function InspectorPanelView({
                   onCommit={(radiusPt) => setShapeStyle({ radiusPt })}
                 />
               )}
+            </div>
+          </InspectorSection>
+        )}
+
+        {element.type === "icon" && (
+          <InspectorSection title="图标">
+            <div className="property-grid">
+              <ColorField
+                label="颜色"
+                value={element.style.color}
+                wide
+                swatches={palette}
+                disabled={locked}
+                onCommit={(color) =>
+                  onCommand({ type: "set-icon-style", slideId, elementId: element.id, style: { color } })
+                }
+              />
+              <NumberField
+                label="线宽"
+                unit="pt"
+                value={element.style.strokeWidth ?? 2}
+                min={1}
+                max={6}
+                precision={1}
+                disabled={locked}
+                onCommit={(strokeWidth) =>
+                  onCommand({ type: "set-icon-style", slideId, elementId: element.id, style: { strokeWidth } })
+                }
+              />
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+                gap: "6px",
+                marginTop: "10px",
+              }}
+            >
+              {ICON_NAMES.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  aria-label={ICON_LABELS[name]}
+                  aria-pressed={element.name === name}
+                  disabled={locked}
+                  onClick={() => onCommand({ type: "set-icon-name", slideId, elementId: element.id, name })}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "6px",
+                    borderRadius: "8px",
+                    border: element.name === name ? "2px solid currentColor" : "1px solid rgba(120,130,140,0.35)",
+                    background: "transparent",
+                    color: "inherit",
+                    cursor: locked ? "default" : "pointer",
+                  }}
+                >
+                  <span style={{ width: "18px", height: "18px" }}>
+                    <IconGlyph name={name} color="currentColor" />
+                  </span>
+                </button>
+              ))}
             </div>
           </InspectorSection>
         )}

@@ -458,12 +458,21 @@ describe("设计质检阶段", () => {
         available: true,
         review: async (_render, _goal, indexes) => {
           pageCalls.push([...(indexes ?? [])]);
+          const firstFailing = indexes?.includes(0) && !reviewedFirstBatch;
+          const slideScores = (indexes ?? []).map((slideIndex) => ({
+            slideIndex,
+            overallScore: firstFailing && slideIndex === 0 ? 70 : 90,
+            hierarchyScore: 90,
+            alignmentScore: 90,
+            readabilityScore: 90,
+          }));
           // 只有第一轮的第一批有问题；第 7 页所在批次一直是合格的。
-          if (indexes?.includes(0) && !reviewedFirstBatch) {
+          if (firstFailing) {
             reviewedFirstBatch = true;
             return {
               ...passingReview,
               overallScore: 70,
+              slideScores,
               issues: [
                 {
                   slideIndex: 0,
@@ -475,7 +484,7 @@ describe("设计质检阶段", () => {
               ],
             };
           }
-          return passingReview;
+          return { ...passingReview, slideScores };
         },
         reviewDeck: async () => {
           deckCalls += 1;
@@ -504,12 +513,144 @@ describe("设计质检阶段", () => {
       inspectContrast: contrastStub,
     });
 
-    // 第二轮只有含第 1 页的批次重新评审；第 7 页那一批沿用上一轮结论。
-    expect(pageCalls).toEqual([[0, 1, 2, 3, 4, 5], [6], [0, 1, 2, 3, 4, 5]]);
+    // 第二轮只重新上传第 1 页；同一批其余页沿用上一轮逐页结论。
+    expect(pageCalls).toEqual([[0, 1, 2, 3, 4, 5], [6], [0]]);
     // 整册总览每轮都要重看：任何一页变化都会改变总览。
     expect(deckCalls).toBe(2);
     expect(result.visualReviewCoverage).toEqual({ reviewed: 7, total: 7 });
     expect(result.designs[0]!.layout).toBe("cards");
+  });
+
+  it("模型没有逐页分数时退回整批复评，不按页猜测", async () => {
+    const pageCalls: number[][] = [];
+    let reviewedFirstBatch = false;
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 13 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes) => {
+          pageCalls.push([...(indexes ?? [])]);
+          if (indexes?.includes(0) && !reviewedFirstBatch) {
+            reviewedFirstBatch = true;
+            return {
+              ...passingReview,
+              overallScore: 70,
+              issues: [
+                {
+                  slideIndex: 0,
+                  severity: "error" as const,
+                  issue: "misalignment" as const,
+                  elementIds: [],
+                  suggestion: "换一种版式",
+                },
+              ],
+            };
+          }
+          return passingReview;
+        },
+        reviewDeck: async () => passingReview,
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 0,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "第一页需要换版式",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: Array.from({ length: 13 }, () => "data:image/jpeg;base64,AA=="),
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    // 没有 slideScores 就无法把批次结论拆到页；第二轮只能重看整批。
+    expect(pageCalls).toEqual([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11], [12], [0, 1, 2, 3, 4, 5]]);
+    expect(result.visualReviewCoverage).toEqual({ reviewed: 13, total: 13 });
+    expect(result.designs[0]!.layout).toBe("cards");
+  });
+
+  it("没有整册评审时仍只上传第二批次里变化的页，第一批保留缩略图", async () => {
+    const pageCalls: number[][] = [];
+    const contactSheets: boolean[] = [];
+    let reviewedPage6 = false;
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 13 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes, _taskId, reviewOptions) => {
+          pageCalls.push([...(indexes ?? [])]);
+          contactSheets.push(reviewOptions?.includeContactSheet === true);
+          const firstProblem = indexes?.includes(6) && !reviewedPage6;
+          const slideScores = (indexes ?? []).map((slideIndex) => ({
+            slideIndex,
+            overallScore: firstProblem && slideIndex === 6 ? 70 : 90,
+            hierarchyScore: 90,
+            alignmentScore: 90,
+            readabilityScore: 90,
+          }));
+          if (firstProblem) {
+            reviewedPage6 = true;
+            return {
+              ...passingReview,
+              overallScore: 70,
+              slideScores,
+              issues: [
+                {
+                  slideIndex: 6,
+                  severity: "error" as const,
+                  issue: "misalignment" as const,
+                  elementIds: [],
+                  suggestion: "换一种版式",
+                },
+              ],
+            };
+          }
+          return { ...passingReview, slideScores };
+        },
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 6,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "第七页需要换版式",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: Array.from({ length: 13 }, () => "data:image/jpeg;base64,AA=="),
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    // 第一批必须整批重看以取得新的缩略图一致性；第二批次只上传第 7 页；
+    // 第三批次没有变化，直接复用上一轮结论。
+    expect(pageCalls).toEqual([[0, 1, 2, 3, 4, 5], [6, 7, 8, 9, 10, 11], [12], [0, 1, 2, 3, 4, 5], [6]]);
+    expect(contactSheets).toEqual([true, false, false, true, false]);
+    expect(result.visualReviewCoverage).toEqual({ reviewed: 13, total: 13 });
+    expect(result.designs[6]!.layout).toBe("cards");
   });
 
   it("没有整册评审时，携带缩略图的第一批不能复用旧结论", async () => {

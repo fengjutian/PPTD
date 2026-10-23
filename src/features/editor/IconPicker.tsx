@@ -1,7 +1,7 @@
 import { BUILTIN_ICONS, type BuiltinIconName } from "../../core/document-model";
 import { IconGlyph } from "./IconView";
 
-const ICON_NAMES = Object.keys(BUILTIN_ICONS) as BuiltinIconName[];
+export const ICON_NAMES = Object.keys(BUILTIN_ICONS) as BuiltinIconName[];
 
 /** Chinese names of the icon set, used by the picker and the layer list. */
 export const ICON_LABELS: Record<BuiltinIconName, string> = {

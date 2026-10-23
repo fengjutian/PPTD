@@ -18,10 +18,12 @@ import type {
   SlideId,
   SlideLayoutSpec,
   SupportedImageMimeType,
+  IconElementStyle,
   TableElementStyle,
   TextElementStyle,
 } from "../document-model";
 import {
+  BUILTIN_ICONS,
   createDocument,
   createSlide,
   iconForText,
@@ -451,6 +453,8 @@ export type DocumentCommand =
   | { type: "set-chart-style"; slideId: SlideId; elementId: ElementId; style: Partial<ChartElementStyle> }
   | { type: "set-chart-kind"; slideId: SlideId; elementId: ElementId; kind: ChartKind }
   | { type: "set-table-style"; slideId: SlideId; elementId: ElementId; style: Partial<TableElementStyle> }
+  | { type: "set-icon-style"; slideId: SlideId; elementId: ElementId; style: Partial<IconElementStyle> }
+  | { type: "set-icon-name"; slideId: SlideId; elementId: ElementId; name: BuiltinIconName }
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string }
@@ -569,6 +573,12 @@ function assertChartStyle(style: Partial<ChartElementStyle>): void {
 /**
  * The style of a table is presentation-only, so it is guarded like the others.
  */
+function assertIconStyle(style: Partial<IconElementStyle>): void {
+  if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_ICON_STYLE");
+  if (style.strokeWidth !== undefined && (!Number.isFinite(style.strokeWidth) || style.strokeWidth < 1 || style.strokeWidth > 6))
+    throw new Error("INVALID_ICON_STYLE");
+}
+
 function assertTableStyle(style: Partial<TableElementStyle>): void {
   if (
     style.fontFamily !== undefined &&
@@ -3577,6 +3587,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "table") throw new Error("ELEMENT_NOT_TABLE");
     assertTableStyle(command.style);
     element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-icon-style") {
+    if (element.type !== "icon") throw new Error("ELEMENT_NOT_ICON");
+    assertIconStyle(command.style);
+    element.style = { ...element.style, ...command.style };
+    return;
+  }
+  if (command.type === "set-icon-name") {
+    if (element.type !== "icon") throw new Error("ELEMENT_NOT_ICON");
+    if (!(command.name in BUILTIN_ICONS)) throw new Error("INVALID_ICON_NAME");
+    element.name = command.name;
     return;
   }
   if (command.type === "set-image-alt-text") {

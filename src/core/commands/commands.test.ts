@@ -3826,4 +3826,32 @@ describe("手工路径的 AI 配图", () => {
     expect(icon.origin).toBe("user");
     expect(icon.frame.width).toBe(inches(1));
   });
+
+  it("updates the style and the name of an icon and refuses a text element", () => {
+    const source = createDocument();
+    const slideId = source.slides[0]!.id;
+    const withIcon = produce(source, (draft) => applyCommand(draft, { type: "add-icon", slideId, name: "book" }));
+    const iconId = withIcon.slides[0]!.elements.at(-1)!.id;
+
+    const restyled = produce(withIcon, (draft) =>
+      applyCommand(draft, { type: "set-icon-style", slideId, elementId: iconId, style: { color: "#112233", strokeWidth: 3 } }),
+    );
+    const icon = restyled.slides[0]!.elements.at(-1)!;
+    if (icon.type !== "icon") throw new Error("expected an icon");
+    expect(icon.style.color).toBe("#112233");
+    expect(icon.style.strokeWidth).toBe(3);
+
+    const renamed = produce(restyled, (draft) =>
+      applyCommand(draft, { type: "set-icon-name", slideId, elementId: iconId, name: "water" }),
+    );
+    const renamedIcon = renamed.slides[0]!.elements.at(-1)!;
+    expect(renamedIcon.type === "icon" ? renamedIcon.name : undefined).toBe("water");
+
+    const textId = source.slides[0]!.elements[0]!.id;
+    expect(() =>
+      produce(source, (draft) =>
+        applyCommand(draft, { type: "set-icon-style", slideId, elementId: textId, style: { color: "#112233" } }),
+      ),
+    ).toThrow("ELEMENT_NOT_ICON");
+  });
 });

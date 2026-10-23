@@ -279,4 +279,22 @@ describe("inspector panel", () => {
     expect(markup).not.toContain("element-preview");
     expect(markup).not.toContain("type-chip");
   });
+
+  it("offers the icon set and marks the icon the element already uses", () => {
+    const icon: SlideElement = {
+      id: "44444444-4444-4444-8444-444444444444" as ElementId,
+      type: "icon",
+      name: "target",
+      frame: { x: emu(0), y: emu(0), width: emu(100), height: emu(100) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: { color: "#2F6B5F", strokeWidth: 2 },
+    };
+    const markup = renderView(icon);
+    expect(markup).toContain("图标");
+    const target = markup.slice(markup.indexOf('aria-label="目标"'));
+    expect(target.slice(0, 260)).toContain('aria-pressed="true"');
+    const book = markup.slice(markup.indexOf('aria-label="书"'));
+    expect(book.slice(0, 260)).toContain('aria-pressed="false"');
+  });
 });

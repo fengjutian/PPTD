@@ -100,6 +100,81 @@ function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualR
   };
 }
 
+type SlideScore = NonNullable<VisualReview["slideScores"]>[number];
+
+/** 逐页评审缓存：只有模型为每一页都返回了分数，才能安全地按页复用。 */
+type SlideReviewCache = {
+  source: "真实 PPTX" | "画布预览";
+  slideCount: number;
+  entries: Map<number, { signature: string; review: VisualReview }>;
+};
+
+type ReviewBatchPlan =
+  | { kind: "reuse"; review: VisualReview }
+  | { kind: "full"; indexes: number[]; batchIndexes: number[] }
+  | { kind: "subset"; indexes: number[]; batchIndexes: number[] };
+
+/**
+ * 把一次批次响应拆成单页结论。
+ *
+ * 只有请求的每一页都有 `slideScores` 时才拆：少一页就无法判断缺失页的
+ * 分数，宁可回退到整批口径，也不能把批次分当成单页分。
+ */
+function splitBatchReview(review: VisualReview, indexes: number[]): Map<number, VisualReview> | undefined {
+  const scores = new Map((review.slideScores ?? []).map((score) => [score.slideIndex, score]));
+  const split = new Map<number, VisualReview>();
+  for (const slideIndex of indexes) {
+    const score = scores.get(slideIndex);
+    if (!score) return undefined;
+    split.set(slideIndex, slideReviewFromBatch(review, slideIndex, score));
+  }
+  return split;
+}
+
+/**
+ * 从一次批次响应里取单页结论。
+ *
+ * 有该页分数时用该页分数；没有时只能用批次分近似，因此这种结论不会写进
+ * 逐页缓存，下一轮仍会重新检查该页。
+ */
+function slideReviewFromBatch(review: VisualReview, slideIndex: number, score?: SlideScore): VisualReview {
+  const ownScore = score ?? review.slideScores?.find((item) => item.slideIndex === slideIndex);
+  return {
+    overallScore: ownScore?.overallScore ?? review.overallScore,
+    hierarchyScore: ownScore?.hierarchyScore ?? review.hierarchyScore,
+    alignmentScore: ownScore?.alignmentScore ?? review.alignmentScore,
+    readabilityScore: ownScore?.readabilityScore ?? review.readabilityScore,
+    consistencyScore: review.consistencyScore,
+    issues: review.issues.filter((issue) => issue.slideIndex === slideIndex),
+    slideGuidance: review.slideGuidance.filter((item) => item.slideIndex === slideIndex),
+    ...(ownScore ? { slideScores: [ownScore] } : {}),
+  };
+}
+
+/** 用逐页结论拼回一批的结论；分数取页分数的最小值，保持保守口径。 */
+function batchReviewFromSlides(
+  indexes: number[],
+  reviews: Map<number, VisualReview>,
+  consistencyScore: number,
+): VisualReview | undefined {
+  const ordered = indexes.map((slideIndex) => reviews.get(slideIndex));
+  if (ordered.some((item) => item === undefined)) return undefined;
+  const present = ordered as VisualReview[];
+  const slideScores = present
+    .flatMap((item) => item.slideScores ?? [])
+    .sort((left, right) => left.slideIndex - right.slideIndex);
+  return {
+    overallScore: Math.min(...present.map((item) => item.overallScore)),
+    hierarchyScore: Math.min(...present.map((item) => item.hierarchyScore)),
+    alignmentScore: Math.min(...present.map((item) => item.alignmentScore)),
+    readabilityScore: Math.min(...present.map((item) => item.readabilityScore)),
+    consistencyScore,
+    issues: present.flatMap((item) => item.issues),
+    slideGuidance: present.flatMap((item) => item.slideGuidance),
+    ...(slideScores.length > 0 ? { slideScores } : {}),
+  };
+}
+
 /** 把视觉评审失败的错误码翻译成用户能读懂的一句话。 */
 export function describeVisualReviewFailure(reason: string): string {
   if (reason.includes("AI_VISION_SLIDE_COUNT_INVALID")) return `文稿页数超过视觉评审上限（${MAX_REVIEWED_SLIDES} 页）`;
@@ -195,6 +270,11 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         reviews: Array<VisualReview | undefined>;
       }
     | undefined;
+  /**
+   * 逐页评审缓存。批内只有一两页变化时，只上传这些页，其余页沿用上一轮
+   * 结论；模型没有返回逐页分数的页不会写进来，下一轮仍按整批重看。
+   */
+  let slideReviewCache: SlideReviewCache | undefined;
   /** 评审最终留下的结构化结论，随结果一起返回给界面。 */
   let visualReview: VisualReview | undefined;
   let visualReviewCoverage: { reviewed: number; total: number } | undefined;
@@ -259,24 +339,54 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         // 每批的设计签名。批内没有变化时可以直接复用上一轮的评审结论，
         // 不必把同一批图片再上传一次。
         const signatures = batches.map((indexes) => JSON.stringify(indexes.map((slideIndex) => current[slideIndex])));
+        const slideSignatures = current.map((design) => JSON.stringify(design));
+        // 逐页缓存按渲染来源和页数隔离。换来源或页数变化时整份作废，
+        // 避免把另一套画面或另一页的结论套到当前页上。
+        if (
+          !slideReviewCache ||
+          slideReviewCache.source !== reviewSource ||
+          slideReviewCache.slideCount !== render.slides.length
+        ) {
+          slideReviewCache = { source: reviewSource, slideCount: render.slides.length, entries: new Map() };
+        }
+        const slideCache = slideReviewCache;
+        const hasDeckReview = options.vision.reviewDeck !== undefined;
         const reusable =
           pageReviewCache &&
           pageReviewCache.source === reviewSource &&
           pageReviewCache.signatures.length === signatures.length
             ? pageReviewCache
             : undefined;
-        const pageReviews = batches.map((indexes, batchIndex) => {
+        const plans = batches.map((batchIndexes, batchIndex): ReviewBatchPlan => {
           const cached = reusable?.reviews[batchIndex];
           // 没有专门的整册评审时，第一批携带缩略图，跨页一致性会随其他页
           // 变化；这一批必须重新看，不能复用上一轮的结论。
           const canReuse =
             cached !== undefined &&
             reusable?.signatures[batchIndex] === signatures[batchIndex] &&
-            (options.vision.reviewDeck !== undefined || batchIndex !== 0);
-          if (canReuse) return Promise.resolve(cached);
-          return options.vision.review(render, goal, indexes, options.taskId, {
+            (hasDeckReview || batchIndex !== 0);
+          if (canReuse) return { kind: "reuse", review: cached };
+          // 第一批没有整册评审时不能只传变化页：缩略图必须重拼，跨页一致性
+          // 只能由看过整册的那一批给出。
+          if (!hasDeckReview && batchIndex === 0) {
+            return { kind: "full", indexes: batchIndexes, batchIndexes };
+          }
+          // 只有缺少当前设计结论的页才需要上传。其余页的结论与当前设计
+          // 一一对应，可以按页复用。
+          const needsReview = batchIndexes.filter((slideIndex) => {
+            const entry = slideCache.entries.get(slideIndex);
+            return entry === undefined || entry.signature !== slideSignatures[slideIndex];
+          });
+          if (needsReview.length > 0 && needsReview.length < batchIndexes.length) {
+            return { kind: "subset", indexes: needsReview, batchIndexes };
+          }
+          return { kind: "full", indexes: batchIndexes, batchIndexes };
+        });
+        const pageReviews = plans.map((plan, batchIndex) => {
+          if (plan.kind === "reuse") return Promise.resolve(plan.review);
+          return options.vision.review(render, goal, plan.indexes, options.taskId, {
             // 有专门的整册评审时，逐页批次不再重复上传缩略图。
-            includeContactSheet: options.vision.reviewDeck ? false : batchIndex === 0,
+            includeContactSheet: !hasDeckReview && batchIndex === 0,
           });
         });
         const deckReview = options.vision.reviewDeck
@@ -288,21 +398,67 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         let overviewReview: VisualReview | undefined;
         outcomes.forEach((outcome, index) => {
           const isDeck = index >= batches.length;
-          if (outcome.status === "fulfilled") {
-            if (isDeck) {
-              overviewReview = outcome.value;
-              return;
-            }
-            collected[index] = outcome.value;
-            reviews.push(outcome.value);
-            if (!options.vision.reviewDeck && index === 0) overviewReview = outcome.value;
-            reviewedSlideCount += batches[index]!.length;
+          if (outcome.status === "rejected") {
+            if (isGenerationCancelled(outcome.reason)) throw outcome.reason;
+            const reason = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+            if (isDeck) deckReviewUnavailable ??= reason;
+            else partialReviewReason ??= reason;
             return;
           }
-          if (isGenerationCancelled(outcome.reason)) throw outcome.reason;
-          const reason = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
-          if (isDeck) deckReviewUnavailable ??= reason;
-          else partialReviewReason ??= reason;
+          if (isDeck) {
+            overviewReview = outcome.value;
+            return;
+          }
+          const plan = plans[index]!;
+          let batchReview = outcome.value;
+          let covered = batches[index]!.length;
+          if (plan.kind === "reuse") {
+            batchReview = plan.review;
+          } else if (plan.kind === "subset") {
+            const split = splitBatchReview(outcome.value, plan.indexes);
+            const bySlide = new Map<number, VisualReview>();
+            if (split) {
+              for (const slideIndex of plan.indexes) {
+                const review = split.get(slideIndex)!;
+                slideCache.entries.set(slideIndex, { signature: slideSignatures[slideIndex]!, review });
+                bySlide.set(slideIndex, review);
+              }
+            } else {
+              // 模型没有给全逐页分数：这一轮只能用批次分近似被检查页，
+              // 不写入逐页缓存，下一轮仍会重新检查它们。
+              for (const slideIndex of plan.indexes) {
+                bySlide.set(slideIndex, slideReviewFromBatch(outcome.value, slideIndex));
+              }
+            }
+            for (const slideIndex of plan.batchIndexes) {
+              if (bySlide.has(slideIndex)) continue;
+              const entry = slideCache.entries.get(slideIndex);
+              if (entry) bySlide.set(slideIndex, entry.review);
+            }
+            const combined = batchReviewFromSlides(plan.batchIndexes, bySlide, outcome.value.consistencyScore);
+            if (combined) {
+              batchReview = combined;
+            } else {
+              // 防御性回退：拼不出整批结论时只按真正检查过的页计覆盖，
+              // 不能把没看的页算进覆盖率。
+              batchReview = outcome.value;
+              covered = plan.indexes.length;
+            }
+          } else {
+            const split = splitBatchReview(outcome.value, plan.indexes);
+            if (split) {
+              for (const slideIndex of plan.indexes) {
+                slideCache.entries.set(slideIndex, {
+                  signature: slideSignatures[slideIndex]!,
+                  review: split.get(slideIndex)!,
+                });
+              }
+            }
+          }
+          collected[index] = batchReview;
+          reviews.push(batchReview);
+          if (!hasDeckReview && index === 0) overviewReview = batchReview;
+          reviewedSlideCount += covered;
         });
         pageReviewCache = {
           source: reviewSource === "真实 PPTX" ? "真实 PPTX" : "画布预览",
