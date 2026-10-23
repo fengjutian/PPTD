@@ -96,12 +96,14 @@ replaceAllOccurrences / replaceOccurrence
 ## 7. 已知边界
 
 - 只搜索文本元素。表格单元格、图表标签、演讲备注和文档标题不在范围内，避免替换到无法安全写回的位置。
+- 锁定文本可以被搜索到，但替换会跳过并在状态里报告跳过数量；单项替换会提示先解锁。
 - 不做画布内子串高亮；结果列表的片段是当前定位匹配的主要依据。
 - 替换会清空文本的局部强调（runs），与手动编辑文本的行为一致。
+- 正文替换沿用 `edit-text` 的规则：正文元素带结构化块时会把正文重建为单段，这与在属性面板里直接修改正文一致。
 - 没有“替换前预览”；全部替换依赖撤销，内容绑定页会被标记为待确认。
 
 ## 8. 实现记录（2026-10-23）
 
 - 核心：`text-search.ts` 搜索/替换纯函数；`replace-text-edits` 命令；`edit-text` 与批量替换共用 `applyTextEdit`。
 - UI：`FindReplaceBar`、开始功能区查找入口、`Ctrl+F` 与 `Ctrl+A`。
-- 验证：`npm run typecheck`、`npm run lint`、`npm run build` 通过；新增测试 8 项（搜索 7、store 1），全量套件在并发改动稳定后复跑。
+- 验证：`npm run typecheck`、`npm run lint`、`npm run build` 通过；`npx vitest run --exclude ".tmp/**" --exclude "tools/visual-regression/**"` 共 105 个测试文件、861 项通过。

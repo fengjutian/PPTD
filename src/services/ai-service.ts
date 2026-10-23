@@ -2,8 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { z } from "zod";
 import { applyDeckArtDirection } from "../core/commands/deck-art-direction";
-import { LAYOUT_CAPACITY } from "../core/commands/layout-capacity";
-import type { AiPaletteRole } from "../core/commands/design-intent";
+import { LAYOUT_CAPACITY, stripListPrefix } from "../core/commands/layout-capacity";
+import type { AiPaletteRole, CompositionFacts } from "../core/commands/design-intent";
+import type { DeckConcept } from "../core/design/deck-concept";
 import { contrastRatio as colorContrastRatio } from "../core/rendering/contrast";
 import { loadSettings } from "./settings";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
@@ -197,8 +198,52 @@ export const slideBriefSchema = z.object({
 export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).min(1) });
 export type SlideBrief = z.infer<typeof slideBriefSchema>;
 
+/**
+ * The design direction the model proposes. P1 only exposes the editorial
+ * preset; a value that has no renderer is not part of the enum.
+ */
+export const aiDeckConceptSchema = z.object({
+  preset: z.enum(["editorial"]),
+  name: z.string().trim().min(1).max(20),
+  idea: z.string().trim().min(1).max(80),
+  typeContrast: z.enum(["calm", "strong", "dramatic"]),
+  imagery: z.enum(["none", "hero", "band", "side", "texture"]),
+  rationale: z.string().trim().min(1).max(120),
+});
+export const aiDeckConceptsSchema = z.object({ concepts: z.array(aiDeckConceptSchema).min(1).max(3) });
+export type AiDeckConceptOutput = z.infer<typeof aiDeckConceptSchema>;
+
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
   return draft.slides.map((slide, slideIndex) => ({ slideIndex, ...slide.plan }));
+}
+
+/**
+ * The content facts the concept planner needs before page layouts exist.
+ *
+ * `layout` is deliberately neutral: the concept only uses the facts to choose a
+ * deck rhythm, and the per-page design stage owns the actual layout choice.
+ */
+export function compositionFactsFromDraft(draft: AiDraft): CompositionFacts[] {
+  return draft.slides.map((slide) => {
+    const blocks = slide.blocks ?? [];
+    const bulletItems = blocks
+      .filter((block): block is Extract<ContentBlock, { type: "bullet-list" }> => block.type === "bullet-list")
+      .flatMap((block) => block.items);
+    const items = (bulletItems.length > 0 ? bulletItems : splitBodyItems(slide.body)).map(stripListPrefix);
+    const hasRowBlock = blocks.some(
+      (block) => block.type === "timeline" || block.type === "process" || block.type === "metric",
+    );
+    return {
+      itemCount: items.length,
+      shortItems: items.every((item) => item.length <= LAYOUT_CAPACITY.shortItemLength),
+      longestItemLength: items.reduce((longest, item) => Math.max(longest, item.length), 0),
+      bodyLength: slide.body.length,
+      hasQuote: blocks.some((block) => block.type === "quote"),
+      hasComparison: blocks.some((block) => block.type === "comparison"),
+      hasRowBlock,
+      layout: "title-body",
+    };
+  });
 }
 const aiPaletteRoleSchema = z.enum([
   "surface",
@@ -226,6 +271,13 @@ export const aiPresentationDesignSchema = z.object({
          * instead of producing a page that cannot carry its own content.
          */
         composition: z.enum(["auto", "stacked", "columns", "grid", "editorial"]).optional(),
+        /**
+         * The page recipe that draws this page. It is optional so old models and
+         * old design files keep the legacy composition path.
+         */
+        recipe: z.enum(["editorial-index", "asymmetric-split"]).optional(),
+        variant: z.enum(["left", "right"]).optional(),
+        focal: z.enum(["title", "index", "body"]).optional(),
         /** How this page communicates, before choosing a geometric skeleton. */
         visualNarrative: z
           .enum(["statement", "evidence", "comparison", "chronology", "framework", "quotation", "scene"])
@@ -777,8 +829,33 @@ export async function generateSlideBriefs(draft: AiDraft, taskId?: number): Prom
 
 export interface AiPresentationDesignOptions {
   visualGoal?: PresentationVisualGoal;
+  /** The chosen deck direction; sent to the design prompt so recipes stay legal. */
+  concept?: DeckConcept;
   /** 生成任务号：取消时后端会中断该任务下所有在途请求。 */
   taskId?: number;
+}
+
+/**
+ * Asks the model for the deck-level design direction.
+ *
+ * P1 returns exactly one direction. The call is deliberately separate from the
+ * page design: the concept is a deck decision, and generating it together with
+ * twenty pages made the model describe pages instead of a direction.
+ */
+export async function generateDeckConcepts(
+  draft: AiDraft,
+  briefs: SlideBrief[],
+  template: DesignTemplateContext,
+  options: { taskId?: number } = {},
+): Promise<AiDeckConceptOutput> {
+  const { provider, model } = await aiSelection();
+  const visualGoal = defaultPresentationVisualGoal();
+  const raw = await invoke<unknown>("generate_deck_concepts", {
+    request: { draft, briefs, template, visualGoal, model, provider, taskId: options.taskId },
+  });
+  const result = aiDeckConceptsSchema.parse(raw);
+  if (result.concepts.length !== 1) throw new Error("AI_CONCEPT_COUNT_INVALID");
+  return result.concepts[0]!;
 }
 
 export async function generatePresentationDesign(
@@ -790,7 +867,7 @@ export async function generatePresentationDesign(
   const { provider, model } = await aiSelection();
   const visualGoal = options.visualGoal ?? defaultPresentationVisualGoal();
   const raw = await invoke<unknown>("generate_presentation_design", {
-    request: { draft, briefs, template, visualGoal, model, provider, taskId: options.taskId },
+    request: { draft, briefs, template, visualGoal, concept: options.concept, model, provider, taskId: options.taskId },
   });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");

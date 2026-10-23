@@ -73,8 +73,11 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
       setStatus(matches.length > 0 ? "替换内容与原文相同" : "没有可替换的内容");
       return;
     }
+    const editedElements = new Set(edits.map((edit) => `${edit.slideId}:${edit.elementId}`));
+    const replaced = matches.filter((match) => editedElements.has(`${match.slideId}:${match.elementId}`)).length;
+    const skipped = matches.length - replaced;
     execute({ type: "replace-text-edits", edits });
-    setStatus(`已替换 ${matches.length} 处（${edits.length} 个文本框）`);
+    setStatus(`已替换 ${replaced} 处（${edits.length} 个文本框）${skipped > 0 ? `，跳过 ${skipped} 处锁定文本` : ""}`);
   };
 
   return (
