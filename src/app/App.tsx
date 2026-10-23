@@ -2047,11 +2047,21 @@ export function App() {
         const source = draft.slides[index];
         if (!source) return draft;
         const slides = [...draft.slides];
-        slides.splice(index, 1, { ...source, ...firstPage, plan: { ...firstPage.plan, visualAsset: source.plan.visualAsset }, reviewed: false }, {
-          id: crypto.randomUUID(),
-          ...secondPage,
-          reviewed: false,
-        });
+        slides.splice(
+          index,
+          1,
+          {
+            ...source,
+            ...firstPage,
+            plan: { ...firstPage.plan, visualAsset: source.plan.visualAsset },
+            reviewed: false,
+          },
+          {
+            id: crypto.randomUUID(),
+            ...secondPage,
+            reviewed: false,
+          },
+        );
         return { ...draft, slides };
       },
       false,

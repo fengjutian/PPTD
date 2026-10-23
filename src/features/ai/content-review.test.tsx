@@ -424,6 +424,10 @@ function renderReview(
       onRestoreSlide={() => undefined}
       onUndoRestore={() => undefined}
       onRewriteSlide={() => undefined}
+      onSuggestTitle={() => undefined}
+      onWriteNotes={() => undefined}
+      onSplitSlide={() => undefined}
+      onReviewDeck={() => undefined}
       onUndo={() => undefined}
       onRedo={() => undefined}
     />,
@@ -445,7 +449,11 @@ describe("content review layout", () => {
     expect(markup).toContain("上移第 1 页");
     expect(markup).toContain("删除第 1 页");
     // 审核页的 AI 入口只在这个页面出现：整份重新生成不认识单页上下文。
-    expect(markup).toContain("AI 重写本页");
+    expect(markup).toContain("AI 重写");
+    expect(markup).toContain("AI 换标题");
+    expect(markup).toContain("AI 备注");
+    expect(markup).toContain("AI 拆页");
+    expect(markup).toContain("AI 审稿");
     expect(markup).toContain("恢复 AI 原稿");
     expect(markup.match(/draft-slide-card active/g)).toHaveLength(1);
     expect(markup).not.toContain("draft-slide-card collapsed");

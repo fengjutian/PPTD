@@ -16,8 +16,12 @@ import {
   generatePresentationDraft,
   mergeStreamProgress,
   polishPresentationTopic,
+  reviewDeckContent,
   rewritePresentationSlide,
   slideBriefsSchema,
+  splitSlideContent,
+  suggestSlideTitles,
+  writeSpeakerNotes,
   splitBodyItems,
   type AiGenerationProgress,
 } from "./ai-service";
@@ -867,6 +871,195 @@ describe("多页草稿的分批编排", () => {
     }).catch((reason: unknown) => reason);
 
     expect(describeAiError(error)).toBe("AI 没有返回可用的正文，请重新生成");
+  });
+
+  it("标题候选会剔掉当前标题和重复项", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "suggest_slide_titles")
+        return { titles: ["旧标题", "广告仍是利润来源", "广告仍是利润来源", "云业务首次全年盈利"] };
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const titles = await suggestSlideTitles({
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["旧标题"],
+      slideIndex: 0,
+      slide: {
+        title: "旧标题",
+        body: "正文",
+        speakerNotes: "",
+        plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+        blocks: [],
+      },
+    });
+
+    expect(titles).toEqual(["广告仍是利润来源", "云业务首次全年盈利"]);
+  });
+
+  it("备注单独生成，空备注不当作可用结果", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "write_speaker_notes") return { speakerNotes: " 先讲结论，再讲依据。 " };
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    await expect(
+      writeSpeakerNotes({
+        topic: "主题",
+        deckTitle: "标题",
+        outline: ["标题"],
+        slideIndex: 0,
+        slide: {
+          title: "标题",
+          body: "正文",
+          speakerNotes: "",
+          plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+          blocks: [],
+        },
+      }),
+    ).resolves.toBe("先讲结论，再讲依据。");
+
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "write_speaker_notes") return { speakerNotes: "   " };
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const error = await writeSpeakerNotes({
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["标题"],
+      slideIndex: 0,
+      slide: {
+        title: "标题",
+        body: "正文",
+        speakerNotes: "",
+        plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+        blocks: [],
+      },
+    }).catch((reason: unknown) => reason);
+
+    expect(describeAiError(error)).toBe("AI 没有写出可用的演讲备注，请重试");
+  });
+
+  it("拆页返回两页，正文按各自的块重算", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "split_slide_content")
+        return {
+          pages: [
+            {
+              title: "第一页标题",
+              body: "旧的投影",
+              speakerNotes: "",
+              plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+              blocks: [{ type: "bullet-list", items: ["要点一", "要点二"] }],
+            },
+            {
+              title: "第二页标题",
+              body: "",
+              speakerNotes: "备注",
+              plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+              blocks: [{ type: "paragraph", text: "第二页正文" }],
+            },
+          ],
+        };
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const pages = await splitSlideContent({
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["第一页标题"],
+      slideIndex: 0,
+      slide: {
+        title: "第一页标题",
+        body: "正文",
+        speakerNotes: "",
+        plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+        blocks: [],
+      },
+    });
+
+    expect(pages.map((page) => page.title)).toEqual(["第一页标题", "第二页标题"]);
+    expect(pages[0]!.body).toBe("要点一\n要点二");
+    expect(pages[1]!.body).toBe("第二页正文");
+  });
+
+  it("拆出来的两页标题相同或有一页为空都算失败", async () => {
+    const input = {
+      topic: "主题",
+      deckTitle: "标题",
+      outline: ["标题"],
+      slideIndex: 0,
+      slide: {
+        title: "标题",
+        body: "正文",
+        speakerNotes: "",
+        plan: {
+          purpose: "目的",
+          conclusion: "结论",
+          visualIntent: "structured-text" as const,
+          density: "medium" as const,
+        },
+        blocks: [],
+      },
+    };
+    const page = (title: string, blocks: unknown[]) => ({
+      title,
+      body: "正文",
+      speakerNotes: "",
+      plan: { purpose: "目的", conclusion: "结论", visualIntent: "structured-text", density: "medium" },
+      blocks,
+    });
+
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "split_slide_content")
+        return {
+          pages: [
+            page("同一页", [{ type: "paragraph", text: "第一段" }]),
+            page("同一页", [{ type: "paragraph", text: "第二段" }]),
+          ],
+        };
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const duplicate = await splitSlideContent(input).catch((reason: unknown) => reason);
+    expect(describeAiError(duplicate)).toBe("AI 拆出的两页标题相同，请重试");
+
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "split_slide_content")
+        return { pages: [page("第一页", [{ type: "paragraph", text: "第一段" }]), page("第二页", [])] };
+      throw new Error(`unexpected command: ${command}`);
+    });
+    const empty = await splitSlideContent(input).catch((reason: unknown) => reason);
+    expect(describeAiError(empty)).toBe("AI 拆出的页面没有内容，请重试");
+  });
+
+  it("整册审稿剔掉越界页码和重复条目，也不改任何文字", async () => {
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "review_deck_content")
+        return {
+          issues: [
+            { slideIndex: 0, severity: "warning", kind: "duplicate", message: "与第 2 页重复" },
+            { slideIndex: 0, severity: "warning", kind: "duplicate", message: "与第 2 页重复" },
+            { slideIndex: 9, severity: "error", kind: "broken-flow", message: "页码越界" },
+            { slideIndex: 1, severity: "error", kind: "missing-conclusion", message: "这一页没有结论" },
+          ],
+        };
+      throw new Error(`unexpected command: ${command}`);
+    });
+
+    const issues = await reviewDeckContent({
+      deckTitle: "标题",
+      presentationBrief: aiDraftSchema.parse({
+        title: "标题",
+        slides: [{ title: "甲", body: "乙", speakerNotes: "" }],
+      }).presentationBrief,
+      slides: [
+        { title: "甲", body: "乙", speakerNotes: "" },
+        { title: "丙", body: "丁", speakerNotes: "" },
+      ],
+      taskId: 3,
+    });
+
+    expect(issues.map((issue) => issue.slideIndex)).toEqual([0, 1]);
   });
 });
 

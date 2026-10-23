@@ -1,4 +1,4 @@
-﻿//! Level A PPTX content import.
+//! Level A PPTX content import.
 //!
 //! The template importer only reads a deck's design language. This module reads
 //! the page content itself: page size and order, text, pictures, basic shapes,
@@ -1524,7 +1524,10 @@ mod tests {
         }
         zip.finish().expect("finish");
 
+        let before = fs::read(&path).expect("read source before");
         let imported = import_sync(&path).expect("import");
+        let after = fs::read(&path).expect("read source after");
+        assert_eq!(before, after, "import must not modify its source");
         assert_eq!(imported.page_size.width, 12_192_000);
         assert_eq!(imported.page_size.height, 6_858_000);
         assert_eq!(imported.slides.len(), 1);

@@ -17,11 +17,7 @@ export interface ThemePresetPickerProps {
  */
 export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePresetPickerProps) {
   return (
-    <div
-      className="theme-card-grid"
-      role="radiogroup"
-      aria-label="视觉主题"
-    >
+    <div className="theme-card-grid" role="radiogroup" aria-label="视觉主题">
       {THEME_PRESETS.map((preset) => {
         const selected = preset.id === value;
         const color = (slot: string) => preset.theme.colors.find((entry) => entry.name === slot)?.value;
@@ -48,9 +44,7 @@ export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePr
               <i style={{ background: accent }} />
             </span>
             <span className="theme-card-palette" aria-hidden>
-              <span
-                style={{ background: surface }}
-              />
+              <span style={{ background: surface }} />
               <span style={{ background: accent }} />
               <span style={{ background: accent2 }} />
               <span style={{ background: accent3 }} />
