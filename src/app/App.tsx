@@ -721,6 +721,7 @@ export function App() {
     visualReview?: VisualReview;
     visualReviewCoverage?: { reviewed: number; total: number };
   }>();
+  const [designQualityReportOpen, setDesignQualityReportOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   /** AI 配图对话框是否打开。 */
   const [aiImageOpen, setAiImageOpen] = useState(false);
@@ -1914,7 +1915,11 @@ export function App() {
     const taskId = designTaskId.current;
     setDesignBusy(true);
     setDesignProgress({ percent: 8, label: "正在准备内容与模板数据" });
-    setTaskStatus(`AI 正在依据${preset ? "内置主题" : "模板"}生成并渲染 PPT…`);
+    // Design generation is a background task. Closing the modal here releases
+    // the workspace immediately; progress and cancellation remain available in
+    // the global task card.
+    setTemplatePickerOpen(false);
+    setMessage(undefined);
     const progressTimer = window.setInterval(() => {
       setDesignProgress((current) => {
         if (current.percent >= 82) return current;
@@ -2113,8 +2118,8 @@ export function App() {
       const visualBelowTarget = stage.visualPassed === false;
       if (stage.passed && !visualCoverageIncomplete && !visualBelowTarget) {
         setDesignQualityReport(undefined);
+        setDesignQualityReportOpen(false);
         setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
-        setActiveView("editor");
         setTaskStatus(`PPT 已完成 AI 设计：${deckName}`);
         if (visualNote) window.setTimeout(() => setTaskStatus(visualNote), 50);
       } else {
@@ -2139,6 +2144,7 @@ export function App() {
           visualReview: stage.visualReview,
           visualReviewCoverage: stage.visualReviewCoverage,
         });
+        setDesignQualityReportOpen(false);
         setTaskStatus(
           stage.issues.length > 0
             ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
@@ -3254,7 +3260,6 @@ export function App() {
               <button
                 type="button"
                 aria-label="关闭模板选择窗口"
-                disabled={designBusy}
                 onClick={() => setTemplatePickerOpen(false)}
               >
                 <X />
@@ -3267,15 +3272,6 @@ export function App() {
                   ? `内置 · ${findThemePreset(themePresetId)?.name ?? "主题"}${themePresetId === recommendedThemePreset.id ? "（内容匹配）" : ""}`
                   : "已上传 PPT"}
               </span>
-              <button
-                type="button"
-                className="secondary-action"
-                disabled={designBusy}
-                onClick={() => setTemplateUploadOpen(true)}
-              >
-                <FileUp />
-                从 PPT 抽取
-              </button>
             </div>
             <div className="template-picker-body">
               <div className="template-picker-sources">
@@ -3356,17 +3352,7 @@ export function App() {
                         <i style={{ width: `${designProgress.percent}%` }} />
                       </div>
                       <small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small>
-                      <button
-                        type="button"
-                        className="secondary-action design-cancel-action"
-                        onClick={() => {
-                          designCancelRef.current = true;
-                          setDesignProgress({ percent: 0, label: "正在取消…" });
-                          void cancelAiGeneration(designTaskId.current).catch(() => undefined);
-                        }}
-                      >
-                        取消生成
-                      </button>
+                      <small>任务已在后台执行，可以关闭此窗口并继续编辑。</small>
                     </div>
                   ) : themePresetId ? (
                     <div
@@ -3418,10 +3404,9 @@ export function App() {
               <button
                 type="button"
                 className="secondary-action"
-                disabled={designBusy}
                 onClick={() => setTemplatePickerOpen(false)}
               >
-                取消
+                {designBusy ? "转至后台" : "取消"}
               </button>
               <button
                 type="button"
@@ -3437,12 +3422,12 @@ export function App() {
         </div>
       )}
 
-      {designQualityReport && (
+      {designQualityReport && designQualityReportOpen && (
         <div
           className="upload-dialog-backdrop"
           role="presentation"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setDesignQualityReport(undefined);
+            if (event.target === event.currentTarget) setDesignQualityReportOpen(false);
           }}
         >
           <section
@@ -3459,7 +3444,7 @@ export function App() {
                   <p>{designQualityReport.templateName} · PPT 已生成并写入当前项目，以下问题不会阻止继续编辑或导出。</p>
                 </div>
               </div>
-              <button type="button" aria-label="关闭设计质检报告" onClick={() => setDesignQualityReport(undefined)}>
+              <button type="button" aria-label="关闭设计质检报告" onClick={() => setDesignQualityReportOpen(false)}>
                 <X />
               </button>
             </div>
@@ -3632,6 +3617,52 @@ export function App() {
             <X />
           </button>
         </div>
+      )}
+
+      {designBusy && !templatePickerOpen && (
+        <aside className="background-task-card" role="status" aria-live="polite" aria-label="AI 设计后台任务">
+          <div className="background-task-heading">
+            <span><Sparkles /><strong>AI 正在后台生成 PPT</strong></span>
+            <b>{designProgress.percent}%</b>
+          </div>
+          <p>{designProgress.label}</p>
+          <div
+            className="background-task-progress"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={designProgress.percent}
+          >
+            <i style={{ width: `${designProgress.percent}%` }} />
+          </div>
+          <div className="background-task-actions">
+            <button type="button" onClick={() => setTemplatePickerOpen(true)}>查看任务</button>
+            <button
+              type="button"
+              className="danger"
+              onClick={() => {
+                designCancelRef.current = true;
+                setDesignProgress({ percent: designProgress.percent, label: "正在取消任务…" });
+                void cancelAiGeneration(designTaskId.current).catch(() => undefined);
+              }}
+            >
+              取消任务
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {designQualityReport && !designQualityReportOpen && !designBusy && (
+        <aside className="background-task-card complete" role="status" aria-live="polite">
+          <div className="background-task-heading">
+            <span><CircleCheck /><strong>PPT 已生成，质检报告可查看</strong></span>
+          </div>
+          <p>生成结果已保留，当前操作不会被打断。</p>
+          <div className="background-task-actions">
+            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>查看质检报告</button>
+            <button type="button" onClick={() => setDesignQualityReport(undefined)}>稍后处理</button>
+          </div>
+        </aside>
       )}
 
       <footer className="statusbar">
