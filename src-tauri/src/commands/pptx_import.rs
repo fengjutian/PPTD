@@ -321,6 +321,8 @@ fn import_sync(source: &Path) -> Result<ImportedDeck, String> {
         "A"
     };
 
+    let slide_count = slides.len();
+
     Ok(ImportedDeck {
         title: source
             .file_stem()
@@ -333,7 +335,7 @@ fn import_sync(source: &Path) -> Result<ImportedDeck, String> {
         report: ImportReport {
             format: "pptx".into(),
             compatibility: compatibility.into(),
-            slide_count: slides.len(),
+            slide_count,
             counts: report.counts,
             unsupported: report.unsupported,
             warnings: report.warnings,
@@ -905,6 +907,7 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
     let mut runs: Vec<ImportedRun> = Vec::new();
     let mut bullet = "none".to_string();
     let mut line_height = None;
+    let mut paragraph_align: Option<String> = None;
     let paragraphs: Vec<Node<'_, '_>> = body.children().filter(|node| node.has_tag_name("p")).collect();
     for (paragraph_index, paragraph) in paragraphs.iter().enumerate() {
         if paragraph_index > 0 {
@@ -917,6 +920,7 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
                     "r" => "right",
                     _ => "left",
                 };
+                paragraph_align = Some(align.into());
                 if let Some(style) = style.as_mut() {
                     style.align = align.into();
                 }
@@ -950,6 +954,7 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
                             .unwrap_or_else(|| current.color.clone());
                         let bold = run_style.bold.unwrap_or(false);
                         let underline = run_style.underline.unwrap_or(false);
+                        let explicit_color = run_style.color.is_some();
                         if let Some(value) = run_style.font_size_pt {
                             current.font_size_pt = value;
                         }
@@ -971,7 +976,7 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
                         if let Some(value) = run_style.font_family {
                             current.font_family = value;
                         }
-                        if bold || run_color != current.color || underline {
+                        if bold || explicit_color || underline {
                             runs.push(ImportedRun {
                                 start,
                                 end,
@@ -991,6 +996,9 @@ fn parse_text_body(shape: Node<'_, '_>, theme: &Option<ImportedTheme>) -> Option
         return None;
     }
     let mut style = style.unwrap_or_else(|| default_text_style(theme, false));
+    if let Some(align) = paragraph_align {
+        style.align = align;
+    }
     style.bullet = bullet;
     style.line_height = line_height;
     if let Some(body_pr) = child(body, "bodyPr") {
@@ -1289,6 +1297,105 @@ fn notes_for_slide(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imports_a_minimal_level_a_deck() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+
+        let directory = tempfile::tempdir().expect("temp dir");
+        let path = directory.path().join("level-a.pptx");
+        let png = BASE64
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=")
+            .expect("png");
+        let presentation = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            <p:sldSz cx="12192000" cy="6858000"/>
+            <p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>
+        </p:presentation>"#;
+        let presentation_rels = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>
+        </Relationships>"#;
+        let slide = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+            <p:cSld><p:spTree>
+                <p:sp>
+                    <p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>
+                    <p:spPr><a:xfrm><a:off x="914400" y="457200"/><a:ext cx="7315200" cy="914400"/></a:xfrm></p:spPr>
+                    <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="4400" b="1"><a:solidFill><a:srgbClr val="3366CC"/></a:solidFill></a:rPr><a:t>Hello</a:t></a:r></a:p></p:txBody>
+                </p:sp>
+                <p:pic>
+                    <p:nvPicPr><p:cNvPr id="3" name="Picture" descr="Sample"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+                    <p:blipFill><a:blip r:embed="rId2"/></p:blipFill>
+                    <p:spPr><a:xfrm><a:off x="914400" y="1828800"/><a:ext cx="1828800" cy="1828800"/></a:xfrm></p:spPr>
+                </p:pic>
+                <p:graphicFrame>
+                    <p:nvGraphicFramePr><p:cNvPr id="4" name="Table"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>
+                    <p:xfrm><a:off x="914400" y="3657600"/><a:ext cx="3657600" cy="1371600"/></p:xfrm>
+                    <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
+                        <a:tbl>
+                            <a:tblGrid><a:gridCol w="1828800"/><a:gridCol w="1828800"/></a:tblGrid>
+                            <a:tr h="457200"><a:tc><a:txBody><a:p><a:r><a:t>项目</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>数值</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+                            <a:tr h="457200"><a:tc><a:txBody><a:p><a:r><a:t>样本量</a:t></a:r></a:p></a:txBody></a:tc><a:tc><a:txBody><a:p><a:r><a:t>38万</a:t></a:r></a:p></a:txBody></a:tc></a:tr>
+                        </a:tbl>
+                    </a:graphicData></a:graphic>
+                </p:graphicFrame>
+            </p:spTree></p:cSld>
+        </p:sld>"#;
+        let slide_rels = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+            <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>
+        </Relationships>"#;
+        let theme = r#"<?xml version="1.0" encoding="UTF-8"?>
+        <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Theme">
+            <a:themeElements>
+                <a:clrScheme name="Theme">
+                    <a:dk1><a:srgbClr val="111111"/></a:dk1>
+                    <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+                    <a:accent1><a:srgbClr val="3366CC"/></a:accent1>
+                </a:clrScheme>
+                <a:fontScheme name="Theme">
+                    <a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont>
+                    <a:minorFont><a:latin typeface="Aptos"/></a:minorFont>
+                </a:fontScheme>
+            </a:themeElements>
+        </a:theme>"#;
+        let content_types = r#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#;
+
+        let file = File::create(&path).expect("create");
+        let mut zip = zip::ZipWriter::new(file);
+        let options = SimpleFileOptions::default();
+        for (name, contents) in [
+            ("[Content_Types].xml", content_types.as_bytes()),
+            ("ppt/presentation.xml", presentation.as_bytes()),
+            ("ppt/_rels/presentation.xml.rels", presentation_rels.as_bytes()),
+            ("ppt/slides/slide1.xml", slide.as_bytes()),
+            ("ppt/slides/_rels/slide1.xml.rels", slide_rels.as_bytes()),
+            ("ppt/theme/theme1.xml", theme.as_bytes()),
+            ("ppt/media/image1.png", png.as_slice()),
+        ] {
+            zip.start_file(name, options).expect("start file");
+            zip.write_all(contents).expect("write file");
+        }
+        zip.finish().expect("finish");
+
+        let imported = import_sync(&path).expect("import");
+        assert_eq!(imported.page_size.width, 12_192_000);
+        assert_eq!(imported.page_size.height, 6_858_000);
+        assert_eq!(imported.slides.len(), 1);
+        let slide = &imported.slides[0];
+        assert_eq!(slide.title.as_deref(), Some("Hello"));
+        assert_eq!(slide.speaker_notes, "");
+        assert_eq!(imported.report.counts.image, 1);
+        assert_eq!(imported.report.counts.table, 1);
+        assert!(slide.elements.iter().any(|element| matches!(element, ImportedElement::Image { data_url, .. } if data_url.starts_with("data:image/png;base64,"))));
+        assert!(slide.elements.iter().any(|element| matches!(element, ImportedElement::Table { header, rows, .. } if header == &["项目", "数值"] && rows[0][1] == "38万")));
+        assert_eq!(imported.theme.as_ref().and_then(|theme| theme.major_font.as_deref()), Some("Aptos Display"));
+    }
 
     #[test]
     fn resolves_relative_part_targets() {
