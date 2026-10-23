@@ -26,6 +26,23 @@ function designedDocument(blocks: AiContentBlock[]) {
 }
 
 describe("design-only relayout", () => {
+  it("does not add a content version when only the design changes", () => {
+    const document = designedDocument([{ type: "metric", label: "收入", value: "38万" }]);
+    expect(document.contentVersions).toHaveLength(1);
+
+    const relaid = produce(document, (draft) =>
+      applyCommand(draft, { type: "relayout-slide", slideId: document.slides[0]!.id }),
+    );
+
+    // 换版式是设计事务：同一份已确认内容只保留一个版本。
+    expect(relaid.contentVersions).toHaveLength(1);
+    expect(relaid.contentVersions![0]!.slides[0]!.blocks?.[0]).toMatchObject({
+      type: "metric",
+      label: "收入",
+      value: "38万",
+    });
+  });
+
   it("recognises legacy list copy as generated and keeps unrelated hand-written text", () => {
     const document = designedDocument([{ type: "paragraph", text: "第一点\n第二点\n第三点" }]);
     const slide = structuredClone(document).slides[0]!;

@@ -57,6 +57,7 @@ import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
+import { ContentHistory } from "../features/editor/ContentHistory";
 import { LayerList } from "../features/editor/LayerList";
 import { SlideElementContent, SlideElementFrame } from "../features/editor/SlideScene";
 import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
@@ -674,6 +675,7 @@ export function App() {
   const animationPreviewTimers = useRef<number[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
+  const [contentHistoryOpen, setContentHistoryOpen] = useState(false);
   const exportCancelRef = useRef<(() => void) | undefined>(undefined);
   const setTaskStatus = (text?: string) =>
     setMessage(
@@ -4402,6 +4404,10 @@ export function App() {
         </div>
       )}
 
+      {contentHistoryOpen && (
+        <ContentHistory document={document} onClose={() => setContentHistoryOpen(false)} />
+      )}
+
       {message && (
         <div className={`page-message ${message.kind}`} role="status" aria-live="polite">
           {message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}
@@ -4499,6 +4505,16 @@ export function App() {
             </span>
             {activeView === "editor" && (
               <ContentReviewStatus slideId={activeSlide.id} status={activeSlide.content.status} onCommand={execute} />
+            )}
+            {activeView === "editor" && (
+              <button
+                type="button"
+                className="content-history-open"
+                title="查看已确认内容版本，并与当前内容逐页对比"
+                onClick={() => setContentHistoryOpen(true)}
+              >
+                内容版本 {document.contentVersions?.length ?? 0}
+              </button>
             )}
             <span>{countLabel}</span>
             <span>{revisionLabel}</span>

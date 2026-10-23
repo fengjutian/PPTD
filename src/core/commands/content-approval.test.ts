@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { produce } from "immer";
 import { applyCommand, commandDomain } from "./commands";
-import { createDocument, type SlideId } from "../document-model";
+import { createDocument, type ContentBlock, type SlideId } from "../document-model";
 
 /**
  * 内容复核闭环。
@@ -71,6 +71,35 @@ describe("content approval", () => {
 
     slide.content.status = "review";
     expect(commandDomain({ type: "reopen-slide-content", slideId: slide.id }, document)).toBeNull();
+  });
+
+  it("records a confirmed content version and skips an identical reconfirmation", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.content.status = "changed";
+    slide.content.blocks = [{ id: crypto.randomUUID(), type: "metric", label: "收入", value: "38万" }];
+
+    applyCommand(document, { type: "approve-slide-content", slideId: slide.id });
+
+    expect(document.contentVersions).toHaveLength(1);
+    expect(document.contentVersions![0]!.slides[0]!.blocks?.[0]).toMatchObject({
+      type: "metric",
+      label: "收入",
+      value: "38万",
+    });
+
+    // 同内容再确认一次不产生第二个版本。
+    applyCommand(document, { type: "approve-slide-content", slideId: slide.id });
+    expect(document.contentVersions).toHaveLength(1);
+
+    (slide.content.blocks![0] as Extract<ContentBlock, { type: "metric" }>).value = "42万";
+    slide.content.status = "changed";
+    applyCommand(document, { type: "approve-slide-content", slideId: slide.id });
+
+    expect(document.contentVersions).toHaveLength(2);
+    expect(document.contentVersions![1]!.slides[0]!.blocks).toEqual([
+      { id: document.contentVersions![1]!.slides[0]!.blocks![0]!.id, type: "metric", label: "收入", value: "42万" },
+    ]);
   });
 
   it("rejects an unknown page instead of silently doing nothing", () => {

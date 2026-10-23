@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentVersion, ContentVersionSlide, PresentationDocument } from "./types";
+import type { ContentVersion, ContentVersionSlide, PresentationDocument } from "./types";
 
 /** The cap keeps a long editing session from turning the project file into a log. */
 export const MAX_CONTENT_VERSIONS = 30;

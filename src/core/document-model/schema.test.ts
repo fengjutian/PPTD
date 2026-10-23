@@ -10,6 +10,7 @@ import versionNineFixture from "./__fixtures__/v9-document.json";
 import versionTenFixture from "./__fixtures__/v10-document.json";
 import versionElevenFixture from "./__fixtures__/v11-document.json";
 import versionTwelveFixture from "./__fixtures__/v12-document.json";
+import versionThirteenFixture from "./__fixtures__/v13-document.json";
 import { createDocument } from "./factory";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
@@ -117,6 +118,13 @@ describe("presentation document schema", () => {
     expect(versionTwelveFixture.schemaVersion).toBe(12);
   });
 
+  it("migrates the fixed version 13 fixture and invents no content history", () => {
+    const migrated = parsePresentationDocument(versionThirteenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.contentVersions).toBeUndefined();
+    expect(versionThirteenFixture.schemaVersion).toBe(13);
+  });
+
   it("accepts a native line with arrow heads and a dash pattern", () => {
     const document = createDocument();
     document.slides[0]!.elements.push({
@@ -207,6 +215,31 @@ describe("presentation document schema", () => {
       brokenElement.contentBlockRef = { blockId: crypto.randomUUID(), field: "unit" as never };
     }
     expect(() => presentationDocumentSchema.parse(broken)).toThrow();
+  });
+
+  it("accepts a confirmed content version and rejects a malformed snapshot", () => {
+    const document = createDocument();
+    document.contentVersions = [
+      {
+        id: crypto.randomUUID(),
+        contentRevision: 3,
+        documentRevision: 5,
+        slides: [
+          {
+            slideId: document.slides[0]!.id,
+            title: "标题",
+            body: "",
+            blocks: [{ id: crypto.randomUUID(), type: "metric", label: "收入", value: "38万" }],
+            speakerNotes: "",
+          },
+        ],
+      },
+    ];
+    expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
+
+    const malformed = structuredClone(document);
+    malformed.contentVersions![0]!.slides[0]!.slideId = "not-a-uuid" as never;
+    expect(() => presentationDocumentSchema.parse(malformed)).toThrow();
   });
 
   it("accepts explicit element provenance and rejects an unknown origin", () => {
