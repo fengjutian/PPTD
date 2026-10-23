@@ -36,7 +36,7 @@ export function stableStringify(value: unknown): string {
       .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
       .join(",")}}`;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(value) ?? "null";
 }
 
 /**

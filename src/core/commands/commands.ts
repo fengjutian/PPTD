@@ -346,6 +346,29 @@ function syncMetricText(slide: Slide, blockId: string, field: "label" | "value",
 }
 
 /**
+ * Keeps the title/body text objects in step with the content they render.
+ *
+ * Those objects are views of the reviewed copy, not independent text. A
+ * restore that only rewrote `slide.content` would leave the canvas showing the
+ * newer words while the content panel and exporter use the restored ones.
+ */
+function syncContentText(slide: Slide, title: string, body: string): boolean {
+  let changed = false;
+  for (const element of slide.elements) {
+    if (element.type !== "text") continue;
+    const legacyTitle = !element.contentRef && slide.elements[0]?.id === element.id;
+    const next =
+      element.contentRef === "title" || legacyTitle ? title : element.contentRef === "body" ? body : undefined;
+    if (next === undefined || element.text === next) continue;
+    element.text = next;
+    // Fragment offsets address the old copy, so they no longer mean anything.
+    element.runs = undefined;
+    changed = true;
+  }
+  return changed;
+}
+
+/**
  * Copies a snapshot's blocks into the current blocks while keeping the current
  * block IDs.
  *
@@ -3509,7 +3532,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         page.content.speakerNotes = source.speakerNotes;
       }
       const blocksChanged = restoreSlideBlocks(page, source.blocks);
-      if (textChanged || blocksChanged) markContentChanged(page);
+      const viewsChanged = syncContentText(page, page.content.title, page.content.body);
+      if (textChanged || blocksChanged || viewsChanged) markContentChanged(page);
     }
     const order = new Map(version.slides.map((item, index) => [item.slideId, index]));
     document.slides.sort((left, right) => order.get(left.id)! - order.get(right.id)!);

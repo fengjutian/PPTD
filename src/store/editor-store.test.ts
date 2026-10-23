@@ -287,6 +287,48 @@ describe("editor history", () => {
     expect(useEditorStore.getState().document.contentVersions).toHaveLength(1);
   });
 
+  it("restores a content version as one undoable content transaction", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    const title = slide.elements.find(
+      (element): element is TextElement => element.type === "text" && element.contentRef === "title",
+    )!;
+    slide.content.title = "旧标题";
+    title.text = "旧标题";
+    slide.content.status = "approved";
+    captureContentVersion(document);
+    const versionId = document.contentVersions![0]!.id;
+    useEditorStore.getState().loadDocument(document);
+
+    useEditorStore.getState().execute({
+      type: "edit-text",
+      slideId: slide.id,
+      elementId: title.id,
+      text: "改过的标题",
+    });
+    expect(useEditorStore.getState().document.slides[0]!.content.title).toBe("改过的标题");
+
+    useEditorStore.getState().execute({ type: "restore-content-version", versionId });
+    const restored = useEditorStore.getState().document.slides[0]!;
+    expect(restored.content.title).toBe("旧标题");
+    // 画布上的标题对象也是内容的视图，恢复后必须一起更新。
+    const restoredTitle = restored.elements.find(
+      (element) => element.type === "text" && element.contentRef === "title",
+    )!;
+    expect(restoredTitle.type === "text" ? restoredTitle.text : "").toBe("旧标题");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 2, content: 2, design: 0 });
+    expect(useEditorStore.getState().document.contentVersions).toHaveLength(1);
+
+    useEditorStore.getState().undo();
+    const undone = useEditorStore.getState().document.slides[0]!;
+    expect(undone.content.title).toBe("改过的标题");
+    const undoneTitle = undone.elements.find(
+      (element) => element.type === "text" && element.contentRef === "title",
+    )!;
+    expect(undoneTitle.type === "text" ? undoneTitle.text : "").toBe("改过的标题");
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 1, design: 0 });
+  });
+
   it("records a metric edit as one undoable content transaction", () => {
     const document = createDocument();
     const slide = document.slides[0]!;
