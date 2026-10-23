@@ -143,11 +143,22 @@ export async function validatePresentationForExport(
       if (element.type === "table") {
         // A table without readable cells would export as an empty grid, and an
         // empty grid in a deck is worse than a missing one.
-        if (!resolveTableData(slide, element)) {
+        const table = resolveTableData(slide, element);
+        if (!table) {
           issues.push({
             code: "invalid-table-data",
             severity: "error",
             message: `第 ${slideIndex + 1} 页表格缺少可用的单元格，无法导出`,
+            slideIndex,
+            elementId: element.id,
+          });
+        } else if (table.rows.some((row) => row.length > table.header.length)) {
+          // The exporter writes one cell per header column; extra cells would
+          // disappear silently. Stop before the writer loses their data.
+          issues.push({
+            code: "invalid-table-data",
+            severity: "error",
+            message: `第 ${slideIndex + 1} 页表格有整行比表头宽，导出会丢失多出的列`,
             slideIndex,
             elementId: element.id,
           });

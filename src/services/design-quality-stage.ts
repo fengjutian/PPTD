@@ -177,6 +177,19 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let deckReviewUnavailable: string | undefined;
   /** 上一轮成功渲染的设计与整册画面，用于只重画变化页。 */
   let lastRealRender: { designs: AiSlideDesign[]; slides: string[]; contactSheet: string } | undefined;
+  /**
+   * 上一轮逐页评审的批次签名与结论。
+   *
+   * 修复通常只动一两页，其余页面的渲染图与设计都没变；再上传一遍既费 token
+   * 又拖慢墙钟时间。签名按整批设计计算：批内任何一页变了，整批重新评审。
+   */
+  let pageReviewCache:
+    | {
+        source: "真实 PPTX" | "画布预览";
+        signatures: string[];
+        reviews: Array<VisualReview | undefined>;
+      }
+    | undefined;
   /** 评审最终留下的结构化结论，随结果一起返回给界面。 */
   let visualReview: VisualReview | undefined;
   let visualReviewCoverage: { reviewed: number; total: number } | undefined;
@@ -238,22 +251,35 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         reviewSlideCount = render.slides.length;
         partialReviewReason = undefined;
         deckReviewUnavailable = undefined;
-        // 整册总览由一次专门的评审负责：它只看跨页一致性和节奏，不产生逐页
-        // 几何。这样每一批逐页评审都不必再附带缩略图，跨页一致性也只由真正
-        // 看过整册的那一路给出，而不是由碰巧排在第一的批次代答。
+        // 每批的设计签名。批内没有变化时可以直接复用上一轮的评审结论，
+        // 不必把同一批图片再上传一次。
+        const signatures = batches.map((indexes) => JSON.stringify(indexes.map((slideIndex) => current[slideIndex])));
+        const reusable =
+          pageReviewCache &&
+          pageReviewCache.source === reviewSource &&
+          pageReviewCache.signatures.length === signatures.length
+            ? pageReviewCache
+            : undefined;
+        const pageReviews = batches.map((indexes, batchIndex) => {
+          const cached = reusable?.reviews[batchIndex];
+          // 没有专门的整册评审时，第一批携带缩略图，跨页一致性会随其他页
+          // 变化；这一批必须重新看，不能复用上一轮的结论。
+          const canReuse =
+            cached !== undefined &&
+            reusable?.signatures[batchIndex] === signatures[batchIndex] &&
+            (options.vision.reviewDeck !== undefined || batchIndex !== 0);
+          if (canReuse) return Promise.resolve(cached);
+          return options.vision.review(render, goal, indexes, options.taskId, {
+            // 有专门的整册评审时，逐页批次不再重复上传缩略图。
+            includeContactSheet: options.vision.reviewDeck ? false : batchIndex === 0,
+          });
+        });
         const deckReview = options.vision.reviewDeck
           ? options.vision.reviewDeck(render, goal, options.taskId)
           : undefined;
-        const outcomes = await Promise.allSettled([
-          ...batches.map((indexes, batchIndex) =>
-            options.vision.review(render, goal, indexes, options.taskId, {
-              // 有专门的整册评审时，逐页批次不再重复上传缩略图。
-              includeContactSheet: options.vision.reviewDeck ? false : batchIndex === 0,
-            }),
-          ),
-          ...(deckReview ? [deckReview] : []),
-        ]);
+        const outcomes = await Promise.allSettled([...pageReviews, ...(deckReview ? [deckReview] : [])]);
         const reviews: VisualReview[] = [];
+        const collected: Array<VisualReview | undefined> = new Array(batches.length).fill(undefined);
         let overviewReview: VisualReview | undefined;
         outcomes.forEach((outcome, index) => {
           const isDeck = index >= batches.length;
@@ -262,6 +288,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               overviewReview = outcome.value;
               return;
             }
+            collected[index] = outcome.value;
             reviews.push(outcome.value);
             if (!options.vision.reviewDeck && index === 0) overviewReview = outcome.value;
             reviewedSlideCount += batches[index]!.length;
@@ -272,6 +299,11 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           if (isDeck) deckReviewUnavailable ??= reason;
           else partialReviewReason ??= reason;
         });
+        pageReviewCache = {
+          source: reviewSource === "真实 PPTX" ? "真实 PPTX" : "画布预览",
+          signatures,
+          reviews: collected,
+        };
         if (reviews.length === 0) throw outcomes.find((outcome) => outcome.status === "rejected")?.reason;
         return mergeReviews(reviews, overviewReview);
       },

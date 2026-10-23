@@ -445,6 +445,131 @@ describe("设计质检阶段", () => {
     expect(result.notes.join("；")).toContain("整册总览评审不可用");
   });
 
+  it("未变化的页批次直接复用上一轮评审，不重复上传同一批图片", async () => {
+    const pageCalls: number[][] = [];
+    let deckCalls = 0;
+    let reviewedFirstBatch = false;
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 7 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes) => {
+          pageCalls.push([...(indexes ?? [])]);
+          // 只有第一轮的第一批有问题；第 7 页所在批次一直是合格的。
+          if (indexes?.includes(0) && !reviewedFirstBatch) {
+            reviewedFirstBatch = true;
+            return {
+              ...passingReview,
+              overallScore: 70,
+              issues: [
+                {
+                  slideIndex: 0,
+                  severity: "error" as const,
+                  issue: "misalignment" as const,
+                  elementIds: [],
+                  suggestion: "换一种版式",
+                },
+              ],
+            };
+          }
+          return passingReview;
+        },
+        reviewDeck: async () => {
+          deckCalls += 1;
+          return passingReview;
+        },
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 0,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "第一页需要换版式",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: Array.from({ length: 7 }, () => "data:image/jpeg;base64,AA=="),
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    // 第二轮只有含第 1 页的批次重新评审；第 7 页那一批沿用上一轮结论。
+    expect(pageCalls).toEqual([[0, 1, 2, 3, 4, 5], [6], [0, 1, 2, 3, 4, 5]]);
+    // 整册总览每轮都要重看：任何一页变化都会改变总览。
+    expect(deckCalls).toBe(2);
+    expect(result.visualReviewCoverage).toEqual({ reviewed: 7, total: 7 });
+    expect(result.designs[0]!.layout).toBe("cards");
+  });
+
+  it("没有整册评审时，携带缩略图的第一批不能复用旧结论", async () => {
+    const pageCalls: number[][] = [];
+    let reviewedSeventhPage = false;
+    const result = await runDesignQualityStage({
+      initialDesigns: Array.from({ length: 7 }, () => design()),
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, indexes) => {
+          pageCalls.push([...(indexes ?? [])]);
+          if (indexes?.includes(6) && !reviewedSeventhPage) {
+            reviewedSeventhPage = true;
+            return {
+              ...passingReview,
+              overallScore: 70,
+              issues: [
+                {
+                  slideIndex: 6,
+                  severity: "error" as const,
+                  issue: "misalignment" as const,
+                  elementIds: [],
+                  suggestion: "换一种版式",
+                },
+              ],
+            };
+          }
+          return passingReview;
+        },
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 6,
+              layout: "cards",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "最后一页需要换版式",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: async () => ({
+        slides: Array.from({ length: 7 }, () => "data:image/jpeg;base64,AA=="),
+        contactSheet: "data:image/jpeg;base64,AA==",
+      }),
+      inspectContrast: contrastStub,
+    });
+
+    // 第 1 批的页面设计没变，但它带着缩略图；整套节奏变了，必须重新看。
+    expect(pageCalls).toEqual([[0, 1, 2, 3, 4, 5], [6], [0, 1, 2, 3, 4, 5], [6]]);
+    expect(result.designs[6]!.layout).toBe("cards");
+  });
+
   it("真实渲染不可用时降级到画布预览，并说清楚原因", async () => {
     const result = await runDesignQualityStage({
       initialDesigns: [design()],

@@ -142,6 +142,14 @@ export function classifyRelayoutElements(slide: Slide): RelayoutElements {
       decide(element, "generated");
       continue;
     }
+    // Content pictures are carried over rather than regenerated. The relayout
+    // command has no visual assets to re-place them with, so trusting the
+    // "generated" origin silently deleted every AI photo from the page.
+    // Layout/slide backgrounds are handled above and stay generated.
+    if (element.type === "image" && element.placement !== "slide-background") {
+      decide(element, "user");
+      continue;
+    }
     if (element.origin) {
       decide(element, element.origin);
       continue;

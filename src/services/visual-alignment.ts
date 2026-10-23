@@ -26,6 +26,24 @@ export const visualReviewSchema = z.object({
   alignmentScore: z.number().min(0).max(100),
   readabilityScore: z.number().min(0).max(100),
   consistencyScore: z.number().min(0).max(100),
+  /**
+   * 逐页评分。逐页批次每个被检查页应有一条；整册总览不产生逐页评分。
+   *
+   * 可选：老模型或旧测试桩可能只给批次级分数，缺省时下游退回批次级口径。
+   * 一致性是整套指标，不放进逐页评分。
+   */
+  slideScores: z
+    .array(
+      z.object({
+        slideIndex: z.number().int().nonnegative(),
+        overallScore: z.number().min(0).max(100),
+        hierarchyScore: z.number().min(0).max(100),
+        alignmentScore: z.number().min(0).max(100),
+        readabilityScore: z.number().min(0).max(100),
+      }),
+    )
+    .max(100)
+    .optional(),
   issues: z
     .array(
       z.object({
@@ -137,6 +155,29 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     number | undefined
   >;
   if (scoreKeys.some((key) => scores[key] === undefined)) throw new Error("AI_VISION_RESPONSE_UNREPAIRABLE");
+
+  // 逐页评分只保留本轮实际检查过的页；非法分数、越界页和重复页都丢弃，
+  // 不用默认分补位。缺失时下游退回批次级口径。
+  const slideScoresByIndex = new Map<number, NonNullable<VisualReview["slideScores"]>[number]>();
+  for (const candidate of Array.isArray(input.slideScores) ? input.slideScores : []) {
+    if (!isRecord(candidate) || typeof candidate.slideIndex !== "number" || !expectedSet.has(candidate.slideIndex))
+      continue;
+    if (slideScoresByIndex.has(candidate.slideIndex)) continue;
+    const overall = normalizeScore(candidate.overallScore);
+    const hierarchy = normalizeScore(candidate.hierarchyScore);
+    const alignment = normalizeScore(candidate.alignmentScore);
+    const readability = normalizeScore(candidate.readabilityScore);
+    if (overall === undefined || hierarchy === undefined || alignment === undefined || readability === undefined)
+      continue;
+    slideScoresByIndex.set(candidate.slideIndex, {
+      slideIndex: candidate.slideIndex,
+      overallScore: overall,
+      hierarchyScore: hierarchy,
+      alignmentScore: alignment,
+      readabilityScore: readability,
+    });
+  }
+  const slideScores = [...slideScoresByIndex.values()].sort((left, right) => left.slideIndex - right.slideIndex);
 
   const issues = (Array.isArray(input.issues) ? input.issues : [])
     .flatMap((candidate) => {

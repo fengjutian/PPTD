@@ -3814,4 +3814,16 @@ describe("手工路径的 AI 配图", () => {
     expect(numberTexts).toContain("04");
     expect(numberTexts).not.toContain("02");
   });
+
+  it("inserts a built-in icon with the user as its origin", () => {
+    const source = createDocument();
+    const slideId = source.slides[0]!.id;
+    const result = produce(source, (draft) => applyCommand(draft, { type: "add-icon", slideId, name: "target" }));
+    const icon = result.slides[0]!.elements.at(-1)!;
+    expect(icon.type).toBe("icon");
+    if (icon.type !== "icon") throw new Error("expected an icon");
+    expect(icon.name).toBe("target");
+    expect(icon.origin).toBe("user");
+    expect(icon.frame.width).toBe(inches(1));
+  });
 });

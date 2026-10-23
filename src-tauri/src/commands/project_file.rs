@@ -374,6 +374,39 @@ fn assets_root(path: &Path) -> Result<PathBuf, String> {
     Ok(path.with_file_name(format!("{file_name}.assets")))
 }
 
+#[cfg(windows)]
+fn is_reparse_point(metadata: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    // FILE_ATTRIBUTE_REPARSE_POINT covers junctions as well as symlinks.
+    metadata.file_attributes() & 0x400 != 0
+}
+
+#[cfg(not(windows))]
+fn is_reparse_point(metadata: &fs::Metadata) -> bool {
+    metadata.file_type().is_symlink()
+}
+
+/// The asset directory, but only when it is a real directory.
+///
+/// A project path is user-controlled; `<name>.pptd.assets` can be a junction
+/// or symlink pointing somewhere else. Writing through it is one problem;
+/// `cleanup_unreferenced_assets` deleting entries through it is worse. Reads
+/// and writes therefore refuse a reparse point instead of following it.
+fn checked_assets_root(path: &Path) -> Result<PathBuf, String> {
+    let root = assets_root(path)?;
+    if root.exists() {
+        let metadata =
+            fs::symlink_metadata(&root).map_err(|error| format!("ASSET_METADATA_FAILED: {error}"))?;
+        if is_reparse_point(&metadata) {
+            return Err("ASSET_DIRECTORY_REPARSE_REJECTED".into());
+        }
+        if !metadata.is_dir() {
+            return Err("ASSET_DIRECTORY_NOT_DIRECTORY".into());
+        }
+    }
+    Ok(root)
+}
+
 /// The lowercase hex SHA-256 digest of image bytes, used as the resource file
 /// name. The digest depends only on the bytes, never on the page, order or
 /// revision, so the same picture is written once and a text-only autosave no
@@ -498,7 +531,7 @@ fn find_layout_render_asset(cache_root: &Path, reference: &str) -> Option<PathBu
 }
 
 fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
-    let directory = assets_root(path)?;
+    let directory = checked_assets_root(path)?;
     fs::create_dir_all(&directory)
         .map_err(|error| format!("ASSET_DIRECTORY_CREATE_FAILED: {error}"))?;
     let Some(elements) = document
@@ -563,7 +596,7 @@ fn externalize_images(path: &Path, document: &mut Value) -> Result<(), String> {
 /// save still reads its revision directory; only a save in the new format
 /// retires it.
 fn cleanup_unreferenced_assets(path: &Path, document: &Value) {
-    let Ok(root) = assets_root(path) else { return };
+    let Ok(root) = checked_assets_root(path) else { return };
     let mut referenced = std::collections::HashSet::new();
     if let Some(slides) = document.pointer("/slides").and_then(Value::as_array) {
         for slide in slides {
@@ -597,7 +630,7 @@ fn cleanup_unreferenced_assets(path: &Path, document: &Value) {
 }
 
 fn hydrate_images(path: &Path, document: &mut Value) -> Result<(), String> {
-    let root = assets_root(path)?;
+    let root = checked_assets_root(path)?;
     let mut total_bytes = 0usize;
     let Some(slides) = document
         .pointer_mut("/slides")
@@ -694,7 +727,7 @@ fn read_image_asset_at(
     reference: &str,
     layout_cache_root: Option<&Path>,
 ) -> Result<String, String> {
-    let root = assets_root(path)?;
+    let root = checked_assets_root(path)?;
     let relative = reference
         .strip_prefix("asset://")
         .ok_or("ASSET_REF_INVALID")?;
@@ -865,11 +898,11 @@ fn copy_referenced_assets(
     if references.is_empty() {
         return Ok(Vec::new());
     }
-    let target_root = assets_root(path)?;
+    let target_root = checked_assets_root(path)?;
     fs::create_dir_all(&target_root)
         .map_err(|error| format!("ASSET_DIRECTORY_CREATE_FAILED: {error}"))?;
     let source_root = match source_path {
-        Some(source_path) => Some(assets_root(source_path)?),
+        Some(source_path) => Some(checked_assets_root(source_path)?),
         None => None,
     };
     let mut missing = Vec::new();
@@ -945,7 +978,7 @@ fn clear_recovery_at(path: &Path) -> Result<(), String> {
     if path.exists() {
         fs::remove_file(path).map_err(|error| format!("RECOVERY_DELETE_FAILED: {error}"))?;
     }
-    let assets = assets_root(path)?;
+    let assets = checked_assets_root(path)?;
     if assets.exists() {
         fs::remove_dir_all(&assets)
             .map_err(|error| format!("RECOVERY_ASSETS_DELETE_FAILED: {error}"))?;

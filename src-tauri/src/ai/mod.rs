@@ -403,7 +403,7 @@ pub async fn chat(
                 return Err(REQUEST_CANCELLED_ERROR.into());
             }
         }
-        tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
+        sleep_with_cancellation(Duration::from_secs(2_u64.pow(attempt + 1)), cancel).await?;
     }
     Err("AI_PROVIDER_BUSY".into())
 }
@@ -444,6 +444,19 @@ fn decode_stream_chunk(pending: &mut Vec<u8>, chunk: &[u8]) -> String {
             pending.clear();
             decoded
         }
+    }
+}
+
+/// Sleeps between retries, but wakes up immediately when the task is cancelled.
+///
+/// The retry backoff used to be a bare `sleep`: cancelling during a 2–4s wait
+/// still made the user wait for the whole delay before the request reported
+/// that it had been cancelled.
+async fn sleep_with_cancellation(duration: Duration, cancel: &CancelToken) -> Result<(), String> {
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err(REQUEST_CANCELLED_ERROR.into()),
+        () = tokio::time::sleep(duration) => Ok(()),
     }
 }
 
@@ -580,7 +593,7 @@ pub async fn vision_chat(
                 return Err(REQUEST_CANCELLED_ERROR.into());
             }
         }
-        tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
+        sleep_with_cancellation(Duration::from_secs(2_u64.pow(attempt + 1)), cancel).await?;
     }
     Err("AI_PROVIDER_BUSY".into())
 }
@@ -931,7 +944,7 @@ pub async fn generate_image(
                 return Err(REQUEST_CANCELLED_ERROR.into());
             }
         }
-        tokio::time::sleep(Duration::from_secs(2_u64.pow(attempt + 1))).await;
+        sleep_with_cancellation(Duration::from_secs(2_u64.pow(attempt + 1)), cancel).await?;
     }
     Err("AI_IMAGE_PROVIDER_BUSY".into())
 }

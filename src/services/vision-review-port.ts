@@ -107,6 +107,17 @@ export function planRepairsByRule(
   const bySlide = new Map<number, VisualReview["issues"]>();
   review.issues.forEach((issue) => bySlide.set(issue.slideIndex, [...(bySlide.get(issue.slideIndex) ?? []), issue]));
   const guidance = new Map(review.slideGuidance.map((item) => [item.slideIndex, item]));
+  /** A rule-table frame must stay inside the page, like a model-provided one. */
+  const pageFrame = (frame: { x: number; y: number; width: number; height: number }) => {
+    const width = Math.min(1, Math.max(0.02, frame.width));
+    const height = Math.min(1, Math.max(0.02, frame.height));
+    return {
+      x: Math.min(Math.max(0, frame.x), 1 - width),
+      y: Math.min(Math.max(0, frame.y), 1 - height),
+      width,
+      height,
+    };
+  };
   // The rule table may only answer the pages the review actually flagged. It
   // used to walk every guidance entry, and normalization used to invent one
   // for every page, so a failed model call ended up re-laying out the whole
@@ -135,22 +146,22 @@ export function planRepairsByRule(
             {
               action: "move" as const,
               target: "title" as const,
-              frame: {
+              frame: pageFrame({
                 x: guide.safeRegion.x,
                 y: guide.safeRegion.y,
                 width: guide.safeRegion.width,
                 height: Math.min(0.14, guide.safeRegion.height * 0.22),
-              },
+              }),
             },
             {
               action: "resize" as const,
               target: "body" as const,
-              frame: {
+              frame: pageFrame({
                 x: guide.safeRegion.x,
                 y: guide.safeRegion.y + Math.min(0.18, guide.safeRegion.height * 0.28),
                 width: guide.safeRegion.width,
                 height: Math.max(0.08, guide.safeRegion.height - Math.min(0.18, guide.safeRegion.height * 0.28)),
-              },
+              }),
             },
           ]
         : []),

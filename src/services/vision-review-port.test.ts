@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TauriVisionReviewPort, validateVisualRenderPayload } from "./vision-review-port";
+import { TauriVisionReviewPort, planRepairsByRule, validateVisualRenderPayload } from "./vision-review-port";
 import type { PresentationRender } from "./presentation-renderer";
 import type { PresentationVisualGoal, VisualReview } from "./visual-alignment";
 
@@ -241,5 +241,36 @@ describe("视觉评审端口", () => {
     });
 
     expect(plan.repairs.map((repair) => repair.slideIndex)).toEqual([0]);
+  });
+
+  it("keeps the fallback rule-table frames inside the page", () => {
+    const plan = planRepairsByRule(
+      {
+        ...review,
+        overallScore: 60,
+        issues: [{ slideIndex: 0, severity: "warning", issue: "weak-hierarchy", elementIds: [], suggestion: "突出标题" }],
+        slideGuidance: [
+          {
+            slideIndex: 0,
+            // A safe region hugging the bottom edge would push the synthetic
+            // body frame past the page before this was clamped.
+            safeRegion: { x: 0.1, y: 0.92, width: 0.8, height: 0.06 },
+            logoRegions: [],
+            busyRegions: [],
+            focalPoint: { x: 0.5, y: 0.5 },
+            recommendedLayout: "title-body",
+          },
+        ],
+      } as VisualReview,
+      85,
+    );
+    const frames = plan.repairs.flatMap((repair) =>
+      repair.elementActions.flatMap((action) => ("frame" in action ? [action.frame] : [])),
+    );
+    expect(frames.length).toBeGreaterThan(0);
+    for (const frame of frames) {
+      expect(frame.x + frame.width).toBeLessThanOrEqual(1);
+      expect(frame.y + frame.height).toBeLessThanOrEqual(1);
+    }
   });
 });

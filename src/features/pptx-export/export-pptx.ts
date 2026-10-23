@@ -233,12 +233,17 @@ export async function buildPptx(
       };
 
       if (element.type === "text") {
+        const hasRuns = Boolean(element.runs && element.runs.length > 0);
         const textOptions = {
           ...position,
           fontFace: element.style.fontFamily,
           fontSize: element.style.fontSizePt,
           color: color(element.style.color),
-          bold: element.style.bold,
+          // With explicit runs every run carries its own bold flag. PptxGenJS
+          // treats a falsy run option as "inherit from the text box", so a
+          // bold:false run under a bold element used to come out bold. Leaving
+          // the box-level flag out lets the run decide.
+          ...(hasRuns ? {} : { bold: element.style.bold }),
           align: element.style.align,
           ...(element.style.letterSpacingPt === undefined ? {} : { charSpacing: element.style.letterSpacingPt }),
           ...(element.style.lineHeight === undefined ? {} : { lineSpacingMultiple: element.style.lineHeight }),
@@ -252,7 +257,7 @@ export async function buildPptx(
         // A text with styled fragments is written as real runs, so the emphasis
         // stays editable in PowerPoint instead of being flattened into the
         // style of the whole box.
-        if (element.runs && element.runs.length > 0) {
+        if (hasRuns) {
           slide.addText(
             textFragments(element.text, element.runs).map((fragment) => {
               const style = resolveFragmentStyle(element.style, fragment.style);
@@ -376,12 +381,12 @@ export async function buildPptx(
           }));
         });
         const rows = [header, ...body];
-        // The rows share the frame of the element, so a table never grows past
-        // the box the designer gave it.
-        const rowHeight = Math.max(0.2, Math.min(0.6, position.h / rows.length));
+        // The rows fill the frame exactly; a fixed 0.2–0.6in clamp made a
+        // table taller or shorter than the box the canvas draws.
+        const rowHeight = position.h / rows.length;
         slide.addTable(rows, {
           ...position,
-          h: rowHeight * rows.length,
+          h: position.h,
           rowH: rowHeight,
           fontFace: element.style.fontFamily,
           fontSize: element.style.fontSizePt,

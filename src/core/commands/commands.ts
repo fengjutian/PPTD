@@ -1,4 +1,5 @@
 import type {
+  BuiltinIconName,
   ChartElementStyle,
   ChartKind,
   ContentBlock,
@@ -415,6 +416,7 @@ export type DocumentCommand =
     }
   | { type: "add-shape"; slideId: SlideId; shape: "rectangle" | "ellipse" }
   | { type: "add-line"; slideId: SlideId; direction: LineDirection }
+  | { type: "add-icon"; slideId: SlideId; name: BuiltinIconName }
   | { type: "duplicate-element"; slideId: SlideId; elementId: ElementId }
   | { type: "duplicate-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "delete-element"; slideId: SlideId; elementId: ElementId }
@@ -3315,6 +3317,20 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       locked: false,
       origin: "user",
       style: { fill: "#d35230", stroke: "#7f2f1d", strokeWidthPt: 1.5, radiusPt: 12 },
+    });
+    return;
+  }
+
+  if (command.type === "add-icon") {
+    slide.elements.push({
+      id: crypto.randomUUID() as ElementId,
+      type: "icon",
+      name: command.name,
+      frame: { x: inches(5.8), y: inches(2.8), width: inches(1), height: inches(1) },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "user",
+      style: { color: "#d35230", strokeWidth: 2 },
     });
     return;
   }

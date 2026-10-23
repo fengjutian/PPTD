@@ -155,6 +155,36 @@ describe("design-only relayout", () => {
     expect(background).toBeLessThan(firstText);
   });
 
+  it("keeps an AI-generated content picture when the page is relaid out", () => {
+    const source = createDocument();
+    const document = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "配图页",
+        slides: [{ title: "配图页", body: "正文", speakerNotes: "" }],
+        designs: [{ ...design, visualAsset: { enabled: true, role: "side", prompt: "一间明亮的办公室" } }],
+        visualAssets: [
+          {
+            slideIndex: 0,
+            dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+            mimeType: "image/png",
+            naturalWidth: 1600,
+            naturalHeight: 900,
+            altText: "AI 配图",
+          },
+        ],
+      }),
+    );
+    const slideId = document.slides[0]!.id;
+    expect(document.slides[0]!.elements.some((element) => element.type === "image")).toBe(true);
+
+    const relaid = produce(document, (draft) => applyCommand(draft, { type: "relayout-slide", slideId }));
+
+    // 重排没有 visualAssets 可重新摆放，不能把已经生成的配图当成
+    // “generated”直接丢掉。
+    expect(relaid.slides[0]!.elements.some((element) => element.type === "image")).toBe(true);
+  });
+
   it("keeps the deck page number when a single page is relaid out", () => {
     const source = createDocument();
     const document = produce(source, (draft) =>

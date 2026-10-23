@@ -115,6 +115,8 @@ import {
 } from "../services/project-files";
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
+import type { BuiltinIconName } from "../core/document-model";
+import { IconPicker } from "../features/editor/IconPicker";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
 import { defaultPresentationVisualGoal, type VisualReview } from "../services/visual-alignment";
 import {
@@ -689,6 +691,7 @@ export function App() {
   const [templatePreviewBusy, setTemplatePreviewBusy] = useState(false);
   const [templateUploadOpen, setTemplateUploadOpen] = useState(false);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [themePresetId, setThemePresetId] = useState("");
   const [designBusy, setDesignBusy] = useState(false);
   const designCancelRef = useRef(false);
@@ -740,6 +743,14 @@ export function App() {
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
   const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
   const dirty = document.revisions.document !== savedRevision;
+  // The close handler is registered once (it must outlive re-renders), so it
+  // reads the latest document/path through refs instead of a stale closure.
+  const documentRef = useRef(document);
+  const dirtyRef = useRef(dirty);
+  const projectPathRef = useRef(projectPath);
+  documentRef.current = document;
+  dirtyRef.current = dirty;
+  projectPathRef.current = projectPath;
 
   // "适应窗口"要按容器实际大小算，不能写死 100%。
   const workspaceRef = useRef<HTMLElement>(null);
@@ -1372,9 +1383,19 @@ export function App() {
       void import("@tauri-apps/api/window")
         .then(async ({ getCurrentWindow }) => {
           const stop = await getCurrentWindow().onCloseRequested(async (event) => {
-            if (!aiUnsavedRef.current) return;
+            if (!aiUnsavedRef.current && !dirtyRef.current) return;
             event.preventDefault();
-            await flush();
+            if (aiUnsavedRef.current) await flush();
+            if (dirtyRef.current) {
+              // The 1.5s autosave debounce may not have fired yet. Flush the
+              // project/recovery snapshot before destroying the window.
+              try {
+                await autoSave(documentRef.current, projectPathRef.current, getImageProjectPath());
+              } catch {
+                // Closing must still complete; the failure is already reported
+                // by the autosave status when the app is still open.
+              }
+            }
             await getCurrentWindow().destroy();
           });
           if (disposed) stop();
@@ -2220,6 +2241,9 @@ export function App() {
             <ToolButton label="图片" onClick={() => imageInputRef.current?.click()}>
               <ImagePlus />
             </ToolButton>
+            <ToolButton label="图标" onClick={() => setIconPickerOpen(true)}>
+              <Sparkles />
+            </ToolButton>
             <ToolButton
               label="AI 配图"
               onClick={() => {
@@ -2241,10 +2265,10 @@ export function App() {
               }}
             />
             <ToolButton
-              label="重排版式（保留手工对象）"
+              label="重排版式（保留手工对象/配图）"
               onClick={() => {
                 execute({ type: "relayout-slide", slideId: activeSlide.id });
-                setTaskStatus("已按当前内容重新应用版式，手工添加的图片、文本和锁定对象已保留");
+                setTaskStatus("已按当前内容重新应用版式，手工对象、配图和锁定对象已保留");
               }}
             >
               <Wand2 />
@@ -2873,6 +2897,16 @@ export function App() {
           error={aiImageError}
           onClose={() => setAiImageOpen(false)}
           onGenerate={(prompt, role) => void handleAiImageGenerate(prompt, role)}
+        />
+      )}
+
+      {iconPickerOpen && (
+        <IconPicker
+          onClose={() => setIconPickerOpen(false)}
+          onPick={(name: BuiltinIconName) => {
+            execute({ type: "add-icon", slideId: activeSlide.id, name });
+            setIconPickerOpen(false);
+          }}
         />
       )}
 

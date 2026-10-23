@@ -102,6 +102,14 @@ describe("inspector panel", () => {
     expect(markup).toContain('aria-label="使用颜色 #d35230"');
   });
 
+  it("shows the speaker notes of the page and says where they go", () => {
+    const markup = renderView(textElement(), "#ffffff", { speakerNotes: "这一页先讲背景" });
+    expect(markup).toContain("演讲备注");
+    expect(markup).toContain("这一页先讲背景");
+    // 备注不显示在页面上，得说清楚它去哪了。
+    expect(markup).toContain("不会显示在页面上");
+  });
+
   it("folds the groups of properties away, because the panel is longer than the window", () => {
     const markup = renderView(textElement());
     expect(markup).toContain('aria-expanded="true"');

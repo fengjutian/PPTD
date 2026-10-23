@@ -1,21 +1,26 @@
-import { BUILTIN_ICONS, type IconElement } from "../../core/document-model";
+import { BUILTIN_ICONS, type BuiltinIconName, type IconElement } from "../../core/document-model";
+
+export interface IconGlyphProps {
+  name: BuiltinIconName;
+  color: string;
+  strokeWidth?: number;
+}
 
 /**
- * The canvas view of a built-in icon.
+ * The drawing of one built-in icon.
  *
- * The drawing is rebuilt from the icon definition instead of being injected as
- * markup, so the only thing a document can choose is a name from the registry.
- * The frame of the element decides the size; the icon keeps its 24×24 grid and
- * centres itself in the frame.
+ * The paths come from the registry, never from the document: the only thing a
+ * saved file can choose is the icon name. The caller decides the box; the icon
+ * keeps its 24×24 grid and centres itself in it.
  */
-export function IconView({ element }: { element: IconElement }) {
-  const definition = BUILTIN_ICONS[element.name];
+export function IconGlyph({ name, color, strokeWidth = 2 }: IconGlyphProps) {
+  const definition = BUILTIN_ICONS[name];
   return (
     <svg
       viewBox="0 0 24 24"
       fill="none"
-      stroke={element.style.color}
-      strokeWidth={element.style.strokeWidth ?? 2}
+      stroke={color}
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       preserveAspectRatio="xMidYMid meet"
@@ -30,4 +35,9 @@ export function IconView({ element }: { element: IconElement }) {
       ))}
     </svg>
   );
+}
+
+/** The canvas view of an icon element. */
+export function IconView({ element }: { element: IconElement }) {
+  return <IconGlyph name={element.name} color={element.style.color} strokeWidth={element.style.strokeWidth} />;
 }

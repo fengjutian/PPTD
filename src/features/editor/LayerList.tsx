@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { BarChart3, Circle, Image as ImageIcon, Lock, Minus, Square, Table2, Type } from "lucide-react";
 import type { ElementId, Slide, SlideElement } from "../../core/document-model";
+import { ICON_LABELS } from "./IconPicker";
 
 function elementLabel(element: SlideElement): string {
   if (element.type === "text") return element.text.trim().slice(0, 14) || "文本";
@@ -8,7 +9,7 @@ function elementLabel(element: SlideElement): string {
   if (element.type === "chart") return "图表";
   if (element.type === "table") return "表格";
   if (element.type === "line") return "线条";
-  if (element.type === "icon") return "图标";
+  if (element.type === "icon") return ICON_LABELS[element.name];
   return element.shape === "ellipse" ? "椭圆" : "矩形";
 }
 
