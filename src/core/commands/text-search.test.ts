@@ -142,6 +142,25 @@ describe("replace-text-edits command", () => {
     expect(result.slides[0]!.content.status).toBe("changed");
   });
 
+  it("searches locked text but refuses to rewrite it", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    const title = slide.elements[0]!;
+    if (title.type !== "text") throw new Error("expected text");
+    title.text = "锁定";
+    title.locked = true;
+    expect(findTextMatches(document, "锁定")).toHaveLength(1);
+    expect(buildReplaceAllEdits(document, "锁定", "替换")).toEqual([]);
+    expect(() =>
+      produce(document, (draft) =>
+        applyCommand(draft, {
+          type: "replace-text-edits",
+          edits: [{ slideId: slide.id, elementId: title.id, text: "替换" }],
+        }),
+      ),
+    ).toThrow("ELEMENT_LOCKED");
+  });
+
   it("refuses the whole batch when one target is invalid", () => {
     const document = createDocument();
     const slide = document.slides[0]!;

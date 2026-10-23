@@ -84,7 +84,7 @@ export const editorialIndex: LayoutRecipe = {
       return conflict("items", "条目行高低于 0.075，编号栏会挤成一团");
     }
 
-    elements.push(verticalRule(0.07, contentTop, contentHeight, 0.006, page, colors.accent));
+    elements.push(verticalRule(0.07, contentTop, contentHeight, 0.004, page, colors.accent));
     const separatorHeight = ruleHeight(ctx.tokens.rule.hairlinePt, page.height);
     const itemSize = ctx.tokens.type.bodyPt;
 

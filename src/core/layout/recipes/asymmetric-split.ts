@@ -137,11 +137,11 @@ export const asymmetricSplit: LayoutRecipe = {
         textHeightPt(item, textFrame.width / 12_700, size, bodyFamily, lineHeight),
         page.height,
       );
-      const barHeight = Math.min(0.08, rowHeight * 0.5);
+      const barHeight = Math.min(0.05, rowHeight * 0.35);
       elements.push(
         rectElement(
           frameFromNormalized(
-            place({ x: 0.44, y: rowY + (rowHeight - barHeight) / 2, width: 0.006, height: barHeight }),
+            place({ x: 0.44, y: rowY + (rowHeight - barHeight) / 2, width: 0.004, height: barHeight }),
             page,
           ),
           colors.accent,
