@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { emu, inches } from "../../document-model";
-import { fittedFontSize, frameFromNormalized, rectsOverlap, ruleHeight, textFits, textHeightPt } from "./measure";
+import {
+  fittedFontSize,
+  fittedFontSizeInRange,
+  frameFromNormalized,
+  rectsOverlap,
+  ruleHeight,
+  textFits,
+  textHeightPt,
+} from "./measure";
 
 const page = { width: inches(13.333), height: inches(7.5) };
 
@@ -28,6 +36,19 @@ describe("recipe measurement", () => {
     const size = fittedFontSize(long, frame, 24, 12, "Microsoft YaHei", 1.25);
     expect(size).toBeLessThan(24);
     expect(size).toBeGreaterThanOrEqual(12);
+  });
+
+  it("grows short text up to the maximum the slot allows", () => {
+    const frame = { x: emu(0), y: emu(0), width: inches(8), height: inches(2) };
+    const size = fittedFontSizeInRange("三个短句", frame, 18, 14, 28, "Microsoft YaHei", 1.25);
+    expect(size).toBeGreaterThan(18);
+    expect(size).toBeLessThanOrEqual(28);
+    expect(fittedFontSize("三个短句", frame, 18, 14, "Microsoft YaHei", 1.25)).toBe(18);
+  });
+
+  it("caps the grown size even when the slot is much larger", () => {
+    const frame = { x: emu(0), y: emu(0), width: inches(12), height: inches(5) };
+    expect(fittedFontSizeInRange("短", frame, 18, 14, 24, "Microsoft YaHei", 1.25)).toBe(24);
   });
 
   it("converts a rule width into a page-relative height", () => {

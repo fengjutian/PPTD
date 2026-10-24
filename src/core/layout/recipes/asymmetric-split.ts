@@ -84,7 +84,9 @@ export const asymmetricSplit: LayoutRecipe = {
       ),
     ];
     const dividerX = mirrored ? 1 - DIVIDER_X : DIVIDER_X;
-    elements.push(verticalRule(dividerX, chrome.contentTop, chrome.contentBottom - chrome.contentTop, 0.0014, page, colors.rule));
+    elements.push(
+      verticalRule(dividerX, chrome.contentTop, chrome.contentBottom - chrome.contentTop, 0.0014, page, colors.rule),
+    );
 
     const pageNumber = String(ctx.page.index + 1).padStart(2, "0");
     const pageNumberFrame = frameFromNormalized(

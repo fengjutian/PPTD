@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CompositionFacts } from "../../commands/design-intent";
-import { inches, type ContentBlock, type SlideContent } from "../../document-model";
+import { inches, type ContentBlock, type SlideContent, type TextElement } from "../../document-model";
 import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../../design/deck-concept";
 import { deriveDesignTokens } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
@@ -166,6 +166,25 @@ describe("editorial-index recipe", () => {
       signature(plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 4 }) }))),
     );
   });
+
+  it("groups a sparse column instead of stretching it to the bottom", () => {
+    const items = ["销售收入保持正增长", "移动端成为增长引擎", "资源向高质量业务倾斜"];
+    const pageContent = content(items);
+    const result = plan(editorialIndex, context(pageContent, { facts: facts({ itemCount: 3 }) }));
+    const rows = result.elements
+      .filter((element): element is TextElement => element.type === "text" && items.includes(element.text))
+      .sort((left, right) => left.frame.y - right.frame.y);
+    expect(rows).toHaveLength(3);
+    const first = rows[0]!;
+    const second = rows[1]!;
+    // 17pt in a 1.35in equal slot was the old rhythm; the measured column is
+    // allowed to be airy, but the row pitch must stay below 0.16 of the page.
+    expect((second.frame.y - first.frame.y) / page.height).toBeLessThan(0.16);
+    // A sparse column can use a larger size than dense running copy.
+    expect(first.style.fontSizePt).toBeGreaterThanOrEqual(20);
+    // The group is centred inside the content region, not pinned to its top.
+    expect(first.frame.y).toBeGreaterThan(inches(2.55));
+  });
 });
 
 describe("image-led recipe", () => {
@@ -246,6 +265,27 @@ describe("data-story recipe", () => {
         hasAsset: false,
       }),
     ).toBe(false);
+  });
+
+  it("puts each label directly under its value instead of a fixed y", () => {
+    const ctx = context(metricContent, {
+      facts: facts({ itemCount: 0, hasRowBlock: true, hasMetric: true }),
+    });
+    const result = plan(dataStory, ctx);
+    const values = result.elements.filter(
+      (element): element is TextElement => element.type === "text" && element.contentBlockRef?.field === "value",
+    );
+    const labels = result.elements.filter(
+      (element): element is TextElement => element.type === "text" && element.contentBlockRef?.field === "label",
+    );
+    expect(values).toHaveLength(3);
+    expect(labels).toHaveLength(3);
+    values.forEach((value, index) => {
+      const label = labels[index]!;
+      const gap = (label.frame.y - (value.frame.y + value.frame.height)) / page.height;
+      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeLessThan(0.05);
+    });
   });
 });
 
@@ -335,5 +375,16 @@ describe("asymmetric-split recipe", () => {
     expect(
       asymmetricSplit.supports(facts({ hasRowBlock: true }), concept(), { hasArtwork: false, hasAsset: false }),
     ).toBe(false);
+  });
+
+  it("starts the right column at the content axis instead of centring it", () => {
+    const pageContent = content(items);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 5, shortItems: false, layout: "split" }) });
+    const result = plan(asymmetricSplit, ctx);
+    const firstRow = result.elements
+      .filter((element): element is TextElement => element.type === "text" && items.includes(element.text))
+      .sort((left, right) => left.frame.y - right.frame.y)[0]!;
+    const contentTop = (2.55 / 7.5) * page.height;
+    expect(Math.abs(firstRow.frame.y - contentTop) / page.height).toBeLessThan(0.03);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyCommand, type AiSlideDesign } from "../core/commands/commands";
-import { createDocument } from "../core/document-model";
+import { createDocument, emu } from "../core/document-model";
 import { validatePresentationVisualQuality } from "./presentation-quality-gate";
 
 const design = (overrides: Partial<AiSlideDesign> = {}): AiSlideDesign => ({
@@ -44,6 +44,41 @@ describe("presentation visual quality gate", () => {
     expect(
       validatePresentationVisualQuality(document, [current]).issues.some((issue) => issue.issue === "low-contrast"),
     ).toBe(true);
+  });
+
+  it("reports a page whose copy stops in the upper half", () => {
+    const document = createDocument();
+    const current = design({ layout: "title-body" });
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "quality",
+      slides: [{ title: "Title", body: "A closing paragraph that should sit lower", speakerNotes: "" }],
+      designs: [current],
+    });
+    const body = document.slides[0]!.elements.find(
+      (element) => element.type === "text" && element.contentRef === "body",
+    );
+    if (!body) throw new Error("expected body");
+    body.frame = {
+      ...body.frame,
+      y: emu(Math.round(document.pageSize.height * 0.22)),
+      height: emu(Math.round(document.pageSize.height * 0.08)),
+    };
+    const report = validatePresentationVisualQuality(document, [current]);
+    expect(report.issues.some((issue) => issue.issue === "underfilled-page")).toBe(true);
+  });
+
+  it("does not report a sparse cover as an underfilled page", () => {
+    const document = createDocument();
+    const current = design({ layout: "cover" });
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "quality",
+      slides: [{ title: "Title", body: "Subtitle", speakerNotes: "" }],
+      designs: [current],
+    });
+    const report = validatePresentationVisualQuality(document, [current]);
+    expect(report.issues.some((issue) => issue.issue === "underfilled-page")).toBe(false);
   });
 
   it("judges text against the card that carries it instead of the page color", () => {

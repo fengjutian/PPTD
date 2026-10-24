@@ -40,7 +40,6 @@ export const dataStory: LayoutRecipe = {
     if (metrics.length > 3) return conflict("metrics", "指标页最多承载 3 个指标");
 
     const page = ctx.frame.page;
-    const pageHeightIn = page.height / 914_400;
     const chrome = resolveChrome(ctx);
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
@@ -170,9 +169,7 @@ export const dataStory: LayoutRecipe = {
       return { metric, valueSize, valueHeight, labelSize, labelHeight };
     });
 
-    const groupHeight = Math.max(
-      ...measured.map((item) => item.valueHeight + LABEL_GAP + item.labelHeight),
-    );
+    const groupHeight = Math.max(...measured.map((item) => item.valueHeight + LABEL_GAP + item.labelHeight));
     if (groupHeight + RULE_GAP > availableHeight) {
       return conflict("metrics", "指标组的高度超过内容区");
     }
@@ -183,10 +180,7 @@ export const dataStory: LayoutRecipe = {
       const ruleY = groupTop - RULE_GAP;
       elements.push(
         rectElement(
-          frameFromNormalized(
-            { x, y: ruleY, width: Math.min(0.1, columnWidth * 0.3), height: 0.006 },
-            page,
-          ),
+          frameFromNormalized({ x, y: ruleY, width: Math.min(0.1, columnWidth * 0.3), height: 0.006 }, page),
           ctx.colors.accent,
         ),
       );

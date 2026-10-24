@@ -170,6 +170,7 @@ export function validatePresentationVisualQuality(
     // the page color and is judged by the pixel contrast inspector instead.
     if (
       design &&
+      slide.content.body.trim().length >= 20 &&
       design.layout !== "cover" &&
       design.layout !== "section" &&
       !hasFullPageArtwork(slide, slide.elements.length, document.pageSize.width, document.pageSize.height)

@@ -2555,19 +2555,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const copyHeight = Math.max(
           ...columns.map((column) => blockHeight(itemText(column.items), copyWidth, itemSize, bodyLeading)),
         );
-        // The panel is as tall as its copy plus a physical padding, with a floor
-        // for very short copy. It starts on the content axis instead of floating
-        // in the middle of the page.
-        const panelPaddingY = 0.20 / pageHeightIn;
-        const panelHeight = Math.min(
-          contentBox.height,
-          Math.max(0.45, headerHeight + panelPaddingY * 2 + copyHeight),
-        );
-        const panelTop = contentBox.y + 0.02;
+        // The panel is as tall as its copy plus a physical padding, with a small
+        // floor for very short copy. A panel that nearly fills the content area
+        // starts on the content axis; a short one is centred so the white space
+        // is not all below it.
+        const panelPaddingY = 0.2 / pageHeightIn;
+        const panelHeight = Math.min(contentBox.height, Math.max(0.32, headerHeight + panelPaddingY * 2 + copyHeight));
+        const panelTop =
+          panelHeight < contentBox.height * 0.7
+            ? contentBox.y + (contentBox.height - panelHeight) / 2
+            : contentBox.y + 0.02;
         columns.forEach((column) => {
           const copy = itemText(column.items);
           const columnHeight = blockHeight(copy, copyWidth, itemSize, bodyLeading);
-          const textTop = panelTop + headerHeight + panelPaddingY;
+          const bodyAreaTop = panelTop + headerHeight + panelPaddingY;
+          const bodyAreaHeight = Math.max(0.02, panelHeight - headerHeight - panelPaddingY * 2);
+          const textTop = bodyAreaTop + Math.max(0, (bodyAreaHeight - columnHeight) / 2);
           const textHeight = Math.min(
             columnHeight * 1.04 + 0.004,
             Math.max(0.02, contentBox.y + contentBox.height - textTop),
@@ -2734,17 +2737,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const valueSize = columns >= 3 ? 40 : 48;
           const labelSize = 18;
           const cardPaddingX = 0.22 / pageWidthIn;
-          const cardPaddingY = 0.20 / pageHeightIn;
+          const cardPaddingY = 0.2 / pageHeightIn;
           const cardWidth = cellWidth - cardGap;
           const valueHeight = Math.max(
-            ...metrics.map((metric) =>
-              blockHeight(metric.value, cardWidth - cardPaddingX * 2, valueSize, bodyLeading),
-            ),
+            ...metrics.map((metric) => blockHeight(metric.value, cardWidth - cardPaddingX * 2, valueSize, bodyLeading)),
           );
           const labelHeight = Math.max(
-            ...metrics.map((metric) =>
-              blockHeight(metric.label, cardWidth - cardPaddingX * 2, labelSize, bodyLeading),
-            ),
+            ...metrics.map((metric) => blockHeight(metric.label, cardWidth - cardPaddingX * 2, labelSize, bodyLeading)),
           );
           // The card carries a number and its label; the height is measured
           // from those two blocks plus a physical padding. The old 0.24 cap
@@ -2768,12 +2767,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
             // The number and its label share a card that grows shorter with
             // every extra row, so both are fitted to the card they sit in.
-            const valueFrame = frame(
-              x + cardPaddingX,
-              y + cardPaddingY,
-              width - cardPaddingX * 2,
-              valueHeight,
-            );
+            const valueFrame = frame(x + cardPaddingX, y + cardPaddingY, width - cardPaddingX * 2, valueHeight);
             const fittedValueSize = fittedFontSize(
               metric.value,
               frame(valueFrame.x, valueFrame.y, valueFrame.width, valueFrame.height),
@@ -2866,14 +2860,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         );
         const stepHeight = Math.min(
           contentBox.height,
-          Math.min(
-            0.36,
-            Math.max(0.2, paddingY * 2 + badgeHeight + 0.02 + labelHeight + 0.01 + bodyHeight),
-          ),
+          Math.min(0.36, Math.max(0.2, paddingY * 2 + badgeHeight + 0.02 + labelHeight + 0.01 + bodyHeight)),
         );
-        // The band sits on the content axis with a small breathing gap. Centring
-        // a 2.1in band in a 4.3in area floated it in the middle of the page.
-        const stepTop = contentBox.y + 0.02;
+        // The band sits on the content axis when it nearly fills the area. A
+        // short band is centred instead of being pinned to the top with its
+        // white space all at the bottom.
+        const stepTop =
+          stepHeight < contentBox.height * 0.7
+            ? contentBox.y + (contentBox.height - stepHeight) / 2
+            : contentBox.y + 0.02;
         processItems.forEach((item, itemIndex) => {
           const x = contentBox.x + itemIndex * (stepWidth + stepGap);
           const badgeX = x + paddingX;
@@ -3296,7 +3291,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // page-width gutter is 0.4in on a 2-column card and the same 0.4in on a
         // 3-column card, which is where the narrow text column came from.
         const cardPaddingX = 0.24 / pageWidthIn;
-        const cardPaddingY = 0.20 / pageHeightIn;
+        const cardPaddingY = 0.2 / pageHeightIn;
         // A top-left badge frees the whole card width for copy. Placing the
         // badge in a left gutter made the text column narrow and the card
         // look unbalanced on portrait-ish three-column grids.
@@ -3672,11 +3667,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const summary = design.layout === "summary" || design.layout === "quote";
           const shortStatement = summary && content.body.length <= 160;
           const bodyWidth = templateBody ? templateBody.width : Math.min(contentBox.width, 0.72);
-          const preferred = templateBody
-            ? (templateBodySize ?? typeScale.body)
-            : shortStatement
-              ? 22
-              : typeScale.body;
+          const preferred = templateBody ? (templateBodySize ?? typeScale.body) : shortStatement ? 22 : typeScale.body;
           const bodyBox = templateBody
             ? safeFrame(templateBody, [contentBox.x, contentBox.y, bodyWidth, contentBox.height], 0.25, 0.12)
             : frame(contentBox.x, contentBox.y, bodyWidth, contentBox.height);
@@ -3698,9 +3689,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(
             text(
               content.body,
-              templateBody
-                ? bodyBox
-                : frame(contentBox.x, bodyY, bodyWidth, Math.max(0.06, measured * 1.04 + 0.004)),
+              templateBody ? bodyBox : frame(contentBox.x, bodyY, bodyWidth, Math.max(0.06, measured * 1.04 + 0.004)),
               bodySize,
               bodyInk,
               false,

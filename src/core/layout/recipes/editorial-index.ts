@@ -4,13 +4,7 @@ import type { Emu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement, verticalRule } from "./elements";
-import {
-  fittedFontSize,
-  frameFromNormalized,
-  ruleHeight,
-  textFits,
-  textHeightPt,
-} from "./measure";
+import { fittedFontSize, frameFromNormalized, ruleHeight, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 /** The most air a row may take before the list stops reading as one block. */
@@ -114,7 +108,6 @@ export const editorialIndex: LayoutRecipe = {
     if (contentHeight < 0.2) return conflict("items", "标题与条目之间没有足够的正文区");
     const sparse = units.items.length <= 4 && units.items.every((item) => item.length <= 18);
     const preferred = Math.min(26, ctx.tokens.type.bodyPt + (sparse ? 6 : 2));
-    const maximum = sparse ? 26 : 22;
     // The column is measured, not divided. A three-point page used to give each
     // 17pt line a 1.35in row because the content area was split into equal
     // slots; the leftover space is now a bounded gap, and the block keeps the
@@ -137,10 +130,18 @@ export const editorialIndex: LayoutRecipe = {
     const firstRowTop = contentTop + pointsToNormalized(flow.rows[0]?.topPt ?? 0, page.height);
     const lastRow = flow.rows[flow.rows.length - 1];
     const lastRowBottom = lastRow
-      ? firstRowTop +
-        pointsToNormalized(lastRow.topPt - (flow.rows[0]?.topPt ?? 0) + lastRow.heightPt, page.height)
+      ? firstRowTop + pointsToNormalized(lastRow.topPt - (flow.rows[0]?.topPt ?? 0) + lastRow.heightPt, page.height)
       : firstRowTop;
-    elements.push(verticalRule(chrome.content.x, firstRowTop, Math.max(0.01, lastRowBottom - firstRowTop), 0.004, page, colors.accent));
+    elements.push(
+      verticalRule(
+        chrome.content.x,
+        firstRowTop,
+        Math.max(0.01, lastRowBottom - firstRowTop),
+        0.004,
+        page,
+        colors.accent,
+      ),
+    );
 
     const separatorHeight = ruleHeight(ctx.tokens.rule.hairlinePt, page.height);
     const numberSize = Math.max(18, Math.min(28, Math.round(flow.fontSizePt * 1.15)));
@@ -162,7 +163,10 @@ export const editorialIndex: LayoutRecipe = {
         textElement(
           String(index + 1).padStart(2, "0"),
           numberFrame,
-          Math.min(numberSize, fittedFontSize(String(index + 1).padStart(2, "0"), numberFrame, numberSize, 14, headingFamily, lineHeight)),
+          Math.min(
+            numberSize,
+            fittedFontSize(String(index + 1).padStart(2, "0"), numberFrame, numberSize, 14, headingFamily, lineHeight),
+          ),
           colors.accent,
           true,
           "left",
@@ -173,10 +177,7 @@ export const editorialIndex: LayoutRecipe = {
       elements.push(
         textElement(
           row.text,
-          frameFromNormalized(
-            { x: textX, y: rowY, width: textWidth, height: Math.max(0.02, rowHeight) },
-            page,
-          ),
+          frameFromNormalized({ x: textX, y: rowY, width: textWidth, height: Math.max(0.02, rowHeight) }, page),
           row.fontSizePt,
           colors.body,
           false,
