@@ -22,10 +22,13 @@ function blockLines(block: ContentBlock): string[] {
       return block.items;
     case "metric":
       return [`${block.label}：${block.value}`];
-    case "chart":
-      return block.categories.map(
-        (category, index) => `${category}：${block.values[index]}${block.unit ?? ""}`,
-      );
+    case "chart": {
+      const series = block.series?.length ? block.series : [{ name: block.unit ?? "数值", values: block.values ?? [] }];
+      return [
+        block.categories.join("、"),
+        ...series.map((item) => `${item.name}：${item.values.join("、")}${block.unit ?? ""}`),
+      ];
+    }
     case "timeline":
     case "process":
       return block.items.map((item) => `${item.label}：${item.text}`);

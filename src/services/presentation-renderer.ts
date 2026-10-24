@@ -260,27 +260,29 @@ function drawChart(
 ): void {
   const resolved = resolveChartData(slide, element);
   if (!resolved) return;
-  const max = Math.max(...resolved.data.map((datum) => Math.abs(datum.value)), 1);
-  const slot = width / resolved.data.length;
+  const allValues = resolved.series.flatMap((series) => series.values);
+  const max = Math.max(...allValues.map((value) => Math.abs(value)), 1);
+  const slot = width / resolved.categories.length;
   const plotHeight = height * 0.72;
   const labelSize = Math.max(9, height * 0.06);
   context.font = `${labelSize}px "${element.style.fontFamily}"`;
   context.textBaseline = "bottom";
   context.textAlign = "center";
-  resolved.data.forEach((datum, index) => {
-    const barWidth = slot * 0.56;
-    const barHeight = (Math.abs(datum.value) / max) * plotHeight;
-    const x = index * slot + (slot - barWidth) / 2;
-    context.fillStyle = element.style.seriesColors[index % element.style.seriesColors.length] ?? "#3366CC";
-    context.fillRect(x, height - plotHeight - barHeight, barWidth, barHeight);
+  const groupWidth = slot * 0.56;
+  const barWidth = groupWidth / Math.max(1, resolved.series.length);
+  resolved.categories.forEach((category, categoryIndex) => {
+    resolved.series.forEach((series, seriesIndex) => {
+      const value = series.values[categoryIndex] ?? 0;
+      const barHeight = (Math.abs(value) / max) * plotHeight;
+      const x = categoryIndex * slot + (slot - groupWidth) / 2 + seriesIndex * barWidth;
+      context.fillStyle = element.style.seriesColors[seriesIndex % element.style.seriesColors.length] ?? "#3366CC";
+      context.fillRect(x, height - plotHeight - barHeight, barWidth, barHeight);
+      context.fillStyle = element.style.textColor;
+      if (element.style.showValueLabels && resolved.series.length === 1)
+        context.fillText(formatChartValue(value, resolved.unit), x + barWidth / 2, height - plotHeight - barHeight - 2);
+    });
     context.fillStyle = element.style.textColor;
-    if (element.style.showValueLabels)
-      context.fillText(
-        formatChartValue(datum.value, resolved.unit),
-        x + barWidth / 2,
-        height - plotHeight - barHeight - 2,
-      );
-    context.fillText(datum.category.slice(0, 6), x + barWidth / 2, height);
+    context.fillText(category.slice(0, 6), categoryIndex * slot + slot / 2, height);
   });
 }
 

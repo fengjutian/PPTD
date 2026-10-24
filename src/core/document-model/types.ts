@@ -32,7 +32,10 @@ export type ContentBlock =
       type: "chart";
       kind: "column" | "bar" | "line" | "pie";
       categories: string[];
-      values: number[];
+      /** Single-series shorthand. Ignored when `series` is present. */
+      values?: number[];
+      /** One or more named series. Each must match `categories` in length. */
+      series?: Array<{ name: string; values: number[] }>;
       unit?: string;
     }
   | { id: string; type: "timeline"; items: Array<{ label: string; text: string }> }

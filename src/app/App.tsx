@@ -2938,7 +2938,6 @@ export function App() {
     });
     designStartedAtRef.current = Date.now();
     setDesignElapsed(0);
-    setDesignDetail(undefined);
     setDesignProgress({ percent: 6, label: "正在准备内容与模板数据" });
     setDesignDetail("整理已审核内容与模板分析数据");
     // Design generation is a background task. Closing the modal here releases
@@ -2954,10 +2953,15 @@ export function App() {
       unlistenDesign = await listenAiGenerationProgress((progress) => {
         if (progress.taskId !== taskId || progress.phase !== "design") return;
         const designed = Math.min(progress.pages, totalSlides);
-        setDesignProgress({
-          percent: 20 + Math.round((48 * designed) / totalSlides),
-          label: "正在生成逐页版式与配色",
-        });
+        // 设计返回后界面已经进入下一阶段，迟到的流式事件不能把进度拉回去。
+        setDesignProgress((current) =>
+          current.percent >= 70
+            ? current
+            : {
+                percent: 20 + Math.round((48 * designed) / totalSlides),
+                label: "正在生成逐页版式与配色",
+              },
+        );
         setDesignDetail(`已设计 ${designed}/${totalSlides} 页`);
       }).catch(() => undefined);
       setDesignProgress({ percent: 12, label: "正在规划逐页设计意图" });

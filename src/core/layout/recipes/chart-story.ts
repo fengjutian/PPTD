@@ -57,7 +57,14 @@ export const chartStory: LayoutRecipe = {
         { x: chrome.content.x, y: contentTop, width: chrome.content.width * 0.72, height: 0.16 },
         page,
       );
-      const leadSize = fittedFontSize(body, leadFrame, Math.min(ctx.tokens.type.bodyPt, 16), 12, bodyFamily, lineHeight);
+      const leadSize = fittedFontSize(
+        body,
+        leadFrame,
+        Math.min(ctx.tokens.type.bodyPt, 16),
+        12,
+        bodyFamily,
+        lineHeight,
+      );
       if (!textFits(body, leadFrame, leadSize, bodyFamily, lineHeight)) {
         return conflict("body", "图表页说明放不下");
       }
@@ -80,7 +87,7 @@ export const chartStory: LayoutRecipe = {
       contentTop += leadHeight + 0.03;
     }
 
-    const chartHeight = Math.min((chrome.contentBottom - contentTop) * 0.86, 0.64);
+    const chartHeight = Math.min((chrome.contentBottom - contentTop) * 0.95, 0.72);
     const chart: ChartElement = {
       id: crypto.randomUUID() as ChartElement["id"],
       type: "chart",
@@ -96,8 +103,8 @@ export const chartStory: LayoutRecipe = {
         fontFamily: bodyFamily,
         fontSizePt: 12,
         textColor: ctx.colors.body,
-        seriesColors: [ctx.colors.accent],
-        showLegend: false,
+        seriesColors: [ctx.colors.accent, ctx.colors.title, ctx.colors.body],
+        showLegend: (block.series?.length ?? 0) > 1,
         showValueLabels: true,
       },
     };

@@ -442,6 +442,24 @@ function renderReview(
 }
 
 describe("content review layout", () => {
+  it("renders the chart block as editable categories and series", () => {
+    const draft = withSlideIds(createDraft());
+    draft.slides[0]!.blocks = [
+      {
+        type: "chart",
+        kind: "column",
+        categories: ["第一季度", "第二季度"],
+        series: [{ name: "收入", values: [38, 52] }],
+        unit: "万元",
+      },
+    ];
+    const markup = renderReview(draft);
+    expect(markup).toContain("图表类别");
+    expect(markup).toContain("系列数值");
+    expect(markup).toContain("添加系列");
+    expect(markup).toContain("柱状图");
+  });
+
   it("shows only the active page editor with localized plan labels", () => {
     const markup = renderReview(withSlideIds(createDraft()));
     expect(markup).toContain("结构化文本 · 中等信息密度");

@@ -372,10 +372,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
       review: async (current, goal, iteration) => {
         currentIteration = iteration;
         if (options.isCancelled()) throw new Error("AI_GENERATION_CANCELLED");
-        options.onProgress?.(
-          `第 ${iteration} 轮视觉评审：导出并渲染真实 PPTX`,
-          roundBase(iteration),
-        );
+        options.onProgress?.(`第 ${iteration} 轮视觉评审：导出并渲染真实 PPTX`, roundBase(iteration));
         realRenderFailure = undefined;
         // 本轮还没有产出任何评审结论。渲染失败时不能用上一轮的覆盖数字
         // 描述这一轮，否则会出现“未完成，但覆盖 7/7 页”的矛盾报告。
@@ -422,10 +419,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         for (let start = 0; start < render.slides.length; start += REVIEW_BATCH_SIZE) {
           batches.push(render.slides.slice(start, start + REVIEW_BATCH_SIZE).map((_, offset) => start + offset));
         }
-        options.onProgress?.(
-          `第 ${iteration} 轮视觉评审：检查 ${render.slides.length} 页`,
-          roundBase(iteration) + 3,
-        );
+        options.onProgress?.(`第 ${iteration} 轮视觉评审：检查 ${render.slides.length} 页`, roundBase(iteration) + 3);
         // 一批超时或返回不合法，不应该把其他批次的结论一起扔掉：保留已经
         // 评审完的页，并把覆盖范围如实报告出来。
         reviewedSlideCount = 0;

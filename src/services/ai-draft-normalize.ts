@@ -38,6 +38,14 @@ function normalizeBlock(block: ContentBlock): ContentBlock {
       return {
         ...block,
         categories: block.categories.map(normalizeChinesePunctuation),
+        ...(block.series
+          ? {
+              series: block.series.map((item) => ({
+                ...item,
+                name: normalizeChinesePunctuation(item.name),
+              })),
+            }
+          : {}),
         ...(block.unit !== undefined ? { unit: normalizeChinesePunctuation(block.unit) } : {}),
       };
     case "timeline":

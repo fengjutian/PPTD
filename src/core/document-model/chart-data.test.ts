@@ -46,7 +46,9 @@ describe("chart data", () => {
     const second = { id: crypto.randomUUID(), type: "metric" as const, label: "覆盖机构", value: "12万" };
     document.slides[0]!.content.blocks = [first, second];
     const resolved = resolveChartData(document.slides[0]!, chartOf([first.id, second.id]));
-    expect(resolved).toEqual({
+    expect(resolved).toMatchObject({
+      categories: ["年检测样本量", "覆盖机构"],
+      series: [{ name: "万", values: [38, 12] }],
       data: [
         { category: "年检测样本量", value: 38 },
         { category: "覆盖机构", value: 12 },
@@ -76,13 +78,36 @@ describe("chart data", () => {
         unit: "万",
       },
     ];
-    expect(resolveChartData(slide, chartOf(["chart-1"]))).toEqual({
+    expect(resolveChartData(slide, chartOf(["chart-1"]))).toMatchObject({
+      categories: ["一月", "二月"],
+      series: [{ name: "万", values: [12, 18] }],
       data: [
         { category: "一月", value: 12 },
         { category: "二月", value: 18 },
       ],
       unit: "万",
     });
+  });
+
+  it("reads multiple named series", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.content.blocks = [
+      {
+        id: "chart-2",
+        type: "chart",
+        kind: "column",
+        categories: ["第一季度", "第二季度"],
+        series: [
+          { name: "收入", values: [38, 52] },
+          { name: "利润", values: [8, 14] },
+        ],
+        unit: "万元",
+      },
+    ];
+    const resolved = resolveChartData(slide, chartOf(["chart-2"]));
+    expect(resolved?.series.map((series) => series.name)).toEqual(["收入", "利润"]);
+    expect(resolved?.series[1]?.values).toEqual([8, 14]);
   });
 
   it("refuses a chart that points at a block that is gone", () => {

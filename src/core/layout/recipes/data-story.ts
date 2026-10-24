@@ -129,7 +129,7 @@ export const dataStory: LayoutRecipe = {
     const chartable =
       parsedMetrics.every((parsed) => parsed !== undefined) &&
       parsedMetrics.every((parsed) => parsed!.unit === parsedMetrics[0]!.unit);
-    const chartHeight = Math.min((chrome.contentBottom - contentTop) * 0.82, 0.62);
+    const chartHeight = Math.min((chrome.contentBottom - contentTop) * 0.92, 0.68);
     if (metrics.length >= 2 && chartable) {
       const chart: ChartElement = {
         id: crypto.randomUUID() as ChartElement["id"],

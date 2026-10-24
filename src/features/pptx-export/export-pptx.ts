@@ -342,26 +342,29 @@ export async function buildPptx(
         // in PowerPoint and the file keeps the data of the page.
         const resolved = resolveChartData(model, element);
         if (!resolved) throw new Error("EXPORT_CHART_DATA_INVALID");
-        const values = resolved.data.map((datum) => datum.value);
-        const labels = resolved.data.map((datum) => datum.category);
+        const labels = resolved.categories;
+        const series = resolved.series.map((item) => ({ name: item.name, labels, values: item.values }));
+        const allValues = resolved.series.flatMap((item) => item.values);
         const colors =
           element.kind === "pie"
-            ? resolved.data.map((_, index) =>
+            ? resolved.categories.map((_, index) =>
                 color(element.style.seriesColors[index % element.style.seriesColors.length]!),
               )
-            : [color(element.style.seriesColors[0]!)];
+            : resolved.series.map((_, index) =>
+                color(element.style.seriesColors[index % element.style.seriesColors.length]!),
+              );
         // The unit of the reviewed numbers belongs to the labels, so a value
         // reads "38万" in the deck and not "380000". Integer data uses an integer
         // format: PowerPoint renders "#,##0.##" as "10." for whole numbers.
-        const numberFormat = resolved.data.some((datum) => !Number.isInteger(datum.value)) ? "#,##0.##" : "#,##0";
+        const numberFormat = allValues.some((value) => !Number.isInteger(value)) ? "#,##0.##" : "#,##0";
         const valueFormat = resolved.unit ? `${numberFormat}"${resolved.unit}"` : numberFormat;
-        slide.addChart(chartType(pptx, element.kind), [{ name: resolved.unit || "数值", labels, values }], {
+        slide.addChart(chartType(pptx, element.kind), series, {
           ...position,
           ...(element.kind === "column" || element.kind === "bar"
             ? { barDir: element.kind === "bar" ? "bar" : "col" }
             : {}),
           chartColors: colors,
-          showLegend: element.style.showLegend,
+          showLegend: element.style.showLegend || resolved.series.length > 1,
           showTitle: false,
           showValue: element.style.showValueLabels,
           dataLabelFormatCode: valueFormat,

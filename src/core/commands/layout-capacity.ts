@@ -152,15 +152,7 @@ export interface LayoutCapacityNote {
 
 /** The kinds of blocks a page can carry. */
 export type CapacityBlockType =
-  | "paragraph"
-  | "bullet-list"
-  | "quote"
-  | "metric"
-  | "chart"
-  | "timeline"
-  | "process"
-  | "comparison"
-  | "table-data";
+  "paragraph" | "bullet-list" | "quote" | "metric" | "chart" | "timeline" | "process" | "comparison" | "table-data";
 
 /**
  * A block of a page, described the way the layout rules see it.

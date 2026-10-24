@@ -130,7 +130,14 @@ export type AiContentBlock =
   | { type: "bullet-list"; items: string[] }
   | { type: "quote"; text: string; attribution?: string }
   | { type: "metric"; label: string; value: string }
-  | { type: "chart"; kind: "column" | "bar" | "line" | "pie"; categories: string[]; values: number[]; unit?: string }
+  | {
+      type: "chart";
+      kind: "column" | "bar" | "line" | "pie";
+      categories: string[];
+      values?: number[];
+      series?: Array<{ name: string; values: number[] }>;
+      unit?: string;
+    }
   | { type: "timeline"; items: Array<{ label: string; text: string }> }
   | { type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
   | { type: "process"; items: Array<{ label: string; text: string }> }
@@ -248,7 +255,18 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
     if (block.type === "quote") return { id, type: "quote", text: block.text, attribution: block.attribution };
     if (block.type === "metric") return { id, type: "metric", label: block.label, value: block.value };
     if (block.type === "chart")
-      return { id, type: "chart", kind: block.kind, categories: [...block.categories], values: [...block.values], ...(block.unit ? { unit: block.unit } : {}) };
+      return {
+        id,
+        type: "chart",
+        kind: block.kind,
+        categories: [...block.categories],
+        ...(block.series
+          ? { series: block.series.map((item) => ({ name: item.name, values: [...item.values] })) }
+          : block.values
+            ? { values: [...block.values] }
+            : {}),
+        ...(block.unit ? { unit: block.unit } : {}),
+      };
     if (block.type === "timeline") return { id, type: "timeline", items: block.items.map((item) => ({ ...item })) };
     if (block.type === "comparison")
       return {
@@ -278,7 +296,14 @@ function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
     if (block.type === "comparison")
       return { ...block, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
     if (block.type === "chart")
-      return { ...block, categories: [...block.categories], values: [...block.values] };
+      return {
+        ...block,
+        categories: [...block.categories],
+        ...(block.values ? { values: [...block.values] } : {}),
+        ...(block.series
+          ? { series: block.series.map((item) => ({ name: item.name, values: [...item.values] })) }
+          : {}),
+      };
     if (block.type === "table-data")
       return { ...block, header: [...block.header], rows: block.rows.map((row) => [...row]) };
     return { ...block };
@@ -640,7 +665,11 @@ function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | unde
         type: "chart",
         kind: block.kind,
         categories: [...block.categories],
-        values: [...block.values],
+        ...(block.series
+          ? { series: block.series.map((item) => ({ name: item.name, values: [...item.values] })) }
+          : block.values
+            ? { values: [...block.values] }
+            : {}),
         ...(block.unit ? { unit: block.unit } : {}),
       };
     if (block.type === "timeline") return { type: "timeline", items: block.items.map((item) => ({ ...item })) };

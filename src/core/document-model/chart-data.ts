@@ -16,7 +16,17 @@ export interface ChartDatum {
   value: number;
 }
 
+export interface ChartSeries {
+  name: string;
+  values: number[];
+}
+
 export interface ResolvedChartData {
+  /** X-axis categories. */
+  categories: string[];
+  /** One or more series. The first series is the legacy single-series view. */
+  series: ChartSeries[];
+  /** Flattened first series, kept for single-series consumers. */
   data: ChartDatum[];
   /** The unit every value carries, e.g. "万" or "%". Empty when there is none. */
   unit: string;
@@ -49,11 +59,21 @@ export function resolveChartData(slide: Slide, element: ChartElement): ResolvedC
     .map((blockId) => blocks.find((candidate) => candidate.id === blockId))
     .find((block): block is Extract<(typeof blocks)[number], { type: "chart" }> => block?.type === "chart");
   if (chartBlock) {
-    if (chartBlock.categories.length !== chartBlock.values.length) return undefined;
+    const series =
+      chartBlock.series && chartBlock.series.length > 0
+        ? chartBlock.series
+        : chartBlock.values
+          ? [{ name: chartBlock.unit || "数值", values: chartBlock.values }]
+          : [];
+    if (series.length === 0) return undefined;
+    if (series.some((item) => item.values.length !== chartBlock.categories.length)) return undefined;
+    const first = series[0]!;
     return {
+      categories: [...chartBlock.categories],
+      series: series.map((item) => ({ name: item.name, values: [...item.values] })),
       data: chartBlock.categories.map((category, index) => ({
         category,
-        value: chartBlock.values[index]!,
+        value: first.values[index]!,
       })),
       unit: chartBlock.unit ?? "",
     };
@@ -70,7 +90,12 @@ export function resolveChartData(slide: Slide, element: ChartElement): ResolvedC
     data.push({ category: block.label, value: parsed.value });
   }
   if (data.length === 0) return undefined;
-  return { data, unit: unit ?? "" };
+  return {
+    categories: data.map((datum) => datum.category),
+    series: [{ name: unit || "数值", values: data.map((datum) => datum.value) }],
+    data,
+    unit: unit ?? "",
+  };
 }
 
 /** The value as it is shown next to a bar, e.g. "38万". */

@@ -330,6 +330,135 @@ function PairListEditor({
  * or removing a row or column therefore changes the reviewed content, which is
  * why the writer does it here rather than in the design stage.
  */
+function ChartSeriesRow({
+  label,
+  series,
+  onChange,
+  onRemove,
+}: {
+  label: string;
+  series: { name: string; values: number[] };
+  onChange: (next: { name: string; values: number[] }) => void;
+  onRemove: () => void;
+}) {
+  const [text, setText] = useState(series.values.join("，"));
+  return (
+    <div className="block-pair-row">
+      <input
+        aria-label={`${label}系列名称`}
+        maxLength={60}
+        placeholder="系列名称"
+        value={series.name}
+        onChange={(event) => onChange({ ...series, name: event.target.value })}
+      />
+      <input
+        aria-label={`${label}系列数值`}
+        placeholder="用逗号分隔，例如 38，52，71"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() =>
+          onChange({
+            ...series,
+            values: text
+              .split(/[，,]/)
+              .map((value) => Number(value.trim()))
+              .filter((value) => Number.isFinite(value)),
+          })
+        }
+      />
+      <button type="button" className="icon-action" aria-label={`删除${label}系列`} onClick={onRemove}>
+        <X />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Chart content is edited as categories, series names and values. The chart
+ * element only points at this block, so editing here changes the exported
+ * chart; there is no second copy of the numbers in the design.
+ */
+function ChartEditor({
+  pageLabel,
+  block,
+  onChange,
+}: {
+  pageLabel: string;
+  block: Extract<ContentBlock, { type: "chart" }>;
+  onChange: (block: Extract<ContentBlock, { type: "chart" }>) => void;
+}) {
+  const [categoryText, setCategoryText] = useState(block.categories.join("，"));
+  const series =
+    block.series && block.series.length > 0
+      ? block.series
+      : [{ name: block.unit?.trim() || "数值", values: block.values ?? [] }];
+  const commit = (next: Array<{ name: string; values: number[] }>) => {
+    const { values: _values, ...rest } = block;
+    onChange({ ...rest, series: next });
+  };
+  return (
+    <div className="chart-editor">
+      <div className="block-pair-row">
+        <select
+          aria-label={`${pageLabel}图表类型`}
+          value={block.kind}
+          onChange={(event) => onChange({ ...block, kind: event.target.value as typeof block.kind })}
+        >
+          <option value="column">柱状图</option>
+          <option value="bar">条形图</option>
+          <option value="line">折线图</option>
+          <option value="pie">饼图</option>
+        </select>
+        <input
+          aria-label={`${pageLabel}图表单位`}
+          maxLength={20}
+          placeholder="单位（可选）"
+          value={block.unit ?? ""}
+          onChange={(event) => onChange({ ...block, unit: event.target.value || undefined })}
+        />
+      </div>
+      <input
+        aria-label={`${pageLabel}图表类别`}
+        placeholder="用逗号分隔类别"
+        value={categoryText}
+        onChange={(event) => setCategoryText(event.target.value)}
+        onBlur={() =>
+          onChange({
+            ...block,
+            categories: categoryText
+              .split(/[，,]/)
+              .map((value) => value.trim())
+              .filter(Boolean),
+          })
+        }
+      />
+      {series.map((item, index) => (
+        <ChartSeriesRow
+          key={index}
+          label={`${pageLabel}第 ${index + 1} 个`}
+          series={item}
+          onChange={(next) => commit(series.map((current, currentIndex) => (currentIndex === index ? next : current)))}
+          onRemove={() => {
+            if (series.length <= 1) return;
+            commit(series.filter((_, currentIndex) => currentIndex !== index));
+          }}
+        />
+      ))}
+      <button
+        type="button"
+        className="link-action"
+        disabled={series.length >= 6}
+        onClick={() =>
+          commit([...series, { name: `系列 ${series.length + 1}`, values: block.categories.map(() => 0) }])
+        }
+      >
+        <Plus />
+        添加系列
+      </button>
+    </div>
+  );
+}
+
 function TableEditor({
   pageLabel,
   block,
@@ -587,7 +716,14 @@ function BlockEditor({
                 ? { type: addType, items: [{ label: "", text: "" }] }
                 : addType === "comparison"
                   ? { type: "comparison", leftLabel: "", rightLabel: "", leftItems: [""], rightItems: [""] }
-                  : { type: "table-data", header: [""], rows: [[""]] };
+                  : addType === "chart"
+                    ? {
+                        type: "chart",
+                        kind: "column",
+                        categories: ["类别 1", "类别 2"],
+                        series: [{ name: "数值", values: [0, 0] }],
+                      }
+                    : { type: "table-data", header: [""], rows: [[""]] };
     onChange([...blocks, next], true);
   };
   return (
@@ -788,6 +924,9 @@ function BlockEditor({
             )}
             {block.type === "table-data" && (
               <TableEditor pageLabel={pageLabel} block={block} onChange={(next) => replace(index, next)} />
+            )}
+            {block.type === "chart" && (
+              <ChartEditor pageLabel={pageLabel} block={block} onChange={(next) => replace(index, next)} />
             )}
           </section>
         );

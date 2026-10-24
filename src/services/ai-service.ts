@@ -55,7 +55,17 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
     type: z.literal("chart"),
     kind: z.enum(["column", "bar", "line", "pie"]),
     categories: z.array(z.string().min(1).max(100)).min(2).max(8),
-    values: z.array(z.number().finite()).min(2).max(8),
+    values: z.array(z.number().finite()).min(2).max(8).optional(),
+    series: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(60),
+          values: z.array(z.number().finite()).min(2).max(8),
+        }),
+      )
+      .min(1)
+      .max(6)
+      .optional(),
     unit: z.string().max(20).optional(),
   }),
   z.object({
@@ -320,10 +330,7 @@ export function compositionFactsFromDraft(draft: AiDraft): CompositionFacts[] {
     const items = (bulletItems.length > 0 ? bulletItems : splitBodyItems(slide.body)).map(stripListPrefix);
     const hasRowBlock = blocks.some(
       (block) =>
-        block.type === "timeline" ||
-        block.type === "process" ||
-        block.type === "metric" ||
-        block.type === "chart",
+        block.type === "timeline" || block.type === "process" || block.type === "metric" || block.type === "chart",
     );
     return {
       itemCount: items.length,

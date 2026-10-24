@@ -71,10 +71,11 @@ pub fn estimate_completed_pages(content: &str) -> usize {
 
 /// 估算已经完成设计的页数。
 ///
-/// 设计结果的每个页面对象恰好带一个必填的 `visualNarrative` 字段，数它出现
-/// 多少次就得到"设计写到第几页"。同样是进度提示用的估算，不参与任何判定。
+/// 设计结果的每个页面对象都有一个必填的 `layout` 字段，数它出现多少次就得到
+/// "设计写到第几页"。`visualNarrative` 在 Schema 里是可选的，老模型可能不写，
+/// 所以不能拿它当计数依据。同样是进度提示用的估算，不参与任何判定。
 pub fn estimate_completed_designs(content: &str) -> usize {
-    content.matches("\"visualNarrative\"").count()
+    content.matches("\"layout\"").count()
 }
 
 #[cfg(test)]
@@ -151,10 +152,7 @@ mod tests {
 
         assert_eq!(estimate_completed_designs(content), 2);
         // 半页写出来时不能算整页完成。
-        assert_eq!(
-            estimate_completed_designs("{\"slides\":[{\"layout\":\"cover\",\"visualNar"),
-            0
-        );
+        assert_eq!(estimate_completed_designs("{\"slides\":[{\"lay"), 0);
         assert_eq!(estimate_completed_designs(""), 0);
     }
 }

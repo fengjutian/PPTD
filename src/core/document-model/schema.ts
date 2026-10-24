@@ -229,7 +229,17 @@ const contentBlockSchema = z.discriminatedUnion("type", [
     type: z.literal("chart"),
     kind: z.enum(["column", "bar", "line", "pie"]),
     categories: z.array(z.string().max(200)).min(2).max(8),
-    values: z.array(z.number().finite()).min(2).max(8),
+    values: z.array(z.number().finite()).min(2).max(8).optional(),
+    series: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(100),
+          values: z.array(z.number().finite()).min(2).max(8),
+        }),
+      )
+      .min(1)
+      .max(6)
+      .optional(),
     unit: z.string().max(20).optional(),
   }),
   z.object({

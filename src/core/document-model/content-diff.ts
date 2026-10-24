@@ -30,8 +30,10 @@ export function summarizeContentBlock(block: ContentBlock): string {
       return block.attribution ? `“${block.text}” —— ${block.attribution}` : `“${block.text}”`;
     case "metric":
       return `${block.label}：${block.value}`;
-    case "chart":
-      return `${block.kind}：${block.categories.map((category, index) => `${category} ${block.values[index]}${block.unit ?? ""}`).join("，")}`;
+    case "chart": {
+      const series = block.series?.length ? block.series : [{ name: block.unit ?? "数值", values: block.values ?? [] }];
+      return `${block.kind}：${series.map((item) => `${item.name} ${item.values.join("/")}`).join("；")}`;
+    }
     case "timeline":
     case "process":
       return block.items.map((item) => `${item.label}：${item.text}`).join("；");
