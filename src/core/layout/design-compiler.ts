@@ -97,6 +97,7 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
     chrome,
     ...(input.plan.composition.ratio === undefined ? {} : { ratio: input.plan.composition.ratio }),
     ...(input.plan.chart === undefined ? {} : { chartKind: input.plan.chart.kind }),
+    ...(recipeFocal(input.plan) ? { focal: recipeFocal(input.plan) } : {}),
     ...(input.templateImage ? { templateImage: input.templateImage } : {}),
   });
   if (!("elements" in planned)) return planned;
@@ -133,6 +134,9 @@ function planRecipe(plan: PageDesignPlan, facts: CompositionFacts): RecipeId | u
     case "quote":
       return "quote-field";
     case "summary":
+      // A dense summary prefers the asymmetric split even when the copy is short:
+      // the author asked for more page coverage, not more air.
+      if (plan.density === "dense") return "asymmetric-split";
       return facts.shortItems ? "editorial-index" : "asymmetric-split";
     case "claim":
       if (facts.hasChart) return "chart-story";
@@ -140,7 +144,30 @@ function planRecipe(plan: PageDesignPlan, facts: CompositionFacts): RecipeId | u
       if (facts.hasComparison) return "comparison";
       if (facts.hasProcess) return "process-rail";
       if (facts.hasTimeline) return "timeline-rail";
+      // Dense text pages use the asymmetric split; sparse pages keep the
+      // editorial index when the copy is short.
+      if (plan.density === "dense") return "asymmetric-split";
       return facts.shortItems ? "editorial-index" : "asymmetric-split";
+  }
+}
+
+/**
+ * Maps the plan's focal object to the recipe-level focal knob.
+ *
+ * The plan names what the page is about (a number, a chart, a picture); the
+ * recipe only understands which typographic layer should grow. Everything that
+ * is not the title is carried by the body layer.
+ */
+function recipeFocal(plan: PageDesignPlan): "title" | "index" | "body" | undefined {
+  switch (plan.focal?.kind) {
+    case "title":
+      return "title";
+    case "number":
+    case "image":
+    case "chart":
+      return "body";
+    default:
+      return undefined;
   }
 }
 

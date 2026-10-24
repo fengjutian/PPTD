@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 状态     | P0/P1/P2 全部；偏好已接入方向提案，验收清单待执行（2026-10-25；UI/真实模型待目视）                                                                                |
+| 状态     | P0/P1/P2 全部；样式合同与字阶意图已收口，验收清单待执行（2026-10-25；UI/真实模型待目视）                                                                          |
 | 优先级   | P0                                                                                                                                                                |
 | 里程碑   | V0.4 设计能力                                                                                                                                                     |
 | 预估     | 10–13 人日                                                                                                                                                        |
@@ -714,3 +714,28 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 - `ai-service.test.ts` 67 项通过；`cargo fmt --check`、`cargo check` 通过。
 - 全量：1181 通过、1 跳过（偏好接线不新增测试数量，只扩展现有断言）。
+
+## 22. 样式合同收口（2026-10-25）
+
+- `design-compiler.ts`：`designPlan.focal` 映射到配方 focal（title → 标题层，number/image/chart → 正文层）；`density: "dense"` 让 claim/summary 选择 asymmetric-split。
+- `design-plan.ts` / `ai-service.ts` / Rust 提示词：删除没有实现路径的 `emphasis`，避免“模型选了但代码忽略”。
+- 新增 `docs/development/design-style-contract.md`：AI 与代码的字段矩阵、代码独占项、扩展规则。
+- ADR 0084。
+- `design-compiler.test.ts`：dense claim/summary 选型、focal 提升正文层字号。
+
+### 验证
+
+- `design-compiler.test.ts` 6 项通过。
+- 全量：1183 通过、1 跳过；类型检查、ESLint、生产构建、`cargo fmt --check`、`cargo check` 通过。
+
+## 23. 字阶意图（2026-10-25）
+
+- `PageDesignPlan.typeScale` 增加 `compact` / `normal` / `expressive`；AI 只选意图，不写点数。
+- `deriveDesignTokens` 增加有界系数并保留既有上下限；`apply-ai-designed-draft` 按当前页 plan 传入。
+- 设计 Schema、Rust 提示词与 prompt regression 样例同步；`docs/development/design-style-contract.md` 增加字段矩阵。
+- ADR 0085。
+- `design-tokens.test.ts`、`commands.test.ts` 覆盖三档顺序与实际标题字号。
+
+### 验证
+
+- `design-tokens.test.ts`、`commands.test.ts` 通过；全量测试、类型检查、ESLint、生产构建、`cargo fmt --check`、`cargo check` 通过。

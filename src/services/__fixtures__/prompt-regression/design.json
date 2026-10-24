@@ -15,6 +15,7 @@
               "role": "claim",
               "composition": { "primitive": "stack" },
               "density": "normal",
+              "typeScale": "expressive",
               "templatePolicy": "use",
               "chart": { "kind": "pie", "relation": "change" }
             }

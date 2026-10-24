@@ -2459,7 +2459,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const templateImage = recipe ? templateImageRegion(recipe)?.frame : undefined;
         const pageIndex = command.pageContext?.index ?? index;
         const pageTotal = command.pageContext?.total ?? command.slides.length;
-        const tokens = deriveDesignTokens(document.theme, document.pageSize, concept);
+        const tokens = deriveDesignTokens(document.theme, document.pageSize, concept, design.designPlan?.typeScale);
         // The template artwork is the background the recipe actually paints on.
         // A dark artwork needs the title ink as the accent, otherwise the
         // numbers and rules disappear into the picture.

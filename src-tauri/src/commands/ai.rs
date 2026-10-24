@@ -1704,14 +1704,15 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 当页面正文落在模板的卡片/网格里，文字被卡片几何限制，或整页只是等权卡片时，可以给该页一个 designPlan：
 - role 只能是 cover、section、claim、comparison、process、timeline、quote、summary。
 - composition.primitive 只能是 split、stack、grid、rail、overlay、band；ratio 在 0.25–0.75。对比页有明显主次时用 split + ratio 0.62（左主）或 0.38（右主），编译器会选择 weighted-split。
-- density 只能是 sparse、normal、dense。
+- density 只能是 sparse、normal、dense；它只影响配方选择（dense 更倾向 asymmetric-split），不直接改坐标。
+- typeScale 可选：compact、normal、expressive；只表达字阶意图，具体字号由代码换算并夹取，不要输出点数。
 - templatePolicy：use 表示填模板占位；takeover 表示保留模板页眉/Logo/页脚，但用干净内容面覆盖正文卡片后重新构图；ignore 暂不使用。
 - recipe 可选，必须是已实现配方；designPlan 存在时由编译器决定几何，recipe 只是首选。
-- emphasis 只标 blockId 和字符范围，不得改文案；focal 只描述第一视觉入口，不输出坐标。
+- focal 只描述第一视觉入口（title/number/image/chart/none），不输出坐标；编译器只把 title 映射为标题层，其余映射为正文层。
 - 数据页先判断 chart.relation：proportion（占整体的份额）、change（随时间变化）、composition（由哪些部分组成）、comparison（类别之间对比）、magnitude（量级大小）；再给 chart.kind：proportion/composition 用 pie（≤5 类）或 bar，change 用 line，comparison/magnitude 用 column/bar。kind 与 relation 不匹配时编译器会改用关系对应的图型；数据仍来自 metric 内容块，不得在 designPlan 里写数值。
 - 只有正文页使用 takeover；封面、章节、引文页不要 takeover。
 示例：
-{"role":"claim","composition":{"primitive":"split","ratio":0.38},"density":"normal","templatePolicy":"takeover","recipe":"asymmetric-split"}
+{"role":"claim","composition":{"primitive":"split","ratio":0.38},"density":"normal","typeScale":"normal","templatePolicy":"takeover","recipe":"asymmetric-split"}
 
 九、主题方向
 1. 用户选择的主题方向以 JSON 传入，约束视觉气质、页面节奏、图片方向、信息密度和禁止组合。

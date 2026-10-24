@@ -45,6 +45,20 @@ describe("design tokens", () => {
     expect(dramatic.type.bodyPt).toBe(strong.type.bodyPt);
   });
 
+  it("applies a bounded type-scale intent", () => {
+    const normal = deriveDesignTokens(findThemePreset("consulting-navy")!.theme, page, concept("strong"));
+    const compact = deriveDesignTokens(findThemePreset("consulting-navy")!.theme, page, concept("strong"), "compact");
+    const expressive = deriveDesignTokens(
+      findThemePreset("consulting-navy")!.theme,
+      page,
+      concept("strong"),
+      "expressive",
+    );
+    expect(compact.type.titlePt).toBeLessThan(normal.type.titlePt);
+    expect(expressive.type.titlePt).toBeGreaterThan(normal.type.titlePt);
+    expect(expressive.type.bodyPt).toBeGreaterThan(normal.type.bodyPt);
+  });
+
   it("keeps a taller page within a narrow spacing band", () => {
     const square = deriveDesignTokens(undefined, { width: inches(10), height: inches(7.5) }, concept("strong"));
     const tall = deriveDesignTokens(undefined, { width: inches(10), height: inches(10) }, concept("strong"));

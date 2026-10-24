@@ -410,6 +410,8 @@ const pageDesignPlanSchema = z.object({
     align: z.enum(["left", "center"]).optional(),
   }),
   density: z.enum(["sparse", "normal", "dense"]),
+  /** The AI picks an intent, never a point size. */
+  typeScale: z.enum(["compact", "normal", "expressive"]).optional(),
   templatePolicy: z.enum(["use", "takeover", "ignore"]),
   recipe: z.enum(aiDesignRecipeIds).optional(),
   focal: z
@@ -425,16 +427,6 @@ const pageDesignPlanSchema = z.object({
       /** The data relation the page is arguing, before the chart type. */
       relation: z.enum(["proportion", "change", "composition", "comparison", "magnitude"]).optional(),
     })
-    .optional(),
-  emphasis: z
-    .array(
-      z.object({
-        blockId: z.string().max(120),
-        start: z.number().int().nonnegative(),
-        end: z.number().int().nonnegative(),
-      }),
-    )
-    .max(30)
     .optional(),
 });
 

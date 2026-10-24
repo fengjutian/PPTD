@@ -4155,6 +4155,65 @@ describe("document commands", () => {
     );
   });
 
+  it("lets the plan type scale change the title size", () => {
+    const source = createDocument();
+    const content = {
+      title: "短标题",
+      body: "第一句正文。\n第二句正文。\n第三句正文。",
+      speakerNotes: "",
+      blocks: [],
+    };
+    const design = (typeScale: "compact" | "normal" | "expressive") => ({
+      layout: "title-body" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+      designPlan: {
+        role: "claim" as const,
+        composition: { primitive: "stack" as const },
+        density: "normal" as const,
+        typeScale,
+        templatePolicy: "use" as const,
+        recipe: "asymmetric-split" as const,
+      },
+    });
+    const resolved = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 3,
+          shortItems: true,
+          longestItemLength: 6,
+          bodyLength: 20,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "title-body",
+        },
+      ],
+      pageCount: 1,
+      id: "type-scale-test",
+    });
+    const titleSize = (typeScale: "compact" | "normal" | "expressive") => {
+      const result = produce(source, (draft) =>
+        applyCommand(draft, {
+          type: "apply-ai-designed-draft",
+          title: "标题",
+          slides: [content],
+          designs: [design(typeScale)],
+          designConcept: resolved.concept,
+        }),
+      );
+      const title = [...result.slides[0]!.elements]
+        .reverse()
+        .find((element) => element.type === "text" && element.contentRef === "title");
+      return title?.type === "text" ? title.style.fontSizePt : 0;
+    };
+    expect(titleSize("compact")).toBeLessThan(titleSize("normal"));
+    expect(titleSize("expressive")).toBeGreaterThan(titleSize("normal"));
+  });
+
   it("lets the data relation override an incompatible chart type", () => {
     const source = createDocument();
     const content = {

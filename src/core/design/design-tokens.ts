@@ -30,10 +30,25 @@ export interface DesignTokens {
   radius: { cardPt: number; badgePt: number };
 }
 
+export type TypeScaleIntent = "compact" | "normal" | "expressive";
+
 const CONTRAST_FACTORS: Record<DeckConcept["typeContrast"], { display: number; title: number }> = {
   calm: { display: 0.96, title: 0.96 },
   strong: { display: 1, title: 1 },
   dramatic: { display: 1.2, title: 1.1 },
+};
+
+/**
+ * Bounded multipliers for the page's type-scale intent.
+ *
+ * The AI chooses an intent, never a point size. The clamp keeps an expressive
+ * page from pushing a title past what the layout can carry; the taste lint and
+ * overflow checks still run afterwards.
+ */
+const INTENT_FACTORS: Record<TypeScaleIntent, { display: number; title: number; body: number }> = {
+  compact: { display: 0.9, title: 0.92, body: 0.96 },
+  normal: { display: 1, title: 1, body: 1 },
+  expressive: { display: 1.12, title: 1.08, body: 1.04 },
 };
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -51,9 +66,11 @@ export function deriveDesignTokens(
   theme: DocumentTheme | undefined,
   pageSize: { width: Emu; height: Emu },
   concept: DeckConcept,
+  intent: TypeScaleIntent = "normal",
 ): DesignTokens {
   const scale = resolveTypeScale(theme);
   const factors = CONTRAST_FACTORS[concept.typeContrast];
+  const intentFactors = INTENT_FACTORS[intent];
   const heightInches = pageSize.height / EMU_PER_INCH;
   const spaceScale = clamp(heightInches / 7.5, 0.8, 1.25);
   return {
@@ -62,10 +79,10 @@ export function deriveDesignTokens(
       body: theme?.minorFont ?? theme?.majorFont ?? "Microsoft YaHei",
     },
     type: {
-      displayPt: clamp(Math.round(scale.display * factors.display), 24, 96),
-      titlePt: clamp(Math.round(scale.title * factors.title), 18, 56),
+      displayPt: clamp(Math.round(scale.display * factors.display * intentFactors.display), 24, 96),
+      titlePt: clamp(Math.round(scale.title * factors.title * intentFactors.title), 18, 56),
       subtitlePt: clamp(scale.subtitle, 14, 32),
-      bodyPt: clamp(scale.body, 12, 28),
+      bodyPt: clamp(Math.round(scale.body * intentFactors.body), 12, 28),
       captionPt: clamp(scale.caption, 8, 16),
       lineHeight: theme?.textStyles?.body?.lineHeight ?? 1.25,
     },

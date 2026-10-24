@@ -1,6 +1,7 @@
 import type { ChartKind } from "../document-model";
 import type { DataRelation } from "./data-relation";
 import type { RecipeId } from "./deck-concept";
+import type { TypeScaleIntent } from "./design-tokens";
 
 /**
  * The semantic plan the design agent writes for one page.
@@ -33,6 +34,8 @@ export interface PageDesignPlan {
     align?: "left" | "center";
   };
   density: DesignDensity;
+  /** How expressive the page's type scale should be; code clamps the points. */
+  typeScale?: TypeScaleIntent;
   templatePolicy: TemplatePolicy;
   /** Optional concrete recipe. When absent the compiler picks one from the role and facts. */
   recipe?: RecipeId;
@@ -43,9 +46,4 @@ export interface PageDesignPlan {
   };
   /** Optional chart form when the page's focal object is a chart. */
   chart?: { kind: ChartKind; relation?: DataRelation };
-  /**
-   * Character ranges in reviewed blocks that should carry emphasis. The
-   * compiler may render these as bold runs; it must not change the text.
-   */
-  emphasis?: Array<{ blockId: string; start: number; end: number }>;
 }

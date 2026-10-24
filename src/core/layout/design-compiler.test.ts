@@ -143,6 +143,54 @@ describe("design plan compiler", () => {
     ).toBe("weighted-split");
   });
 
+  it("uses the planned density to choose a denser claim or summary", () => {
+    const denseClaim = input({
+      role: "claim",
+      density: "dense",
+      templatePolicy: "use",
+      composition: { primitive: "stack" },
+    }).plan;
+    expect(planRecipeId(denseClaim, { ...facts, shortItems: true })).toBe("asymmetric-split");
+
+    const denseSummary = input({
+      role: "summary",
+      density: "dense",
+      templatePolicy: "use",
+      composition: { primitive: "stack" },
+    }).plan;
+    expect(planRecipeId(denseSummary, { ...facts, shortItems: true })).toBe("asymmetric-split");
+  });
+
+  it("lets the plan focal promote the body layer", () => {
+    const base = compileDesignPlan(
+      input({
+        role: "claim",
+        density: "normal",
+        templatePolicy: "use",
+        composition: { primitive: "split", ratio: 0.38 },
+        recipe: "asymmetric-split",
+      }),
+    );
+    const focused = compileDesignPlan(
+      input({
+        role: "claim",
+        density: "normal",
+        templatePolicy: "use",
+        composition: { primitive: "split", ratio: 0.38 },
+        recipe: "asymmetric-split",
+        focal: { kind: "number" },
+      }),
+    );
+    if (!("elements" in base) || !("elements" in focused)) throw new Error("compile failed");
+    const baseBody = base.elements.find((element) => element.type === "text" && element.text.includes("美国与欧盟"));
+    const focusedBody = focused.elements.find(
+      (element) => element.type === "text" && element.text.includes("美国与欧盟"),
+    );
+    expect(baseBody?.type === "text" ? baseBody.style.fontSizePt : 0).toBeLessThan(
+      focusedBody?.type === "text" ? focusedBody.style.fontSizePt : 0,
+    );
+  });
+
   it("refuses a recipe that the content cannot carry", () => {
     const result = compileDesignPlan(
       input({
