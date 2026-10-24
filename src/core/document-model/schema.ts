@@ -2,8 +2,9 @@ import { z } from "zod";
 import { phaseForEffect } from "./animation";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
+import { MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 19 as const;
+export const CURRENT_SCHEMA_VERSION = 20 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -388,6 +389,33 @@ const slideSchema = z.object({
   layoutId: z.string().uuid().optional(),
 });
 
+const designDirectionProposalSchema = z.object({
+  id: z.string().uuid(),
+  preset: z.enum(["editorial", "documentary"]),
+  name: z.string().min(1).max(20),
+  idea: z.string().min(1).max(80),
+  rationale: z.string().min(1).max(120),
+  typeContrast: z.enum(["calm", "strong", "dramatic"]),
+  imagery: z.enum(["none", "hero", "band", "side", "texture"]),
+  previewPages: z
+    .array(z.object({ index: z.number().int().nonnegative(), contentFingerprint: z.string().min(1).max(200) }))
+    .max(3),
+});
+
+const designDirectionRecordSchema = z.object({
+  id: z.string().uuid(),
+  createdAt: z.string().min(1).max(64),
+  contentRevision: z.number().int().nonnegative(),
+  contentFingerprint: z.string().min(1).max(20_000),
+  proposals: z.array(designDirectionProposalSchema).min(1).max(3),
+  selectedProposalId: z.string().uuid(),
+  selectedBy: z.enum(["user", "fallback"]),
+  userWords: z.string().max(200).optional(),
+  regenerations: z.number().int().min(0).max(2),
+  promptVersion: z.string().min(1).max(64),
+  model: z.string().min(1).max(120).optional(),
+});
+
 const baseDocumentSchema = z.object({
   id: z.string().uuid(),
   schemaVersion: z.number().int(),
@@ -402,6 +430,7 @@ const baseDocumentSchema = z.object({
   theme: themeSchema.optional(),
   layouts: z.array(slideLayoutSchema).max(200).optional(),
   contentVersions: z.array(contentVersionSchema).max(MAX_CONTENT_VERSIONS).optional(),
+  designDirections: z.array(designDirectionRecordSchema).max(MAX_DESIGN_DIRECTIONS).optional(),
   reviewTraces: z
     .array(
       z.object({
@@ -560,6 +589,11 @@ const versionEighteenDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionNineteenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(19) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionSeventeenDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(17) })
   .superRefine(validateUniqueIds)
@@ -701,6 +735,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // rectangle/ellipse and unmerged tables, which are still valid, so nothing
   // has to be rewritten.
   18: (document) => ({ ...versionEighteenDocumentSchema.parse(document), schemaVersion: 19 }),
+  // Version 20 stores the design-direction decision. It is design state and
+  // optional: an older document keeps every page and simply has no recorded
+  // direction, so the next generation asks again instead of guessing.
+  19: (document) => ({ ...versionNineteenDocumentSchema.parse(document), schemaVersion: 20 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

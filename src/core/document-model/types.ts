@@ -528,6 +528,48 @@ export interface ReviewTrace {
   slides: Array<{ slideIndex: number; overallScore: number }>;
 }
 
+/**
+ * The persisted vocabulary of a design direction.
+ *
+ * It mirrors `core/design/deck-concept.ts` but lives here because the document
+ * model is the lower layer. The command layer rejects a preset the renderer
+ * cannot draw, and `designDirections` is design state: it never enters the
+ * content hash or the content revision.
+ */
+export type DesignDirectionPreset = "editorial" | "documentary";
+export type DesignDirectionImagery = "none" | "hero" | "band" | "side" | "texture";
+export type DesignDirectionContrast = "calm" | "strong" | "dramatic";
+
+export const MAX_DESIGN_DIRECTIONS = 20;
+
+export interface DesignDirectionProposal {
+  id: string;
+  preset: DesignDirectionPreset;
+  name: string;
+  idea: string;
+  rationale: string;
+  typeContrast: DesignDirectionContrast;
+  imagery: DesignDirectionImagery;
+  /** The pages rendered for the user, with the content they were rendered from. */
+  previewPages: Array<{ index: number; contentFingerprint: string }>;
+}
+
+/** The user's direction decision, recorded with the design it produced. */
+export interface DesignDirectionRecord {
+  id: string;
+  createdAt: string;
+  contentRevision: number;
+  contentFingerprint: string;
+  proposals: DesignDirectionProposal[];
+  selectedProposalId: string;
+  selectedBy: "user" | "fallback";
+  /** The user's own words when they chose or rejected a direction. */
+  userWords?: string;
+  regenerations: number;
+  promptVersion: string;
+  model?: string;
+}
+
 export interface PresentationDocument {
   id: DocumentId;
   schemaVersion: SchemaVersion;
@@ -541,4 +583,6 @@ export interface PresentationDocument {
   contentVersions?: ContentVersion[];
   /** Visual review summaries, oldest first. Capped by the document model. */
   reviewTraces?: ReviewTrace[];
+  /** Direction decisions, oldest first. Capped by MAX_DESIGN_DIRECTIONS. */
+  designDirections?: DesignDirectionRecord[];
 }

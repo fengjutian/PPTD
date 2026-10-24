@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 状态     | 进行中（P0-7、P0-8 已实现，2026-10-24）                                                                                                                           |
+| 状态     | 进行中（P0-1、P0-2、P0-7、P0-8 已实现，2026-10-24）                                                                                                               |
 | 优先级   | P0                                                                                                                                                                |
 | 里程碑   | V0.4 设计能力                                                                                                                                                     |
 | 预估     | 10–13 人日                                                                                                                                                        |
@@ -126,14 +126,19 @@ interface DeckConcept extends AiDeckConcept {
 
 ```ts
 // src/core/document-model/types.ts
+export type DesignDirectionPreset = "editorial" | "documentary";
+export type DesignDirectionImagery = "none" | "hero" | "band" | "side" | "texture";
+export type DesignDirectionContrast = "calm" | "strong" | "dramatic";
+export const MAX_DESIGN_DIRECTIONS = 20;
+
 export interface DesignDirectionProposal {
   id: string;
-  preset: ConceptPresetId;
+  preset: DesignDirectionPreset;
   name: string;
   idea: string;
   rationale: string;
-  typeContrast: TypeContrast;
-  imagery: ImageryStrategy;
+  typeContrast: DesignDirectionContrast;
+  imagery: DesignDirectionImagery;
   /** 预览页在真实文稿中的页码与内容指纹，用于判断预览是否过期。 */
   previewPages: Array<{ index: number; contentFingerprint: string }>;
 }
@@ -155,27 +160,27 @@ export interface DesignDirectionRecord {
 
 export interface PresentationDocument {
   // ...
-  designDirections?: DesignDirectionRecord[]; // 最多 20 条，超出丢弃最旧
+  designDirections?: DesignDirectionRecord[]; // 最多 MAX_DESIGN_DIRECTIONS 条
 }
 ```
 
-内容指纹复用现有实现：`documentContentFingerprint`（`src/services/design-quality-stage.ts`）是纯函数但位于 services 层。实施时先把它移动到 `src/core/commands/content-fingerprint.ts`，services 改为从 core 导入；不得在 core 内反向依赖 services。
+文档模型不能反向依赖 `core/design`：方向词汇在 `types.ts` 中单独定义，命令层用 `CONCEPT_PRESET_IDS` 校验 preset 是否真的能渲染。内容指纹下沉到 `src/core/document-model/content-hash.ts` 的 `documentContentFingerprint`，services 层保留同名导出并委托给 core，避免两套哈希。
 
 `DesignDirectionRecord` 与 `ReviewTrace` 的区别：前者是用户决策，后者是评审结果；两者都不进入内容哈希，都按上限裁剪。
 
 ### 4.3 Schema 迁移 19 → 20
 
 - `CURRENT_SCHEMA_VERSION` 从 19 改为 20（`src/core/document-model/schema.ts:6`）。
-- 迁移为恒等迁移：旧文档补 `designDirections: []`，其余字段不动。
-- 复用现有输入样例 `src/core/document-model/__fixtures__/v19-document.json`（本就没有 `designDirections`），新增迁移结果样例 `v20-document.json`；断言迁移后版本为 20、方向数组为空、内容哈希不变。
-- `schema.ts` 增加 `designDirectionSchema`；`idea` 1–80、`name` 1–12、`proposals` 2–3、`regenerations` 0–2、`proposals[].preset` 必须属于 `CONCEPT_PRESET_IDS`。
+- 迁移是恒等迁移：`designDirections` 是可选字段，旧文档保持 `undefined`，不补空数组；界面据此判断“从未选过方向”。
+- 复用输入样例 `src/core/document-model/__fixtures__/v19-document.json`，新增结果样例 `v20-document.json`（含一条用户选择记录）；测试断言 v19 迁移后没有方向、v20 能保留记录与两个提案。
+- `schema.ts` 增加 `designDirectionRecordSchema`：`proposals` 1–3、`previewPages` ≤3、`idea` ≤80、`name` ≤20、`rationale` ≤120、`userWords` ≤200、`regenerations` 0–2；`preset`、`imagery`、`typeContrast` 使用显式枚举。
 
 ### 4.4 revision 与内容哈希
 
 - 预览：只操作内存中的临时文档，不调用 store，不产生 patch。
-- 应用：`apply-ai-designed-draft` 一次事务内写入设计元素与方向记录，产生**一个**撤销项，`designRevision` +1。
-- `designDirections` 不属于内容字段，不参与 `contentHash`；应用后必须断言 `contentHash` 与 `contentRevision` 未变（已有内容已确认，设计应用不得改动内容）。
-- 撤销该命令时，方向记录随文档回滚。命令本身按 `both` 分类（它同时写入内容与设计），因此 patch 生成处必须显式把方向记录归入设计态变更，不能让它参与内容 revision 统计。
+- 应用：`apply-ai-designed-draft` 一次事务内写入设计元素与方向记录，产生**一个**撤销项；撤销时方向记录随 patch 回滚（已有 store 测试）。
+- `designDirections` 不属于内容字段，不参与 `contentHash`；测试断言应用前后逐页 `contentHash` 不变。
+- 已知偏差：命令目前按 `both` 分类，store 的 `both` 分支会递增 `contentRevision`，即使内容完全相同。方向记录本身不触发内容 revision；整册设计应用的内容 revision 语义沿用既有行为，若要求严格保持，需要单独调整 `commandDomain` 并为设计应用拆分 scope。
 
 ## 5. 方向提案
 
@@ -526,8 +531,12 @@ P1/P2 的 ADR 预留：0077（本地设计记忆与指纹）、0078（导出回�
 
 ## 13. 实施记录（2026-10-24）
 
-### 已完成（P0-1、P0-7、P0-8）
+### 已完成（P0-1、P0-2、P0-7、P0-8）
 
+- `src/core/document-model/types.ts`：新增 `DesignDirectionProposal` / `DesignDirectionRecord`、`MAX_DESIGN_DIRECTIONS` 与 `designDirections` 字段；方向词汇单独定义，避免文档模型反向依赖 `core/design`。
+- `src/core/document-model/schema.ts`：`CURRENT_SCHEMA_VERSION` 19 → 20，新增方向记录 Schema 与恒等迁移；`v20-document.json` 固定样例包含一条用户选择记录。
+- `src/core/document-model/content-hash.ts`：`documentContentFingerprint` 下沉到 core，services 层同名导出改为委托。
+- `src/core/commands/commands.ts`：`apply-ai-designed-draft` 接受可选 `designDirection`；校验 preset 可渲染、`selectedProposalId` 存在、内容指纹未过期；与设计同事务写入并按 20 条裁剪，撤销一并回滚。
 - `src/core/design/deck-concept.ts`：`ConceptPresetId` 增加 `documentary`；预设的 `imagery` 改为白名单；`DeckConcept` 增加 `imageryRoles`；新增 `defaultDocumentaryConcept`；`resolveDeckConcept` 保留合法 preset，不再一律改写为 `editorial`。
 - `src/core/design/surface-profile.ts`：`rules` 复现改造前边距，`full-bleed` 收窄边距并关闭强调线。
 - `src/core/commands/commands.ts`：surface 安全区只在没有模板占位、没有评审 `safeRegion` 时生效；`showRule` 跟随 surface；配图角色按 `imageryRoles` 收敛，`documentary` 允许内容页主视觉。
@@ -550,15 +559,18 @@ P1/P2 的 ADR 预留：0077（本地设计记忆与指纹）、0078（导出回�
 - `src/core/commands/visual-asset.test.ts`：19 项通过（含 `allowHeroOnContent`）。
 - `tools/design-preview/design-preview.test.ts`：7 项通过；十页夹具零发现；两个方向标题轴 0.07/0.04、强调线元素差 1；导出 `tasteLint` 为 `{hard:0,soft:0,codes:{}}`。
 - `src/features/pptx-export/export-pptx.test.ts`：8pt 正文导出成功，报告 `hard=1` 且 code 正确。
-- 全量：1121 通过、1 跳过（`PPTD_SKIP_VISUAL=1`）；类型检查、ESLint（0 error）、生产构建、`cargo fmt --check`、`cargo check` 通过。
+- `src/core/commands/design-direction.test.ts`：5 项通过（持久化、非法 preset、过期指纹、20 条上限、撤销回滚）。
+- `src/core/document-model/schema.test.ts`：47 项通过（含 v19 → v20 迁移与 v20 样例解析）。
+- 全量：1128 通过、1 跳过（`PPTD_SKIP_VISUAL=1`）；类型检查、ESLint（0 error）、生产构建、`cargo fmt --check`、`cargo check` 通过。
 
 ### 未完成
 
 - 未做应用内截图目视验证：面板结构与样式已通过构建，但本会话没有浏览器截图能力；需在 `npm run tauri dev` 中确认折叠、徽标、定位与窄面板换行。
-- 方向提案、两页预览、选择记录与 UI（P0-2/3/4/5）、样张选择器（P0-6）尚未开始。
+- 方向提案、两页预览、选择 UI（P0-3/4/5）与样张选择器（P0-6）尚未开始。
 - ADR 0075 尚未创建；方向决策在实现前暂以本文与需求文档为准。
 
 ### 已知偏差
 
 - `RHYTHM_REPEAT` 使用结构签名，而不是 `(layout, recipe)`：文档模型不持久化这两个设计字段，规则以元素类型与 `contentRef` 序列判断骨架。
 - 体检结果不持久化：确定性函数在打开项目与文档变化时重算，导出报告只保存当次快照。
+- `apply-ai-designed-draft` 按 `both` 分类，store 会递增 `contentRevision`，即使逐页 `contentHash` 未变；方向记录本身不触发内容 revision，严格的“设计不改内容 revision”需要另拆 command scope。

@@ -1,6 +1,9 @@
 import { colorLuminance, contrastRatioAgainstLuminance } from "../core/rendering/contrast";
 import type { AiSlideDesign } from "../core/commands/commands";
-import { hashSlideContent, type PresentationDocument } from "../core/document-model";
+import {
+  documentContentFingerprint as coreDocumentContentFingerprint,
+  type PresentationDocument,
+} from "../core/document-model";
 import { validatePresentationVisualQuality, type PresentationQualityIssue } from "./presentation-quality-gate";
 import {
   inspectRenderedTextContrast,
@@ -281,7 +284,7 @@ const issueLabels: Record<PresentationQualityIssue["issue"], string> = {
  * 常量计算。否则比较两边的都是同一个常量，守卫永远不会触发。
  */
 export function documentContentFingerprint(document: PresentationDocument): string {
-  return JSON.stringify(document.slides.map((slide) => hashSlideContent(slide.content)));
+  return coreDocumentContentFingerprint(document);
 }
 
 /** 把质量问题汇总成一句用户能读懂的话：哪些页、什么问题、多少处。 */

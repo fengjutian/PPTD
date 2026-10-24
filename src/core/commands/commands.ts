@@ -5,6 +5,7 @@ import type {
   ContentBlock,
   DocumentTextStyles,
   DocumentTheme,
+  DesignDirectionRecord,
   ElementId,
   Emu,
   ImageCrop,
@@ -32,11 +33,13 @@ import {
   captureContentVersion,
   createDocument,
   createSlide,
+  documentContentFingerprint,
   diffContentVersion,
   emu,
   iconForText,
   inches,
   MAX_PAGE_SIZE_IN,
+  MAX_DESIGN_DIRECTIONS,
   MIN_PAGE_SIZE_IN,
   parseMetricValue,
   phaseForEffect,
@@ -87,7 +90,7 @@ import {
 import { resolveTypeScale } from "../design/type-scale";
 import { findThemePreset } from "../design/theme-presets";
 import { deriveDesignTokens } from "../design/design-tokens";
-import type { DeckConcept } from "../design/deck-concept";
+import { CONCEPT_PRESET_IDS, type DeckConcept } from "../design/deck-concept";
 import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { compileDesignPlan } from "../layout/design-compiler";
 import { consumptionProblem, selectRecipe } from "../layout/recipes/plan";
@@ -741,6 +744,12 @@ export type DocumentCommand =
        * keeps the legacy composition path byte-for-byte.
        */
       designConcept?: DeckConcept;
+      /**
+       * The direction decision that produced this design. It is written with the
+       * design in one transaction, so undo removes both and the content hash is
+       * untouched. The fingerprint must still match the reviewed content.
+       */
+      designDirection?: DesignDirectionRecord;
       pageSize?: { width: Emu; height: Emu };
       fontFamily?: string;
       bodyFontFamily?: string;
@@ -4205,6 +4214,22 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       for (const element of slide.elements) element.origin = "generated";
       return slide;
     });
+    // The direction decision is design state: it is recorded with the design and
+    // never touches the content hash. A preset the renderer cannot draw, or a
+    // decision taken against different content, is refused instead of stored.
+    if (command.designDirection) {
+      const direction = command.designDirection;
+      if (
+        direction.proposals.some((proposal) => !CONCEPT_PRESET_IDS.includes(proposal.preset)) ||
+        !direction.proposals.some((proposal) => proposal.id === direction.selectedProposalId)
+      ) {
+        throw new Error("DESIGN_DIRECTION_INVALID");
+      }
+      if (direction.contentFingerprint !== documentContentFingerprint(document)) {
+        throw new Error("DESIGN_DIRECTION_STALE");
+      }
+      document.designDirections = [...(document.designDirections ?? []), direction].slice(-MAX_DESIGN_DIRECTIONS);
+    }
     // Applying a reviewed draft is a confirmation act: keep the confirmed copy
     // so a later edit can be compared with what the user actually approved.
     captureContentVersion(document);

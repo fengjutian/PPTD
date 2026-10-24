@@ -17,6 +17,7 @@ import versionSixteenFixture from "./__fixtures__/v16-document.json";
 import versionSeventeenFixture from "./__fixtures__/v17-document.json";
 import versionEighteenFixture from "./__fixtures__/v18-document.json";
 import versionNineteenFixture from "./__fixtures__/v19-document.json";
+import versionTwentyFixture from "./__fixtures__/v20-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
@@ -203,6 +204,22 @@ describe("presentation document schema", () => {
     const parsed = parsePresentationDocument(versionNineteenFixture);
     expect(parsed.slides[0]!.elements[1]).toMatchObject({ type: "shape", shape: "triangle" });
     expect(versionNineteenFixture.schemaVersion).toBe(19);
+  });
+
+  it("keeps the design direction of a version 20 fixture", () => {
+    const parsed = parsePresentationDocument(versionTwentyFixture);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.designDirections?.[0]?.selectedBy).toBe("user");
+    expect(parsed.designDirections?.[0]?.proposals[1]?.preset).toBe("documentary");
+    expect(parsed.designDirections?.[0]?.proposals).toHaveLength(2);
+  });
+
+  it("migrates a version 19 fixture without inventing a direction", () => {
+    const migrated = parsePresentationDocument(versionNineteenFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    // No decision was ever taken, so the next generation asks instead of
+    // claiming a direction the user never chose.
+    expect(migrated.designDirections).toBeUndefined();
   });
 
   it("migrates the fixed version 18 fixture without changing its shapes", () => {

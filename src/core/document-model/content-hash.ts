@@ -21,3 +21,14 @@ export function refreshContentHashes(document: { slides: Array<{ content: SlideC
     slide.content.contentHash = hashSlideContent(slide.content);
   }
 }
+
+/**
+ * One string that pins the reviewed content of every page, in order.
+ *
+ * The direction record and the visual review both need to know whether the
+ * content they were produced from is still the current one. Pages are hashed
+ * individually so a single edit does not invalidate unrelated page previews.
+ */
+export function documentContentFingerprint(document: { slides: Array<{ content: SlideContent }> }): string {
+  return JSON.stringify(document.slides.map((slide) => hashSlideContent(slide.content)));
+}
