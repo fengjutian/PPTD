@@ -713,7 +713,13 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].id, "keep");
         // 重复删除是幂等的：前端重试或双击都不该报错。
-        assert_eq!(database.remove_ai_history("drop").expect("remove again").len(), 1);
+        assert_eq!(
+            database
+                .remove_ai_history("drop")
+                .expect("remove again")
+                .len(),
+            1
+        );
         assert_eq!(
             database.remove_ai_history("  ").unwrap_err(),
             "AI_HISTORY_ID_INVALID"

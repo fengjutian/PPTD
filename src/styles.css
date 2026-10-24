@@ -1821,9 +1821,7 @@ button {
 }
 .project-gallery {
   width: 100%;
-  /* 宽屏最多 6 列；封顶后仍保持 6 列，不会因为窗口更宽变成 7 列。 */
-  max-width: 1680px;
-  margin: 0 auto;
+  margin: 0;
 }
 .project-gallery-heading {
   display: flex;
@@ -1940,7 +1938,7 @@ button {
   align-content: end;
   justify-items: start;
   gap: 7px;
-  padding: 18px;
+  padding: 16px;
   background:
     radial-gradient(circle at 84% 20%, rgb(255 255 255 / 18%), transparent 27%),
     linear-gradient(145deg, #183f78 0%, #2d5da4 54%, #718bc0 100%);
@@ -1973,10 +1971,10 @@ button {
   height: 13px;
 }
 .project-card-preview.ai > strong {
-  width: min(78%, 220px);
+  width: min(90%, 240px);
   overflow: hidden;
   color: #fff;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1988,7 +1986,7 @@ button {
 .project-card-copy {
   display: grid;
   gap: 7px;
-  padding: 14px 16px 16px;
+  padding: 13px 14px 15px;
 }
 .project-card-title-row {
   display: flex;
