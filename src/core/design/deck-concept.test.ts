@@ -41,6 +41,8 @@ describe("deck concept", () => {
       "asymmetric-split",
       "process-rail",
       "comparison",
+      "timeline-rail",
+      "quote-field",
     ]);
     expect(resolved.concept.rhythm).toHaveLength(10);
     expect(resolved.concept.rhythm[0]).toBe("statement");

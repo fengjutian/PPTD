@@ -6,6 +6,8 @@ import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
 import { imageLed } from "./image-led";
 import { processRail } from "./process-rail";
+import { quoteField } from "./quote-field";
+import { timelineRail } from "./timeline-rail";
 import type { LayoutRecipe } from "./types";
 
 const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
@@ -16,6 +18,8 @@ const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
   "image-led": imageLed,
   "process-rail": processRail,
   comparison: comparison,
+  "timeline-rail": timelineRail,
+  "quote-field": quoteField,
 };
 
 export function findRecipe(id: RecipeId): LayoutRecipe | undefined {

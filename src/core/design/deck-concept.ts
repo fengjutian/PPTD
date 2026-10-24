@@ -31,7 +31,9 @@ export type RecipeId =
   | "editorial-index"
   | "asymmetric-split"
   | "process-rail"
-  | "comparison";
+  | "comparison"
+  | "timeline-rail"
+  | "quote-field";
 
 export interface AiDeckConcept {
   preset: ConceptPresetId;
@@ -73,6 +75,8 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
       "asymmetric-split",
       "process-rail",
       "comparison",
+      "timeline-rail",
+      "quote-field",
     ],
     imagery: "none",
     typeContrast: "strong",

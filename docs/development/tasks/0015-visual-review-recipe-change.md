@@ -199,6 +199,7 @@ if (
 验证：
 
 - `npm run typecheck`、`npm run lint`（仅既有 warning）、`npm run build` 通过。
+- `cargo fmt --check`、`cargo check`、`cargo test commands::ai::tests --lib`（9 项）通过。
 - `PPTD_SKIP_VISUAL=1 npm test`：135 个测试文件、1063 项通过，1 项视觉回归按环境跳过。
 
 未完成：

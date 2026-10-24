@@ -1541,9 +1541,11 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - asymmetric-split：左标题栏 + 右正文栏，适合 2–5 条较长要点；不要给两栏对比页选它。
 - process-rail：纵向流程轨，步骤序号/标签/说明沿一条轨道排列；仅当页面有 process 内容块且 3–6 步时使用。
 - comparison：等高双栏 + 中轴，栏头强调、条目按测量排列；仅当页面有 comparison 内容块且左右各 2–5 条时使用。
-- 有 quote、timeline、table 内容块的页面不选配方；有 comparison 优先 comparison，有 process 优先 process-rail，有 metric 优先 data-story。
+- timeline-rail：日期在左、事件在右的纵向时间线；仅当页面有 timeline 内容块且 3–6 条时使用。
+- quote-field：大引文 + 引号 + 署名；仅当页面是 quote 版式且有 quote 内容块时使用。
+- 有 table 内容块的页面不选配方；有 comparison 优先 comparison，有 process 优先 process-rail，有 timeline 优先 timeline-rail，有 metric 优先 data-story。
 - 章节页、结尾总结页暂不选配方。
-- 封面优先 cover-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
+- 封面优先 cover-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 timeline 优先 timeline-rail；有 quote 且 layout=quote 优先 quote-field；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
 - variant 只能是 left 或 right；focal 只能是 title、index 或 body；不确定就省略。
 
 九、主题方向

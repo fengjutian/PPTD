@@ -353,6 +353,8 @@ export const aiPresentationDesignSchema = z.object({
             "asymmetric-split",
             "process-rail",
             "comparison",
+            "timeline-rail",
+            "quote-field",
           ])
           .optional(),
         variant: z.enum(["left", "right"]).optional(),
