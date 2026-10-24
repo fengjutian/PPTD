@@ -300,28 +300,34 @@ export function buildDesignPreviewDocument(options?: {
 
 保持现有默认值，确保已有测试不变。内部把硬编码的 `themePresetId` 与 `defaultEditorialConcept()` 改为参数。
 
-### 6.2 样张产物
+### 6.2 样张的形态
 
-目录：
+样张首先是**文档夹具**，不是图片。`tools/design-preview/specimens.ts` 导出：
 
-```text
-tools/design-preview/specimens/
-  manifest.json
-  <themePresetId>/<conceptPresetId>/p01-cover.jpg … p08-summary.jpg
-  <themePresetId>/<conceptPresetId>/contact-sheet.jpg
+```ts
+export function buildSpecimenDocument(options: {
+  themePresetId: string;
+  conceptPresetId: ConceptPresetId;
+}): PresentationDocument;
 ```
 
-`manifest.json` 记录：`themePresetId`、`conceptPresetId`、8 页的 `slideId` 与内容指纹、生成时间、生成器版本、图片相对路径、渲染宽度。生成器版本取 `package.json` 的 `version` 加 `CURRENT_SCHEMA_VERSION`。
+- 8 页固定结构（封面、章节、正文、指标、表格、图表、图片、结论），内容来自固定夹具，不调用模型。
+- 页面尺寸取内置 16:9；主题通过 `themePresetId` 注入，概念通过命令的 `designConcept` 注入。
+- 纯 Node 可构造：不依赖 DOM，也不依赖 PptxGenJS。
 
-生成方式：`specimens.gen.test.ts`，仅在 `PPTD_WRITE_SPECIMENS=1` 时写文件；默认运行只校验清单存在、结构完整、页数与 recipe 覆盖一致，不比对像素。像素比对仍走 `tools/visual-regression`，两者不要合并。
+**不在仓库入库 JPEG。** 现有渲染器 `presentation-renderer.ts` 依赖浏览器 canvas，Node 测试环境没有 DOM；为了几张图引入 Playwright 或 Office，会把样张生成变成环境依赖。改为：
 
-体积约束：单张 JPEG 宽度 1280、质量 0.8；单套 8 页加 contact sheet 目标不超过 1.5 MB。P0 只入库 3 套（`paper-ink`、`consulting-navy`、`tech-blue`）作为验收，其余 8 套在 P1 补齐，缺失时选择器降级为文字。
+- **选择器按需渲染**：用户聚焦某套预设时，才在应用内调 `renderPresentationForVisualReview(specimen, 640)` 渲染该套 8 页（或先只渲染封面），结果按 `themePresetId + conceptPresetId + schemaVersion` 缓存在内存。
+- **README / 发布材料**如需静态图，由人工在应用内导出 contact sheet 后提交，属于发布流程，不是 CI 步骤。
+- **视觉回归**继续走 `tools/visual-regression` 的 PowerPoint / LibreOffice 基线，不新建图片管线。
+
+清单 `tools/design-preview/specimens.manifest.json` 只记录结构信息：预设 ID、8 页页序与 recipe、页面尺寸、夹具版本；不记录图片路径。测试在 Node 中直接比较页数、recipe 覆盖与元素数量。
 
 ### 6.3 消费方
 
-- `features/ai/ThemePresetPicker`：有样张显示第一页缩略图 + “查看 8 页”；无样张只显示描述。
-- 导出兼容测试：用同一份 fixture 文档执行 `buildPptx`，断言 8 页对象类型与清单一致（不新增视觉基线）。
-- 方向提案：`documentary` 预设的 `rationale` 可引用对应样张路径，但提示词只传文字摘要，不传图片。
+- `features/ai/ThemePresetPicker`：聚焦或选中时请求样张预览；渲染中显示骨架屏；失败退回现有色板卡片，不显示空白。
+- 方向提案：只传样张的结构摘要（recipe 序列、密度、图像策略），不传图片。
+- 导出兼容测试：同一份 specimen 文档执行 `buildPptx`，断言 8 页对象类型与清单一致。
 
 ## 7. 设计体检
 
@@ -421,7 +427,7 @@ export function lintTaste(
 | Schema | `src/core/document-model/schema.test.ts`       | 19 → 20 恒等迁移、固定样例、非法方向记录被拒                                                            | 是   |
 | 命令   | `src/core/commands/commands.test.ts`           | 方向记录追加/上限 20/撤销回滚/`contentHash` 与 `contentRevision` 不变/过期返回 `DESIGN_DIRECTION_STALE` | 是   |
 | 服务   | `src/services/ai-service.test.ts`              | 2–3 个方向合法、重复 preset 拒绝、长度越界拒绝、未知 preset 拒绝、失败码 `AI_DIRECTIONS_INVALID`        | 是   |
-| 夹具   | `tools/design-preview/design-preview.test.ts`  | 11 套 × 2 预设有清单则结构完整；无样张时不失败                                                          | 是   |
+| 夹具   | `tools/design-preview/design-preview.test.ts`  | specimen builder 对 11 套预设各产出 8 页，recipe 覆盖与清单一致；不依赖 DOM                             | 是   |
 | 导出   | `src/features/pptx-export/export-pptx.test.ts` | 报告包含体检计数；无体检时不写 0                                                                        | 是   |
 | 回归   | `tools/visual-regression`                      | 样张像素基线（按渲染器分目录，`PPTD_SKIP_VISUAL=1` 跳过）                                               | 条件 |
 
@@ -449,7 +455,7 @@ export function lintTaste(
 | P0-3 | Rust `generate_deck_directions` + 提示词 + TS Schema 校验                                                      | 合法输出可解析；非法输出稳定报错；进度与取消可用                                                 | 1.5d |
 | P0-4 | 方向预览：临时单页文档 + `inferRelayoutContext` + `pageContext` + 渲染                                         | 两页预览可出图；零副作用；预览/最终 parity 断言通过                                              | 1.5d |
 | P0-5 | 方向选择 UI 与状态机                                                                                           | 选择/换一组/跳过/取消全路径；键盘可用；失败回退单方向                                            | 2d   |
-| P0-6 | 夹具参数化、3 套样张生成、清单与选择器接入                                                                     | 样张可重建；缺失降级；清单校验测试通过                                                           | 1.5d |
+| P0-6 | 夹具参数化、specimen builder、选择器按需预览                                                                   | 11 套预设可构建 8 页；预览可渲染且失败降级；清单校验通过                                         | 1.5d |
 | P0-7 | `taste-lint` 核心与 11 条规则                                                                                  | 规则单测与边界通过；十页夹具零误报（阈值可调）                                                   | 2d   |
 | P0-8 | 体检面板、导出报告字段                                                                                         | 定位可用；导出计数正确；异常显示未执行                                                           | 1d   |
 | P0-9 | 测试补齐、ADR、README、架构文档同步                                                                            | 全量测试/类型/lint/构建通过；文档链接有效                                                        | 1d   |
@@ -466,7 +472,7 @@ export function lintTaste(
 | 体检误杀              | 用户被无意义提示干扰     | 只做软提示；十页夹具零误报作为门槛；规则可单独禁用                                                                                |
 | Schema 变更破坏旧项目 | 打开失败                 | 可选字段 + 恒等迁移 + 固定样例；旧文档无记录走原路径                                                                              |
 | 模型输出不稳定        | 方向缺失或重复           | Schema 校验 + 归一化 + 失败回退单方向；不补造内容                                                                                 |
-| 样张体积膨胀          | 仓库变大                 | 只入 3 套、JPEG 1280/0.8、单套 ≤1.5MB；其余按需生成                                                                               |
+| 样张按需渲染卡顿      | 打开选择器变慢           | 只渲染聚焦项与封面、宽度 640、内存缓存、失败退回色板                                                                              |
 | UI 阻塞主流程         | 无法继续                 | 可跳过、可取消、失败自动回退；不设置强制等待                                                                                      |
 
 回退开关（设置项，默认开启）：
