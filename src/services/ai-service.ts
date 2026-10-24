@@ -1395,6 +1395,8 @@ export interface AiDeckDirectionOptions {
   themeDirection?: ThemeDirection;
   /** Local look fingerprints; never reviewed copy. */
   recentLooks?: readonly unknown[];
+  /** The user's own taste notes, stored only on this machine. */
+  preferences?: readonly { text: string; scope: string }[];
 }
 
 /**
@@ -1419,6 +1421,7 @@ export async function generateDeckDirections(
       visualGoal: defaultPresentationVisualGoal(),
       themeDirection: options.themeDirection,
       recentLooks: options.recentLooks,
+      preferences: options.preferences,
       model,
       provider,
       taskId: options.taskId,

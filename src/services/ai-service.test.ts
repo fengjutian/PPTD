@@ -156,11 +156,19 @@ describe("AI structured outputs", () => {
       slides: [],
       layouts: [],
     };
-    const result = await generateDeckDirections(draft, briefsFromDraft(draft), template, { taskId: 7 });
+    const result = await generateDeckDirections(draft, briefsFromDraft(draft), template, {
+      taskId: 7,
+      preferences: [{ text: "想要更像杂志", scope: "deck" }],
+    });
     expect(result.map((direction) => direction.preset)).toEqual(["editorial", "documentary"]);
     expect(invoke).toHaveBeenCalledWith(
       "generate_deck_directions",
-      expect.objectContaining({ request: expect.objectContaining({ taskId: 7 }) }),
+      expect.objectContaining({
+        request: expect.objectContaining({
+          taskId: 7,
+          preferences: [{ text: "想要更像杂志", scope: "deck" }],
+        }),
+      }),
     );
   });
 

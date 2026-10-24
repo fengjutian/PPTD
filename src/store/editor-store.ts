@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { applyCommand, commandDomain, type ChangeDomain, type DocumentCommand } from "../core/commands";
 import {
   createDocument,
+  documentSemanticContentFingerprint,
   refreshContentHashes,
   type ElementId,
   type PresentationDocument,
@@ -87,6 +88,8 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((state) => {
       const domain = commandDomain(command, state.document);
       if (!domain) return state;
+      const contentBefore =
+        command.type === "apply-ai-designed-draft" ? documentSemanticContentFingerprint(state.document) : undefined;
       // A group copy whose sources are all locked copies nothing. It must not
       // bump a revision or leave an undo entry that cannot change the document.
       if (command.type === "duplicate-elements") {
@@ -100,7 +103,14 @@ export const useEditorStore = create<EditorState>((set) => ({
       const [document, forward, inverse] = produceWithPatches(state.document, (draft) => {
         applyCommand(draft, command);
         draft.revisions.document += 1;
-        if (domain === "content" || domain === "both") draft.revisions.content += 1;
+        // An AI design pass rebuilds the deck but may leave the reviewed content
+        // byte-for-byte identical. "both" describes the command's capability, not
+        // what this run changed: only bump the content revision when the content
+        // actually moved.
+        const contentChanged =
+          contentBefore === undefined ||
+          contentBefore !== documentSemanticContentFingerprint(draft as PresentationDocument);
+        if (domain === "content" || (domain === "both" && contentChanged)) draft.revisions.content += 1;
         if (domain === "design" || domain === "both") draft.revisions.design += 1;
         refreshContentHashes(draft);
       });

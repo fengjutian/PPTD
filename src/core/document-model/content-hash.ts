@@ -36,3 +36,35 @@ export function refreshContentHashes(document: { slides: Array<{ content: SlideC
 export function documentContentFingerprint(document: { slides: Array<{ content: SlideContent }> }): string {
   return JSON.stringify(document.slides.map((slide) => hashSlideContent(slide.content)));
 }
+
+/**
+ * Content identity without entity IDs.
+ *
+ * Rebuilding a deck on the design path mints new block IDs for exactly the same
+ * reviewed text. Comparing the normal content hash would call that a content
+ * change and bump the content revision even though nothing a reviewer approved
+ * moved. IDs are storage identity, not content.
+ */
+export function documentSemanticContentFingerprint(document: { slides: Array<{ content: SlideContent }> }): string {
+  return JSON.stringify(
+    document.slides.map((slide) => {
+      const content = slide.content;
+      return hashString(
+        JSON.stringify([content.title, content.body, content.speakerNotes, stripIds(content.blocks ?? [])]),
+      );
+    }),
+  );
+}
+
+function stripIds(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripIds);
+  if (value && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(source)) {
+      if (key !== "id") result[key] = stripIds(child);
+    }
+    return result;
+  }
+  return value;
+}

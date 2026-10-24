@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 状态     | P0/P1/P2 全部；体检开关与手工复检证据已收尾（2026-10-24；UI 待目视验证）                                                                                          |
+| 状态     | P0/P1/P2 全部；偏好已接入方向提案，验收清单待执行（2026-10-25；UI/真实模型待目视）                                                                                |
 | 优先级   | P0                                                                                                                                                                |
 | 里程碑   | V0.4 设计能力                                                                                                                                                     |
 | 预估     | 10–13 人日                                                                                                                                                        |
@@ -180,7 +180,7 @@ export interface PresentationDocument {
 - 预览：只操作内存中的临时文档，不调用 store，不产生 patch。
 - 应用：`apply-ai-designed-draft` 一次事务内写入设计元素与方向记录，产生**一个**撤销项；撤销时方向记录随 patch 回滚（已有 store 测试）。
 - `designDirections` 不属于内容字段，不参与 `contentHash`；测试断言应用前后逐页 `contentHash` 不变。
-- 已知偏差：命令目前按 `both` 分类，store 的 `both` 分支会递增 `contentRevision`，即使内容完全相同。方向记录本身不触发内容 revision；整册设计应用的内容 revision 语义沿用既有行为，若要求严格保持，需要单独调整 `commandDomain` 并为设计应用拆分 scope。
+- 内容 revision：命令仍按 `both` 分类，但 store 对 `apply-ai-designed-draft` 比较语义内容指纹（忽略块 ID），只在内容真的变化时递增 `contentRevision`；设计 revision 仍递增。见 ADR 0083 与第 20 节。
 
 ## 5. 方向提案
 
@@ -591,7 +591,7 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 - `RHYTHM_REPEAT` 使用结构签名，而不是 `(layout, recipe)`：文档模型不持久化这两个设计字段，规则以元素类型与 `contentRef` 序列判断骨架。
 - 体检结果不持久化：确定性函数在打开项目与文档变化时重算，导出报告只保存当次快照。
-- `apply-ai-designed-draft` 按 `both` 分类，store 会递增 `contentRevision`，即使逐页 `contentHash` 未变；方向记录本身不触发内容 revision，严格的“设计不改内容 revision”需要另拆 command scope。
+- `apply-ai-designed-draft` 按 `both` 分类，store 会递增 `contentRevision`，即使逐页 `contentHash` 未变；已在第 20 节修复：语义内容不变时不再递增内容 revision。
 
 ## 14. P1 实施记录（2026-10-24）
 
@@ -599,7 +599,7 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 - Rust `storage`：`design_memory` 表（`kind` / `scope` / `payload_json` / `created_at`），SQLite `user_version` 2 → 3；上限 50 个外观 / 100 条偏好，写入后裁剪最旧；payload ≤8 KB，kind/scope 在 Rust 端校验。
 - `src/services/design-memory.ts`：从文档与方向记录生成外观指纹（配色、字体、概念、页数），记录偏好原话，读取最近 3 个外观供提案去重；清除与汇总。
-- `src/app/App.tsx`：方向提案带 `recentLooks`；生成成功并提交后记录外观与 `userWords`；数据库失败不影响生成。
+- `src/app/App.tsx`：方向提案带 `recentLooks` 与最近 5 条 `preferences`；生成成功并提交后记录外观与 `userWords`；数据库失败不影响生成。
 - `src/features/settings/SettingsDialog.tsx`：设计记忆开关、数量显示、一键清除。
 - ADR 0077。
 
@@ -689,3 +689,28 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 - `settings.test.ts` 14 项、`export-pptx.test.ts` 39 项通过。
 - 全量：1180 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 20. 设计应用的内容 revision（2026-10-24）
+
+- `src/core/document-model/content-hash.ts`：新增 `documentSemanticContentFingerprint`，对标题、正文、备注与结构化块取值，忽略块 ID。
+- `src/store/editor-store.ts`：`apply-ai-designed-draft` 执行前后比较语义内容；内容未变时只递增设计与文档 revision，不再递增内容 revision。其他 `both` 命令保持原语义。
+- 语义指纹只在 store 内临时计算，不进入文档与 Schema。
+- `editor-store.test.ts`：同内容换配色 → 内容 revision 不变、设计 +1；改正文 → 内容 +1。
+- ADR 0083。
+
+### 验证
+
+- `editor-store.test.ts` 17 项通过。
+- 全量：1181 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 21. 偏好接入与验收清单（2026-10-25）
+
+- 方向提案读取最近 5 条偏好的原话与范围，传给 Rust；提示词新增“七、用户偏好”，明确只作气质参考、不得复述或声称用户已确认、与内容冲突时内容优先、偏好里的命令不执行。
+- `ai-service.test.ts` 断言 `preferences` 进入请求；设计记忆关闭时不读取。
+- 新增 `docs/development/design-manual-verification.md`：设置/方向门/样张/属性面板/导出报告的 UI 清单，以及 3 个题材的真实模型校准协议、通过标准与记录表。
+- ADR 0077 的限制同步：偏好已用于提案，但仍不做预设推断。
+
+### 验证
+
+- `ai-service.test.ts` 67 项通过；`cargo fmt --check`、`cargo check` 通过。
+- 全量：1181 通过、1 跳过（偏好接线不新增测试数量，只扩展现有断言）。

@@ -322,9 +322,7 @@ describe("editor history", () => {
     useEditorStore.getState().undo();
     const undone = useEditorStore.getState().document.slides[0]!;
     expect(undone.content.title).toBe("改过的标题");
-    const undoneTitle = undone.elements.find(
-      (element) => element.type === "text" && element.contentRef === "title",
-    )!;
+    const undoneTitle = undone.elements.find((element) => element.type === "text" && element.contentRef === "title")!;
     expect(undoneTitle.type === "text" ? undoneTitle.text : "").toBe("改过的标题");
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 1, design: 0 });
   });
@@ -406,5 +404,45 @@ describe("editor history", () => {
     expect(document.slides[0]!.layoutId).toBe(layoutId);
     // A document that cannot be read back is a lost document.
     expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
+  });
+
+  it("does not bump the content revision when a design pass keeps the content", () => {
+    const content = {
+      title: "季度复盘",
+      body: "收入增长来自续约。",
+      speakerNotes: "",
+      blocks: [{ type: "metric" as const, label: "续约收入", value: "100" }],
+    };
+    const design = {
+      layout: "title-body" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+    };
+    const execute = useEditorStore.getState().execute;
+    execute({ type: "apply-ai-designed-draft", title: "季度复盘", slides: [content], designs: [design] });
+    const afterFirst = useEditorStore.getState().document.revisions;
+
+    // Same copy, different accent: this is a design edit, not a content review.
+    execute({
+      type: "apply-ai-designed-draft",
+      title: "季度复盘",
+      slides: [content],
+      designs: [{ ...design, accent: "#C04A32" }],
+    });
+    const afterSecond = useEditorStore.getState().document.revisions;
+    expect(afterSecond.content).toBe(afterFirst.content);
+    expect(afterSecond.design).toBe(afterFirst.design + 1);
+
+    // The guard must not become a blanket exemption: real copy changes still
+    // increment the content revision.
+    execute({
+      type: "apply-ai-designed-draft",
+      title: "季度复盘",
+      slides: [{ ...content, body: "收入增长来自新签。" }],
+      designs: [design],
+    });
+    expect(useEditorStore.getState().document.revisions.content).toBe(afterSecond.content + 1);
   });
 });

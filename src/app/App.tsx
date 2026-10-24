@@ -182,7 +182,12 @@ import {
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
 import { DESIGN_DIRECTIONS_PROMPT_VERSION } from "../services/ai-service";
-import { loadRecentLooks, recordDesignLook, recordDesignPreference } from "../services/design-memory";
+import {
+  loadDesignPreferences,
+  loadRecentLooks,
+  recordDesignLook,
+  recordDesignPreference,
+} from "../services/design-memory";
 import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
@@ -3048,6 +3053,7 @@ export function App() {
         applyCommand(baseline, { type: "apply-ai-draft", title: sourceDraft.title, slides: sourceDraft.slides });
         // Local-only look fingerprints; empty when memory is disabled.
         const recentLooks = gateSettings.designMemoryEnabled ? await loadRecentLooks(3) : [];
+        const preferences = gateSettings.designMemoryEnabled ? await loadDesignPreferences(5) : [];
         let regenerations = 0;
         while (regenerations <= 2) {
           setDesignProgress({ percent: 16, label: "正在生成两个设计方向" });
@@ -3058,6 +3064,7 @@ export function App() {
               taskId,
               themeDirection,
               recentLooks,
+              preferences: preferences.map(({ text, scope }) => ({ text, scope })),
             });
           } catch (error) {
             if (designCancelRef.current) throw error;
