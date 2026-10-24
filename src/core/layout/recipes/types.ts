@@ -3,6 +3,7 @@ import type { AiVisualAsset } from "../../commands/visual-asset";
 import type { DeckConcept, RecipeId } from "../../design/deck-concept";
 import type { DesignTokens } from "../../design/design-tokens";
 import type { Emu, RectEmu, SlideContent, SlideElement } from "../../document-model";
+import type { PageChrome } from "../page-chrome";
 
 /** A rectangle in page-relative units, 0–1 on both axes. */
 export interface NormalizedFrame {
@@ -32,6 +33,8 @@ export interface RecipeContext {
     page: { width: Emu; height: Emu };
   };
   page: { index: number; total: number };
+  /** The shared title axis, rule and content region of this page. */
+  chrome?: PageChrome;
   /** Page-level choices from the design; recipes may ignore them. */
   variant?: "left" | "right";
   focal?: "title" | "index" | "body";

@@ -1,17 +1,22 @@
 import type { IntentConflict } from "../../commands/design-intent";
+import { layoutFlow } from "../../rendering/flow";
 import type { Emu } from "../../document-model";
+import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, ruleHeight, textFits, textHeightPt } from "./measure";
+import {
+  fittedFontSize,
+  frameFromNormalized,
+  ruleHeight,
+  textFits,
+  textHeightPt,
+} from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
-const TITLE = { x: 0.07, y: 0.09, width: 0.86, height: 0.15 };
-const LEAD = { x: 0.07, y: 0.3, width: 0.86, height: 0.1 };
-const ACCENT_RULE = { x: 0.07, y: 0.265, width: 0.08, height: 0.006 };
-const CONTENT_BOTTOM = 0.89;
-const CONTENT_TOP_WITH_LEAD = 0.4;
-const CONTENT_TOP_WITHOUT_LEAD = 0.34;
-const MIN_ROW_HEIGHT = 0.075;
+/** The most air a row may take before the list stops reading as one block. */
+const MAX_ROW_GAP_PT = 26;
+/** The tightest a row may sit before the list turns into a paragraph. */
+const MIN_ROW_GAP_PT = 8;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -44,112 +49,135 @@ export const editorialIndex: LayoutRecipe = {
     }
 
     const page = ctx.frame.page;
+    const pageHeightIn = page.height / 914_400;
+    const pageWidthIn = page.width / 914_400;
+    const chrome = resolveChrome(ctx);
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
-    const titleFrame = frameFromNormalized(TITLE, page);
+    const colors = ctx.colors;
+    const titleFrame = frameFromNormalized(chrome.title, page);
     const titleSize = fittedFontSize(title, titleFrame, ctx.tokens.type.titlePt, 18, headingFamily, lineHeight);
     if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
       return conflict("title", "标题在标题轴内放不下");
     }
 
-    const colors = ctx.colors;
     const elements: RecipePlan["elements"] = [
       textElement(title, titleFrame, titleSize, colors.title, true, "left", headingFamily, {
         contentRef: "title",
         lineHeight,
       }),
-      rectElement(frameFromNormalized(ACCENT_RULE, page), colors.accent),
+      rectElement(frameFromNormalized(chrome.rule, page), colors.accent),
     ];
 
-    let contentTop = CONTENT_TOP_WITHOUT_LEAD;
+    let contentTop = chrome.contentTop;
     if (units.lead) {
-      const leadFrame = frameFromNormalized(LEAD, page);
+      const leadFrame = frameFromNormalized(
+        {
+          x: chrome.content.x,
+          y: contentTop,
+          width: chrome.content.width,
+          height: Math.min(0.12, chrome.content.height * 0.22),
+        },
+        page,
+      );
       const leadSize = fittedFontSize(units.lead, leadFrame, ctx.tokens.type.bodyPt, 12, bodyFamily, lineHeight);
       if (!textFits(units.lead, leadFrame, leadSize, bodyFamily, lineHeight)) {
         return conflict("body", "正文引导段放不进标题与条目之间");
       }
-      elements.push(
-        textElement(units.lead, leadFrame, leadSize, colors.body, false, "left", bodyFamily, {
-          contentRef: "body",
-          lineHeight,
-        }),
-      );
-      contentTop = CONTENT_TOP_WITH_LEAD;
-    }
-
-    const contentHeight = CONTENT_BOTTOM - contentTop;
-    const rowHeight = contentHeight / units.items.length;
-    if (rowHeight < MIN_ROW_HEIGHT) {
-      return conflict("items", "条目行高低于 0.075，编号栏会挤成一团");
-    }
-
-    elements.push(verticalRule(0.07, contentTop, contentHeight, 0.004, page, colors.accent));
-    const separatorHeight = ruleHeight(ctx.tokens.rule.hairlinePt, page.height);
-    const itemSize = ctx.tokens.type.bodyPt;
-
-    for (let index = 0; index < units.items.length; index += 1) {
-      const item = units.items[index]!;
-      const rowY = contentTop + index * rowHeight;
-      const separatorY = rowY + rowHeight - separatorHeight / 2;
-      elements.push(
-        rectElement(
-          frameFromNormalized({ x: 0.07, y: separatorY, width: 0.86, height: separatorHeight }, page),
-          colors.rule,
-        ),
-      );
-
-      const indexFrame = frameFromNormalized({ x: 0.09, y: rowY, width: 0.08, height: rowHeight }, page);
-      const indexText = String(index + 1).padStart(2, "0");
-      const indexSize = fittedFontSize(
-        indexText,
-        indexFrame,
-        Math.min(24, Math.max(18, itemSize + 2)),
-        14,
-        headingFamily,
-        lineHeight,
-      );
-      const indexHeight = pointsToNormalized(
-        textHeightPt(indexText, indexFrame.width / 12_700, indexSize, headingFamily, lineHeight),
+      const leadHeight = pointsToNormalized(
+        textHeightPt(units.lead, leadFrame.width / 12_700, leadSize, bodyFamily, lineHeight),
         page.height,
       );
       elements.push(
         textElement(
-          indexText,
+          units.lead,
           {
-            x: indexFrame.x,
-            y: Math.round((rowY + (rowHeight - indexHeight) / 2) * page.height) as Emu,
-            width: indexFrame.width,
-            height: Math.max(1, Math.round((indexHeight + 0.006) * page.height)) as Emu,
+            ...leadFrame,
+            height: Math.round((leadHeight + 0.004) * page.height) as Emu,
           },
-          indexSize,
+          leadSize,
+          colors.body,
+          false,
+          "left",
+          bodyFamily,
+          { contentRef: "body", lineHeight },
+        ),
+      );
+      contentTop = contentTop + leadHeight + 0.035;
+    }
+
+    const numberWidth = Math.min(0.07, chrome.content.width * 0.12);
+    const textX = chrome.content.x + numberWidth + 0.03;
+    const textWidth = Math.max(0.2, chrome.content.width - numberWidth - 0.03);
+    const contentHeight = chrome.contentBottom - contentTop;
+    if (contentHeight < 0.2) return conflict("items", "标题与条目之间没有足够的正文区");
+    const sparse = units.items.length <= 4 && units.items.every((item) => item.length <= 18);
+    const preferred = Math.min(26, ctx.tokens.type.bodyPt + (sparse ? 6 : 2));
+    const maximum = sparse ? 26 : 22;
+    // The column is measured, not divided. A three-point page used to give each
+    // 17pt line a 1.35in row because the content area was split into equal
+    // slots; the leftover space is now a bounded gap, and the block keeps the
+    // height its copy actually needs.
+    const flow = layoutFlow({
+      items: units.items,
+      widthPt: textWidth * pageWidthIn * 72,
+      availableHeightPt: contentHeight * pageHeightIn * 72,
+      preferredFontSizePt: preferred,
+      minimumFontSizePt: 14,
+      minimumGapPt: MIN_ROW_GAP_PT,
+      maximumGapPt: MAX_ROW_GAP_PT,
+      verticalAlign: "center",
+      lineHeightRatio: lineHeight,
+      fontFamily: bodyFamily,
+    });
+    if (flow.overflow) return conflict("items", "条目在编号栏里放不下");
+
+    const rowGap = pointsToNormalized(flow.gapPt, page.height);
+    const firstRowTop = contentTop + pointsToNormalized(flow.rows[0]?.topPt ?? 0, page.height);
+    const lastRow = flow.rows[flow.rows.length - 1];
+    const lastRowBottom = lastRow
+      ? firstRowTop +
+        pointsToNormalized(lastRow.topPt - (flow.rows[0]?.topPt ?? 0) + lastRow.heightPt, page.height)
+      : firstRowTop;
+    elements.push(verticalRule(chrome.content.x, firstRowTop, Math.max(0.01, lastRowBottom - firstRowTop), 0.004, page, colors.accent));
+
+    const separatorHeight = ruleHeight(ctx.tokens.rule.hairlinePt, page.height);
+    const numberSize = Math.max(18, Math.min(28, Math.round(flow.fontSizePt * 1.15)));
+
+    flow.rows.forEach((row, index) => {
+      const rowY = firstRowTop + pointsToNormalized(row.topPt - (flow.rows[0]?.topPt ?? 0), page.height);
+      const rowHeight = pointsToNormalized(row.heightPt, page.height);
+      const numberHeight = pointsToNormalized(numberSize * lineHeight, page.height);
+      const numberFrame = frameFromNormalized(
+        {
+          x: chrome.content.x + 0.015,
+          y: Math.max(chrome.content.y, rowY + (rowHeight - numberHeight) / 2),
+          width: numberWidth,
+          height: Math.max(0.02, numberHeight),
+        },
+        page,
+      );
+      elements.push(
+        textElement(
+          String(index + 1).padStart(2, "0"),
+          numberFrame,
+          Math.min(numberSize, fittedFontSize(String(index + 1).padStart(2, "0"), numberFrame, numberSize, 14, headingFamily, lineHeight)),
           colors.accent,
           true,
-          "center",
+          "left",
           headingFamily,
           { lineHeight },
         ),
       );
-
-      const textFrame = frameFromNormalized({ x: 0.19, y: rowY + 0.012, width: 0.73, height: rowHeight - 0.024 }, page);
-      const size = fittedFontSize(item, textFrame, itemSize, 12, bodyFamily, lineHeight);
-      if (!textFits(item, textFrame, size, bodyFamily, lineHeight)) {
-        return conflict("items", `第 ${index + 1} 条要点在编号栏里放不下`);
-      }
-      const itemHeight = pointsToNormalized(
-        textHeightPt(item, textFrame.width / 12_700, size, bodyFamily, lineHeight),
-        page.height,
-      );
       elements.push(
         textElement(
-          item,
-          {
-            x: textFrame.x,
-            y: Math.round((rowY + (rowHeight - itemHeight) / 2) * page.height) as Emu,
-            width: textFrame.width,
-            height: Math.max(1, Math.round((itemHeight + 0.006) * page.height)) as Emu,
-          },
-          size,
+          row.text,
+          frameFromNormalized(
+            { x: textX, y: rowY, width: textWidth, height: Math.max(0.02, rowHeight) },
+            page,
+          ),
+          row.fontSizePt,
           colors.body,
           false,
           "left",
@@ -157,7 +185,19 @@ export const editorialIndex: LayoutRecipe = {
           { contentRef: "decorative", lineHeight },
         ),
       );
-    }
+      if (index < flow.rows.length - 1) {
+        const separatorY = rowY + rowHeight + rowGap / 2;
+        elements.push(
+          rectElement(
+            frameFromNormalized(
+              { x: chrome.content.x, y: separatorY, width: chrome.content.width, height: separatorHeight },
+              page,
+            ),
+            colors.rule,
+          ),
+        );
+      }
+    });
 
     return {
       elements,

@@ -87,6 +87,7 @@ import { findThemePreset } from "../design/theme-presets";
 import { deriveDesignTokens } from "../design/design-tokens";
 import type { DeckConcept } from "../design/deck-concept";
 import { consumptionProblem, selectRecipe } from "../layout/recipes/plan";
+import { planPageChrome } from "../layout/page-chrome";
 import { coverCrop } from "../rendering/image-fit";
 import {
   DENSITY_FACTORS,
@@ -1691,15 +1692,27 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       preferredPt: number,
       minimumPt = 12,
       lineHeightRatio = 1.2,
+      maximumPt = preferredPt,
     ): number => {
       const widthPt = box.width / 12_700;
       const heightPt = box.height / 12_700;
       // The same line estimator the quality gate uses decides whether a size
       // fits, so a page that passes generation cannot be reported as overflow.
-      for (let size = preferredPt; size >= minimumPt; size -= 1) {
-        if (estimateTextLines(value, widthPt, size, majorFont) * size * lineHeightRatio <= heightPt) return size;
+      const fits = (size: number) =>
+        estimateTextLines(value, widthPt, size, majorFont) * size * lineHeightRatio <= heightPt;
+      const minimum = Math.max(1, Math.round(minimumPt));
+      const maximum = Math.max(minimum, Math.round(maximumPt));
+      const preferred = Math.min(maximum, Math.max(minimum, Math.round(preferredPt)));
+      if (fits(preferred)) {
+        for (let size = preferred + 1; size <= maximum; size += 1) {
+          if (!fits(size)) return size - 1;
+        }
+        return maximum;
       }
-      return minimumPt;
+      for (let size = preferred - 1; size >= minimum; size -= 1) {
+        if (fits(size)) return size;
+      }
+      return minimum;
     };
     // Every text element is checked against the background it actually sits on.
     // A design that asks for dark text on dark artwork is corrected instead of
@@ -2124,6 +2137,21 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const contentBox = assetLayout ? assetLayout.text : contentRegion;
       // The same text area in the units the element frames use.
       const contentAreaEmu = frame(contentBox.x, contentBox.y, contentBox.width, contentBox.height);
+      // One chrome per page: title axis, accent rule and content region. Every
+      // recipe and every legacy branch reads this object instead of inventing
+      // its own title y / rule y / content top. That is what keeps six pages of
+      // one deck on the same axis.
+      const chrome = planPageChrome({
+        page: { width: pageWidth, height: pageHeight },
+        title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+        content: frame(contentBox.x, contentBox.y, contentBox.width, contentBox.height),
+        safe: {
+          x: safeLeft,
+          y: safeTop,
+          width: safeRight - safeLeft,
+          height: safeBottom - safeTop,
+        },
+      });
       // The intent of the page: which composition it is drawn in, which level of
       // the hierarchy carries the weight and how much white space it spends.
       // The composition is checked against the reviewed content, so an intent
@@ -2303,6 +2331,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             page: { width: pageWidth, height: pageHeight },
           },
           page: { index: pageIndex, total: pageTotal },
+          chrome,
           ...(design.variant ? { variant: design.variant } : {}),
           ...(design.focal ? { focal: design.focal } : {}),
         });
@@ -2476,7 +2505,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(
           text(
             content.title,
-            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            frame(chrome.title.x, chrome.title.y, chrome.title.width, chrome.title.height),
             templateTitleSize ?? typeScale.title,
             titleInk,
             true,
@@ -2485,8 +2514,16 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             titleLuminance,
           ),
         );
+        if (!keepsArtwork)
+          slide.elements.push(
+            shape(
+              frame(chrome.rule.x, chrome.rule.y, chrome.rule.width, Math.max(0.009, chrome.rule.height)),
+              design.accent,
+            ),
+          );
         const columnWidth = contentBox.width * CONTENT_REGION.comparisonColumnWidth;
         const columnGap = contentBox.width * CONTENT_REGION.comparisonColumnGap;
+        const panelPaddingX = 0.28 / pageWidthIn;
         const columns = [
           { x: contentBox.x, label: comparisonBlock.leftLabel, items: comparisonBlock.leftItems },
           {
@@ -2495,22 +2532,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             items: comparisonBlock.rightItems,
           },
         ];
-        // The panel is never shorter than its share of the content area. Sized to
-        // its copy alone, a two-point comparison became a 1.7in card floating in
-        // a 3.75in area, with the lower 40% of the page left white. The floor
-        // makes the two cards carry the page; the copy then centres inside it.
         const labelSize = CONTENT_REGION.comparisonLabelFontSizePt;
         const headerHeight = pointsToFraction(labelSize * 1.2) + 0.018;
         // A comparison column carries every point the writer reviewed. A column
         // that cut its last point would drop reviewed copy from the exported
         // file, so the copy shrinks to fit instead of losing a point.
-        const itemText = (items: string[]) => items.map((item) => `• ${cleanPoint(item)}`).join("\n\n");
-        const minimumPanelHeight = Math.min(
-          contentBox.height,
-          contentBox.height * CONTENT_REGION.comparisonMinPanelHeightRatio,
-        );
-        // The panel grows with its copy up to the content area, so the copy is
-        // fitted against the whole area; the floor only applies to short copy.
+        const itemText = (items: string[]) => items.map((item) => `• ${cleanPoint(item)}`).join("\n");
+        const copyWidth = columnWidth - panelPaddingX * 2;
         const availableHeight = Math.max(0.05, contentBox.height - headerHeight - 0.06);
         const longestColumn = columns.reduce(
           (longest, column) => (itemText(column.items).length > itemText(longest.items).length ? column : longest),
@@ -2518,26 +2546,32 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         );
         const itemSize = fittedFontSize(
           itemText(longestColumn.items),
-          frame(contentBox.x, contentBox.y, columnWidth - 0.07, availableHeight),
+          frame(contentBox.x, contentBox.y, copyWidth, availableHeight),
           CONTENT_REGION.comparisonItemFontSizePt,
           CONTENT_REGION.comparisonMinimumItemFontSizePt,
           1.25,
+          CONTENT_REGION.comparisonItemFontSizePt,
         );
         const copyHeight = Math.max(
-          ...columns.map((column) => blockHeight(itemText(column.items), columnWidth - 0.07, itemSize, bodyLeading)),
+          ...columns.map((column) => blockHeight(itemText(column.items), copyWidth, itemSize, bodyLeading)),
         );
-        const panelHeight = Math.min(contentBox.height, Math.max(minimumPanelHeight, headerHeight + 0.06 + copyHeight));
-        const panelTop = contentBox.y + (contentBox.height - panelHeight) * CONTENT_REGION.blockVerticalAnchor;
+        // The panel is as tall as its copy plus a physical padding, with a floor
+        // for very short copy. It starts on the content axis instead of floating
+        // in the middle of the page.
+        const panelPaddingY = 0.20 / pageHeightIn;
+        const panelHeight = Math.min(
+          contentBox.height,
+          Math.max(0.45, headerHeight + panelPaddingY * 2 + copyHeight),
+        );
+        const panelTop = contentBox.y + 0.02;
         columns.forEach((column) => {
           const copy = itemText(column.items);
-          const columnHeight = blockHeight(copy, columnWidth - 0.07, itemSize, bodyLeading);
-          // The header stays at the top of the panel and the points centre in the
-          // room below it, so a short column does not pin its copy under the
-          // header with a hole underneath.
-          const bodyTop = panelTop + headerHeight;
-          const bodyBottom = panelTop + panelHeight - 0.03;
-          const textTop = bodyTop + Math.max(0.015, (bodyBottom - bodyTop - columnHeight) / 2);
-          const textHeight = Math.min(columnHeight * 1.04 + 0.002, Math.max(0.02, bodyBottom - textTop));
+          const columnHeight = blockHeight(copy, copyWidth, itemSize, bodyLeading);
+          const textTop = panelTop + headerHeight + panelPaddingY;
+          const textHeight = Math.min(
+            columnHeight * 1.04 + 0.004,
+            Math.max(0.02, contentBox.y + contentBox.height - textTop),
+          );
           slide.elements.push(
             shape(frame(column.x, panelTop, columnWidth, panelHeight), cardFill, "rectangle", cardStroke, 0.75),
             shape(frame(column.x, panelTop, columnWidth, headerHeight), accentFill),
@@ -2547,7 +2581,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               column.label,
               centeredBlock(
                 column.label,
-                { x: column.x + 0.025, y: panelTop, width: columnWidth - 0.05, height: headerHeight },
+                { x: column.x + 0.02, y: panelTop, width: columnWidth - 0.04, height: headerHeight },
                 labelSize,
               ),
               labelSize,
@@ -2561,7 +2595,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           slide.elements.push(
             text(
               copy,
-              frame(column.x + 0.035, textTop, columnWidth - 0.07, textHeight),
+              frame(column.x + panelPaddingX, textTop, copyWidth, textHeight),
               itemSize,
               bodyInk,
               false,
@@ -2631,7 +2665,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(
           text(
             content.title,
-            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            frame(chrome.title.x, chrome.title.y, chrome.title.width, chrome.title.height),
             templateTitleSize ?? typeScale.title,
             titleInk,
             true,
@@ -2643,7 +2677,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!keepsArtwork)
           slide.elements.push(
             shape(
-              frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.2), 0.012),
+              frame(chrome.rule.x, chrome.rule.y, chrome.rule.width, Math.max(0.009, chrome.rule.height)),
               design.accent,
             ),
           );
@@ -2697,18 +2731,35 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const rows = Math.ceil(metrics.length / columns);
           const cellWidth = contentBox.width / columns;
           const cardGap = 0.03;
-          const valueSize = 30;
-          const labelSize = 15;
-          // The stat card carries a number and its label; it is sized to that
-          // pair instead of stretching over the whole placeholder, which used to
-          // leave the label stranded at the bottom of a mostly empty card.
-          const cardHeight = Math.min(0.24, contentBox.height / rows - 0.04);
+          const valueSize = columns >= 3 ? 40 : 48;
+          const labelSize = 18;
+          const cardPaddingX = 0.22 / pageWidthIn;
+          const cardPaddingY = 0.20 / pageHeightIn;
+          const cardWidth = cellWidth - cardGap;
+          const valueHeight = Math.max(
+            ...metrics.map((metric) =>
+              blockHeight(metric.value, cardWidth - cardPaddingX * 2, valueSize, bodyLeading),
+            ),
+          );
+          const labelHeight = Math.max(
+            ...metrics.map((metric) =>
+              blockHeight(metric.label, cardWidth - cardPaddingX * 2, labelSize, bodyLeading),
+            ),
+          );
+          // The card carries a number and its label; the height is measured
+          // from those two blocks plus a physical padding. The old 0.24 cap
+          // left a 1.8in card holding a single line of 15pt label with a hole
+          // between the number and its name.
+          const cardHeight = Math.min(
+            Math.max(0.24, contentBox.height / rows - cardGap),
+            Math.max(0.24, cardPaddingY * 2 + valueHeight + 0.02 + labelHeight),
+          );
           const gridHeight = rows * cardHeight + (rows - 1) * cardGap;
           const gridTop = contentBox.y + (contentBox.height - gridHeight) * CONTENT_REGION.blockVerticalAnchor;
           metrics.forEach((metric, metricIndex) => {
             const column = metricIndex % columns;
             const row = Math.floor(metricIndex / columns);
-            const width = cellWidth - 0.025;
+            const width = cardWidth;
             const x = contentBox.x + column * cellWidth;
             const y = gridTop + row * (cardHeight + cardGap);
             // The card text is a view of the reviewed metric, not a copy of it.
@@ -2717,16 +2768,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             slide.elements.push(shape(frame(x, y, width, cardHeight), cardFill, "rectangle", cardStroke, 0.75));
             // The number and its label share a card that grows shorter with
             // every extra row, so both are fitted to the card they sit in.
-            const valueFrame = centeredBlock(
-              metric.value,
-              { x: x + 0.02, y: y + cardHeight * 0.1, width: width - 0.04, height: cardHeight * 0.46 },
-              valueSize,
+            const valueFrame = frame(
+              x + cardPaddingX,
+              y + cardPaddingY,
+              width - cardPaddingX * 2,
+              valueHeight,
             );
             const fittedValueSize = fittedFontSize(
               metric.value,
               frame(valueFrame.x, valueFrame.y, valueFrame.width, valueFrame.height),
               valueSize,
-              12,
+              24,
+              bodyLeading,
+              valueSize + 8,
             );
             const valueText = text(
               metric.value,
@@ -2740,16 +2794,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             );
             if (block) valueText.contentBlockRef = { blockId: block.id, field: "value" };
             slide.elements.push(valueText);
-            const labelFrame = centeredBlock(
-              metric.label,
-              { x: x + 0.02, y: y + cardHeight * 0.54, width: width - 0.04, height: cardHeight * 0.36 },
-              labelSize,
+            const labelFrame = frame(
+              x + cardPaddingX,
+              y + cardPaddingY + valueHeight + 0.02,
+              width - cardPaddingX * 2,
+              labelHeight,
             );
             const fittedLabelSize = fittedFontSize(
               metric.label,
               frame(labelFrame.x, labelFrame.y, labelFrame.width, labelFrame.height),
               labelSize,
-              9,
+              12,
+              bodyLeading,
+              20,
             );
             const labelText = text(
               metric.label,
@@ -2773,7 +2830,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(
           text(
             content.title,
-            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            frame(chrome.title.x, chrome.title.y, chrome.title.width, chrome.title.height),
             templateTitleSize ?? typeScale.title,
             titleInk,
             true,
@@ -2785,35 +2842,42 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!keepsArtwork)
           slide.elements.push(
             shape(
-              frame(titleBox.x, titleBox.y + titleBox.height + 0.03, Math.min(0.12, titleBox.width * 0.2), 0.012),
+              frame(chrome.rule.x, chrome.rule.y, chrome.rule.width, Math.max(0.009, chrome.rule.height)),
               design.accent,
             ),
           );
         const stepGap = 0.03 * density.gap;
         const stepWidth =
           (contentBox.width - stepGap * Math.max(processItems.length - 1, 0)) / Math.max(processItems.length, 1);
-        const labelSize = 18;
-        const textSize = 14;
+        const labelSize = 20;
+        const textSize = 16;
         const badgeSize = 14;
-        const badgeDiameter = 0.42;
+        const badgeDiameter = 0.38;
         const badgeHeight = badgeDiameter / pageHeightIn;
-        const padding = 0.045;
-        // The card is sized by what it carries: a badge, a label and one or two
-        // lines of copy. Centring the copy in a fixed 1.95in panel left a hole
-        // under every label and pushed the whole row into the upper third.
+        // Padding is a physical distance, not a share of the page. The old
+        // 0.045-of-page-width value took 0.6in from each side of a 2.8in card
+        // and left a 1.6in text column, which is what broke "建库" into "建"
+        // and "库" on the same card.
+        const paddingX = 0.22 / pageWidthIn;
+        const paddingY = 0.22 / pageHeightIn;
         const labelHeight = pointsToFraction(labelSize * 1.3);
         const bodyHeight = Math.max(
-          ...processItems.map((item) => blockHeight(item.text, stepWidth - padding * 2, textSize, bodyLeading)),
+          ...processItems.map((item) => blockHeight(item.text, stepWidth - paddingX * 2, textSize, bodyLeading)),
         );
         const stepHeight = Math.min(
-          0.28,
-          Math.max(0.16, padding * 2 + badgeHeight + 0.02 + labelHeight + 0.01 + bodyHeight),
+          contentBox.height,
+          Math.min(
+            0.36,
+            Math.max(0.2, paddingY * 2 + badgeHeight + 0.02 + labelHeight + 0.01 + bodyHeight),
+          ),
         );
-        const stepTop = contentBox.y + (contentBox.height - stepHeight) * 0.5;
+        // The band sits on the content axis with a small breathing gap. Centring
+        // a 2.1in band in a 4.3in area floated it in the middle of the page.
+        const stepTop = contentBox.y + 0.02;
         processItems.forEach((item, itemIndex) => {
           const x = contentBox.x + itemIndex * (stepWidth + stepGap);
-          const badgeX = x + padding;
-          const badgeY = stepTop + padding;
+          const badgeX = x + paddingX;
+          const badgeY = stepTop + paddingY;
           slide.elements.push(
             shape(frame(x, stepTop, stepWidth, stepHeight), cardFill, "rectangle", cardStroke, 0.75),
             shape(frame(x, stepTop, stepWidth, 0.008), design.accent),
@@ -2837,19 +2901,19 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           );
           // Left aligned type reads as an editorial column; centring every line
           // in four identical boxes is what made the page look like a template.
-          const labelY = badgeY + badgeHeight + 0.02;
-          const labelFrame = frame(x + padding, labelY, stepWidth - padding * 2, labelHeight);
-          const fittedLabelSize = fittedFontSize(item.label, labelFrame, labelSize, 9);
+          const labelY = badgeY + badgeHeight + 0.018;
+          const labelFrame = frame(x + paddingX, labelY, stepWidth - paddingX * 2, labelHeight);
+          const fittedLabelSize = fittedFontSize(item.label, labelFrame, labelSize, 12);
           slide.elements.push(
             text(item.label, labelFrame, fittedLabelSize, titleInk, true, "left", undefined, cardLuminance),
           );
           const copyFrame = frame(
-            x + padding,
-            labelY + labelHeight + 0.01,
-            stepWidth - padding * 2,
+            x + paddingX,
+            labelY + labelHeight + 0.008,
+            stepWidth - paddingX * 2,
             Math.max(0.04, bodyHeight),
           );
-          const fittedTextSize = fittedFontSize(item.text, copyFrame, textSize, 9);
+          const fittedTextSize = fittedFontSize(item.text, copyFrame, textSize, 10);
           slide.elements.push(
             text(item.text, copyFrame, fittedTextSize, bodyInk, false, "left", undefined, cardLuminance),
           );
@@ -3187,7 +3251,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(
           text(
             content.title,
-            frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+            frame(chrome.title.x, chrome.title.y, chrome.title.width, chrome.title.height),
             templateTitleSize ?? typeScale.title,
             titleInk,
             true,
@@ -3204,7 +3268,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             slide.elements.push(
               text(
                 String(index + 1).padStart(2, "0"),
-                frame(alignmentGrid.right - 0.07, alignmentGrid.titleY, 0.07, alignmentGrid.titleHeight),
+                frame(chrome.title.x + chrome.title.width - 0.07, chrome.title.y, 0.07, chrome.title.height),
                 14,
                 titleInk,
                 true,
@@ -3215,12 +3279,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             );
           slide.elements.push(
             shape(
-              frame(
-                alignmentGrid.left,
-                alignmentGrid.ruleY,
-                Math.min(0.12, (alignmentGrid.right - alignmentGrid.left) * 0.2),
-                0.009,
-              ),
+              frame(chrome.rule.x, chrome.rule.y, chrome.rule.width, Math.max(0.009, chrome.rule.height)),
               design.accent,
             ),
           );
@@ -3233,26 +3292,31 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const columnGap = 0.022 * density.gap;
         const rowGap = 0.04 * density.gap;
         const cardWidth = (contentWidth - columnGap * (columns - 1)) / columns;
+        // Padding is a physical distance, not a share of the page. A 0.03-of-
+        // page-width gutter is 0.4in on a 2-column card and the same 0.4in on a
+        // 3-column card, which is where the narrow text column came from.
+        const cardPaddingX = 0.24 / pageWidthIn;
+        const cardPaddingY = 0.20 / pageHeightIn;
         // A top-left badge frees the whole card width for copy. Placing the
         // badge in a left gutter made the text column narrow and the card
         // look unbalanced on portrait-ish three-column grids.
         const badgeDiameter = 0.36;
         const badgeHeight = badgeDiameter / pageHeightIn;
-        const cardTextTop = 0.035 + badgeHeight + 0.03;
+        const cardTextTop = cardPaddingY + badgeHeight + 0.02;
         // Four short points leave a grid that reads as a caption when the type
         // stays at the dense size. Sparse grids carry one point more.
         const sparseCards = visible.length <= 4 && visible.every((item) => item.trim().length <= 16);
-        const cardFontSize = sparseCards ? 17 : 16;
+        const cardFontSize = sparseCards ? 19 : 17;
+        const cardTextWidth = cardWidth - cardPaddingX * 2;
         const cardTextHeight = Math.max(
-          ...visible.map((item) => blockHeight(cleanPoint(item), cardWidth - 0.06, cardFontSize, bodyLeading)),
+          ...visible.map((item) => blockHeight(cleanPoint(item), cardTextWidth, cardFontSize, bodyLeading)),
         );
         // A card is as tall as the badge and the copy it carries. Stretching a
-        // one-line card to the row's full height left the copy stranded in the
-        // middle of an empty box.
+        // one-line card to a fixed 0.24/0.26 page height left the copy stranded
+        // in the middle of an empty box.
         const cardHeight = Math.min(
-          rows === 1 ? 0.3 : sparseCards ? 0.26 : 0.24,
-          Math.max(0.16, cardTextTop + cardTextHeight + 0.03),
-          contentHeight / rows - 0.04,
+          Math.max(0.16, contentHeight / rows - 0.03),
+          Math.max(0.16, cardTextTop + cardTextHeight + cardPaddingY),
         );
         const gridHeight = rows * cardHeight + (rows - 1) * rowGap;
         const gridTop = contentBox.y + (contentHeight - gridHeight) * CONTENT_REGION.blockVerticalAnchor;
@@ -3266,8 +3330,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           const y = gridTop + row * (cardHeight + rowGap);
           const cleanItem = cleanPoint(item);
           const badgeWidth = badgeDiameter / pageWidthIn;
-          const badgeX = x + 0.03;
-          const badgeY = y + 0.035;
+          const badgeX = x + cardPaddingX;
+          const badgeY = y + cardPaddingY;
           const textTop = y + cardTextTop;
           slide.elements.push(
             shape(frame(x, y, cardWidth, cardHeight), cardFill, "rectangle", cardStroke, 0.75),
@@ -3309,21 +3373,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             );
           }
           const cardTextBox = {
-            x: x + 0.03,
+            x: x + cardPaddingX,
             y: textTop,
-            width: cardWidth - 0.06,
-            height: Math.max(0.05, cardHeight - cardTextTop - 0.03),
+            width: cardTextWidth,
+            height: Math.max(0.05, cardHeight - cardTextTop - cardPaddingY),
           };
           const fittedCardSize = fittedFontSize(
             cleanItem,
             frame(cardTextBox.x, cardTextBox.y, cardTextBox.width, cardTextBox.height),
             cardFontSize,
             12,
+            bodyLeading,
+            22,
           );
-          const fittedHeight = blockHeight(cleanItem, cardWidth - 0.06, fittedCardSize, bodyLeading);
-          // Centre the copy in the space under the badge: a one-line card with
-          // the text pinned to the top reads as a card that was cut short.
-          const copyTop = cardTextBox.y + Math.max(0, (cardTextBox.height - fittedHeight) / 2);
+          const fittedHeight = blockHeight(cleanItem, cardTextWidth, fittedCardSize, bodyLeading);
+          // Top-align the copy under the badge. The card is already sized to
+          // the text; centring a one-line card inside a taller floor is what
+          // made short cards look like empty boxes.
+          const copyTop = cardTextBox.y;
           slide.elements.push(
             text(
               cleanItem,
@@ -3331,7 +3398,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
                 cardTextBox.x,
                 copyTop,
                 cardTextBox.width,
-                Math.max(0.04, Math.min(cardTextBox.height, fittedHeight)),
+                Math.max(0.04, Math.min(cardTextBox.height, fittedHeight * 1.04 + 0.004)),
               ),
               fittedCardSize,
               "#293241",
@@ -3578,17 +3645,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         slide.elements.push(
           text(
             content.title,
-            safeFrame(
-              recipeTitle,
-              [
-                alignmentGrid.left,
-                alignmentGrid.titleY,
-                alignmentGrid.right - alignmentGrid.left,
-                alignmentGrid.titleHeight,
-              ],
-              0.25,
-              0.04,
-            ),
+            frame(chrome.title.x, chrome.title.y, chrome.title.width, chrome.title.height),
             templateTitleSize ?? typeScale.title,
             titleInk,
             true,
@@ -3600,31 +3657,51 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!keepsArtwork)
           slide.elements.push(
             shape(
-              frame(
-                alignmentGrid.left,
-                alignmentGrid.ruleY,
-                Math.min(0.11, (alignmentGrid.right - alignmentGrid.left) * 0.2),
-                0.012,
-              ),
+              frame(chrome.rule.x, chrome.rule.y, chrome.rule.width, Math.max(0.009, chrome.rule.height)),
               design.accent,
             ),
           );
-        if (content.body.trim())
+        if (content.body.trim()) {
+          // A single paragraph used to be pinned to the top of a full-height
+          // frame: 17pt copy ended at 38% of the page and the rest was white.
+          // A closing/summary page with short copy is now set larger and
+          // centred as one statement. A template body placeholder keeps its own
+          // geometry and size: the template's type scale is not ours to
+          // overwrite. Running copy keeps the theme's body size.
+          const templateBody = recipeContent;
+          const summary = design.layout === "summary" || design.layout === "quote";
+          const shortStatement = summary && content.body.length <= 160;
+          const bodyWidth = templateBody ? templateBody.width : Math.min(contentBox.width, 0.72);
+          const preferred = templateBody
+            ? (templateBodySize ?? typeScale.body)
+            : shortStatement
+              ? 22
+              : typeScale.body;
+          const bodyBox = templateBody
+            ? safeFrame(templateBody, [contentBox.x, contentBox.y, bodyWidth, contentBox.height], 0.25, 0.12)
+            : frame(contentBox.x, contentBox.y, bodyWidth, contentBox.height);
+          const bodySize = fittedFontSize(
+            content.body,
+            bodyBox,
+            preferred,
+            12,
+            bodyLeading,
+            templateBody ? preferred : shortStatement ? 24 : preferred,
+          );
+          const measured = blockHeight(content.body, bodyWidth, bodySize, bodyLeading);
+          const bodyY =
+            shortStatement && measured < contentBox.height * 0.55
+              ? contentBox.y + (contentBox.height - measured) / 2
+              : templateBody
+                ? templateBody.y
+                : contentBox.y;
           slide.elements.push(
             text(
               content.body,
-              safeFrame(
-                recipeContent,
-                [
-                  alignmentGrid.left + 0.01,
-                  alignmentGrid.contentY,
-                  alignmentGrid.right - alignmentGrid.left - 0.02,
-                  alignmentGrid.contentBottom - alignmentGrid.contentY,
-                ],
-                0.25,
-                0.12,
-              ),
-              templateBodySize ?? typeScale.body,
+              templateBody
+                ? bodyBox
+                : frame(contentBox.x, bodyY, bodyWidth, Math.max(0.06, measured * 1.04 + 0.004)),
+              bodySize,
               bodyInk,
               false,
               "left",
@@ -3632,6 +3709,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               contentTextLuminance,
             ),
           );
+        }
       }
       // Link rendered title/body text back to semantic content. Structured
       // layouts (cards, timeline items, metrics) stay decorative because one

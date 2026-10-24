@@ -53,10 +53,45 @@ export function fittedFontSize(
   fontFamily: string | undefined,
   lineHeight: number,
 ): number {
-  for (let size = Math.max(1, Math.round(preferredPt)); size >= minimumPt; size -= 1) {
+  return fittedFontSizeInRange(text, frame, preferredPt, minimumPt, preferredPt, fontFamily, lineHeight);
+}
+
+/**
+ * The largest size in `[minimumPt, maximumPt]` that fits the frame.
+ *
+ * The old fitter only ever shrank. That kept text inside its box, but it also
+ * kept a page with three short points at body size while the rows around it
+ * were a foot tall: the page was empty and the type was small at the same time.
+ * A layout that knows a slot is sparse can now ask for a size range and use the
+ * room the content actually has.
+ *
+ * `preferredPt` is the first candidate, not a cap: when it fits, the fitter
+ * keeps growing until `maximumPt` or the first size that no longer fits. When
+ * it does not fit, the fitter shrinks as before. If even `minimumPt` does not
+ * fit, the caller still owns the conflict decision.
+ */
+export function fittedFontSizeInRange(
+  text: string,
+  frame: RectEmu,
+  preferredPt: number,
+  minimumPt: number,
+  maximumPt: number,
+  fontFamily: string | undefined,
+  lineHeight: number,
+): number {
+  const minimum = Math.max(1, Math.round(minimumPt));
+  const maximum = Math.max(minimum, Math.round(maximumPt));
+  const preferred = Math.min(maximum, Math.max(minimum, Math.round(preferredPt)));
+  if (textFits(text, frame, preferred, fontFamily, lineHeight)) {
+    for (let size = preferred + 1; size <= maximum; size += 1) {
+      if (!textFits(text, frame, size, fontFamily, lineHeight)) return size - 1;
+    }
+    return maximum;
+  }
+  for (let size = preferred - 1; size >= minimum; size -= 1) {
     if (textFits(text, frame, size, fontFamily, lineHeight)) return size;
   }
-  return minimumPt;
+  return minimum;
 }
 
 export function rectsOverlap(left: RectEmu, right: RectEmu): boolean {

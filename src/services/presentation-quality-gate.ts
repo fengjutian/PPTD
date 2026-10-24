@@ -4,7 +4,13 @@ import { contrastRatio } from "../core/rendering/contrast";
 import { estimateTextLines, textLikelyOverflows } from "../core/rendering/text-fit";
 
 export type PresentationQualityIssueKind =
-  "out-of-bounds" | "text-overlap" | "obstacle-overlap" | "low-contrast" | "text-overflow" | "underfilled-columns";
+  | "out-of-bounds"
+  | "text-overlap"
+  | "obstacle-overlap"
+  | "low-contrast"
+  | "text-overflow"
+  | "underfilled-columns"
+  | "underfilled-page";
 export interface PresentationQualityIssue {
   slideIndex: number;
   elementIds: string[];
@@ -155,6 +161,37 @@ export function validatePresentationVisualQuality(
             issue: "text-overlap",
             message: "两个文本框发生可见重叠",
           });
+      }
+    }
+    // A page that stops in its upper half is not "airy": it is a page whose
+    // composition never happened. The old gate only checked split columns, so a
+    // 17pt paragraph ending at 38% of the page passed every deterministic check.
+    // Cover and section pages are allowed to be sparse; template artwork hides
+    // the page color and is judged by the pixel contrast inspector instead.
+    if (
+      design &&
+      design.layout !== "cover" &&
+      design.layout !== "section" &&
+      !hasFullPageArtwork(slide, slide.elements.length, document.pageSize.width, document.pageSize.height)
+    ) {
+      let paintedBottom = 0;
+      for (const element of slide.elements) {
+        if (element.type === "image" && element.placement === "layout-background") continue;
+        const frameBottom = (element.frame.y + element.frame.height) / document.pageSize.height;
+        if (frameBottom > 0.9) continue;
+        const painted =
+          element.type === "text"
+            ? element.frame.y / document.pageSize.height + renderedTextHeight(element, document.pageSize.height)
+            : frameBottom;
+        paintedBottom = Math.max(paintedBottom, painted);
+      }
+      if (paintedBottom < 0.58) {
+        issues.push({
+          slideIndex,
+          elementIds: texts.map((element) => element.id),
+          issue: "underfilled-page",
+          message: "正文只占页面上半部，下方连续空白超过三分之一",
+        });
       }
     }
     // A split page with two tall columns can still look empty when the copy is

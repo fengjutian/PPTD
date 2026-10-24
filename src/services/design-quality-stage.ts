@@ -256,6 +256,7 @@ const issueLabels: Record<PresentationQualityIssue["issue"], string> = {
   "low-contrast": "文字对比度不足",
   "text-overflow": "文本超出文本框容量",
   "underfilled-columns": "双栏正文只占页面上半部",
+  "underfilled-page": "正文只占页面上半部，下方连续空白",
 };
 
 /**

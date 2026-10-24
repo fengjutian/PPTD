@@ -1,15 +1,11 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { Emu } from "../../document-model";
+import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
 import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
-const TEXT = { x: 0.07, y: 0.1, width: 0.4, height: 0.78 };
-const TITLE = { x: 0.07, y: 0.12, width: 0.4, height: 0.26 };
-const RULE = { x: 0.07, y: 0.41, width: 0.12, height: 0.006 };
-const ITEMS_TOP = 0.46;
-const ITEMS_BOTTOM = 0.89;
 const IMAGE = { x: 0.52, y: 0, width: 0.48, height: 1 };
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
@@ -42,11 +38,20 @@ export const imageLed: LayoutRecipe = {
     }
 
     const page = ctx.frame.page;
+    const chrome = resolveChrome(ctx);
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
     const isCover = ctx.facts.layout === "cover";
-    const titleFrame = frameFromNormalized(TITLE, page);
+    const textX = chrome.title.x;
+    const titleWidth = Math.min(0.4, Math.max(0.25, chrome.title.width));
+    const titleFrameNormalized = {
+      x: textX,
+      y: chrome.title.y,
+      width: titleWidth,
+      height: Math.max(0.2, chrome.title.height),
+    };
+    const titleFrame = frameFromNormalized(titleFrameNormalized, page);
     const titleSize = fittedFontSize(
       title,
       titleFrame,
@@ -60,16 +65,19 @@ export const imageLed: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(frameFromNormalized(RULE, page), ctx.colors.accent),
+      rectElement(
+        frameFromNormalized({ x: textX, y: chrome.rule.y, width: 0.12, height: chrome.rule.height }, page),
+        ctx.colors.accent,
+      ),
       textElement(title, titleFrame, titleSize, ctx.colors.title, true, "left", headingFamily, {
         contentRef: "title",
         lineHeight,
       }),
     ];
 
-    let itemTop = ITEMS_TOP;
+    let itemTop = Math.max(chrome.contentTop, chrome.rule.y + 0.05);
     if (units.lead) {
-      const leadFrame = frameFromNormalized({ x: TEXT.x, y: itemTop, width: TEXT.width, height: 0.13 }, page);
+      const leadFrame = frameFromNormalized({ x: textX, y: itemTop, width: titleWidth, height: 0.13 }, page);
       const leadSize = fittedFontSize(units.lead, leadFrame, ctx.tokens.type.bodyPt, 12, bodyFamily, lineHeight);
       if (!textFits(units.lead, leadFrame, leadSize, bodyFamily, lineHeight)) {
         return conflict("body", "图文页引导段放不下");
@@ -85,13 +93,13 @@ export const imageLed: LayoutRecipe = {
 
     const items = units.items;
     if (items.length > 0) {
-      const area = ITEMS_BOTTOM - itemTop;
+      const area = chrome.contentBottom - itemTop;
       const rowHeight = area / items.length;
       if (rowHeight < 0.07) return conflict("items", "图文页要点行高不足");
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index]!;
         const frame = frameFromNormalized(
-          { x: TEXT.x, y: itemTop + index * rowHeight + 0.01, width: TEXT.width, height: rowHeight - 0.02 },
+          { x: textX, y: itemTop + index * rowHeight + 0.01, width: titleWidth, height: rowHeight - 0.02 },
           page,
         );
         const size = fittedFontSize(item, frame, ctx.tokens.type.bodyPt, 12, bodyFamily, lineHeight);
@@ -122,7 +130,7 @@ export const imageLed: LayoutRecipe = {
       }
     } else if (units.body) {
       const bodyFrame = frameFromNormalized(
-        { x: TEXT.x, y: itemTop, width: TEXT.width, height: ITEMS_BOTTOM - itemTop },
+        { x: textX, y: itemTop, width: titleWidth, height: chrome.contentBottom - itemTop },
         page,
       );
       const size = fittedFontSize(units.body, bodyFrame, ctx.tokens.type.bodyPt, 12, bodyFamily, lineHeight);
