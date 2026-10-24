@@ -8,7 +8,7 @@ import { fittedFontSize, frameFromNormalized, ruleHeight, textFits, textHeightPt
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 /** The most air a row may take before the list stops reading as one block. */
-const MAX_ROW_GAP_PT = 26;
+const MAX_ROW_GAP_PT = 36;
 /** The tightest a row may sit before the list turns into a paragraph. */
 const MIN_ROW_GAP_PT = 8;
 
@@ -70,12 +70,19 @@ export const editorialIndex: LayoutRecipe = {
         {
           x: chrome.content.x,
           y: contentTop,
-          width: chrome.content.width,
-          height: Math.min(0.12, chrome.content.height * 0.22),
+          width: chrome.content.width * 0.72,
+          height: Math.min(0.14, chrome.content.height * 0.25),
         },
         page,
       );
-      const leadSize = fittedFontSize(units.lead, leadFrame, ctx.tokens.type.bodyPt, 12, bodyFamily, lineHeight);
+      const leadSize = fittedFontSize(
+        units.lead,
+        leadFrame,
+        Math.min(ctx.tokens.type.bodyPt, 16),
+        12,
+        bodyFamily,
+        lineHeight,
+      );
       if (!textFits(units.lead, leadFrame, leadSize, bodyFamily, lineHeight)) {
         return conflict("body", "正文引导段放不进标题与条目之间");
       }
@@ -107,7 +114,7 @@ export const editorialIndex: LayoutRecipe = {
     const contentHeight = chrome.contentBottom - contentTop;
     if (contentHeight < 0.2) return conflict("items", "标题与条目之间没有足够的正文区");
     const sparse = units.items.length <= 4 && units.items.every((item) => item.length <= 18);
-    const preferred = Math.min(26, ctx.tokens.type.bodyPt + (sparse ? 6 : 2));
+    const preferred = Math.min(22, ctx.tokens.type.bodyPt + (sparse ? 4 : 1));
     // The column is measured, not divided. A three-point page used to give each
     // 17pt line a 1.35in row because the content area was split into equal
     // slots; the leftover space is now a bounded gap, and the block keeps the
@@ -144,7 +151,7 @@ export const editorialIndex: LayoutRecipe = {
     );
 
     const separatorHeight = ruleHeight(ctx.tokens.rule.hairlinePt, page.height);
-    const numberSize = Math.max(18, Math.min(28, Math.round(flow.fontSizePt * 1.15)));
+    const numberSize = Math.max(16, Math.min(22, Math.round(flow.fontSizePt * 1.05)));
 
     flow.rows.forEach((row, index) => {
       const rowY = firstRowTop + pointsToNormalized(row.topPt - (flow.rows[0]?.topPt ?? 0), page.height);

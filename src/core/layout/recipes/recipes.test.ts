@@ -531,18 +531,11 @@ describe("comparison recipe", () => {
       .filter((element): element is TextElement => element.type === "text")
       .map((element) => element.text);
     expect(texts).toEqual(
-      expect.arrayContaining([
-        "自建实验室",
-        "委托检测",
-        "长期成本更低",
-        "数据完全自主",
-        "启动快",
-        "依赖外部排期",
-        "VS",
-      ]),
+      expect.arrayContaining(["自建实验室", "委托检测", "长期成本更低", "数据完全自主", "启动快", "依赖外部排期"]),
     );
+    expect(texts).not.toContain("VS");
     const ellipses = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
-    expect(ellipses).toHaveLength(1);
+    expect(ellipses).toHaveLength(0);
   });
 
   it("refuses six points in one column", () => {

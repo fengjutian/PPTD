@@ -97,6 +97,13 @@ describe("AI structured outputs", () => {
           titleColor: "#12233D",
           bodyColor: "#465368",
           recipe: "editorial-index",
+          designPlan: {
+            role: "claim",
+            composition: { primitive: "split", ratio: 0.38 },
+            density: "normal",
+            templatePolicy: "takeover",
+            recipe: "asymmetric-split",
+          },
           variant: "left",
           focal: "title",
         },
@@ -104,6 +111,12 @@ describe("AI structured outputs", () => {
     });
     expect(design.slides[0]).toMatchObject({
       recipe: "editorial-index",
+      designPlan: {
+        role: "claim",
+        composition: { primitive: "split", ratio: 0.38 },
+        density: "normal",
+        templatePolicy: "takeover",
+      },
       variant: "left",
       focal: "title",
     });

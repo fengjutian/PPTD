@@ -1854,10 +1854,11 @@ describe("document commands", () => {
     );
     const texts = result.slides[0]!.elements.filter((element): element is TextElement => element.type === "text");
     expect(texts.map((element) => element.text)).toEqual(
-      expect.arrayContaining(["自建实验室", "委托检测", "长期成本更低", "启动快", "VS"]),
+      expect.arrayContaining(["自建实验室", "委托检测", "长期成本更低", "启动快"]),
     );
+    expect(texts.map((element) => element.text)).not.toContain("VS");
     expect(result.slides[0]!.elements.some((element) => element.type === "shape" && element.shape === "ellipse")).toBe(
-      true,
+      false,
     );
   });
 
@@ -2053,6 +2054,91 @@ describe("document commands", () => {
     expect(
       result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "肿瘤早筛覆盖率提升"),
     ).toBe(true);
+  });
+
+  it("compiles a design plan and lays a takeover surface over template cards", () => {
+    const source = createDocument();
+    const content = {
+      title: "反垄断裁决与 AI 资本开支，将主导 Alphabet 下一财年的估值走向",
+      body: [
+        "美国与欧盟反垄断诉讼可能改变搜索与 Android 分发模式",
+        "AI 数据中心与芯片投入将推高资本开支，压制短期利润率",
+        "搜索广告与云收入仍是估值的基本锚点",
+        "生成式 AI 商业化进度决定长期估值溢价",
+      ].join("\n"),
+      speakerNotes: "",
+    };
+    const design = {
+      layout: "split" as const,
+      background: "#486A67",
+      accent: "#B08A2E",
+      titleColor: "#FFFFFF",
+      bodyColor: "#293241",
+      designPlan: {
+        role: "claim" as const,
+        composition: { primitive: "split" as const, ratio: 0.38 },
+        density: "normal" as const,
+        templatePolicy: "takeover" as const,
+        recipe: "asymmetric-split" as const,
+      },
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 4,
+          shortItems: false,
+          longestItemLength: 30,
+          bodyLength: 0,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "split",
+        },
+      ],
+      pageCount: 1,
+      id: "plan",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "Alphabet 估值",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+        templateLayouts: [
+          {
+            index: 11,
+            name: "内页",
+            backgroundImageDataUrl: "data:image/png;base64,AAAA",
+            regions: [
+              {
+                role: "title" as const,
+                frame: { x: 0.052, y: 0.03, width: 0.8, height: 0.08 },
+                textColor: "#FFFFFF",
+              },
+              {
+                role: "body" as const,
+                frame: { x: 0.08, y: 0.22, width: 0.84, height: 0.62 },
+                textColor: "#293241",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const surface = result.slides[0]!.elements.find(
+      (element) => element.type === "shape" && element.style.fill === "#486A67",
+    );
+    expect(surface?.type).toBe("shape");
+    expect(surface?.type === "shape" ? surface.frame.width / source.pageSize.width : 0).toBeGreaterThan(0.8);
+    const body = result.slides[0]!.elements.find(
+      (element): element is TextElement => element.type === "text" && element.text === content.body.split("\n")[2],
+    )!;
+    // The template body ink was chosen for white cards; the takeover surface is
+    // dark, so the compiler must flip the body copy to a light ink.
+    expect(body.style.color).not.toBe("#293241");
+    expect(result.slides[0]!.content.title).toBe(content.title);
   });
 
   it("uses the section statement for a chapter page", () => {

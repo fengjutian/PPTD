@@ -52,7 +52,7 @@ export function isVisualAssetRole(value: unknown): value is AiVisualAssetRole {
 
 /** 素材层的默认描述前缀，让不同页面的图看起来像同一套。 */
 export const VISUAL_ASSET_STYLE_HINT =
-  "商务演示配图，简洁克制的几何构成，柔和光线，与页面主色协调，画面中不要出现任何文字、字母或数字";
+  "财经杂志编辑摄影或高质量材质特写，低饱和、自然光、留白充足，与页面主色协调；不要霓虹灯、不要 Logo、不要图标、不要 UI 元素，画面中不要出现任何文字、字母或数字";
 
 /**
  * 一页的配图提示词。

@@ -82,8 +82,7 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
     colors = {
       ...input.colors,
       body: dark ? "#DCE3EA" : "#3E4650",
-      accent:
-        dark && (colorLuminance(input.colors.accent) ?? 1) < 0.32 ? "#DCE3EA" : input.colors.accent,
+      accent: dark && (colorLuminance(input.colors.accent) ?? 1) < 0.32 ? "#DCE3EA" : input.colors.accent,
     };
   }
 
@@ -107,8 +106,8 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
 
 /** The clean surface a takeover draws over the template body. */
 function takeoverSurface(chrome: PageChrome, safe: NormalizedFrame): NormalizedFrame {
-  const left = Math.max(0.035, safe.x + 0.01);
-  const right = Math.min(0.965, safe.x + safe.width - 0.01);
+  const left = Math.max(0.02, safe.x - 0.02);
+  const right = Math.min(0.98, safe.x + safe.width + 0.02);
   const top = Math.max(0.11, Math.min(0.2, chrome.contentTop - 0.03));
   const bottom = Math.min(0.9, chrome.contentBottom + 0.02);
   return { x: left, y: top, width: Math.max(0.2, right - left), height: Math.max(0.2, bottom - top) };
@@ -146,10 +145,7 @@ export function planRecipeId(plan: PageDesignPlan, facts: CompositionFacts): Rec
 }
 
 /** The content frame that a takeover page actually uses. */
-export function takeoverContentFrame(input: {
-  chrome: PageChrome;
-  frame: RecipeContext["frame"];
-}): RectEmu {
+export function takeoverContentFrame(input: { chrome: PageChrome; frame: RecipeContext["frame"] }): RectEmu {
   const surface = takeoverSurface(input.chrome, input.frame.safe);
   const inset = 0.05;
   return frameFromNormalized(

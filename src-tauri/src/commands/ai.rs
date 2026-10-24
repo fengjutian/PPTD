@@ -1549,6 +1549,18 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - 封面优先 cover-statement；section 优先 section-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 timeline 优先 timeline-rail；有 quote 且 layout=quote 优先 quote-field；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
 - variant 只能是 left 或 right；focal 只能是 title、index 或 body；不确定就省略。
 
+【设计计划 designPlan（可选，优先于逐块微调）】
+当页面正文落在模板的卡片/网格里，文字被卡片几何限制，或整页只是等权卡片时，可以给该页一个 designPlan：
+- role 只能是 cover、section、claim、comparison、process、timeline、quote、summary。
+- composition.primitive 只能是 split、stack、grid、rail、overlay、band；ratio 在 0.25–0.75。
+- density 只能是 sparse、normal、dense。
+- templatePolicy：use 表示填模板占位；takeover 表示保留模板页眉/Logo/页脚，但用干净内容面覆盖正文卡片后重新构图；ignore 暂不使用。
+- recipe 可选，必须是已实现配方；designPlan 存在时由编译器决定几何，recipe 只是首选。
+- emphasis 只标 blockId 和字符范围，不得改文案；focal 只描述第一视觉入口，不输出坐标。
+- 只有正文页使用 takeover；封面、章节、引文页不要 takeover。
+示例：
+{"role":"claim","composition":{"primitive":"split","ratio":0.38},"density":"normal","templatePolicy":"takeover","recipe":"asymmetric-split"}
+
 九、主题方向
 1. 用户选择的主题方向以 JSON 传入，约束视觉气质、页面节奏、图片方向、信息密度和禁止组合。
 2. 主题方向不得覆盖内容边界、模板安全区、页面配方合法性；冲突时按“硬规则 > 模板 > 主题方向 > 模型偏好”处理。
@@ -1560,7 +1572,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 2. slides 数量必须与输入内容页数完全一致，顺序必须一致。
 3. 所有颜色必须为六位十六进制格式，例如 #1A2B3C。
 4. layout 只能是 cover、title-body、split、cards、quote、section、summary 之一。
-5. 每页必须提供 layout、visualNarrative、composition、emphasis、densityTarget、palette、background、accent、titleColor 和 bodyColor；recipe、variant、focal 可选。
+5. 每页必须提供 layout、visualNarrative、composition、emphasis、densityTarget、palette、background、accent、titleColor 和 bodyColor；recipe、designPlan、variant、focal 可选。
 6. 不得输出坐标、字号、正文或装饰元素；这些由确定性排版引擎生成。
 
 严格输出结构：

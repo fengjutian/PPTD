@@ -8,15 +8,7 @@ import type { RecipeId } from "./deck-concept";
  * compiler turns this plan into geometry, so every page still lands on the same
  * title axis, grid and safe area.
  */
-export type DesignRole =
-  | "cover"
-  | "section"
-  | "claim"
-  | "comparison"
-  | "process"
-  | "timeline"
-  | "quote"
-  | "summary";
+export type DesignRole = "cover" | "section" | "claim" | "comparison" | "process" | "timeline" | "quote" | "summary";
 
 /** A layout family, not a finished recipe. */
 export type DesignPrimitive = "split" | "stack" | "grid" | "rail" | "overlay" | "band";

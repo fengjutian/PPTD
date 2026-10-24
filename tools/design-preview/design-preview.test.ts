@@ -60,7 +60,8 @@ describe("ten-page design preview", () => {
     expect(texts(2)).toEqual(expect.arrayContaining(["01", "客流回升"]));
     expect(texts(4)).toEqual(expect.arrayContaining(["38 万", "260 家", "5 天"]));
     expect(ellipses(5)).toHaveLength(4);
-    expect(texts(6)).toEqual(expect.arrayContaining(["自建团队", "委托合作", "VS"]));
+    expect(texts(6)).toEqual(expect.arrayContaining(["自建团队", "委托合作"]));
+    expect(texts(6)).not.toContain("VS");
     expect(ellipses(7)).toHaveLength(5);
     expect(texts(8)).toEqual(expect.arrayContaining(["“", "先天下之忧而忧，后天下之乐而乐。", "— 范仲淹"]));
 
