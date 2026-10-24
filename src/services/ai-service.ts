@@ -355,6 +355,7 @@ export const aiPresentationDesignSchema = z.object({
             "comparison",
             "timeline-rail",
             "quote-field",
+            "section-statement",
           ])
           .optional(),
         variant: z.enum(["left", "right"]).optional(),

@@ -43,6 +43,24 @@ describe("template layout selection", () => {
     expect(planTemplateLayouts({ layouts, intents: ["body"] })[0]?.index).toBe(11);
   });
 
+  it("prefers a layout with a picture placeholder for an image page", () => {
+    const withImage: AiTemplateLayout = {
+      index: 21,
+      name: "图文页",
+      regions: [
+        region("title", 0.052, 0.03, 0.45, 0.08),
+        region("body", 0.052, 0.2, 0.44, 0.6),
+        region("image", 0.54, 0.12, 0.4, 0.7),
+      ],
+    };
+    expect(
+      templateLayoutCandidates([contentLayout(11, "内页"), withImage], "image").map((layout) => layout.index),
+    ).toEqual([21]);
+    expect(planTemplateLayouts({ layouts: [contentLayout(11, "内页"), withImage], intents: ["image"] })[0]?.index).toBe(
+      21,
+    );
+  });
+
   it("never keeps a layout whose own title collides with its body", () => {
     const broken: AiTemplateLayout = {
       index: 1,

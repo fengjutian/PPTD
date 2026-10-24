@@ -12,6 +12,9 @@ import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
 import { imageLed } from "./image-led";
 import { processRail } from "./process-rail";
+import { quoteField } from "./quote-field";
+import { sectionStatement } from "./section-statement";
+import { timelineRail } from "./timeline-rail";
 import { consumptionProblem } from "./plan";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
@@ -238,6 +241,31 @@ describe("image-led recipe", () => {
 
   it("requires an actual picture", () => {
     expect(imageLed.supports(facts(), concept(), { hasArtwork: false, hasAsset: false })).toBe(false);
+  });
+
+  it("uses the template picture placeholder when the template has one", () => {
+    const pageContent = content(["品牌认知持续提升", "重点行业渗透加快", "客户续约保持稳定"]);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    ctx.frame.title = { x: inches(0.63), y: inches(0.2), width: inches(5.8), height: inches(0.5) };
+    ctx.frame.content = { x: inches(0.63), y: inches(1.5), width: inches(5.8), height: inches(4.8) };
+    ctx.chrome = planPageChrome({
+      page,
+      title: ctx.frame.title,
+      content: ctx.frame.content,
+      safe: ctx.frame.safe,
+      showRule: false,
+    });
+    ctx.templateImage = { x: 0.56, y: 0.2, width: 0.38, height: 0.6 };
+    expect(
+      imageLed.supports(ctx.facts, ctx.concept, {
+        hasArtwork: true,
+        hasAsset: true,
+        hasTemplateImage: true,
+        assetRole: "side",
+      }),
+    ).toBe(true);
+    const result = plan(imageLed, ctx);
+    expect(result.imageFrame).toEqual(ctx.templateImage);
   });
 });
 
@@ -535,5 +563,128 @@ describe("comparison recipe", () => {
       context(six, { facts: facts({ itemCount: 8, hasComparison: true, layout: "split" }) }),
     );
     expect("conflict" in result).toBe(true);
+  });
+});
+
+describe("timeline-rail recipe", () => {
+  const timelineContent: SlideContent = {
+    title: "公司发展历程",
+    body: "",
+    blocks: [
+      {
+        id: "timeline-1",
+        type: "timeline",
+        items: [
+          { label: "2018", text: "公司成立，完成首轮融资" },
+          { label: "2020", text: "自建测序平台投入运行" },
+          { label: "2021", text: "合作医院突破 100 家" },
+          { label: "2023", text: "年检测样本量超过 30 万" },
+          { label: "2025", text: "三代测序产品线全面上线" },
+        ],
+      },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws dates, nodes and events along one rail", () => {
+    const ctx = context(timelineContent, {
+      facts: facts({ itemCount: 5, hasTimeline: true, hasRowBlock: true, layout: "cards" }),
+    });
+    expect(timelineRail.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(timelineRail, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, timelineContent)).toBeUndefined();
+    expect(result.consumed.blockIds).toEqual(["timeline-1"]);
+    const texts = result.elements
+      .filter((element): element is TextElement => element.type === "text")
+      .map((element) => element.text);
+    expect(texts).toEqual(expect.arrayContaining(["2018", "2025", "公司成立，完成首轮融资"]));
+    const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(5);
+  });
+
+  it("refuses seven dates", () => {
+    const seven = {
+      ...timelineContent,
+      blocks: [
+        {
+          id: "timeline-1",
+          type: "timeline" as const,
+          items: Array.from({ length: 7 }, (_, index) => ({ label: `第${index}年`, text: "事件" })),
+        },
+      ],
+    };
+    const result = timelineRail.plan(
+      context(seven, { facts: facts({ itemCount: 7, hasTimeline: true, hasRowBlock: true }) }),
+    );
+    expect("conflict" in result).toBe(true);
+  });
+});
+
+describe("quote-field recipe", () => {
+  const quoteContent: SlideContent = {
+    title: "岳阳楼记",
+    body: "",
+    blocks: [
+      {
+        id: "quote-1",
+        type: "quote",
+        text: "先天下之忧而忧，后天下之乐而乐。",
+        attribution: "范仲淹",
+      },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws a large quote with its mark and attribution", () => {
+    const ctx = context(quoteContent, {
+      facts: facts({ itemCount: 1, hasQuote: true, layout: "quote" }),
+    });
+    expect(quoteField.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(quoteField, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, quoteContent)).toBeUndefined();
+    expect(result.consumed.blockIds).toEqual(["quote-1"]);
+    const texts = result.elements
+      .filter((element): element is TextElement => element.type === "text")
+      .map((element) => element.text);
+    expect(texts).toEqual(expect.arrayContaining(["“", "先天下之忧而忧，后天下之乐而乐。", "— 范仲淹"]));
+    const quote = result.elements.find(
+      (element): element is TextElement =>
+        element.type === "text" && element.text === "先天下之忧而忧，后天下之乐而乐。",
+    )!;
+    expect(quote.style.fontSizePt).toBeGreaterThanOrEqual(28);
+  });
+});
+
+describe("section-statement recipe", () => {
+  const sectionContent: SlideContent = {
+    title: "第二部分 交付能力",
+    body: "从样本前处理到报告解读的完整链路。",
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws a chapter number, title and one sentence", () => {
+    const ctx = context(sectionContent, { facts: facts({ itemCount: 1, layout: "section" }) });
+    ctx.page = { index: 1, total: 10 };
+    expect(sectionStatement.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(sectionStatement, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, sectionContent)).toBeUndefined();
+    const texts = result.elements
+      .filter((element): element is TextElement => element.type === "text")
+      .map((element) => element.text);
+    expect(texts).toEqual(expect.arrayContaining(["02", sectionContent.title, sectionContent.body]));
+    expect(result.elements.some((element) => element.type === "shape")).toBe(true);
+  });
+
+  it("does not draw over a template section page", () => {
+    const ctx = context(sectionContent, { facts: facts({ itemCount: 1, layout: "section" }) });
+    expect(
+      sectionStatement.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false, hasTemplate: true }),
+    ).toBe(false);
   });
 });

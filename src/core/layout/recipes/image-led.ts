@@ -1,9 +1,10 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { Emu } from "../../document-model";
+import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { fittedFontSize, frameFromNormalized, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 const IMAGE = { x: 0.52, y: 0, width: 0.48, height: 1 };
@@ -21,7 +22,10 @@ export const imageLed: LayoutRecipe = {
 
   supports(facts, concept, options) {
     if (!concept.recipes.includes("image-led")) return false;
-    if (!options.hasAsset || options.hasArtwork) return false;
+    // A picture needs a frame. On a template page the frame is the template's
+    // own picture placeholder; a flat page uses the right half of the page.
+    if (!options.hasAsset) return false;
+    if (options.hasArtwork && !options.hasTemplateImage) return false;
     if (options.assetRole === "band") return false;
     if (facts.hasQuote || facts.hasComparison || facts.hasRowBlock) return false;
     if (facts.layout === "section" || facts.layout === "quote") return false;
@@ -43,13 +47,16 @@ export const imageLed: LayoutRecipe = {
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
     const isCover = ctx.facts.layout === "cover";
+    const templateImage = ctx.templateImage;
     const textX = chrome.title.x;
-    const titleWidth = Math.min(0.4, Math.max(0.25, chrome.title.width));
+    const titleWidth = templateImage
+      ? Math.max(0.25, chrome.title.width)
+      : Math.min(0.4, Math.max(0.25, chrome.title.width));
     const titleFrameNormalized = {
       x: textX,
       y: chrome.title.y,
       width: titleWidth,
-      height: Math.max(0.2, chrome.title.height),
+      height: templateImage ? Math.max(0.1, chrome.title.height) : Math.max(0.2, chrome.title.height),
     };
     const titleFrame = frameFromNormalized(titleFrameNormalized, page);
     const titleSize = fittedFontSize(
@@ -79,7 +86,7 @@ export const imageLed: LayoutRecipe = {
       }),
     ];
 
-    let itemTop = Math.max(chrome.contentTop, chrome.rule.y + 0.05);
+    let itemTop = templateImage ? chrome.contentTop : Math.max(chrome.contentTop, chrome.rule.y + 0.05);
     if (units.lead) {
       const leadFrame = frameFromNormalized({ x: textX, y: itemTop, width: titleWidth, height: 0.13 }, page);
       const leadSize = fittedFontSize(units.lead, leadFrame, ctx.tokens.type.bodyPt, 12, bodyFamily, lineHeight);
@@ -97,33 +104,37 @@ export const imageLed: LayoutRecipe = {
 
     const items = units.items;
     if (items.length > 0) {
-      const area = chrome.contentBottom - itemTop;
-      const rowHeight = area / items.length;
-      if (rowHeight < 0.07) return conflict("items", "图文页要点行高不足");
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index]!;
-        const frame = frameFromNormalized(
-          { x: textX, y: itemTop + index * rowHeight + 0.01, width: titleWidth, height: rowHeight - 0.02 },
-          page,
-        );
-        const size = fittedFontSize(item, frame, ctx.tokens.type.bodyPt, 12, bodyFamily, lineHeight);
-        if (!textFits(item, frame, size, bodyFamily, lineHeight)) {
-          return conflict("items", `图文页第 ${index + 1} 条要点放不下`);
-        }
-        const height = pointsToNormalized(
-          textHeightPt(item, frame.width / 12_700, size, bodyFamily, lineHeight),
-          page.height,
-        );
+      const pageWidthIn = page.width / 914_400;
+      const pageHeightIn = page.height / 914_400;
+      const availableHeight = chrome.contentBottom - itemTop;
+      if (availableHeight < 0.07) return conflict("items", "图文页要点行高不足");
+      const flow = layoutFlow({
+        items,
+        widthPt: titleWidth * pageWidthIn * 72,
+        availableHeightPt: availableHeight * pageHeightIn * 72,
+        preferredFontSizePt: ctx.tokens.type.bodyPt + 2,
+        minimumFontSizePt: 12,
+        minimumGapPt: 10,
+        maximumGapPt: 28,
+        verticalAlign: "top",
+        lineHeightRatio: lineHeight,
+        fontFamily: bodyFamily,
+      });
+      if (flow.overflow) return conflict("items", "图文页要点在文字区里放不下");
+      flow.rows.forEach((row) => {
         elements.push(
           textElement(
-            item,
-            {
-              x: frame.x,
-              y: Math.round((itemTop + index * rowHeight + (rowHeight - height) / 2) * page.height) as Emu,
-              width: frame.width,
-              height: Math.max(1, Math.round((height + 0.006) * page.height)) as Emu,
-            },
-            size,
+            row.text,
+            frameFromNormalized(
+              {
+                x: textX,
+                y: itemTop + pointsToNormalized(row.topPt, page.height),
+                width: titleWidth,
+                height: pointsToNormalized(row.heightPt, page.height),
+              },
+              page,
+            ),
+            row.fontSizePt,
             ctx.colors.body,
             false,
             "left",
@@ -131,7 +142,7 @@ export const imageLed: LayoutRecipe = {
             { contentRef: "decorative", lineHeight },
           ),
         );
-      }
+      });
     } else if (units.body) {
       const bodyFrame = frameFromNormalized(
         { x: textX, y: itemTop, width: titleWidth, height: chrome.contentBottom - itemTop },
@@ -158,7 +169,7 @@ export const imageLed: LayoutRecipe = {
         blockIds: units.blockIds,
       },
       conflicts: [],
-      imageFrame: IMAGE,
+      imageFrame: templateImage ?? IMAGE,
     };
   },
 };

@@ -146,6 +146,9 @@ const repairRecipes = [
   "asymmetric-split",
   "process-rail",
   "comparison",
+  "timeline-rail",
+  "quote-field",
+  "section-statement",
 ] as const;
 type NormalizedRegion = VisualReview["slideGuidance"][number]["safeRegion"];
 

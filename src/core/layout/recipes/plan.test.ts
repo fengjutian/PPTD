@@ -49,6 +49,13 @@ describe("recipe planning", () => {
     expect(chooseRecipeId(facts({ hasProcess: true, hasRowBlock: true, itemCount: 0 }), concept(), options)).toBe(
       "process-rail",
     );
+    expect(chooseRecipeId(facts({ hasTimeline: true, hasRowBlock: true, itemCount: 5 }), concept(), options)).toBe(
+      "timeline-rail",
+    );
+    expect(chooseRecipeId(facts({ hasQuote: true, layout: "quote", itemCount: 1 }), concept(), options)).toBe(
+      "quote-field",
+    );
+    expect(chooseRecipeId(facts({ layout: "section", itemCount: 1 }), concept(), options)).toBe("section-statement");
   });
 
   it("chooses the image-led recipe when the page has a picture", () => {

@@ -1861,6 +1861,245 @@ describe("document commands", () => {
     );
   });
 
+  it("uses the timeline rail for a timeline block", () => {
+    const source = createDocument();
+    const content = {
+      title: "公司发展历程",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        {
+          type: "timeline" as const,
+          items: [
+            { label: "2018", text: "公司成立" },
+            { label: "2020", text: "自建平台" },
+            { label: "2021", text: "医院破百" },
+            { label: "2023", text: "样本超 30 万" },
+            { label: "2025", text: "三代产品线" },
+          ],
+        },
+      ],
+    };
+    const design = {
+      layout: "cards" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#1E3550",
+      bodyColor: "#5F6B76",
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 5,
+          shortItems: true,
+          longestItemLength: 8,
+          bodyLength: 0,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: true,
+          hasTimeline: true,
+          layout: "cards",
+        },
+      ],
+      pageCount: 1,
+      id: "timeline",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "时间线",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+      }),
+    );
+    const texts = result.slides[0]!.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(
+      expect.arrayContaining(["2018", "2025", "公司成立", "三代产品线"]),
+    );
+    expect(
+      result.slides[0]!.elements.filter((element) => element.type === "shape" && element.shape === "ellipse"),
+    ).toHaveLength(5);
+  });
+
+  it("uses the quote field for a quote page", () => {
+    const source = createDocument();
+    const content = {
+      title: "岳阳楼记",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        {
+          type: "quote" as const,
+          text: "先天下之忧而忧，后天下之乐而乐。",
+          attribution: "范仲淹",
+        },
+      ],
+    };
+    const design = {
+      layout: "quote" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#1E3550",
+      bodyColor: "#5F6B76",
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 1,
+          shortItems: true,
+          longestItemLength: 18,
+          bodyLength: 0,
+          hasQuote: true,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "quote",
+        },
+      ],
+      pageCount: 1,
+      id: "quote",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "引文",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+      }),
+    );
+    const texts = result.slides[0]!.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(
+      expect.arrayContaining(["“", "先天下之忧而忧，后天下之乐而乐。", "— 范仲淹"]),
+    );
+  });
+
+  it("uses the template picture placeholder for an image-led page", () => {
+    const source = createDocument();
+    const content = {
+      title: "精准医疗的视觉证据",
+      body: "肿瘤早筛覆盖率提升\n三代测序渗透率上升\n临床指南更新加快",
+      speakerNotes: "",
+    };
+    const design = {
+      layout: "cards" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#1E3550",
+      bodyColor: "#5F6B76",
+      visualAsset: { enabled: true, role: "side" as const },
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 3,
+          shortItems: true,
+          longestItemLength: 12,
+          bodyLength: 40,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "cards",
+        },
+      ],
+      pageCount: 1,
+      id: "template-image",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "图文",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+        visualAssets: [
+          {
+            slideIndex: 0,
+            dataUrl:
+              "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==",
+            mimeType: "image/png" as const,
+            naturalWidth: 1024,
+            naturalHeight: 512,
+            altText: "模板图位",
+          },
+        ],
+        templateLayouts: [
+          {
+            index: 21,
+            name: "图文页",
+            backgroundImageDataUrl: "data:image/png;base64,AAAA",
+            regions: [
+              { role: "title" as const, frame: { x: 0.052, y: 0.03, width: 0.45, height: 0.08 } },
+              { role: "body" as const, frame: { x: 0.052, y: 0.2, width: 0.44, height: 0.6 } },
+              { role: "image" as const, frame: { x: 0.54, y: 0.12, width: 0.4, height: 0.7 } },
+            ],
+          },
+        ],
+      }),
+    );
+    const image = result.slides[0]!.elements.find(
+      (element) => element.type === "image" && element.placement === "content",
+    );
+    expect(image?.type).toBe("image");
+    expect(image?.type === "image" ? image.frame : undefined).toEqual({
+      x: Math.round(source.pageSize.width * 0.54),
+      y: Math.round(source.pageSize.height * 0.12),
+      width: Math.round(source.pageSize.width * 0.4),
+      height: Math.round(source.pageSize.height * 0.7),
+    });
+    expect(
+      result.slides[0]!.elements.some((element) => element.type === "text" && element.text === "肿瘤早筛覆盖率提升"),
+    ).toBe(true);
+  });
+
+  it("uses the section statement for a chapter page", () => {
+    const source = createDocument();
+    const content = {
+      title: "第二部分 交付能力",
+      body: "从样本前处理到报告解读的完整链路。",
+      speakerNotes: "",
+    };
+    const design = {
+      layout: "section" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#1E3550",
+      bodyColor: "#5F6B76",
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 1,
+          shortItems: true,
+          longestItemLength: 16,
+          bodyLength: 20,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "section",
+        },
+      ],
+      pageCount: 1,
+      id: "section",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "章节",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+      }),
+    );
+    const texts = result.slides[0]!.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(expect.arrayContaining(["01", content.title, content.body]));
+    expect(result.slides[0]!.elements.some((element) => element.type === "shape")).toBe(true);
+  });
+
   it("rejects overlapping template regions for split layouts", () => {
     const source = createDocument();
     const content = { title: "双栏", body: "1. 左侧内容 2. 右侧内容", speakerNotes: "" };

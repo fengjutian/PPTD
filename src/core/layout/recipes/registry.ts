@@ -7,6 +7,7 @@ import { editorialIndex } from "./editorial-index";
 import { imageLed } from "./image-led";
 import { processRail } from "./process-rail";
 import { quoteField } from "./quote-field";
+import { sectionStatement } from "./section-statement";
 import { timelineRail } from "./timeline-rail";
 import type { LayoutRecipe } from "./types";
 
@@ -20,6 +21,7 @@ const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
   comparison: comparison,
   "timeline-rail": timelineRail,
   "quote-field": quoteField,
+  "section-statement": sectionStatement,
 };
 
 export function findRecipe(id: RecipeId): LayoutRecipe | undefined {

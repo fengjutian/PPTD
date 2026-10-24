@@ -142,7 +142,8 @@ export const timelineRail: LayoutRecipe = {
           ) + 0.008,
       );
     let rowHeights = measureRows(textSize);
-    const total = (rows: number[], gap: number) => rows.reduce((sum, height) => sum + height, 0) + gap * (rows.length - 1);
+    const total = (rows: number[], gap: number) =>
+      rows.reduce((sum, height) => sum + height, 0) + gap * (rows.length - 1);
     const minGap = pointsToNormalized(MIN_GAP_PT, page.height);
     while (textSize > MIN_TEXT_SIZE_PT && total(rowHeights, minGap) > contentHeight) {
       textSize -= 1;

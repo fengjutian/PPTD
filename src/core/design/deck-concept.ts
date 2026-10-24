@@ -33,7 +33,8 @@ export type RecipeId =
   | "process-rail"
   | "comparison"
   | "timeline-rail"
-  | "quote-field";
+  | "quote-field"
+  | "section-statement";
 
 export interface AiDeckConcept {
   preset: ConceptPresetId;
@@ -77,6 +78,7 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
       "comparison",
       "timeline-rail",
       "quote-field",
+      "section-statement",
     ],
     imagery: "none",
     typeContrast: "strong",

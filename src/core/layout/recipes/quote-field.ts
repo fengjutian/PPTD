@@ -1,5 +1,5 @@
 import type { IntentConflict } from "../../commands/design-intent";
-import type { ContentBlock, Emu, RectEmu } from "../../document-model";
+import type { ContentBlock, Emu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement, verticalRule } from "./elements";
 import { fittedFontSize, fittedFontSizeInRange, frameFromNormalized, textFits, textHeightPt } from "./measure";
@@ -47,7 +47,6 @@ export const quoteField: LayoutRecipe = {
     const attribution = block.attribution?.trim();
 
     const page = ctx.frame.page;
-    const pageHeightIn = page.height / 914_400;
     const chrome = resolveChrome(ctx);
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
@@ -55,7 +54,14 @@ export const quoteField: LayoutRecipe = {
     const colors = ctx.colors;
 
     const titleFrame = frameFromNormalized(chrome.title, page);
-    const titleSize = fittedFontSize(title, titleFrame, Math.min(ctx.tokens.type.titlePt, TITLE_SIZE_PT), 16, headingFamily, lineHeight);
+    const titleSize = fittedFontSize(
+      title,
+      titleFrame,
+      Math.min(ctx.tokens.type.titlePt, TITLE_SIZE_PT),
+      16,
+      headingFamily,
+      lineHeight,
+    );
     if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
       return conflict("title", "引文页标题放不下");
     }
@@ -136,10 +142,7 @@ export const quoteField: LayoutRecipe = {
     elements.push(
       textElement(
         "“",
-        frameFromNormalized(
-          { x: chrome.content.x + 0.055, y: groupTop, width: 0.12, height: markHeight },
-          page,
-        ),
+        frameFromNormalized({ x: chrome.content.x + 0.055, y: groupTop, width: 0.12, height: markHeight }, page),
         MARK_SIZE_PT,
         colors.accent,
         true,

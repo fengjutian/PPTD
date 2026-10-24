@@ -43,6 +43,7 @@ describe("deck concept", () => {
       "comparison",
       "timeline-rail",
       "quote-field",
+      "section-statement",
     ]);
     expect(resolved.concept.rhythm).toHaveLength(10);
     expect(resolved.concept.rhythm[0]).toBe("statement");

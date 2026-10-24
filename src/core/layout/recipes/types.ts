@@ -37,6 +37,8 @@ export interface RecipeContext {
   page: { index: number; total: number };
   /** The shared title axis, rule and content region of this page. */
   chrome?: PageChrome;
+  /** The picture placeholder of the template layout, when it has one. */
+  templateImage?: NormalizedFrame;
   /** Page-level choices from the design; recipes may ignore them. */
   variant?: "left" | "right";
   focal?: "title" | "index" | "body";
@@ -68,6 +70,10 @@ export interface RecipeSupportOptions {
   hasAsset: boolean;
   /** The role the renderer gave the picture, when a page has one. */
   assetRole?: "hero" | "side" | "band";
+  /** True when the page is built on a template layout. */
+  hasTemplate?: boolean;
+  /** True when the chosen template layout has a picture placeholder. */
+  hasTemplateImage?: boolean;
 }
 
 export interface LayoutRecipe {

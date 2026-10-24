@@ -63,6 +63,7 @@ import {
   planTemplateLayouts,
   templateColumnRegions,
   templateContentRegion,
+  templateImageRegion,
   templateLayoutHasFooterMarker,
   templateTitleRegion,
   type AiElementRepair,
@@ -1836,6 +1837,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const composition = deckPlan.compositions[index]!;
       if (design.layout === "cover") return "cover";
       if (design.layout === "section") return "section";
+      if (design.recipe === "image-led" || design.visualAsset?.enabled) return "image";
       if (hasBlock("comparison")) return "split";
       if (hasBlock("timeline") || hasBlock("process") || hasBlock("metric")) return "cards";
       if (design.layout === "quote") return "quote";
@@ -2315,6 +2317,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // template's title/body placeholders, which the chrome above carries.
         if (!concept) return undefined;
         const hasActualAsset = Boolean(visualAsset && assetLayout);
+        const templateImage = recipe ? templateImageRegion(recipe)?.frame : undefined;
         const selection = selectRecipe({
           facts: compositionFacts,
           concept,
@@ -2322,6 +2325,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           options: {
             hasArtwork: keepsArtwork,
             hasAsset: hasActualAsset,
+            hasTemplate,
+            ...(templateImage ? { hasTemplateImage: true } : {}),
             ...(hasActualAsset && assetPlan.role ? { assetRole: assetPlan.role } : {}),
           },
         });
@@ -2363,6 +2368,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           },
           page: { index: pageIndex, total: pageTotal },
           chrome,
+          ...(templateImage ? { templateImage } : {}),
           ...(design.variant ? { variant: design.variant } : {}),
           ...(design.focal ? { focal: design.focal } : {}),
         });

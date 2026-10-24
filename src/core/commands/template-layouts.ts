@@ -136,7 +136,7 @@ export interface AiTemplateLayout {
   backgroundLuminance?: { title?: BackgroundRange; body?: BackgroundRange };
 }
 
-export type TemplateLayoutIntent = "cover" | "section" | "split" | "cards" | "quote" | "body";
+export type TemplateLayoutIntent = "cover" | "section" | "split" | "cards" | "quote" | "image" | "body";
 
 export interface BackgroundRhythm {
   coverVariants: number;
@@ -157,6 +157,7 @@ const INTENT_KEYWORDS: Record<TemplateLayoutIntent, readonly string[]> = {
   split: ["comparison", "two content", "双栏", "比较", "对比", "两栏", "左右"],
   cards: ["content", "卡片", "流程", "时间线", "要点", "内页"],
   quote: ["quote", "引言", "引用", "金句"],
+  image: ["picture", "image", "photo", "图文", "图片", "图像", "配图"],
   body: ["title and content", "标题和内容", "正文", "内页", "图文", "content"],
 };
 
@@ -212,6 +213,11 @@ export function templateBodyRegions(layout: AiTemplateLayout): AiTemplateRegion[
 
 export function templateContentRegion(layout: AiTemplateLayout): AiTemplateRegion | undefined {
   return contentRegionOf(layout.regions);
+}
+
+/** The picture placeholder of a layout, when the template has one. */
+export function templateImageRegion(layout: AiTemplateLayout): AiTemplateRegion | undefined {
+  return layout.regions.find((region) => region.role === "image");
 }
 
 export function templateColumnRegions(layout: AiTemplateLayout): [AiTemplateRegion, AiTemplateRegion] | undefined {
@@ -279,6 +285,17 @@ export function templateLayoutCandidates(
       const wide = pool.filter((layout) => isWideContent(templateContentRegion(layout)?.frame));
       return wide.length > 0 ? wide : pool.filter((layout) => templateContentRegion(layout));
     }
+    case "quote":
+      return pool;
+    case "image": {
+      // A layout with a real picture placeholder is the only one that can carry
+      // a generated image without covering the copy. When the template has
+      // none, fall back to a body layout and let the legacy branch draw the page.
+      const withImage = pool.filter((layout) => templateImageRegion(layout) && templateContentRegion(layout));
+      if (withImage.length > 0) return withImage;
+      const wide = pool.filter((layout) => isWideContent(templateContentRegion(layout)?.frame));
+      return wide.length > 0 ? wide : pool.filter((layout) => templateContentRegion(layout));
+    }
     default: {
       const wide = pool.filter((layout) => isWideContent(templateContentRegion(layout)?.frame));
       return wide.length > 0 ? wide : pool.filter((layout) => templateContentRegion(layout));
@@ -302,6 +319,13 @@ export function templateLayoutScore(layout: AiTemplateLayout, intent: TemplateLa
       return (keyword ? 100 : 0) + (templateColumnRegions(layout) ? 40 : 0) + (isWideContent(content) ? 20 : 0);
     case "quote":
       return (keyword ? 100 : 0) + (isWideContent(content) ? 20 : 0);
+    case "image":
+      return (
+        (keyword ? 80 : 0) +
+        (templateImageRegion(layout) ? 40 : 0) +
+        (isWideContent(content) ? 20 : 0) +
+        (usableTitle ? 10 : 0)
+      );
     default:
       return (keyword ? 40 : 0) + (isWideContent(content) ? 40 : 0) + (usableTitle ? 20 : 0);
   }

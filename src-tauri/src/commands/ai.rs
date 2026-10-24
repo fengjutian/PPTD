@@ -707,7 +707,7 @@ pub async fn plan_presentation_repairs(
 - restyle：改字号和颜色。fontScale 在 0.75–1.5 之间，color 是六位十六进制。target 为 region 时只作用于落在 frame 里的文字。
 - align：对齐。frame 圈出要对齐的那一块，axis 为 left 表示把它们的左轴对齐到 frame.x，为 top 表示顶边对齐到 frame.y。
 - changeLayout：换这一页的版式。
-- recipe：换这一页的页面配方。可用值：cover-statement、data-story、image-led、editorial-index、asymmetric-split、process-rail、comparison。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，流程换 process-rail，对比换 comparison；换配方时不要再叠加 elementActions 的几何修复。
+- recipe：换这一页的页面配方。可用值：cover-statement、data-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、timeline-rail、quote-field、section-statement。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，流程换 process-rail，对比换 comparison，时间线换 timeline-rail，引文换 quote-field，章节换 section-statement；换配方时不要再叠加 elementActions 的几何修复。
 
 target 只有三种：
 - title：这一页的标题。
@@ -1543,9 +1543,10 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - comparison：等高双栏 + 中轴，栏头强调、条目按测量排列；仅当页面有 comparison 内容块且左右各 2–5 条时使用。
 - timeline-rail：日期在左、事件在右的纵向时间线；仅当页面有 timeline 内容块且 3–6 条时使用。
 - quote-field：大引文 + 引号 + 署名；仅当页面是 quote 版式且有 quote 内容块时使用。
+- section-statement：章节页，深色/强调色竖栏 + 大章节号 + 标题 + 一句说明；仅当 layout=section 且没有模板底图时使用。
 - 有 table 内容块的页面不选配方；有 comparison 优先 comparison，有 process 优先 process-rail，有 timeline 优先 timeline-rail，有 metric 优先 data-story。
-- 章节页、结尾总结页暂不选配方。
-- 封面优先 cover-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 timeline 优先 timeline-rail；有 quote 且 layout=quote 优先 quote-field；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
+- 结尾总结页暂不选配方；section 页优先 section-statement。
+- 封面优先 cover-statement；section 优先 section-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 timeline 优先 timeline-rail；有 quote 且 layout=quote 优先 quote-field；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
 - variant 只能是 left 或 right；focal 只能是 title、index 或 body；不确定就省略。
 
 九、主题方向
