@@ -97,6 +97,8 @@ function reviewedText(slide: Slide): string {
     else if (block.type === "comparison")
       values.push(block.leftLabel, block.rightLabel, ...block.leftItems, ...block.rightItems);
     else if (block.type === "table-data") values.push(...block.header, ...block.rows.flat());
+    else if (block.type === "chart")
+      values.push(...block.categories, ...block.values.map((value) => String(value)), block.unit ?? "");
   }
   return values.join("\n");
 }

@@ -274,6 +274,12 @@ function readInspectorWidth(): number {
 type AppView = "editor" | "ai" | "theme" | "settings";
 type PageMessage = { id: number; text: string; kind: "info" | "success" | "error" };
 type DesignProgress = { percent: number; label: string };
+
+/** 已用时。分钟也按两位显示，进度提示里的数字不会一会儿宽一会儿窄。 */
+function formatElapsed(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
 type TemplateLayoutRender = { layoutIndex: number; layoutName: string; dataUrl: string };
 
 function matchTemplateLayoutRender(
@@ -919,6 +925,16 @@ export function App() {
   /** 设计阶段的后端取消任务号。 */
   const designTaskId = useRef(0);
   const [designProgress, setDesignProgress] = useState<DesignProgress>({ percent: 0, label: "等待开始" });
+  /**
+   * 设计阶段的真实细节：已设计页数、配图张数、评审轮次。
+   *
+   * 进度条只回答“到哪一步了”，这里回答“具体在做什么”。两者分开，百分比
+   * 才不会为了显得在动而编造。
+   */
+  const [designDetail, setDesignDetail] = useState<string>();
+  /** 已用秒数，每秒刷新。进度停在同一阶段时，它也能证明任务还活着。 */
+  const [designElapsed, setDesignElapsed] = useState(0);
+  const designStartedAtRef = useRef(0);
   /** 质量门未过时保留报告，让用户决定进入编辑器调整还是稍后处理。 */
   const [designQualityReport, setDesignQualityReport] = useState<{
     templateName: string;
@@ -2860,6 +2876,19 @@ export function App() {
   const recommendedThemePresetId = inferThemePresetId(aiDraft?.title.trim() || aiTopic.trim());
   const recommendedThemePreset = findThemePreset(recommendedThemePresetId) ?? defaultThemePreset();
 
+  // 设计进度不再靠定时器"爬"：计时器只负责已用时，百分比由真实阶段和
+  // 流式页数决定。任务结束时归零，下一次生成从头计时。
+  useEffect(() => {
+    if (!designBusy) {
+      setDesignElapsed(0);
+      return;
+    }
+    const tick = () => setDesignElapsed(Math.floor((Date.now() - designStartedAtRef.current) / 1000));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [designBusy]);
+
   const continueToTheme = () => {
     if (!aiDraft) return;
     // Make the recommendation an actual default selection. The user can still
@@ -2907,26 +2936,37 @@ export function App() {
         state.stage === "reviewing-content" ? state : transitionAgentWorkflow(startAgentWorkflow(state), "planning");
       return transitionAgentWorkflow(prepared, "generating-design");
     });
-    setDesignProgress({ percent: 8, label: "正在准备内容与模板数据" });
+    designStartedAtRef.current = Date.now();
+    setDesignElapsed(0);
+    setDesignDetail(undefined);
+    setDesignProgress({ percent: 6, label: "正在准备内容与模板数据" });
+    setDesignDetail("整理已审核内容与模板分析数据");
     // Design generation is a background task. Closing the modal here releases
     // the workspace immediately; progress and cancellation remain available in
     // the global task card.
     setTemplatePickerOpen(false);
     setMessage(undefined);
-    const progressTimer = window.setInterval(() => {
-      setDesignProgress((current) => {
-        if (current.percent >= 82) return current;
-        const next = Math.min(82, current.percent + (current.percent < 35 ? 4 : current.percent < 65 ? 2 : 1));
-        const label = next < 28 ? "正在分析模板视觉特征" : next < 58 ? "AI 正在生成逐页版式" : "正在完善配色与页面层级";
-        return { percent: next, label };
-      });
-    }, 900);
+    // 设计结果的页数要等模型流式写出来才知道。这里按"已设计几页"推进，
+    // 不再用定时器把进度条爬到 82% 然后停住。
+    let unlistenDesign: (() => void) | undefined;
     try {
-      setDesignProgress({ percent: 18, label: "正在规划逐页设计意图" });
+      const totalSlides = Math.max(1, sourceDraft.slides.length);
+      unlistenDesign = await listenAiGenerationProgress((progress) => {
+        if (progress.taskId !== taskId || progress.phase !== "design") return;
+        const designed = Math.min(progress.pages, totalSlides);
+        setDesignProgress({
+          percent: 20 + Math.round((48 * designed) / totalSlides),
+          label: "正在生成逐页版式与配色",
+        });
+        setDesignDetail(`已设计 ${designed}/${totalSlides} 页`);
+      }).catch(() => undefined);
+      setDesignProgress({ percent: 12, label: "正在规划逐页设计意图" });
       const briefs = briefsFromDraft(sourceDraft);
       const pageFacts = compositionFactsFromDraft(sourceDraft);
+      setDesignDetail("已拆出每页的设计目的、视觉意图与信息密度");
       let concept: DeckConcept;
-      setDesignProgress({ percent: 28, label: "正在确定整册设计方向" });
+      setDesignProgress({ percent: 16, label: "正在确定整册设计方向" });
+      setDesignDetail("模型在判断整册的视觉气质、配色与版面节奏");
       try {
         const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, {
           taskId,
@@ -2949,20 +2989,20 @@ export function App() {
         }).concept;
       }
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-      setDesignProgress({ percent: 46, label: "正在匹配模板版式与页面意图" });
+      setDesignProgress({ percent: 20, label: "正在生成逐页版式与配色" });
+      setDesignDetail(`共 ${sourceDraft.slides.length} 页，等待模型写出第一页设计`);
       const design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
         taskId,
         concept,
         themeDirection,
       });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-      window.clearInterval(progressTimer);
-      setDesignProgress({ percent: 88, label: "正在校验 AI 设计结果" });
+      setDesignProgress({ percent: 70, label: "正在校验 AI 设计结果" });
+      setDesignDetail(`已收到 ${sourceDraft.slides.length} 页设计，正在核对页数与配色合法性`);
       const hasTemplateSize = analysis.slideWidthEmu && analysis.slideHeightEmu;
       const templateColors = new Map(analysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]));
       const resolveTemplateColor = (value: string | null) =>
         value?.startsWith("#") ? value : value ? templateColors.get(value.toLowerCase()) : undefined;
-      setDesignProgress({ percent: 94, label: "正在渲染可编辑页面" });
       const templateLayoutSources = hasTemplateSize
         ? analysis.layouts.length > 0
           ? analysis.layouts
@@ -2986,6 +3026,14 @@ export function App() {
       // Measure the rendered artwork under each placeholder so the command layer
       // can tell whether the template's own ink stays readable on it.
       const backgroundProbes = new Map<number, TemplateBackgroundProbe>();
+      const probeTargets = templateLayoutSources.filter((layout) =>
+        Boolean(matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name)),
+      ).length;
+      let probedLayouts = 0;
+      if (probeTargets > 0) {
+        setDesignProgress({ percent: 72, label: "正在测量模板底图对比度" });
+        setDesignDetail(`正在检查 ${probeTargets} 个版式的底图`);
+      }
       await Promise.all(
         templateLayoutSources.map(async (layout) => {
           const render = matchTemplateLayoutRender(templateLayoutRenders, layout.index, layout.name);
@@ -2997,6 +3045,9 @@ export function App() {
             );
           } catch {
             // A layout without a probe falls back to the page color.
+          } finally {
+            probedLayouts += 1;
+            setDesignDetail(`已检查 ${probedLayouts}/${probeTargets} 个版式底图`);
           }
         }),
       );
@@ -3014,10 +3065,24 @@ export function App() {
         // 内容阶段产出的配图意图是用户审核过的，它优先于设计阶段的建议。
         intents: sourceDraft.slides.map((slide) => slide.plan?.visualAsset),
       });
+      const assetTargets = assetPlan.decisions.filter((decision) => decision.enabled && decision.role).length;
+      if (assetTargets > 0) {
+        setDesignProgress({ percent: 76, label: "正在生成页面配图" });
+        setDesignDetail(`配图 0/${assetTargets}`);
+      }
       const visualAssets = await generateDeckVisualAssets({
         decisions: assetPlan.decisions,
         prompts: assetPlan.prompts,
+        onProgress: (completed, total) => {
+          setDesignProgress({
+            percent: 76 + Math.round((6 * completed) / Math.max(1, total)),
+            label: "正在生成页面配图",
+          });
+          setDesignDetail(`配图 ${completed}/${total}`);
+        },
       });
+      setDesignProgress({ percent: 82, label: "正在准备导出与评审" });
+      setDesignDetail("配图与底图测量已完成，开始导出 PPTX");
       const generationCommand: DocumentCommand = {
         type: "apply-ai-designed-draft",
         title: sourceDraft.title,
@@ -3130,7 +3195,20 @@ export function App() {
         taskId,
         isCancelled: () => designCancelRef.current,
         onProgress: (label, percent) => {
-          setDesignProgress({ percent, label });
+          // 同一阶段内多轮评审会让百分比重新经过同一个节点，进度条只能
+          // 向前走；真正变化的是文案里的轮次和页数。
+          setDesignProgress((current) => ({ percent: Math.max(current.percent, percent), label }));
+          setDesignDetail(
+            label.includes("修复")
+              ? "只改被评审点名的页面，改完再复检"
+              : label.includes("检查")
+                ? "按 6 页一批并行送审"
+                : label.includes("渲染")
+                  ? "导出 PPTX，并用 PowerPoint 渲染真实页面"
+                  : label.includes("不可用")
+                    ? "当前模型未通过图片输入探测，只做确定性校验"
+                    : undefined,
+          );
           const stage = label.includes("修复")
             ? "repairing"
             : label.includes("视觉评审")
@@ -3216,6 +3294,11 @@ export function App() {
       setDesignQualityReportOpen(false);
       if (stage.passed && !visualCoverageIncomplete && !visualBelowTarget) {
         setDesignProgress({ percent: 100, label: "生成完成，正在进入编辑器" });
+        setDesignDetail(
+          stage.reviewReuse && stage.reviewReuse.reused > 0
+            ? `质检复用了 ${stage.reviewReuse.reused} 页的评审结论，已写入编辑器`
+            : "已通过质检，可在编辑器中继续调整",
+        );
         setTaskStatus(`PPT 已完成 AI 设计：${deckName}`);
         if (visualNote) window.setTimeout(() => setTaskStatus(visualNote), 50);
       } else {
@@ -3229,6 +3312,13 @@ export function App() {
               ? "生成完成，视觉评审未覆盖全部页面"
               : "生成完成，视觉评审未达到目标",
         });
+        setDesignDetail(
+          stage.issues.length > 0
+            ? `${stage.issues.length} 处排版问题已记录在质检报告里`
+            : visualCoverageIncomplete && coverage
+              ? `视觉评审只覆盖 ${coverage.reviewed}/${coverage.total} 页`
+              : "质检报告已保留，可随时查看",
+        );
         setTaskStatus(
           stage.issues.length > 0
             ? `PPT 已生成，存在 ${stage.issues.length} 个待调整的排版问题：${summarizeQualityIssues(stage.issues)}`
@@ -3244,13 +3334,13 @@ export function App() {
         );
       }
     } catch (error) {
-      window.clearInterval(progressTimer);
       const message = error instanceof Error ? error.message : String(error);
       if (message === "AI_GENERATION_CANCELLED" || message.includes("AI_REQUEST_CANCELLED")) {
         setAgentWorkflow((state) =>
           canTransitionAgentWorkflow(state.stage, "cancelled") ? transitionAgentWorkflow(state, "cancelled") : state,
         );
         setDesignProgress({ percent: 0, label: "已取消生成" });
+        setDesignDetail("在途请求已中断，未写入任何内容");
         setTaskStatus("已取消 AI 设计生成");
       } else {
         setAgentWorkflow((state) =>
@@ -3259,10 +3349,11 @@ export function App() {
             : state,
         );
         setDesignProgress({ percent: 0, label: "生成失败，请重试" });
+        setDesignDetail(describeAiError(error));
         setTaskStatus(`AI 设计生成失败：${describeAiError(error)}`);
       }
     } finally {
-      window.clearInterval(progressTimer);
+      unlistenDesign?.();
       void endAiGeneration(taskId).catch(() => undefined);
       designBusyRef.current = false;
       setGeneratingHistoryId(undefined);
@@ -5756,7 +5847,10 @@ export function App() {
                       >
                         <i style={{ width: `${designProgress.percent}%` }} />
                       </div>
-                      <small>AI 生成阶段为估算进度，校验与渲染阶段按实际节点更新</small>
+                      <p className="design-progress-detail">
+                        {designDetail ? `${designDetail} · ` : ""}已用时 {formatElapsed(designElapsed)}
+                      </p>
+                      <small>设计阶段按模型流式写出的页数推进，校验与渲染按真实节点更新</small>
                       <small>任务已在后台执行，可以关闭此窗口并继续编辑。</small>
                     </div>
                   ) : themePresetId ? (
@@ -6353,7 +6447,10 @@ export function App() {
             </span>
             <b>{designProgress.percent}%</b>
           </div>
-          <p>{designProgress.label}</p>
+          <p>
+            {designProgress.label}
+            {designDetail ? ` · ${designDetail}` : ""} · 已用时 {formatElapsed(designElapsed)}
+          </p>
           <div
             className="background-task-progress"
             role="progressbar"

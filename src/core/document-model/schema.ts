@@ -226,6 +226,14 @@ const contentBlockSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     id: z.string().uuid(),
+    type: z.literal("chart"),
+    kind: z.enum(["column", "bar", "line", "pie"]),
+    categories: z.array(z.string().max(200)).min(2).max(8),
+    values: z.array(z.number().finite()).min(2).max(8),
+    unit: z.string().max(20).optional(),
+  }),
+  z.object({
+    id: z.string().uuid(),
     type: z.literal("timeline"),
     items: z.array(z.object({ label: z.string().max(500), text: z.string().max(2_000) })).max(50),
   }),

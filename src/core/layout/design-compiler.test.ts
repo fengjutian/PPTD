@@ -130,6 +130,17 @@ describe("design plan compiler", () => {
         { ...facts, shortItems: true },
       ),
     ).toBe("editorial-index");
+    expect(
+      planRecipeId(
+        {
+          role: "comparison",
+          composition: { primitive: "split", ratio: 0.62 },
+          density: "normal",
+          templatePolicy: "use",
+        },
+        { ...facts, hasComparison: true },
+      ),
+    ).toBe("weighted-split");
   });
 
   it("refuses a recipe that the content cannot carry", () => {

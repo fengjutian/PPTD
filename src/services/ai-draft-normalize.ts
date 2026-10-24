@@ -34,6 +34,12 @@ function normalizeBlock(block: ContentBlock): ContentBlock {
       };
     case "metric":
       return { ...block, label: normalizeChinesePunctuation(block.label) };
+    case "chart":
+      return {
+        ...block,
+        categories: block.categories.map(normalizeChinesePunctuation),
+        ...(block.unit !== undefined ? { unit: normalizeChinesePunctuation(block.unit) } : {}),
+      };
     case "timeline":
     case "process":
       return {

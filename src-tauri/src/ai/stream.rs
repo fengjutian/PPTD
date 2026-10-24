@@ -69,6 +69,14 @@ pub fn estimate_completed_pages(content: &str) -> usize {
     content.matches("\"speakerNotes\"").count()
 }
 
+/// 估算已经完成设计的页数。
+///
+/// 设计结果的每个页面对象恰好带一个必填的 `visualNarrative` 字段，数它出现
+/// 多少次就得到"设计写到第几页"。同样是进度提示用的估算，不参与任何判定。
+pub fn estimate_completed_designs(content: &str) -> usize {
+    content.matches("\"visualNarrative\"").count()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,5 +143,18 @@ mod tests {
 
         assert_eq!(estimate_completed_pages(content), 2);
         assert_eq!(estimate_completed_pages(""), 0);
+    }
+
+    #[test]
+    fn counts_the_pages_that_are_already_designed() {
+        let content = "{\"slides\":[{\"layout\":\"cover\",\"visualNarrative\":\"statement\"},{\"layout\":\"split\",\"visualNarrative\":\"comparison\"}]}";
+
+        assert_eq!(estimate_completed_designs(content), 2);
+        // 半页写出来时不能算整页完成。
+        assert_eq!(
+            estimate_completed_designs("{\"slides\":[{\"layout\":\"cover\",\"visualNar"),
+            0
+        );
+        assert_eq!(estimate_completed_designs(""), 0);
     }
 }

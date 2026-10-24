@@ -45,6 +45,19 @@ export function parseMetricValue(value: string): { value: number; unit: string }
  */
 export function resolveChartData(slide: Slide, element: ChartElement): ResolvedChartData | undefined {
   const blocks = slide.content.blocks ?? [];
+  const chartBlock = element.contentBlockIds
+    .map((blockId) => blocks.find((candidate) => candidate.id === blockId))
+    .find((block): block is Extract<(typeof blocks)[number], { type: "chart" }> => block?.type === "chart");
+  if (chartBlock) {
+    if (chartBlock.categories.length !== chartBlock.values.length) return undefined;
+    return {
+      data: chartBlock.categories.map((category, index) => ({
+        category,
+        value: chartBlock.values[index]!,
+      })),
+      unit: chartBlock.unit ?? "",
+    };
+  }
   const data: ChartDatum[] = [];
   let unit: string | undefined;
   for (const blockId of element.contentBlockIds) {

@@ -5584,6 +5584,16 @@ button {
   font-size: 9px;
   text-align: center;
 }
+/* 真实细节（已设计页数、配图张数、已用时）比说明文字重一档，用继承色
+   保证在深色/浅色主题下都读得清。 */
+.design-progress-detail {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: inherit;
+  font-size: 10px;
+  text-align: center;
+  opacity: 0.78;
+}
 .design-cancel-action {
   grid-column: 1 / -1;
   justify-self: center;

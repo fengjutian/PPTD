@@ -41,6 +41,10 @@ export interface RecipeContext {
   templateImage?: NormalizedFrame;
   /** Page-level choices from the design; recipes may ignore them. */
   variant?: "left" | "right";
+  /** Main-column share for a weighted split, 0–1. */
+  ratio?: number;
+  /** Chart form requested by the design plan. */
+  chartKind?: "column" | "bar" | "line" | "pie";
   focal?: "title" | "index" | "body";
   asset?: AiVisualAsset;
 }

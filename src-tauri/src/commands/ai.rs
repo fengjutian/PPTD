@@ -31,6 +31,13 @@ fn emit_generation_progress(reporter: &ProgressReporter<'_>, received: usize, co
     let Some(task_id) = reporter.task_id else {
         return;
     };
+    // 设计结果和正文的页面标记不同：正文每页带 speakerNotes，设计每页带
+    // visualNarrative。按阶段选计数方式，前端才能显示"已设计 N/M 页"。
+    let pages = if reporter.phase == "design" {
+        ai::stream::estimate_completed_designs(content)
+    } else {
+        ai::stream::estimate_completed_pages(content)
+    };
     let _ = reporter.app.emit(
         GENERATION_PROGRESS_EVENT,
         serde_json::json!({
@@ -38,7 +45,7 @@ fn emit_generation_progress(reporter: &ProgressReporter<'_>, received: usize, co
             "key": reporter.key,
             "phase": reporter.phase,
             "received": received,
-            "pages": ai::stream::estimate_completed_pages(content),
+            "pages": pages,
         }),
     );
 }
@@ -223,6 +230,8 @@ pub struct GenerateDesignRequest {
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
     task_id: Option<u64>,
+    /// 是否流式接收并汇报进度。设计结果一次返回整册，流式只用于显示"已设计几页"。
+    stream_progress: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -707,7 +716,7 @@ pub async fn plan_presentation_repairs(
 - restyle：改字号和颜色。fontScale 在 0.75–1.5 之间，color 是六位十六进制。target 为 region 时只作用于落在 frame 里的文字。
 - align：对齐。frame 圈出要对齐的那一块，axis 为 left 表示把它们的左轴对齐到 frame.x，为 top 表示顶边对齐到 frame.y。
 - changeLayout：换这一页的版式。
-- recipe：换这一页的页面配方。可用值：cover-statement、data-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、timeline-rail、quote-field、section-statement。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，流程换 process-rail，对比换 comparison，时间线换 timeline-rail，引文换 quote-field，章节换 section-statement；换配方时不要再叠加 elementActions 的几何修复。
+- recipe：换这一页的页面配方。可用值：cover-statement、data-story、chart-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，图表换 chart-story，流程换 process-rail，对比换 comparison 或 weighted-split，时间线换 timeline-rail，引文换 quote-field，章节换 section-statement；换配方时不要再叠加 elementActions 的几何修复。
 
 target 只有三种：
 - title：这一页的标题。
@@ -1159,7 +1168,8 @@ pub fn slides_batch_prompt(
 3. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须改用结构化内容块。封面只保留标题和一句不超过 30 字的副标题，不得放编号列表或五点概述。
 4. body 必须与 blocks 表达相同事实，方便用户直接编辑。中文引文使用“”，篇名使用《》，不要用英文直引号。
 5. speakerNotes 是该页的演讲备注，可为空字符串。
-6. plan.purpose 说明该页目的，plan.conclusion 是该页的单一结论；visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text；density 只能为 low、medium、high。
+6. plan.purpose 说明该页目的，plan.conclusion 是该页的单一结论；visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text；density 只能为 low、medium、high。plan.visualBrief 可选，用于说明这页的视觉形式：form 只能是 image、chart、diagram、quote、metric、table、none；brief 只描述画面/图式，不得新增数字或结论；没有证据时 form=none。
+7. 需要图表时输出 chart 内容块：{{"type":"chart","kind":"column|bar|line|pie","categories":["第一季度","第二季度"],"values":[38,52],"unit":"万元"}}；categories 与 values 等长、2–8 项，数字必须来自已审核正文或素材事实，不得虚构。
 7. blocks 支持：
    - {{"type":"paragraph","text":"..."}}
    - {{"type":"bullet-list","items":["..."]}}
@@ -1410,6 +1420,7 @@ pub async fn generate_deck_concepts(
 #[tauri::command]
 pub async fn generate_presentation_design(
     request: GenerateDesignRequest,
+    app: tauri::AppHandle,
     cancels: tauri::State<'_, CancelRegistry>,
 ) -> Result<serde_json::Value, String> {
     let cancel = cancels.token_for(request.task_id);
@@ -1536,11 +1547,13 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 模型可以在 layout 之外再选择一个页面配方，配方决定容器内部的骨架；它不改变坐标，也不改变内容。
 - cover-statement：封面，主标题 + 一句副标题 + 几何强调块；仅用于第一页/封面。
 - data-story：1–3 个指标的大数字 + 标签；仅当页面有 metric 内容块且没有 timeline/process/table 时使用。
+- chart-story：原生图表页，图表数据来自 chart 内容块；仅当页面有 chart 内容块时使用。
 - image-led：图片是页面主体，文字收在图片让出的文字区；仅当页面有已生成的视觉素材且没有 quote/comparison/结构化块时使用。
 - editorial-index：标题 + 编号 + 细线 + 正文，适合 3–6 条短要点；不要给卡片页选它。
 - asymmetric-split：左标题栏 + 右正文栏，适合 2–5 条较长要点；不要给两栏对比页选它。
 - process-rail：纵向流程轨，步骤序号/标签/说明沿一条轨道排列；仅当页面有 process 内容块且 3–6 步时使用。
 - comparison：等高双栏 + 中轴，栏头强调、条目按测量排列；仅当页面有 comparison 内容块且左右各 2–5 条时使用。
+- weighted-split：0.38/0.62 主次分栏，主栏标题和条目更大；仅当 comparison 两侧有明显主次时使用，并在 designPlan.composition.ratio 给出主栏占比。
 - timeline-rail：日期在左、事件在右的纵向时间线；仅当页面有 timeline 内容块且 3–6 条时使用。
 - quote-field：大引文 + 引号 + 署名；仅当页面是 quote 版式且有 quote 内容块时使用。
 - section-statement：章节页，深色/强调色竖栏 + 大章节号 + 标题 + 一句说明；仅当 layout=section 且没有模板底图时使用。
@@ -1552,11 +1565,12 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 【设计计划 designPlan（可选，优先于逐块微调）】
 当页面正文落在模板的卡片/网格里，文字被卡片几何限制，或整页只是等权卡片时，可以给该页一个 designPlan：
 - role 只能是 cover、section、claim、comparison、process、timeline、quote、summary。
-- composition.primitive 只能是 split、stack、grid、rail、overlay、band；ratio 在 0.25–0.75。
+- composition.primitive 只能是 split、stack、grid、rail、overlay、band；ratio 在 0.25–0.75。对比页有明显主次时用 split + ratio 0.62（左主）或 0.38（右主），编译器会选择 weighted-split。
 - density 只能是 sparse、normal、dense。
 - templatePolicy：use 表示填模板占位；takeover 表示保留模板页眉/Logo/页脚，但用干净内容面覆盖正文卡片后重新构图；ignore 暂不使用。
 - recipe 可选，必须是已实现配方；designPlan 存在时由编译器决定几何，recipe 只是首选。
 - emphasis 只标 blockId 和字符范围，不得改文案；focal 只描述第一视觉入口，不输出坐标。
+- 指标页需要图表时给 chart.kind：column、bar、line、pie；时间趋势用 line，占比用 pie，类别比较用 column/bar。数据仍来自 metric 内容块，不得在 designPlan 里写数值。
 - 只有正文页使用 takeover；封面、章节、引文页不要 takeover。
 示例：
 {"role":"claim","composition":{"primitive":"split","ratio":0.38},"density":"normal","templatePolicy":"takeover","recipe":"asymmetric-split"}
@@ -1578,7 +1592,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 严格输出结构：
 {"slides":[{"layout":"cover","visualNarrative":"statement","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","recipe":"editorial-index","variant":"left","focal":"title","visualAsset":{"enabled":true,"prompt":"一座明亮的现代化数据中心，几何线条构成的上升箭头","role":"hero"}}]}"##;
     let user_prompt = format!(
-        "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度、页面配方和配色角色。SlideBrief 是页面目的、结论、视觉意图和密度的事实来源；不要跳过或改写它。\n\n整册设计方向（只用于保持配方合法，不得改写）：\n{concept}\n\n主题方向（只约束视觉；为空表示上传模板）：\n{theme_direction}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、配方匹配内容条数与长度、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
+        "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度、页面配方和配色角色。SlideBrief 是页面目的、结论、视觉意图、视觉形式和密度的事实来源；不要跳过或改写它。visualBrief.form=chart/diagram/table 时优先选择能承载对应内容块的配方；form=none 时不要强行配图。\n\n整册设计方向（只用于保持配方合法，不得改写）：\n{concept}\n\n主题方向（只约束视觉；为空表示上传模板）：\n{theme_direction}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、配方匹配内容条数与长度、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
     );
     let body = ChatRequest {
         model,
@@ -1596,13 +1610,20 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
         ],
         temperature: 0.25,
     };
-    let content = ai::chat(
+    let content = complete_chat(
         provider,
         &api_key,
         &body,
         DESIGN_TIMEOUT,
         "AI_DESIGN_REQUEST_FAILED",
         &cancel,
+        progress_reporter(
+            &app,
+            request.task_id,
+            "design",
+            "design",
+            request.stream_progress.unwrap_or(false),
+        ),
     )
     .await?;
     parse_json(strip_code_fence(&content), "AI_DESIGN_JSON_INVALID")

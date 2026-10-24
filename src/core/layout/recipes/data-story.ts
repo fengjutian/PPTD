@@ -1,5 +1,6 @@
 import type { IntentConflict } from "../../commands/design-intent";
-import type { ContentBlock, Emu } from "../../document-model";
+import type { ChartElement, ContentBlock, Emu } from "../../document-model";
+import { parseMetricValue } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
 import { fittedFontSizeInRange, frameFromNormalized, textFits, textHeightPt } from "./measure";
@@ -118,6 +119,44 @@ export const dataStory: LayoutRecipe = {
         contentTop = contentTop + leadHeight + 0.03;
         bodyCovered = true;
       }
+    }
+
+    // When the metrics share a unit they are a real series, not three unrelated
+    // numbers. Draw a native, editable chart and keep the labels/numbers beside
+    // it; the chart points at the reviewed metric blocks, so it cannot invent a
+    // number of its own.
+    const parsedMetrics = metrics.map((metric) => parseMetricValue(metric.value));
+    const chartable =
+      parsedMetrics.every((parsed) => parsed !== undefined) &&
+      parsedMetrics.every((parsed) => parsed!.unit === parsedMetrics[0]!.unit);
+    const chartHeight = Math.min((chrome.contentBottom - contentTop) * 0.82, 0.62);
+    if (metrics.length >= 2 && chartable) {
+      const chart: ChartElement = {
+        id: crypto.randomUUID() as ChartElement["id"],
+        type: "chart",
+        contentBlockIds: metrics.map((metric) => metric.id),
+        kind: ctx.chartKind ?? "column",
+        frame: frameFromNormalized(
+          { x: chrome.content.x, y: contentTop + 0.02, width: chrome.content.width, height: chartHeight },
+          page,
+        ),
+        rotationMilliDegree: 0,
+        locked: false,
+        style: {
+          fontFamily: bodyFamily,
+          fontSizePt: 12,
+          textColor: ctx.colors.body,
+          seriesColors: [ctx.colors.accent],
+          showLegend: false,
+          showValueLabels: true,
+        },
+      };
+      elements.push(chart);
+      return {
+        elements,
+        consumed: { title: true, body: bodyCovered, items: 0, blockIds: metrics.map((metric) => metric.id) },
+        conflicts: [],
+      };
     }
 
     const columns = metrics.length;

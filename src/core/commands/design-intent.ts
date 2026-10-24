@@ -80,6 +80,8 @@ export interface CompositionFacts {
   hasRowBlock: boolean;
   /** Whether the page carries at least one metric block. */
   hasMetric?: boolean;
+  /** Whether the page carries a chart block. */
+  hasChart?: boolean;
   /** Whether the page carries a timeline block. */
   hasTimeline?: boolean;
   /** Whether the page carries a process block. */

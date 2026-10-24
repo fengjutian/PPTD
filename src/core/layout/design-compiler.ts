@@ -95,6 +95,8 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
     frame,
     page: input.page,
     chrome,
+    ...(input.plan.composition.ratio === undefined ? {} : { ratio: input.plan.composition.ratio }),
+    ...(input.plan.chart === undefined ? {} : { chartKind: input.plan.chart.kind }),
     ...(input.templateImage ? { templateImage: input.templateImage } : {}),
   });
   if (!("elements" in planned)) return planned;
@@ -121,7 +123,9 @@ function planRecipe(plan: PageDesignPlan, facts: CompositionFacts): RecipeId | u
     case "section":
       return "section-statement";
     case "comparison":
-      return "comparison";
+      return plan.composition.ratio !== undefined && Math.abs(plan.composition.ratio - 0.5) >= 0.05
+        ? "weighted-split"
+        : "comparison";
     case "process":
       return "process-rail";
     case "timeline":
@@ -131,6 +135,7 @@ function planRecipe(plan: PageDesignPlan, facts: CompositionFacts): RecipeId | u
     case "summary":
       return facts.shortItems ? "editorial-index" : "asymmetric-split";
     case "claim":
+      if (facts.hasChart) return "chart-story";
       if (facts.hasMetric) return "data-story";
       if (facts.hasComparison) return "comparison";
       if (facts.hasProcess) return "process-rail";

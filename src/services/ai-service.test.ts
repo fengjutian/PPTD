@@ -15,6 +15,7 @@ import {
   describeAiError,
   extractSourceFacts,
   generatePresentationDraft,
+  generatePresentationDesign,
   mergeStreamProgress,
   polishPresentationTopic,
   reviewDeckContent,
@@ -25,6 +26,7 @@ import {
   suggestSlideTitles,
   writeSpeakerNotes,
   splitBodyItems,
+  visualAssetForBrief,
   type AiGenerationProgress,
 } from "./ai-service";
 import { contrastRatio } from "../core/rendering/contrast";
@@ -163,6 +165,83 @@ describe("AI structured outputs", () => {
       hasRowBlock: false,
       layout: "title-body",
     });
+  });
+
+  it("accepts a chart content block with categories and values", () => {
+    const draft = aiDraftSchema.parse({
+      title: "收入趋势",
+      slides: [
+        {
+          title: "收入连续三个季度回升",
+          body: "",
+          speakerNotes: "",
+          blocks: [
+            {
+              type: "chart",
+              kind: "line",
+              categories: ["第一季度", "第二季度", "第三季度"],
+              values: [38, 52, 71],
+              unit: "万元",
+            },
+          ],
+        },
+      ],
+    });
+    expect(draft.slides[0]!.blocks[0]).toMatchObject({ type: "chart", kind: "line", values: [38, 52, 71] });
+  });
+
+  it("keeps the content-stage visual brief", () => {
+    const draft = aiDraftSchema.parse({
+      title: "收入趋势",
+      slides: [
+        {
+          title: "收入连续三个季度回升",
+          body: "第一季度 12 万，第二季度 18 万，第三季度 24 万",
+          speakerNotes: "",
+          plan: {
+            purpose: "证明收入回升",
+            conclusion: "连续三个季度增长",
+            visualIntent: "structured-text",
+            density: "medium",
+            visualBrief: {
+              form: "chart",
+              brief: "按季度展示收入变化的柱状图，数字来自本页正文",
+              aspect: "16:9",
+            },
+          },
+        },
+      ],
+    });
+    expect(draft.slides[0]?.plan.visualBrief).toMatchObject({ form: "chart", aspect: "16:9" });
+  });
+
+  it("uses visualBrief to turn an image page into a concrete picture prompt", () => {
+    const asset = visualAssetForBrief({
+      form: "image",
+      brief: "一间自然光下的现代实验室，桌面有样本与仪器，构图留白",
+      title: "精准医疗",
+      visualIntent: "image-story",
+    });
+    expect(asset).toMatchObject({ enabled: true, role: "side" });
+    expect(asset?.prompt).toContain("自然光下的现代实验室");
+  });
+
+  it("does not put a stock photo on a chart or no-visual page", () => {
+    expect(
+      visualAssetForBrief({
+        form: "chart",
+        title: "收入趋势",
+        visualIntent: "data-chart",
+      }),
+    ).toEqual({ enabled: false });
+    expect(
+      visualAssetForBrief({
+        form: "none",
+        asset: { enabled: true, prompt: "旧图" },
+        title: "结论",
+        visualIntent: "summary",
+      }),
+    ).toEqual({ enabled: false });
   });
 
   it("accepts drafts with more than twenty pages", () => {
@@ -793,6 +872,31 @@ describe("多页草稿的分批编排", () => {
 
     const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "generate_presentation");
     expect(call?.[1]).toMatchObject({ request: { taskId: 9, streamProgress: true } });
+  });
+
+  it("设计阶段同样走流式，界面才能显示已设计几页", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("AI_DESIGN_REQUEST_FAILED: 连接中断"));
+    const draft = aiDraftSchema.parse({
+      title: "短稿",
+      slides: [{ title: "第一页", body: "正文", speakerNotes: "" }],
+    });
+    const template = {
+      slideWidthEmu: null,
+      slideHeightEmu: null,
+      themeColors: [],
+      majorFont: null,
+      minorFont: null,
+      defaultBackgroundColor: null,
+      slides: [],
+      layouts: [],
+    };
+
+    await expect(generatePresentationDesign(draft, briefsFromDraft(draft), template)).rejects.toThrow(
+      "AI_DESIGN_REQUEST_FAILED",
+    );
+
+    const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "generate_presentation_design");
+    expect(call?.[1]).toMatchObject({ request: { streamProgress: true } });
   });
 
   it("有素材时把事实清单带给后端，并挂到草稿上", async () => {

@@ -197,6 +197,8 @@ export async function generateDeckVisualAssets(input: {
   decisions: readonly VisualAssetDecision[];
   prompts: ReadonlyMap<number, string>;
   concurrency?: number;
+  /** 每完成一组（最多 `concurrency` 张）汇报一次，用于显示"配图 2/4"。 */
+  onProgress?: (completed: number, total: number) => void;
 }): Promise<GeneratedVisualAsset[]> {
   const targets = input.decisions
     .map((decision, index) => ({ decision, index }))
@@ -216,6 +218,9 @@ export async function generateDeckVisualAssets(input: {
     for (const asset of results) {
       if (asset) assets.push(asset);
     }
+    // 进度按"已尝试的页数"算，不按成功张数：失败的那张也要往前走，
+    // 否则用户会看到配图阶段停在一个永远不动的数字上。
+    input.onProgress?.(Math.min(offset + group.length, targets.length), targets.length);
   }
   return assets;
 }

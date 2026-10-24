@@ -34,6 +34,7 @@ export function chooseRecipeId(
   if (facts.layout === "section" && concept.recipes.includes("section-statement")) return "section-statement";
   if (facts.hasQuote && facts.layout === "quote" && concept.recipes.includes("quote-field")) return "quote-field";
   if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return undefined;
+  if (facts.hasChart && concept.recipes.includes("chart-story")) return "chart-story";
   if (facts.hasComparison && concept.recipes.includes("comparison")) return "comparison";
   if (facts.hasProcess && concept.recipes.includes("process-rail")) return "process-rail";
   if (facts.hasTimeline && concept.recipes.includes("timeline-rail")) return "timeline-rail";

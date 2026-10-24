@@ -152,7 +152,15 @@ export interface LayoutCapacityNote {
 
 /** The kinds of blocks a page can carry. */
 export type CapacityBlockType =
-  "paragraph" | "bullet-list" | "quote" | "metric" | "timeline" | "process" | "comparison" | "table-data";
+  | "paragraph"
+  | "bullet-list"
+  | "quote"
+  | "metric"
+  | "chart"
+  | "timeline"
+  | "process"
+  | "comparison"
+  | "table-data";
 
 /**
  * A block of a page, described the way the layout rules see it.
@@ -254,7 +262,9 @@ export function assessLayoutCapacity(input: LayoutCapacityInput, options: Capaci
   const count = points.length;
   const blocks = input.blocks ?? [];
   const comparison = blocks.find((block) => block.type === "comparison");
-  const rowBlocks = blocks.filter((block) => block.type === "timeline" || block.type === "process");
+  const rowBlocks = blocks.filter(
+    (block) => block.type === "timeline" || block.type === "process" || block.type === "chart",
+  );
   const metricBlocks = blocks.filter((block) => block.type === "metric");
 
   // A title that does not fit its box does not wrap, it pushes into the copy

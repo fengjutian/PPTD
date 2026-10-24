@@ -130,6 +130,7 @@ export type AiContentBlock =
   | { type: "bullet-list"; items: string[] }
   | { type: "quote"; text: string; attribution?: string }
   | { type: "metric"; label: string; value: string }
+  | { type: "chart"; kind: "column" | "bar" | "line" | "pie"; categories: string[]; values: number[]; unit?: string }
   | { type: "timeline"; items: Array<{ label: string; text: string }> }
   | { type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
   | { type: "process"; items: Array<{ label: string; text: string }> }
@@ -246,6 +247,8 @@ function toContentBlocks(blocks: AiContentBlock[] | undefined): ContentBlock[] |
     if (block.type === "bullet-list") return { id, type: "bullet-list", items: [...block.items] };
     if (block.type === "quote") return { id, type: "quote", text: block.text, attribution: block.attribution };
     if (block.type === "metric") return { id, type: "metric", label: block.label, value: block.value };
+    if (block.type === "chart")
+      return { id, type: "chart", kind: block.kind, categories: [...block.categories], values: [...block.values], ...(block.unit ? { unit: block.unit } : {}) };
     if (block.type === "timeline") return { id, type: "timeline", items: block.items.map((item) => ({ ...item })) };
     if (block.type === "comparison")
       return {
@@ -274,6 +277,8 @@ function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
       return { ...block, items: block.items.map((item) => ({ ...item })) };
     if (block.type === "comparison")
       return { ...block, leftItems: [...block.leftItems], rightItems: [...block.rightItems] };
+    if (block.type === "chart")
+      return { ...block, categories: [...block.categories], values: [...block.values] };
     if (block.type === "table-data")
       return { ...block, header: [...block.header], rows: block.rows.map((row) => [...row]) };
     return { ...block };
@@ -630,6 +635,14 @@ function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | unde
     if (block.type === "bullet-list") return { type: "bullet-list", items: [...block.items] };
     if (block.type === "quote") return { type: "quote", text: block.text, attribution: block.attribution };
     if (block.type === "metric") return { type: "metric", label: block.label, value: block.value };
+    if (block.type === "chart")
+      return {
+        type: "chart",
+        kind: block.kind,
+        categories: [...block.categories],
+        values: [...block.values],
+        ...(block.unit ? { unit: block.unit } : {}),
+      };
     if (block.type === "timeline") return { type: "timeline", items: block.items.map((item) => ({ ...item })) };
     if (block.type === "comparison")
       return {
@@ -1851,7 +1864,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         hasQuote: Boolean(detectPullQuote({ quoteText: quoteBlock?.text, items })),
         hasComparison: blocks.some((block) => block.type === "comparison"),
         hasRowBlock: blocks.some(
-          (block) => block.type === "timeline" || block.type === "process" || block.type === "metric",
+          (block) =>
+            block.type === "timeline" || block.type === "process" || block.type === "metric" || block.type === "chart",
         ),
         layout: design.layout,
       };
@@ -1950,6 +1964,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const tableBlock = blocks.find(
         (block): block is Extract<AiContentBlock, { type: "table-data" }> => block.type === "table-data",
       );
+      const chartBlock = blocks.find(
+        (block): block is Extract<AiContentBlock, { type: "chart" }> => block.type === "chart",
+      );
       // A quoted line already present in the reviewed copy can carry the page
       // as a pull quote. It is a visual emphasis of existing content, never a
       // new claim, and gives dense list pages an editorial anchor.
@@ -1960,7 +1977,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const shortItems = items.every((item) => cleanPoint(item).length <= LAYOUT_CAPACITY.shortItemLength);
       const longestItemLength = items.reduce((longest, item) => Math.max(longest, cleanPoint(item).length), 0);
       const hasDeterministicBlock = Boolean(
-        timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock,
+        timelineBlock || comparisonBlock || processBlock || metricBlocks.length > 0 || tableBlock || chartBlock,
       );
       // A picture for this page. It is generated outside the document, so a page
       // without one simply has no picture: the deck still stands without it.
@@ -2232,8 +2249,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         bodyLength: content.body.length,
         hasQuote: Boolean(pullQuote),
         hasComparison: Boolean(comparisonBlock),
-        hasRowBlock: Boolean(timelineBlock || processBlock || metricBlocks.length > 0),
+        hasRowBlock: Boolean(timelineBlock || processBlock || metricBlocks.length > 0 || chartBlock),
         hasMetric: metricBlocks.length > 0,
+        hasChart: Boolean(chartBlock),
         hasTimeline: Boolean(timelineBlock),
         hasProcess: Boolean(processBlock),
         hasTable: Boolean(tableBlock),

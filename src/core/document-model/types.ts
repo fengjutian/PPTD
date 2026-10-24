@@ -27,6 +27,14 @@ export type ContentBlock =
   | { id: string; type: "bullet-list"; items: string[] }
   | { id: string; type: "quote"; text: string; attribution?: string }
   | { id: string; type: "metric"; label: string; value: string }
+  | {
+      id: string;
+      type: "chart";
+      kind: "column" | "bar" | "line" | "pie";
+      categories: string[];
+      values: number[];
+      unit?: string;
+    }
   | { id: string; type: "timeline"; items: Array<{ label: string; text: string }> }
   | { id: string; type: "comparison"; leftLabel: string; rightLabel: string; leftItems: string[]; rightItems: string[] }
   | { id: string; type: "process"; items: Array<{ label: string; text: string }> }

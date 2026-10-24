@@ -348,6 +348,20 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let contactSheet: string | undefined;
   let finalDeckReview: VisualReview | undefined;
   let reviewReuse: { reviewed: number; reused: number } | undefined;
+  /**
+   * 当前视觉评审轮次，供修复进度复用。
+   *
+   * 修复发生在同一轮评审之后，它本身不带轮次参数；从评审里记下来，修复
+   * 进度才不会在第 2、3 轮时又跳回起点。
+   */
+  let currentIteration = 1;
+  /**
+   * 每轮评审占 4 个百分点：渲染、检查、修复各占一段，最多 3 轮。
+   *
+   * 质检阶段整体落在 84–99 之间，100 由调用方在真正完成后设置。第二轮和
+   * 第三轮的百分比继续往上走，进度条不会因为"重来一遍"而倒退。
+   */
+  const roundBase = (iteration: number) => 84 + Math.min(iteration - 1, 2) * 4;
 
   try {
     const aligned = await runVisualAlignmentLoop<AiSlideDesign[]>({
@@ -356,8 +370,12 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
       contentFingerprint: options.contentFingerprint,
       stateFingerprint: (value) => JSON.stringify(value),
       review: async (current, goal, iteration) => {
+        currentIteration = iteration;
         if (options.isCancelled()) throw new Error("AI_GENERATION_CANCELLED");
-        options.onProgress?.(`第 ${iteration} 轮视觉评审：导出并渲染真实 PPTX`, 94);
+        options.onProgress?.(
+          `第 ${iteration} 轮视觉评审：导出并渲染真实 PPTX`,
+          roundBase(iteration),
+        );
         realRenderFailure = undefined;
         // 本轮还没有产出任何评审结论。渲染失败时不能用上一轮的覆盖数字
         // 描述这一轮，否则会出现“未完成，但覆盖 7/7 页”的矛盾报告。
@@ -404,7 +422,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         for (let start = 0; start < render.slides.length; start += REVIEW_BATCH_SIZE) {
           batches.push(render.slides.slice(start, start + REVIEW_BATCH_SIZE).map((_, offset) => start + offset));
         }
-        options.onProgress?.(`第 ${iteration} 轮视觉评审：检查 ${render.slides.length} 页`, 95);
+        options.onProgress?.(
+          `第 ${iteration} 轮视觉评审：检查 ${render.slides.length} 页`,
+          roundBase(iteration) + 3,
+        );
         // 一批超时或返回不合法，不应该把其他批次的结论一起扔掉：保留已经
         // 评审完的页，并把覆盖范围如实报告出来。
         reviewedSlideCount = 0;
@@ -600,7 +621,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         return mergeReviews(reviews, overviewReview);
       },
       repair: async (current, review, goal) => {
-        options.onProgress?.("视觉评审已收到问题，正在生成修复计划", 97);
+        options.onProgress?.("视觉评审已收到问题，正在生成修复计划", roundBase(currentIteration) + 7);
         // 修复计划由模型出，模型需要知道每页的标题和当前版式才能决定改什么。
         const document = options.buildDocument(current);
         const deck = current.map((design, index) => ({
@@ -727,7 +748,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     // 用户主动关闭视觉评审不算“未达标”，但任何一次尝试后的失败都不能
     // 让界面走完全通过的静默路径。
     if (!message.includes("AI_VISION_DISABLED")) visualPassed = false;
-    options.onProgress?.("视觉评审不可用，继续用确定性校验", 96);
+    options.onProgress?.("视觉评审不可用，继续用确定性校验", 88);
   }
 
   /** 像素采样失败只降级：没有采样结果不等于页面有问题，也不等于生成失败。 */

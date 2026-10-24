@@ -63,6 +63,28 @@ describe("chart data", () => {
     expect(resolveChartData(document.slides[0]!, chartOf([first.id, second.id]))).toBeUndefined();
   });
 
+  it("reads a chart block directly", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.content.blocks = [
+      {
+        id: "chart-1",
+        type: "chart",
+        kind: "column",
+        categories: ["一月", "二月"],
+        values: [12, 18],
+        unit: "万",
+      },
+    ];
+    expect(resolveChartData(slide, chartOf(["chart-1"]))).toEqual({
+      data: [
+        { category: "一月", value: 12 },
+        { category: "二月", value: 18 },
+      ],
+      unit: "万",
+    });
+  });
+
   it("refuses a chart that points at a block that is gone", () => {
     const document = createDocument();
     const first = { id: crypto.randomUUID(), type: "metric" as const, label: "样本量", value: "38万" };

@@ -39,6 +39,8 @@ export interface PageDesignPlan {
     blockId?: string;
     brief?: string;
   };
+  /** Optional chart form when the page's focal object is a chart. */
+  chart?: { kind: "column" | "bar" | "line" | "pie" };
   /**
    * Character ranges in reviewed blocks that should carry emphasis. The
    * compiler may render these as bold runs; it must not change the text.

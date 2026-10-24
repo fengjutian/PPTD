@@ -141,11 +141,13 @@ const repairLayouts = visualLayouts;
 const repairRecipes = [
   "cover-statement",
   "data-story",
+  "chart-story",
   "image-led",
   "editorial-index",
   "asymmetric-split",
   "process-rail",
   "comparison",
+  "weighted-split",
   "timeline-rail",
   "quote-field",
   "section-statement",

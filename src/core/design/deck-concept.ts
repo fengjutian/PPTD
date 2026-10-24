@@ -27,11 +27,13 @@ export type PageBeat = "statement" | "evidence" | "quiet" | "close";
 export type RecipeId =
   | "cover-statement"
   | "data-story"
+  | "chart-story"
   | "image-led"
   | "editorial-index"
   | "asymmetric-split"
   | "process-rail"
   | "comparison"
+  | "weighted-split"
   | "timeline-rail"
   | "quote-field"
   | "section-statement";
@@ -71,11 +73,13 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
     recipes: [
       "cover-statement",
       "data-story",
+      "chart-story",
       "image-led",
       "editorial-index",
       "asymmetric-split",
       "process-rail",
       "comparison",
+      "weighted-split",
       "timeline-rail",
       "quote-field",
       "section-statement",

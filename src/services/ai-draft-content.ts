@@ -22,6 +22,10 @@ function blockLines(block: ContentBlock): string[] {
       return block.items;
     case "metric":
       return [`${block.label}：${block.value}`];
+    case "chart":
+      return block.categories.map(
+        (category, index) => `${category}：${block.values[index]}${block.unit ?? ""}`,
+      );
     case "timeline":
     case "process":
       return block.items.map((item) => `${item.label}：${item.text}`);

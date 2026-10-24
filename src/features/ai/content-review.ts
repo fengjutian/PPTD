@@ -67,6 +67,7 @@ export const blockTypeLabels: Record<ContentBlock["type"], string> = {
   "bullet-list": "要点列表",
   quote: "引用",
   metric: "指标",
+  chart: "图表",
   timeline: "时间线",
   process: "流程",
   comparison: "对比",
@@ -122,6 +123,8 @@ function blockPointCount(block: ContentBlock): number {
     case "table-data":
       // A table is as dense as the rows it carries.
       return block.rows.length;
+    case "chart":
+      return block.categories.length;
     case "paragraph":
     case "quote":
     case "metric":
@@ -210,6 +213,8 @@ export function slideCapacityNotes(slide: DraftSlide, index: number): SlideCapac
           type: block.type,
           itemCount: block.items.filter((item) => item.label.trim() || item.text.trim()).length,
         };
+      case "chart":
+        return { index: blockIndex, type: block.type, itemCount: block.categories.length };
       default:
         return { index: blockIndex, type: block.type, itemCount: 1 };
     }

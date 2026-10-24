@@ -6,6 +6,7 @@ import { deriveDesignTokens } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
 import { planPageChrome } from "../page-chrome";
 import { asymmetricSplit } from "./asymmetric-split";
+import { chartStory } from "./chart-story";
 import { comparison } from "./comparison";
 import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
@@ -15,6 +16,7 @@ import { processRail } from "./process-rail";
 import { quoteField } from "./quote-field";
 import { sectionStatement } from "./section-statement";
 import { timelineRail } from "./timeline-rail";
+import { weightedSplit } from "./weighted-split";
 import { consumptionProblem } from "./plan";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
@@ -301,6 +303,29 @@ describe("data-story recipe", () => {
     expect(metricValues).toHaveLength(3);
   });
 
+  it("draws a native chart when the metrics share a unit", () => {
+    const numeric: SlideContent = {
+      ...metricContent,
+      blocks: [
+        { id: "n1", type: "metric", label: "第一季度", value: "38" },
+        { id: "n2", type: "metric", label: "第二季度", value: "52" },
+        { id: "n3", type: "metric", label: "第三季度", value: "71" },
+      ],
+      body: "",
+    };
+    const ctx = context(numeric, {
+      facts: facts({ itemCount: 0, hasRowBlock: true, hasMetric: true }),
+    });
+    ctx.chartKind = "line";
+    const result = plan(dataStory, ctx);
+    expect(consumptionProblem(result, numeric)).toBeUndefined();
+    const chart = result.elements.find((element) => element.type === "chart");
+    expect(chart?.type).toBe("chart");
+    expect(chart?.type === "chart" ? chart.kind : "").toBe("line");
+    expect(chart?.type === "chart" ? chart.contentBlockIds : []).toEqual(["n1", "n2", "n3"]);
+    expect(result.consumed.blockIds).toEqual(["n1", "n2", "n3"]);
+  });
+
   it("refuses a fourth metric", () => {
     const four = {
       ...metricContent,
@@ -556,6 +581,77 @@ describe("comparison recipe", () => {
       context(six, { facts: facts({ itemCount: 8, hasComparison: true, layout: "split" }) }),
     );
     expect("conflict" in result).toBe(true);
+  });
+});
+
+describe("chart-story recipe", () => {
+  const chartContent: SlideContent = {
+    title: "收入连续三个季度回升",
+    body: "",
+    blocks: [
+      {
+        id: "chart-1",
+        type: "chart",
+        kind: "line",
+        categories: ["第一季度", "第二季度", "第三季度"],
+        values: [38, 52, 71],
+        unit: "万元",
+      },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws a native chart from the reviewed chart block", () => {
+    const ctx = context(chartContent, {
+      facts: facts({ itemCount: 0, hasChart: true, hasRowBlock: true, layout: "cards" }),
+    });
+    expect(chartStory.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(chartStory, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, chartContent)).toBeUndefined();
+    expect(result.consumed.blockIds).toEqual(["chart-1"]);
+    const chart = result.elements.find((element) => element.type === "chart");
+    expect(chart?.type).toBe("chart");
+    expect(chart?.type === "chart" ? chart.kind : "").toBe("line");
+    expect(chart?.type === "chart" ? chart.contentBlockIds : []).toEqual(["chart-1"]);
+  });
+});
+
+describe("weighted-split recipe", () => {
+  const weightedContent: SlideContent = {
+    title: "现金牛与第二曲线",
+    body: "",
+    blocks: [
+      {
+        id: "weighted-1",
+        type: "comparison",
+        leftLabel: "搜索与广告",
+        rightLabel: "Google Cloud",
+        leftItems: ["规模最大", "利润率高", "监管压力"],
+        rightItems: ["增速双位数", "利润率转正", "持续投入"],
+      },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("gives the primary column more width and type size", () => {
+    const ctx = context(weightedContent, {
+      facts: facts({ itemCount: 6, hasComparison: true, layout: "split" }),
+    });
+    ctx.ratio = 0.62;
+    expect(weightedSplit.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(weightedSplit, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, weightedContent)).toBeUndefined();
+    expect(result.consumed.blockIds).toEqual(["weighted-1"]);
+    const texts = result.elements.filter((element): element is TextElement => element.type === "text");
+    const left = texts.find((element) => element.text === "搜索与广告")!;
+    const right = texts.find((element) => element.text === "Google Cloud")!;
+    expect(left.style.fontSizePt).toBeGreaterThan(right.style.fontSizePt);
+    expect(left.frame.width).toBeGreaterThan(right.frame.width);
+    expect(texts.map((element) => element.text)).not.toContain("VS");
   });
 });
 

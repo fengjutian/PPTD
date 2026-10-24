@@ -52,6 +52,13 @@ export const contentBlockSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("metric"), label: z.string().min(1).max(300), value: z.string().min(1).max(100) }),
   z.object({
+    type: z.literal("chart"),
+    kind: z.enum(["column", "bar", "line", "pie"]),
+    categories: z.array(z.string().min(1).max(100)).min(2).max(8),
+    values: z.array(z.number().finite()).min(2).max(8),
+    unit: z.string().max(20).optional(),
+  }),
+  z.object({
     type: z.literal("timeline"),
     items: z
       .array(z.object({ label: z.string().min(1).max(100), text: z.string().min(1).max(500) }))
@@ -105,6 +112,20 @@ const visualAssetIntentSchema = z.object({
 });
 export type AiVisualAssetIntent = z.infer<typeof visualAssetIntentSchema>;
 
+const visualBriefSchema = z.object({
+  /**
+   * The visual form the page should take. This is a content decision: the page
+   * says whether its evidence is a photograph, a chart, a diagram, a quote, a
+   * metric, a table or nothing at all. The design stage may refuse it when the
+   * reviewed content cannot carry it.
+   */
+  form: z.enum(["image", "chart", "diagram", "quote", "metric", "table", "none"]),
+  /** What the picture/diagram shows, never new wording or numbers. */
+  brief: z.string().max(300).optional(),
+  aspect: z.enum(["16:9", "4:3", "1:1"]).optional(),
+});
+export type VisualBrief = z.infer<typeof visualBriefSchema>;
+
 const slidePlanSchema = z.object({
   purpose: z.string().min(1).max(300),
   conclusion: z.string().min(1).max(300),
@@ -120,6 +141,7 @@ const slidePlanSchema = z.object({
     "structured-text",
   ]),
   density: z.enum(["low", "medium", "high"]),
+  visualBrief: visualBriefSchema.optional(),
   visualAsset: visualAssetIntentSchema.optional(),
 });
 const legacySlidePlan = {
@@ -259,6 +281,7 @@ export const slideBriefSchema = z.object({
     "structured-text",
   ]),
   density: z.enum(["low", "medium", "high"]),
+  visualBrief: visualBriefSchema.optional(),
 });
 export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).min(1) });
 export type SlideBrief = z.infer<typeof slideBriefSchema>;
@@ -296,7 +319,11 @@ export function compositionFactsFromDraft(draft: AiDraft): CompositionFacts[] {
       .flatMap((block) => block.items);
     const items = (bulletItems.length > 0 ? bulletItems : splitBodyItems(slide.body)).map(stripListPrefix);
     const hasRowBlock = blocks.some(
-      (block) => block.type === "timeline" || block.type === "process" || block.type === "metric",
+      (block) =>
+        block.type === "timeline" ||
+        block.type === "process" ||
+        block.type === "metric" ||
+        block.type === "chart",
     );
     return {
       itemCount: items.length,
@@ -307,6 +334,7 @@ export function compositionFactsFromDraft(draft: AiDraft): CompositionFacts[] {
       hasComparison: blocks.some((block) => block.type === "comparison"),
       hasRowBlock,
       hasMetric: blocks.some((block) => block.type === "metric"),
+      hasChart: blocks.some((block) => block.type === "chart"),
       hasTimeline: blocks.some((block) => block.type === "timeline"),
       hasProcess: blocks.some((block) => block.type === "process"),
       hasTable: blocks.some((block) => block.type === "table-data"),
@@ -328,11 +356,13 @@ const aiPaletteRoleSchema = z.enum([
 const aiDesignRecipeIds = [
   "cover-statement",
   "data-story",
+  "chart-story",
   "image-led",
   "editorial-index",
   "asymmetric-split",
   "process-rail",
   "comparison",
+  "weighted-split",
   "timeline-rail",
   "quote-field",
   "section-statement",
@@ -355,6 +385,7 @@ const pageDesignPlanSchema = z.object({
       brief: z.string().max(600).optional(),
     })
     .optional(),
+  chart: z.object({ kind: z.enum(["column", "bar", "line", "pie"]) }).optional(),
   emphasis: z
     .array(
       z.object({
@@ -429,6 +460,35 @@ export const aiPresentationDesignSchema = z.object({
     .min(1),
 });
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
+type DesignVisualAsset = NonNullable<AiPresentationDesign["slides"][number]["visualAsset"]>;
+
+/**
+ * Applies the content stage's visual form to the design stage's asset choice.
+ *
+ * "none" disables an image even when the design model asked for one; "image"
+ * turns a missing prompt into a concrete picture brief. Non-image forms keep
+ * the page free of stock photography so a chart/diagram/table block owns the
+ * page instead.
+ */
+export function visualAssetForBrief(input: {
+  asset?: DesignVisualAsset;
+  form?: VisualBrief["form"];
+  brief?: string;
+  title: string;
+  visualIntent: SlideBrief["visualIntent"];
+}): DesignVisualAsset | undefined {
+  if (!input.form) return input.asset;
+  if (input.form !== "image") return { enabled: false };
+  return {
+    enabled: true,
+    role: input.asset?.role ?? (input.visualIntent === "hero" ? "hero" : "side"),
+    prompt:
+      input.asset?.prompt?.trim() ||
+      input.brief?.trim() ||
+      `${input.title}相关的真实场景或材质特写，无文字、无字母、无数字`,
+  };
+}
+
 type AiLayoutKind = z.infer<typeof aiPresentationDesignSchema>["slides"][number]["layout"];
 const intentLayouts: Record<SlideBrief["visualIntent"], AiLayoutKind> = {
   hero: "cover",
@@ -1309,6 +1369,9 @@ export async function generatePresentationDesign(
       model,
       provider,
       taskId: options.taskId,
+      // 设计结果一次返回整册，流式只用于把"已设计几页"报给界面；
+      // 厂商不支持流式时后端会退回一次性请求，生成结果不受影响。
+      streamProgress: true,
     },
   });
   const design = aiPresentationDesignSchema.parse(raw);
@@ -1335,20 +1398,27 @@ export async function generatePresentationDesign(
                       : brief.visualIntent === "hero" || brief.visualIntent === "summary"
                         ? "statement"
                         : "framework");
+          const visualAsset =
+            visualAssetForBrief({
+              asset: slide.visualAsset,
+              form: brief.visualBrief?.form,
+              brief: brief.visualBrief?.brief,
+              title: content.title,
+              visualIntent: brief.visualIntent,
+            }) ??
+            // Scene pages need a visual anchor even when an older model omitted
+            // the new asset instruction. The renderer still owns placement.
+            (visualNarrative === "scene"
+              ? {
+                  enabled: true,
+                  role: "side" as const,
+                  prompt: `${content.title}相关的写实环境或象征性场景，无文字、无字母、无数字`,
+                }
+              : undefined);
           return {
             ...slide,
             visualNarrative,
-            // Scene pages need a visual anchor even when an older model omitted
-            // the new asset instruction. The renderer still owns placement.
-            ...(visualNarrative === "scene" && !slide.visualAsset
-              ? {
-                  visualAsset: {
-                    enabled: true,
-                    role: "side" as const,
-                    prompt: `${content.title}相关的写实环境或象征性场景，无文字、无字母、无数字`,
-                  },
-                }
-              : {}),
+            ...(visualAsset ? { visualAsset } : {}),
             layout: chooseSlideLayout({
               index,
               requested: slide.layout,
