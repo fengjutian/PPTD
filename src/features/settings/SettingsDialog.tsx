@@ -2,6 +2,7 @@ import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "luci
 import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
+import { clearDesignMemory, designMemorySummary, type DesignMemorySummary } from "../../services/design-memory";
 import { clearVisionCapabilityCache } from "../../services/ai-vision";
 import {
   createTranslator,
@@ -58,6 +59,7 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
   const [busy, setBusy] = useState(false);
   const [testState, setTestState] = useState<{ kind: "success" | "error"; message: string }>();
   const [installedFonts, setInstalledFonts] = useState<Record<string, boolean>>({});
+  const [memory, setMemory] = useState<DesignMemorySummary>();
   const provider = findAiProvider(settings.aiProviderId);
   const t = useMemo(() => createTranslator(language), [language]);
   const providerLabel = language === "en" ? (provider.labelEn ?? provider.label) : provider.label;
@@ -70,6 +72,15 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
       .catch(() => {
         if (active) setSettings(defaultSettings());
       });
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    void designMemorySummary().then((summary) => {
+      if (active) setMemory(summary);
+    });
     return () => {
       active = false;
     };
@@ -246,6 +257,46 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
               <em>{t("settings.model.visionReviewHelp")}</em>
             </span>
           </label>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.designDirectionGate}
+              onChange={(event) => setSettings({ ...settings, designDirectionGate: event.target.checked })}
+            />
+            <span>
+              <strong>{t("settings.model.directionGate")}</strong>
+              <em>{t("settings.model.directionGateHelp")}</em>
+            </span>
+          </label>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.designMemoryEnabled}
+              onChange={(event) => setSettings({ ...settings, designMemoryEnabled: event.target.checked })}
+            />
+            <span>
+              <strong>{t("settings.model.designMemory")}</strong>
+              <em>{t("settings.model.designMemoryHelp")}</em>
+            </span>
+          </label>
+          <div className="settings-memory">
+            <span>
+              {t("settings.memory.count", {
+                decks: String(memory?.decks ?? 0),
+                preferences: String(memory?.preferences ?? 0),
+              })}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                void clearDesignMemory().then(() => setMemory({ decks: 0, preferences: 0 }));
+              }}
+              disabled={!memory || (memory.decks === 0 && memory.preferences === 0)}
+            >
+              <Trash2 size={14} />
+              {t("settings.memory.clear")}
+            </button>
+          </div>
           <label>
             {t("settings.model.apiBaseUrl")}
             <input value={provider.baseUrl} readOnly />

@@ -4,6 +4,7 @@ import { AI_PROVIDERS, DEFAULT_AI_PROVIDER_ID, findAiProvider } from "./ai-provi
 import {
   aiDraftSchema,
   aiDeckConceptSchema,
+  aiDeckDirectionsSchema,
   aiOutlineSchema,
   aiPresentationDesignSchema,
   aiSlideBatchSchema,
@@ -14,6 +15,7 @@ import {
   constrainDesignToTemplate,
   describeAiError,
   extractSourceFacts,
+  generateDeckDirections,
   generatePresentationDraft,
   generatePresentationDesign,
   mergeStreamProgress,
@@ -96,6 +98,91 @@ describe("AI structured outputs", () => {
         preset: "instrument",
       }),
     ).toThrow();
+  });
+
+  it("requires two directions with different presets", () => {
+    const editorial = {
+      preset: "editorial",
+      name: "编辑式",
+      idea: "用细线和大字号组织内容。",
+      typeContrast: "strong",
+      imagery: "none",
+      rationale: "内容以判断和要点为主。",
+    };
+    const parsed = aiDeckDirectionsSchema.parse({
+      directions: [
+        editorial,
+        { ...editorial, preset: "documentary", name: "纪实", imagery: "hero", typeContrast: "calm" },
+      ],
+    });
+    expect(parsed.directions.map((direction) => direction.preset)).toEqual(["editorial", "documentary"]);
+    // The same skeleton twice is a colour swap, not a choice.
+    expect(() => aiDeckDirectionsSchema.parse({ directions: [editorial, editorial] })).toThrow();
+    expect(() => aiDeckDirectionsSchema.parse({ directions: [editorial] })).toThrow();
+  });
+
+  it("sorts proposed directions by catalog order, not model order", async () => {
+    const draft = aiDraftSchema.parse({
+      title: "方向",
+      slides: [{ title: "第一页", body: "正文", speakerNotes: "" }],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce({
+      directions: [
+        {
+          preset: "documentary",
+          name: "纪实",
+          idea: "让图片占住页面。",
+          typeContrast: "calm",
+          imagery: "hero",
+          rationale: "内容有现场照片。",
+        },
+        {
+          preset: "editorial",
+          name: "编辑式",
+          idea: "用细线组织内容。",
+          typeContrast: "strong",
+          imagery: "none",
+          rationale: "内容以判断为主。",
+        },
+      ],
+    });
+    const template = {
+      slideWidthEmu: null,
+      slideHeightEmu: null,
+      themeColors: [],
+      majorFont: null,
+      minorFont: null,
+      defaultBackgroundColor: null,
+      slides: [],
+      layouts: [],
+    };
+    const result = await generateDeckDirections(draft, briefsFromDraft(draft), template, { taskId: 7 });
+    expect(result.map((direction) => direction.preset)).toEqual(["editorial", "documentary"]);
+    expect(invoke).toHaveBeenCalledWith(
+      "generate_deck_directions",
+      expect.objectContaining({ request: expect.objectContaining({ taskId: 7 }) }),
+    );
+  });
+
+  it("wraps an invalid direction payload in a stable code", async () => {
+    const draft = aiDraftSchema.parse({
+      title: "方向",
+      slides: [{ title: "第一页", body: "正文", speakerNotes: "" }],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce({ directions: [] });
+    const template = {
+      slideWidthEmu: null,
+      slideHeightEmu: null,
+      themeColors: [],
+      majorFont: null,
+      minorFont: null,
+      defaultBackgroundColor: null,
+      slides: [],
+      layouts: [],
+    };
+    await expect(generateDeckDirections(draft, briefsFromDraft(draft), template)).rejects.toThrow(
+      "AI_DIRECTIONS_INVALID",
+    );
   });
 
   it("keeps the optional recipe fields on a design", () => {

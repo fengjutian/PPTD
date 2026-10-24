@@ -4,7 +4,7 @@ import { z } from "zod";
 import { applyDeckArtDirection } from "../core/commands/deck-art-direction";
 import { LAYOUT_CAPACITY, stripListPrefix } from "../core/commands/layout-capacity";
 import type { AiPaletteRole, CompositionFacts } from "../core/commands/design-intent";
-import type { DeckConcept } from "../core/design/deck-concept";
+import { CONCEPT_PRESET_IDS, type DeckConcept } from "../core/design/deck-concept";
 import type { ThemeDirection } from "../core/design/theme-direction";
 import { contrastRatio as colorContrastRatio } from "../core/rendering/contrast";
 import { loadSettings } from "./settings";
@@ -310,6 +310,23 @@ export const aiDeckConceptSchema = z.object({
   rationale: z.string().trim().min(1).max(120),
 });
 export const aiDeckConceptsSchema = z.object({ concepts: z.array(aiDeckConceptSchema).min(1).max(3) });
+/**
+ * The two directions the gate shows. The preset must be unique: two versions of
+ * the same skeleton are a colour swap, not a choice. The upper bound is three so
+ * a future preset does not need a contract change.
+ */
+export const aiDeckDirectionsSchema = z
+  .object({ directions: z.array(aiDeckConceptSchema).min(2).max(3) })
+  .superRefine((value, context) => {
+    const presets = value.directions.map((direction) => direction.preset);
+    if (new Set(presets).size !== presets.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["directions"],
+        message: "AI_DIRECTIONS_DUPLICATE_PRESET",
+      });
+    }
+  });
 export type AiDeckConceptOutput = z.infer<typeof aiDeckConceptSchema>;
 
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
@@ -1356,6 +1373,53 @@ export async function generateDeckConcepts(
   const result = aiDeckConceptsSchema.parse(raw);
   if (result.concepts.length !== 1) throw new Error("AI_CONCEPT_COUNT_INVALID");
   return result.concepts[0]!;
+}
+
+export interface AiDeckDirectionOptions {
+  taskId?: number;
+  themeDirection?: ThemeDirection;
+  /** Local look fingerprints; never reviewed copy. */
+  recentLooks?: readonly unknown[];
+}
+
+/**
+ * Proposes the renderable directions for the same reviewed content, in one call.
+ *
+ * The order is stable (catalog order, not model order) so the two previews do
+ * not swap places between runs and the recorded decision refers to the same
+ * proposal id. A duplicate preset is a contract violation, not a 3rd direction.
+ */
+export async function generateDeckDirections(
+  draft: AiDraft,
+  briefs: SlideBrief[],
+  template: DesignTemplateContext,
+  options: AiDeckDirectionOptions = {},
+): Promise<AiDeckConceptOutput[]> {
+  const { provider, model } = await aiSelection();
+  const raw = await invoke<unknown>("generate_deck_directions", {
+    request: {
+      draft,
+      briefs,
+      template,
+      visualGoal: defaultPresentationVisualGoal(),
+      themeDirection: options.themeDirection,
+      recentLooks: options.recentLooks,
+      model,
+      provider,
+      taskId: options.taskId,
+    },
+  });
+  const result = (() => {
+    try {
+      return aiDeckDirectionsSchema.parse(raw);
+    } catch (error) {
+      // The UI keys on a stable code; the zod detail stays in the message.
+      throw new Error(`AI_DIRECTIONS_INVALID: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  })();
+  return [...result.directions].sort(
+    (left, right) => CONCEPT_PRESET_IDS.indexOf(left.preset) - CONCEPT_PRESET_IDS.indexOf(right.preset),
+  );
 }
 
 export async function generatePresentationDesign(

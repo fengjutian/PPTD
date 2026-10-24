@@ -28,6 +28,7 @@ import { patchImageCrops } from "./image-crop-xml";
 import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
 import { lintTaste } from "../../core/design/taste-lint";
+import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
 const inch = (value: number) => value / EMU_PER_INCH;
 const color = (value: string) => value.replace(/^#/, "");
@@ -73,6 +74,11 @@ export interface ExportReport {
    * run; an empty `codes` with zero counts means it ran and found nothing.
    */
   tasteLint?: ExportTasteSummary;
+  /**
+   * Independent read-back of the written package. Absent only if the check
+   * itself failed before producing a report.
+   */
+  parity?: ExportParityReport;
   warnings: string[];
   issues: ExportIssue[];
   package: PptxPackageValidation;
@@ -545,6 +551,8 @@ export async function buildPptx(
   if (!packageValidation.valid) {
     throw new Error(`EXPORT_PACKAGE_INVALID: ${packageValidation.issues.join("；")}`);
   }
+  // Read the written package back, independently of the mapping above.
+  const parity = verifyExportedPptx(bytes, document);
 
   // Taste findings are advisory (ADR 0015). A lint failure must never fail the
   // export; if the pure function ever throws, the report stays silent instead of
@@ -579,6 +587,7 @@ export async function buildPptx(
       nativeAnimationCount: animationResult.written,
       nativeAnimationSkipped: animationResult.skipped,
       ...(tasteLint ? { tasteLint } : {}),
+      parity,
       warnings: [...issues.map((issue) => issue.message), ...animationWarnings],
       issues,
       package: packageValidation,

@@ -1,4 +1,6 @@
-use crate::storage::{Database, RecentProjectEntry, StoredAiHistoryEntry, StoredAppSettings};
+use crate::storage::{
+    Database, DesignMemoryEntry, RecentProjectEntry, StoredAiHistoryEntry, StoredAppSettings,
+};
 use tauri::State;
 
 #[tauri::command]
@@ -37,6 +39,34 @@ pub fn remove_ai_draft_history(
     id: String,
 ) -> Result<Vec<StoredAiHistoryEntry>, String> {
     database.remove_ai_history(&id)
+}
+
+#[tauri::command]
+pub fn load_design_memory(database: State<'_, Database>) -> Result<Vec<DesignMemoryEntry>, String> {
+    database.load_design_memory()
+}
+
+#[tauri::command]
+pub fn upsert_design_memory(
+    database: State<'_, Database>,
+    entry: DesignMemoryEntry,
+) -> Result<Vec<DesignMemoryEntry>, String> {
+    database.save_design_memory(&entry)
+}
+
+#[tauri::command]
+pub fn remove_design_memory(
+    database: State<'_, Database>,
+    id: String,
+) -> Result<Vec<DesignMemoryEntry>, String> {
+    database.remove_design_memory(&id)
+}
+
+#[tauri::command]
+pub fn clear_design_memory(
+    database: State<'_, Database>,
+) -> Result<Vec<DesignMemoryEntry>, String> {
+    database.clear_design_memory()
 }
 
 #[tauri::command]

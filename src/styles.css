@@ -10346,3 +10346,286 @@ button {
   font-size: 10px;
   line-height: 1.4;
 }
+
+/* Design direction gate: two real previews, then a decision. */
+.design-direction-dialog {
+  width: min(980px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+}
+.design-direction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 4px 20px 0;
+}
+.design-direction-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 12px;
+  background: #1b1d21;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.design-direction-card:hover,
+.design-direction-card:focus-visible {
+  border-color: var(--ppt-accent, #d35230);
+  background: #202227;
+  outline: none;
+}
+.design-direction-previews {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.design-direction-previews img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #111214;
+}
+.design-direction-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.design-direction-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.design-direction-name strong {
+  color: #e9ebee;
+  font-size: 15px;
+}
+.design-direction-name small {
+  padding: 1px 7px;
+  border: 1px solid #3a3d44;
+  border-radius: 999px;
+  color: #9da1a8;
+  font-size: 10px;
+}
+.design-direction-idea {
+  color: #e9ebee;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.design-direction-rationale {
+  color: #8f939b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.design-direction-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #f0a58f;
+  font-size: 12px;
+}
+.design-direction-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 20px 0;
+}
+.design-direction-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 8px;
+  background: #1b1d21;
+  color: #cfd2d7;
+  font-size: 12px;
+  cursor: pointer;
+}
+.design-direction-actions button:hover:not(:disabled) {
+  border-color: #4b4e55;
+  background: #202227;
+}
+.design-direction-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.design-direction-note {
+  margin: 10px 20px 18px;
+  color: #7f838b;
+  font-size: 11px;
+  text-align: center;
+}
+@media (max-width: 760px) {
+  .design-direction-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Theme specimen: eight real pages, rendered on demand. */
+.theme-specimen-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 7px 11px;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 8px;
+  background: #1b1d21;
+  color: #cfd2d7;
+  font-size: 12px;
+  cursor: pointer;
+}
+.theme-specimen-open:hover:not(:disabled) {
+  border-color: var(--ppt-accent, #d35230);
+  color: #f0a58f;
+}
+.theme-specimen-open:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.theme-specimen-dialog {
+  width: min(1120px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+}
+.theme-specimen-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 4px 20px 20px;
+}
+.theme-specimen-grid img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 8px;
+  background: #111214;
+}
+@media (max-width: 760px) {
+  .theme-specimen-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.design-direction-words {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 4px 20px 0;
+}
+.design-direction-words label {
+  color: #8f939b;
+  font-size: 11px;
+}
+.design-direction-words textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 8px;
+  background: #1b1d21;
+  color: #e9ebee;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.design-direction-words textarea:focus {
+  outline: none;
+  border-color: var(--ppt-accent, #d35230);
+}
+
+/* The recorded direction decision, for reopening a deck later. */
+.direction-record {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.direction-record-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.direction-record-line strong {
+  color: #e9ebee;
+  font-size: 13px;
+}
+.direction-record-meta {
+  color: #8f939b;
+  font-size: 10px;
+}
+.direction-record-words {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid #6f3023;
+  background: #1b1d21;
+  color: #cfd2d7;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.direction-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.direction-record-list li {
+  display: flex;
+  gap: 8px;
+  color: #8f939b;
+  font-size: 12px;
+}
+.direction-record-list li.selected {
+  color: #e9ebee;
+}
+.direction-record-list strong {
+  display: block;
+  font-size: 12px;
+}
+.direction-record-list small {
+  display: block;
+  color: #8f939b;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.settings-memory {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--panel-border, #2c2e33);
+  border-radius: 8px;
+  color: #8f939b;
+  font-size: 11px;
+}
+.settings-memory button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 7px;
+  background: #1b1d21;
+  color: #cfd2d7;
+  font-size: 11px;
+  cursor: pointer;
+}
+.settings-memory button:hover:not(:disabled) {
+  border-color: var(--ppt-accent, #d35230);
+  color: #f0a58f;
+}
+.settings-memory button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

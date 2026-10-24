@@ -7,9 +7,13 @@ use std::{
     time::Duration,
 };
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 const HISTORY_LIMIT: usize = 20;
 const RECENT_PROJECT_LIMIT: usize = 20;
+const DESIGN_MEMORY_DECK_LIMIT: usize = 50;
+const DESIGN_MEMORY_PREFERENCE_LIMIT: usize = 100;
+const MAX_DESIGN_MEMORY_PAYLOAD_BYTES: usize = 8 * 1024;
+const MAX_DESIGN_MEMORY_SCOPE_CHARS: usize = 64;
 const MAX_PROVIDER_ID_CHARS: usize = 64;
 const MAX_MODEL_CHARS: usize = 128;
 const MAX_TOPIC_CHARS: usize = 4000;
@@ -70,6 +74,22 @@ pub struct RecentProjectEntry {
     pub modified_at: i64,
     pub last_opened_at: i64,
     pub missing: bool,
+}
+
+/// One local design-memory entry.
+///
+/// `deck` entries store a look fingerprint (palette, fonts, concept, page count)
+/// and `preference` entries store the user's own words with a scope. Neither
+/// carries reviewed copy, notes or images; the payload is capped and validated
+/// before it reaches the table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesignMemoryEntry {
+    pub id: String,
+    pub kind: String,
+    pub scope: String,
+    pub payload: Value,
+    pub created_at: i64,
 }
 
 /// SQLite-backed local store for preferences and AI draft history.
@@ -268,6 +288,72 @@ impl Database {
         self.load_ai_history()
     }
 
+    pub fn load_design_memory(&self) -> Result<Vec<DesignMemoryEntry>, String> {
+        let connection = self.lock()?;
+        load_design_memory_from(&connection)
+    }
+
+    pub fn save_design_memory(
+        &self,
+        entry: &DesignMemoryEntry,
+    ) -> Result<Vec<DesignMemoryEntry>, String> {
+        validate_design_memory(entry)?;
+        let payload = serde_json::to_string(&entry.payload)
+            .map_err(|_| "DESIGN_MEMORY_PAYLOAD_INVALID".to_string())?;
+        if payload.len() > MAX_DESIGN_MEMORY_PAYLOAD_BYTES {
+            return Err("DESIGN_MEMORY_PAYLOAD_TOO_LARGE".into());
+        }
+        {
+            let connection = self.lock()?;
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO design_memory
+                       (id, kind, scope, payload_json, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![entry.id, entry.kind, entry.scope, payload, entry.created_at],
+                )
+                .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+            let limit = match entry.kind.as_str() {
+                "deck" => DESIGN_MEMORY_DECK_LIMIT,
+                _ => DESIGN_MEMORY_PREFERENCE_LIMIT,
+            };
+            connection
+                .execute(
+                    "DELETE FROM design_memory
+                     WHERE kind = ?1
+                       AND id NOT IN (
+                         SELECT id FROM design_memory
+                         WHERE kind = ?1
+                         ORDER BY created_at DESC, rowid DESC
+                         LIMIT ?2
+                       )",
+                    params![entry.kind, limit as i64],
+                )
+                .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        }
+        self.load_design_memory()
+    }
+
+    pub fn remove_design_memory(&self, id: &str) -> Result<Vec<DesignMemoryEntry>, String> {
+        {
+            let connection = self.lock()?;
+            connection
+                .execute("DELETE FROM design_memory WHERE id = ?1", [id])
+                .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        }
+        self.load_design_memory()
+    }
+
+    pub fn clear_design_memory(&self) -> Result<Vec<DesignMemoryEntry>, String> {
+        {
+            let connection = self.lock()?;
+            connection
+                .execute("DELETE FROM design_memory", [])
+                .map_err(|error| format!("DATABASE_WRITE_FAILED: {error}"))?;
+        }
+        Ok(Vec::new())
+    }
+
     pub fn load_recent_projects(&self) -> Result<Vec<RecentProjectEntry>, String> {
         let connection = self.lock()?;
         let mut statement = connection
@@ -392,7 +478,16 @@ fn migrate(connection: &mut Connection) -> Result<(), String> {
                last_opened_at INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS recent_projects_last_opened_at
-               ON recent_projects (last_opened_at DESC);",
+               ON recent_projects (last_opened_at DESC);
+             CREATE TABLE IF NOT EXISTS design_memory (
+               id TEXT PRIMARY KEY NOT NULL,
+               kind TEXT NOT NULL,
+               scope TEXT NOT NULL,
+               payload_json TEXT NOT NULL,
+               created_at INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS design_memory_kind_created_at
+               ON design_memory (kind, created_at DESC);",
         )
         .map_err(|error| format!("DATABASE_MIGRATION_FAILED: {error}"))?;
     transaction
@@ -401,6 +496,48 @@ fn migrate(connection: &mut Connection) -> Result<(), String> {
     transaction
         .commit()
         .map_err(|error| format!("DATABASE_COMMIT_FAILED: {error}"))
+}
+
+fn load_design_memory_from(connection: &Connection) -> Result<Vec<DesignMemoryEntry>, String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT id, kind, scope, payload_json, created_at
+             FROM design_memory
+             ORDER BY created_at DESC, rowid DESC",
+        )
+        .map_err(|error| format!("DATABASE_READ_FAILED: {error}"))?;
+    let rows = statement
+        .query_map([], |row| {
+            let payload: String = row.get(3)?;
+            Ok(DesignMemoryEntry {
+                id: row.get(0)?,
+                kind: row.get(1)?,
+                scope: row.get(2)?,
+                // A corrupted payload must not make every entry unreadable.
+                payload: serde_json::from_str(&payload).unwrap_or(Value::Null),
+                created_at: row.get(4)?,
+            })
+        })
+        .map_err(|error| format!("DATABASE_READ_FAILED: {error}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("DATABASE_READ_FAILED: {error}"))
+}
+
+fn validate_design_memory(entry: &DesignMemoryEntry) -> Result<(), String> {
+    if entry.id.trim().is_empty() || entry.id.chars().count() > 128 {
+        return Err("DESIGN_MEMORY_ID_INVALID".into());
+    }
+    if !matches!(entry.kind.as_str(), "deck" | "preference") {
+        return Err("DESIGN_MEMORY_KIND_INVALID".into());
+    }
+    if entry.scope.trim().is_empty() || entry.scope.chars().count() > MAX_DESIGN_MEMORY_SCOPE_CHARS
+    {
+        return Err("DESIGN_MEMORY_SCOPE_INVALID".into());
+    }
+    if !entry.payload.is_object() {
+        return Err("DESIGN_MEMORY_PAYLOAD_INVALID".into());
+    }
+    Ok(())
 }
 
 fn read_setting(connection: &Connection, key: &str) -> Result<Option<String>, String> {
@@ -850,5 +987,28 @@ mod tests {
             .remove_recent_project(&path.to_string_lossy())
             .expect("remove");
         assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn stores_and_clears_design_memory() {
+        let database = Database::open_in_memory().expect("database");
+        let entry = DesignMemoryEntry {
+            id: "memory-1".into(),
+            kind: "deck".into(),
+            scope: "deck".into(),
+            payload: serde_json::json!({
+                "concept": "editorial",
+                "palette": ["#FFFFFF"],
+                "fonts": { "major": "A", "minor": "B" },
+                "pageCount": 8
+            }),
+            created_at: 1,
+        };
+        let loaded = database.save_design_memory(&entry).expect("save");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].payload["concept"], "editorial");
+        assert!(database.load_design_memory().expect("load").len() == 1);
+        assert!(database.clear_design_memory().expect("clear").is_empty());
+        assert!(database.load_design_memory().expect("load").is_empty());
     }
 }

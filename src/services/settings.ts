@@ -20,6 +20,20 @@ export interface AppSettings {
    * 排版校验，视觉评分与建议随之不可用。缺省开启，保持既有行为。
    */
   visionReviewEnabled: boolean;
+  /**
+   * 是否在无模板生成时先提出两个设计方向。
+   *
+   * 关闭后走原有的单方向路径：少一次提案调用和两页预览设计，适合已经明确
+   * 知道自己要什么的用户。缺省开启。
+   */
+  designDirectionGate: boolean;
+  /**
+   * 是否允许在本机保存设计记忆。
+   *
+   * 只保存外观指纹与用户显式写下的偏好原话，不保存正文、备注、图片或模型
+   * 响应；关闭后不再记录，也不再在方向提案里引用历史。
+   */
+  designMemoryEnabled: boolean;
 }
 let systemThemeQuery: MediaQueryList | undefined;
 let systemThemeListener: (() => void) | undefined;
@@ -77,6 +91,8 @@ export function defaultSettings(): AppSettings {
     aiProviderId: provider.id,
     aiModel: provider.defaultModel,
     visionReviewEnabled: true,
+    designDirectionGate: true,
+    designMemoryEnabled: true,
   };
 }
 
@@ -92,7 +108,19 @@ export async function loadSettings(): Promise<AppSettings> {
   const aiModel = provider.models.includes(stored.aiModel) ? stored.aiModel : provider.defaultModel;
   // 老库没有这个字段：只有显式 false 才关闭，缺省保持允许。
   const visionReviewEnabled = stored.visionReviewEnabled !== false;
-  return { theme, uiFont, uiLanguage, aiProviderId: provider.id, aiModel, visionReviewEnabled };
+  // 方向门同理：缺省开启，旧库不会因为升级突然多出一个步骤或少一个步骤。
+  const designDirectionGate = stored.designDirectionGate !== false;
+  const designMemoryEnabled = stored.designMemoryEnabled !== false;
+  return {
+    theme,
+    uiFont,
+    uiLanguage,
+    aiProviderId: provider.id,
+    aiModel,
+    visionReviewEnabled,
+    designDirectionGate,
+    designMemoryEnabled,
+  };
 }
 
 export async function saveSettings(settings: AppSettings): Promise<void> {
@@ -103,6 +131,8 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
     aiProviderId: settings.aiProviderId,
     aiModel: settings.aiModel,
     visionReviewEnabled: settings.visionReviewEnabled,
+    designDirectionGate: settings.designDirectionGate,
+    designMemoryEnabled: settings.designMemoryEnabled,
   });
   applyTheme(settings.theme);
   applyUiFont(settings.uiFont);

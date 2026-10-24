@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyCommand } from "./commands";
-import { createDocument, hashSlideContent, type DesignDirectionRecord } from "../document-model";
+import { applyCommand, directionContentFingerprint } from "./commands";
+import { createDocument, type DesignDirectionRecord } from "../document-model";
 import { defaultDocumentaryConcept, resolveDeckConcept } from "../design/deck-concept";
 import type { CompositionFacts } from "./design-intent";
 import { useEditorStore } from "../../store/editor-store";
@@ -49,7 +49,7 @@ function directionRecord(overrides: Partial<DesignDirectionRecord> = {}): Design
     id: crypto.randomUUID(),
     createdAt: "2026-10-24T12:00:00.000Z",
     contentRevision: 1,
-    contentFingerprint: JSON.stringify([hashSlideContent(content)]),
+    contentFingerprint: directionContentFingerprint([content]),
     proposals: [proposal],
     selectedProposalId: proposal.id,
     selectedBy: "user",
@@ -71,13 +71,32 @@ function commandFor(direction: DesignDirectionRecord) {
 }
 
 describe("design direction record", () => {
-  it("stores the decision with the design and leaves the content fingerprint alone", () => {
+  it("stores the decision with the design and leaves the reviewed copy alone", () => {
     const document = createDocument();
-    const before = JSON.stringify([hashSlideContent(content)]);
     applyCommand(document, commandFor(directionRecord()));
     expect(document.designDirections).toHaveLength(1);
     expect(document.designDirections?.[0]?.selectedBy).toBe("user");
-    expect(JSON.stringify([hashSlideContent(document.slides[0]!.content)])).toBe(before);
+    expect(document.slides[0]!.content.title).toBe(content.title);
+    expect(document.slides[0]!.content.body).toBe(content.body);
+  });
+
+  it("accepts a decision made against content with blocks", () => {
+    const withBlocks = {
+      ...content,
+      blocks: [{ type: "bullet-list" as const, items: ["复购", "陈列"] }],
+    };
+    const record = directionRecord({ contentFingerprint: directionContentFingerprint([withBlocks]) });
+    const document = createDocument();
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "方向记录",
+      slides: [withBlocks],
+      designs: [design],
+      designConcept: concept(),
+      designDirection: record,
+    });
+    expect(document.designDirections).toHaveLength(1);
+    expect(document.slides[0]!.content.blocks).toHaveLength(1);
   });
 
   it("rejects a preset the renderer cannot draw", () => {

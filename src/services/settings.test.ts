@@ -8,6 +8,7 @@ const store = vi.hoisted(() => ({
     aiProviderId: string;
     aiModel: string;
     visionReviewEnabled?: boolean;
+    designDirectionGate?: boolean;
   } | null,
   saved: [] as {
     theme: string;
@@ -16,6 +17,7 @@ const store = vi.hoisted(() => ({
     aiProviderId: string;
     aiModel: string;
     visionReviewEnabled?: boolean;
+    designDirectionGate?: boolean;
   }[],
 }));
 
@@ -130,5 +132,28 @@ describe("视觉评审隐私开关", () => {
     store.saved.length = 0;
     await saveSettings({ ...defaultSettings(), visionReviewEnabled: false });
     expect(store.saved.at(-1)?.visionReviewEnabled).toBe(false);
+  });
+});
+
+describe("设计方向门开关", () => {
+  it("老库没有这个字段时默认开启", async () => {
+    store.value = { theme: "dark", uiFont: "sans", aiProviderId: "minimax", aiModel: "MiniMax-M3" };
+    expect((await loadSettings()).designDirectionGate).toBe(true);
+  });
+
+  it("显式关闭会被读到，并在保存时原样写回", async () => {
+    stubDom();
+    store.value = {
+      theme: "dark",
+      uiFont: "sans",
+      aiProviderId: "minimax",
+      aiModel: "MiniMax-M3",
+      designDirectionGate: false,
+    };
+    expect((await loadSettings()).designDirectionGate).toBe(false);
+
+    store.saved.length = 0;
+    await saveSettings({ ...defaultSettings(), designDirectionGate: false });
+    expect(store.saved.at(-1)?.designDirectionGate).toBe(false);
   });
 });

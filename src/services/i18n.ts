@@ -30,6 +30,14 @@ const zh = {
   "settings.model.visionReview": "允许视觉评审",
   "settings.model.visionReviewHelp":
     "生成时把页面渲染图发送给当前模型服务检查排版。关闭后不再上传任何渲染图，只做确定性排版校验，视觉评分与建议将不可用。首次生成前会发一张小图探测模型是否支持图片输入；不支持时本次自动跳过。",
+  "settings.model.directionGate": "生成前选择设计方向",
+  "settings.model.directionGateHelp":
+    "无模板生成时先给出“编辑式”和“纪实全幅”两个方向，各附两页真实预览。关闭后直接按推荐方向生成，少一次提案调用和两页预览设计。",
+  "settings.model.designMemory": "保存本机设计记忆",
+  "settings.model.designMemoryHelp":
+    "只保存配色、字体、方向、页数和你在方向选择时写下的偏好原话；不保存正文、备注、图片或模型响应。用于下次方向提案时避免重复。",
+  "settings.memory.count": "已记录 {decks} 个外观、{preferences} 条偏好",
+  "settings.memory.clear": "清除设计记忆",
   "settings.model.apiBaseUrl": "API 地址",
   "settings.model.apiKey": "API Key",
   "settings.model.configured": "已安全配置",
@@ -115,6 +123,14 @@ const en: Record<UiMessageKey, string> = {
   "settings.model.visionReview": "Allow visual review",
   "settings.model.visionReviewHelp":
     "Send slide renders to the current model service during generation so it can check layout. When disabled, no renders are uploaded and only deterministic layout validation runs; visual scores and suggestions become unavailable. Before the first run a small image probes whether the model accepts image input; if it does not, visual review is skipped for this run.",
+  "settings.model.directionGate": "Choose a design direction before generating",
+  "settings.model.directionGateHelp":
+    "Without a template, propose Editorial and Documentary with two real previews each. When disabled, the deck is generated from the recommended direction directly, saving one proposal call and two preview designs.",
+  "settings.model.designMemory": "Save design memory on this computer",
+  "settings.model.designMemoryHelp":
+    "Stores only palette, fonts, direction, page count and the taste notes you type while choosing a direction. It never stores copy, notes, images or model responses. Used to avoid repeating a look in the next proposal.",
+  "settings.memory.count": "{decks} looks and {preferences} preferences saved",
+  "settings.memory.clear": "Clear design memory",
   "settings.model.apiBaseUrl": "API endpoint",
   "settings.model.apiKey": "API Key",
   "settings.model.configured": "Configured securely",

@@ -17,6 +17,19 @@ export interface StoredAppSettings {
   aiModel: string;
   /** 是否允许把页面渲染图发送给模型服务。老库没有这个字段时按允许处理。 */
   visionReviewEnabled?: boolean;
+  /** 是否在无模板生成时先给出两个设计方向。老库没有这个字段时按开启处理。 */
+  designDirectionGate?: boolean;
+  /** 是否允许在本机保存设计记忆（外观指纹与偏好原话）。缺省开启。 */
+  designMemoryEnabled?: boolean;
+}
+
+/** One local design-memory row. The payload never carries reviewed copy. */
+export interface StoredDesignMemoryEntry {
+  id: string;
+  kind: "deck" | "preference";
+  scope: string;
+  payload: Record<string, unknown>;
+  createdAt: number;
 }
 
 export interface StoredAiHistoryEntry {
@@ -79,4 +92,24 @@ export async function saveRecentProject(entry: RecentProjectEntry): Promise<Rece
 export async function removeRecentProject(path: string): Promise<RecentProjectEntry[]> {
   requireDesktopRuntime();
   return invoke<RecentProjectEntry[]>("remove_recent_project", { path });
+}
+
+export async function loadStoredDesignMemory(): Promise<StoredDesignMemoryEntry[]> {
+  if (!isTauri()) return [];
+  return invoke<StoredDesignMemoryEntry[]>("load_design_memory");
+}
+
+export async function saveStoredDesignMemory(entry: StoredDesignMemoryEntry): Promise<StoredDesignMemoryEntry[]> {
+  requireDesktopRuntime();
+  return invoke<StoredDesignMemoryEntry[]>("upsert_design_memory", { entry });
+}
+
+export async function removeStoredDesignMemory(id: string): Promise<StoredDesignMemoryEntry[]> {
+  requireDesktopRuntime();
+  return invoke<StoredDesignMemoryEntry[]>("remove_design_memory", { id });
+}
+
+export async function clearStoredDesignMemory(): Promise<StoredDesignMemoryEntry[]> {
+  requireDesktopRuntime();
+  return invoke<StoredDesignMemoryEntry[]>("clear_design_memory");
 }

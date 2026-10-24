@@ -249,6 +249,60 @@ function TastePanel() {
 }
 
 /**
+ * The last direction decision, kept next to the page properties.
+ *
+ * It answers "why does the deck look like this" after a reopen: which direction
+ * was chosen, which alternatives were shown, and what the user said at the time.
+ */
+const DIRECTION_PRESET_LABELS: Readonly<Record<string, string>> = {
+  editorial: "编辑式",
+  documentary: "纪实全幅",
+};
+
+function DirectionPanel() {
+  const document = useEditorStore((state) => state.document);
+  const record = document.designDirections?.at(-1);
+  const selected = record?.proposals.find((proposal) => proposal.id === record.selectedProposalId);
+  return (
+    <InspectorSection
+      title="设计方向"
+      defaultOpen={false}
+      tools={record ? <span className="taste-badge">{selected?.name ?? "已记录"}</span> : undefined}
+    >
+      {!record ? (
+        <p className="field-help">尚未记录设计方向。无模板生成时会先给出两个方向供选择。</p>
+      ) : (
+        <div className="direction-record">
+          <p className="direction-record-line">
+            <strong>{selected?.name ?? "已删除的方向"}</strong>
+            <span className="taste-badge">{DIRECTION_PRESET_LABELS[selected?.preset ?? ""] ?? selected?.preset}</span>
+            <span className="direction-record-meta">
+              {record.selectedBy === "user" ? "你选的" : "按推荐"} ·{" "}
+              {new Date(record.createdAt).toLocaleDateString("zh-CN")} · 内容 rev {record.contentRevision}
+            </span>
+          </p>
+          {record.userWords && <p className="direction-record-words">“{record.userWords}”</p>}
+          <ul className="direction-record-list">
+            {record.proposals.map((proposal) => (
+              <li key={proposal.id} className={proposal.id === record.selectedProposalId ? "selected" : ""}>
+                <span aria-hidden>{proposal.id === record.selectedProposalId ? "✓" : "·"}</span>
+                <div>
+                  <strong>{proposal.name}</strong>
+                  <small>
+                    {DIRECTION_PRESET_LABELS[proposal.preset] ?? proposal.preset} · {proposal.idea}
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {record.regenerations > 0 && <p className="field-help">生成前换过 {record.regenerations} 组方向。</p>}
+        </div>
+      )}
+    </InspectorSection>
+  );
+}
+
+/**
  * Presentation of the inspector for one element. It only emits commands, so the
  * same markup can be rendered without a store and asserted in tests.
  */
@@ -1562,6 +1616,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
   return (
     <aside className="right-panel">
       <TastePanel />
+      <DirectionPanel />
       {multiBounds ? (
         <MultiSelectionPanel
           slideId={slide.id}

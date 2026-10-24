@@ -21,7 +21,7 @@ import { encodePng, type PixelImage } from "../../src/core/rendering/png";
 const PAGE_WIDTH = 10;
 const PAGE_HEIGHT = 5.625;
 
-function gradientImage(): string {
+export function gradientImage(): string {
   const width = 320;
   const height = 180;
   const data = new Uint8ClampedArray(width * height * 4);

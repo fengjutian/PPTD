@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 状态     | 进行中（P0-1、P0-2、P0-7、P0-8 已实现，2026-10-24）                                                                                                               |
+| 状态     | 已实现（P0-1–P0-8、设置开关与记录查看，2026-10-24；UI 待目视验证）                                                                                                |
 | 优先级   | P0                                                                                                                                                                |
 | 里程碑   | V0.4 设计能力                                                                                                                                                     |
 | 预估     | 10–13 人日                                                                                                                                                        |
@@ -189,33 +189,40 @@ export interface PresentationDocument {
 新增命令 `generate_deck_directions`（`src-tauri/src/commands/ai.rs`，与 `generate_deck_concepts` 并列）：
 
 ```rust
-pub struct GenerateDeckDirectionsRequest {
-    pub draft: AiDraft,
-    pub briefs: Vec<SlideBrief>,
-    pub template: DesignTemplateContext,
-    pub visual_goal: PresentationVisualGoal,
-    pub theme_direction: Option<ThemeDirection>,
-    /// 最近项目的设计指纹摘要，仅用于去重；不含正文。
-    pub recent_looks: Option<Vec<RecentLook>>,
-    pub model: String,
-    pub provider: String,
-    pub task_id: Option<u32>,
-    pub stream_progress: Option<bool>,
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateDirectionsRequest {
+    draft: serde_json::Value,
+    briefs: serde_json::Value,
+    template: serde_json::Value,
+    visual_goal: serde_json::Value,
+    theme_direction: Option<serde_json::Value>,
+    model: Option<String>,
+    provider: Option<String>,
+    task_id: Option<u64>,
 }
 ```
 
-输出：
+输出（当前渲染器只有两个 preset，因此固定两个方向；未来新增 preset 时把上限从 2 放宽到 3）：
 
 ```json
 {
   "directions": [
     {
       "preset": "editorial",
-      "name": "编辑部",
-      "idea": "用细线和大字号把结论排成社论版面。",
-      "rationale": "内容以判断和要点为主，图片少。",
+      "name": "编辑式年报",
+      "idea": "用细线和大字号把结论排成编辑部版面。",
       "typeContrast": "strong",
-      "imagery": "none"
+      "imagery": "none",
+      "rationale": "内容以判断和要点为主，适合编号栏和留白。"
+    },
+    {
+      "preset": "documentary",
+      "name": "纪实全幅",
+      "idea": "让真实图片占住页面，文字退到边缘。",
+      "typeContrast": "calm",
+      "imagery": "side",
+      "rationale": "内容有现场照片，图片比文字更能说明问题。"
     }
   ]
 }
@@ -223,14 +230,14 @@ pub struct GenerateDeckDirectionsRequest {
 
 提示词硬规则：
 
-1. 只输出 2–3 个方向，`preset` 必须互不相同且在允许列表内。
-2. `name` 不超过 12 字；`idea` 1–80 字，只说视觉策略，不复述标题；`rationale` 不超过 120 字，说明与内容的匹配。
+1. 输出 2 个方向，`preset` 必须分别是 `editorial` 与 `documentary`，不得重复或新增其他值。
+2. `name` 1–20 字；`idea` 1–80 字，只说视觉策略，不复述标题；`rationale` 1–120 字，说明与内容的匹配。
 3. 禁止输出页面文案、坐标、字号、颜色值或元素清单。
-4. 方向差异必须落在表面策略、字阶对比或图像策略上，不能只换配色。
-5. 提供 `recent_looks` 时，避免与最近 3 个项目的外观家族重复。
+4. 两个方向必须在版面骨架、图像策略、字阶对比中至少两项不同，不能只换配色。
+5. 内容没有可用图片时仍要给出 documentary，但 `imagery` 用 `side` 并在 rationale 说明以文字为主。
 6. 只输出一个 JSON 对象，不要 Markdown 或解释。
 
-超时沿用设计阶段预算（180 秒），取消走 `task_id` 广播，进度阶段复用 `"design"`，界面文案区分“生成方向”和“生成逐页设计”。
+超时沿用 `CONCEPT_TIMEOUT`（120 秒），温度 0.5（比单方向提案略高，换取差异），取消走 `task_id` 广播。`recent_looks` 属于 P1 设计记忆，本轮不传。
 
 ### 5.2 校验与归一化（TS）
 
@@ -241,60 +248,57 @@ export async function generateDeckDirections(
   draft: AiDraft,
   briefs: SlideBrief[],
   template: DesignTemplateContext,
-  options: { taskId?: number; themeDirection?: ThemeDirection; recentLooks?: RecentLook[] },
-): Promise<AiDeckDirection[]>;
+  options: { taskId?: number; themeDirection?: ThemeDirection } = {},
+): Promise<AiDeckConceptOutput[]>;
 ```
 
-校验顺序（任一失败抛 `AI_DIRECTIONS_INVALID`，保留原始错误信息到诊断上下文）：
-
-1. 数量 2–3；
-2. `preset` 唯一且属于 `CONCEPT_PRESET_IDS`；
-3. `name`、`idea`、`rationale` 长度与去空白；
-4. `typeContrast` 属于枚举；
-5. `imagery` 属于该预设白名单。
-
-归一化只做三件事：`trim`、折叠连续空白、按 `CONCEPT_PRESET_IDS` 顺序稳定排序（保证 UI 顺序可复现）。不补造缺失方向、不改写文案。
+- `aiDeckDirectionsSchema` 校验数量 2–3、`preset` 唯一、字段长度与枚举；`preset` 枚举只包含能渲染的值。
+- 解析失败统一包装为 `AI_DIRECTIONS_INVALID: <zod 详情>`，界面只依赖稳定 code，详情保留在消息里。
+- 归一化只做稳定排序：按 `CONCEPT_PRESET_IDS` 顺序输出，模型顺序不影响两个预览的位置和记录里的 proposal 顺序。
+- `imagery` 与具体 preset 的白名单不在这里校验：`resolveDeckConcept` 负责收敛并记录 conflict，避免服务层复制一份渲染能力表。
 
 ### 5.3 两页预览
 
-选页规则：
+选页由调用方决定（通常是封面 + 一页代表性正文），预览构建不猜页。
 
-- 第 1 页固定为封面（`slides[0]`）。
-- 第 2 页取第一个满足“有结构化内容块或正文 ≥ 60 字”的正文页；没有则取 `slides[1]`。
-
-流程（每个方向一次）：
-
-1. 从真实文档取两页的 `AiSlideDraft` 与 `SlideBrief`，构造临时 `AiDraft`（标题与页序保持真实）。
-2. 调 `generatePresentationDesign(previewDraft, previewBriefs, analysis, { concept })`，得到 2 页设计。**这是方向阶段唯一的新增模型调用**；N≤3 时为 2N 页设计量。
-3. 对每一页复用 `inferRelayoutContext(slide, document)`（`src/core/commands/slide-relayout.ts:293`）得到模板上下文；创建临时单页文档（`createDocument` + `pageSize` + `theme` + `layouts`），先 `apply-ai-draft` 写入该页内容，再 `apply-ai-designed-draft` 写入该页设计，并传入真实 `pageContext: { index, total, sectionLabel }`。
-4. `renderPresentationForVisualReview(tempDoc, 1280)` 取 `slides[0]` 作为预览图；两页拼成一张卡片预览（复用 `composeContactSheetFromDataUrls` 或直接并排两张）。
-5. 释放临时文档与图片 URL；不写入 store，不修改真实文档。
-
-**为什么用临时单页而不是克隆整册**：`apply-ai-designed-draft` 要求 `slides.length === designs.length`；整册克隆需要一次设计 20 页，成本与方向阶段上限冲突。逐页临时渲染与 `relayoutSlide` 同路径，页码/章节名通过 `pageContext` 保持真实，差异最小。
-
-已知限制（必须写进 UI 文案与测试容忍）：预览是“代表性页面”，不是最终整册的逐像素副本；页脚、页码、章节名以外的跨页节奏（例如上一页的章节来源）可能与最终稿有 1 级差异。
-
-### 5.4 UI 状态机
-
-`features/ai` 内新增纯状态模块 `design-direction-flow.ts`（无 React），由 App 调用：
+`src/core/commands/direction-preview.ts`：
 
 ```ts
-type DirectionFlowState =
-  | { stage: "idle" }
-  | { stage: "generating"; startedAt: number }
-  | { stage: "ready"; proposals: DirectionProposal[]; regenerations: number; previews: DirectionPreview[] }
-  | { stage: "applying"; selectedId: string }
-  | { stage: "skipped"; regenerations: number }
-  | { stage: "failed"; code: string; message: string };
+export function buildDirectionPreviewPages(input: {
+  document: PresentationDocument;
+  concept: DeckConcept;
+  pageIndexes: readonly number[];
+  designs: readonly AiSlideDesign[];
+  commandBase?: DirectionPreviewCommandBase;
+  title?: string;
+}): DirectionPreviewPage[];
 ```
 
-规则：
+每个预览页：
 
-- `regenerations` 上限 2；达到上限后“换一组”禁用并提示。
-- 选择后进入 `applying`，若整册设计失败，允许回到 `ready` 重选（不消耗 `regenerations`）。
-- 跳过写入 `selectedBy: "fallback"`；接口失败**不写记录**，只提示，下次生成重新询问。
-- 取消：调用 `cancelAiGeneration(taskId)`，状态回 `idle`，不写文档。
-- 键盘：方向卡片是 `radiogroup`，左右切换，Enter 确认，Esc 取消；缩略图 `alt` 为“方向名：立意”。
+1. 从真实页面取标题、正文、备注与内容块（`toAiBlocks`），构造该页的 `AiSlideDraft`。
+2. 建一个临时文档，只设置标题与页面尺寸；主题与模板上下文由 `commandBase` 带入，和最终应用保持同一份参数。
+3. 复用 `apply-ai-designed-draft`：`slides`/`designs` 各一页，`designConcept` 是当前方向，`pageContext` 传真实 `index`、`total` 与 `sectionLabel`；该页的视觉素材过滤后把 `slideIndex` 重映射为 0。
+4. 返回 `{ index, document }`。渲染由调用方执行（`renderPresentationForVisualReview(temp, 640)`），渲染完即丢弃。
+
+**为什么用临时单页而不是克隆整册**：命令要求 `slides.length === designs.length`；整册克隆需要一次设计 20 页，成本与方向阶段上限冲突。单页文档让页码、页脚和章节名通过 `pageContext` 保持真实，同时不碰真实文档（测试断言序列化前后完全一致）。
+
+已知限制（必须写进 UI 文案）：
+
+- 模板版式的轮换是整册级决策，单页预览可能选到与最终稿不同的版式；预设主题的页面已由测试锁定标题轴一致（误差 < 1% 页宽）。
+- 预览是“代表性页面”，不是最终整册的逐像素副本；跨页节奏、相邻页的章节来源可能有一级差异。
+
+### 5.4 UI 接线
+
+方向门在 `App.generateFromDraft` 内部，只有 `mode === "preset"` 时触发：
+
+- 状态：`directionOptions`（对话框卡片）、`directionRegenerations`、`directionChoiceRef`（Promise resolver）。
+- 流程：提案 → 逐个方向解析概念、设计 2 页、构建临时文档、640 宽渲染 → 打开 `DesignDirectionDialog` → 等待 `select / skip / retry`。
+- “换一组”最多 2 次；达到上限后按钮禁用，再次请求会回退单方向路径。
+- 取消任务时 `directionChoiceRef` 以 `skip` 释放等待，随后按 `designCancelRef` 抛出取消，不会把任务卡在已关闭的对话框后面。
+- 选择结果转成 `DesignDirectionRecord`，随 `generationCommand` 一起应用；跳过时选推荐方向并记 `selectedBy: "fallback"`。
+- 提案或预览失败（少于 2 个可用方向）时返回 `undefined`，走原有的 `generateDeckConcepts` 单方向路径，不写记录。
+- 对话框卡片是原生 `<button>`，Tab 顺序与视觉顺序一致；缩略图 `alt` 为“方向名 第 N 页预览”。没有自定义 radiogroup 键盘逻辑，Esc 不关闭（必须选择、跳过或取消任务）。
 
 ## 6. 样张
 
@@ -313,32 +317,32 @@ export function buildDesignPreviewDocument(options?: {
 
 ### 6.2 样张的形态
 
-样张首先是**文档夹具**，不是图片。`tools/design-preview/specimens.ts` 导出：
+样张首先是**文档**，不是图片。`src/services/theme-specimen.ts` 导出：
 
 ```ts
-export function buildSpecimenDocument(options: {
-  themePresetId: string;
-  conceptPresetId: ConceptPresetId;
+export function buildSpecimenDocument(options?: {
+  themePresetId?: string; // 默认 editorial-teal
+  conceptPresetId?: ConceptPresetId; // 默认 editorial
 }): PresentationDocument;
 ```
 
 - 8 页固定结构（封面、章节、正文、指标、表格、图表、图片、结论），内容来自固定夹具，不调用模型。
-- 页面尺寸取内置 16:9；主题通过 `themePresetId` 注入，概念通过命令的 `designConcept` 注入。
-- 纯 Node 可构造：不依赖 DOM，也不依赖 PptxGenJS。
+- 页面尺寸取内置 16:9；主题通过 `themePresetId` 注入，概念通过 `designConcept` 注入。
+- 纯函数可构造：不依赖 DOM，也不依赖 PptxGenJS。
 
 **不在仓库入库 JPEG。** 现有渲染器 `presentation-renderer.ts` 依赖浏览器 canvas，Node 测试环境没有 DOM；为了几张图引入 Playwright 或 Office，会把样张生成变成环境依赖。改为：
 
-- **选择器按需渲染**：用户聚焦某套预设时，才在应用内调 `renderPresentationForVisualReview(specimen, 640)` 渲染该套 8 页（或先只渲染封面），结果按 `themePresetId + conceptPresetId + schemaVersion` 缓存在内存。
-- **README / 发布材料**如需静态图，由人工在应用内导出 contact sheet 后提交，属于发布流程，不是 CI 步骤。
+- **选择器按需渲染**：用户点击“查看 8 页样张”后，才在应用内调 `renderPresentationForVisualReview(document, 480)` 渲染 8 页；未完成时显示“正在渲染”，失败时退回色板卡片，不留空白。
+- **README / 发布材料**如需静态图，由人工在应用内导出后提交，属于发布流程，不是 CI 步骤。
 - **视觉回归**继续走 `tools/visual-regression` 的 PowerPoint / LibreOffice 基线，不新建图片管线。
 
-清单 `tools/design-preview/specimens.manifest.json` 只记录结构信息：预设 ID、8 页页序与 recipe、页面尺寸、夹具版本；不记录图片路径。测试在 Node 中直接比较页数、recipe 覆盖与元素数量。
+没有图片清单：样张是代码构造的文档，测试直接比较页数、元素类型与方向差异，不维护第二份 manifest。
 
 ### 6.3 消费方
 
-- `features/ai/ThemePresetPicker`：聚焦或选中时请求样张预览；渲染中显示骨架屏；失败退回现有色板卡片，不显示空白。
-- 方向提案：只传样张的结构摘要（recipe 序列、密度、图像策略），不传图片。
-- 导出兼容测试：同一份 specimen 文档执行 `buildPptx`，断言 8 页对象类型与清单一致。
+- `features/ai/ThemePresetPicker`：选中主题后显示“查看「X」8 页样张”按钮；点击才渲染，结果只存在组件内存。
+- 方向提案：只传方向字段，不传样张图片。
+- 测试：`src/services/theme-specimen.test.ts` 覆盖 8 页结构、11 套主题、两个方向的标题轴差异。
 
 ## 7. 设计体检
 
@@ -498,28 +502,50 @@ export function lintTaste(document: PresentationDocument, options?: TasteLintOpt
 | 样张按需渲染卡顿      | 打开选择器变慢           | 只渲染聚焦项与封面、宽度 640、内存缓存、失败退回色板                                                                              |
 | UI 阻塞主流程         | 无法继续                 | 可跳过、可取消、失败自动回退；不设置强制等待                                                                                      |
 
-回退开关（设置项，默认开启）：
+回退开关（设置项）：
 
-- `designDirections: "auto" | "off"`：关闭后完全走现有单方向路径。
-- `tasteLint: "on" | "off"`：关闭后不显示体检页签，导出报告不写该字段。
+- `designDirectionGate`（已实现，默认开启）：关闭后完全走现有单方向路径。
+- `tasteLint` 开关尚未实现：体检当前始终运行，只在 UI 中折叠显示；导出报告始终带计数。
 
 ## 11. 文档与 ADR
 
-实施前需要新增（编号顺延当前最大 0074）：
+已创建：
 
 1. `docs/architecture/decisions/0075-design-direction-proposal-and-selection.md`
-   - 方向是设计态事实；预览走真实编译器；记录随设计事务写入；不进入内容哈希。
+   - 方向是设计态事实；预览走真实命令；记录随设计事务写入；指纹来自草稿而非文档哈希。
 2. `docs/architecture/decisions/0076-deterministic-taste-lint.md`
    - 只做可判定项；硬底线与软提示分级；不阻断；阈值按页宽比例 + pt 双条件；不持久化。
 
 实施后同步：
 
-- `docs/architecture/system-architecture.md` 3 节模块表：新增 `core/design/taste-lint`、`features/ai/design-direction`。
+- `docs/architecture/system-architecture.md` 3 节模块表：新增 `core/design/taste-lint`、`features/ai/design-direction`（以实际模块名为准）。
 - `docs/requirements/PPTD-TRS-v1.0.md` 变更记录：登记 4.x 设计方向与品味门。
 - `README.md` “当前实现范围”与“已知限制”：方向数量、样张覆盖、体检边界（像素级不覆盖）。
 - `docs/development/v0.1-plan.md` 不修改（本任务属于 V0.4）。
 
-P1/P2 的 ADR 预留：0077（本地设计记忆与指纹）、0078（导出回读独立性）、0079（评审概念分与封顶）。
+P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导出回读独立性，已创建）、0079（评审概念分与封顶，待做）。
+
+## 14. P1 实施记录（2026-10-24）
+
+### 本地设计记忆（FR-D6）
+
+- Rust `storage`：`design_memory` 表（`kind` / `scope` / `payload_json` / `created_at`），SQLite `user_version` 2 → 3；上限 50 个外观 / 100 条偏好，写入后裁剪最旧；payload ≤8 KB，kind/scope 在 Rust 端校验。
+- `src/services/design-memory.ts`：从文档与方向记录生成外观指纹（配色、字体、概念、页数），记录偏好原话，读取最近 3 个外观供提案去重；清除与汇总。
+- `src/app/App.tsx`：方向提案带 `recentLooks`；生成成功并提交后记录外观与 `userWords`；数据库失败不影响生成。
+- `src/features/settings/SettingsDialog.tsx`：设计记忆开关、数量显示、一键清除。
+- `design-memory.test.ts`：4 项通过，断言 payload 不含正文。
+
+### 导出回读（FR-D8）
+
+- `verify-export.ts`：独立解压并解析 slide XML，比对文字、图片/表格/图表数量；明确 `skipped`；包不可读时返回 error 而不是让导出失败。
+- `ExportReport.parity` 与导出报告界面；4 项测试覆盖正常、丢文字、丢图片、表格/图表计数。
+- ADR 0078。
+
+### 验证
+
+- 新增 `design-memory.test.ts` 4 项、`verify-export.test.ts` 4 项、`settings.test.ts` 增至 12 项。
+- Rust `cargo test storage`：18 项通过。
+- 全量前端测试、类型检查、ESLint、生产构建通过（以最近一次全量输出为准）。
 
 ## 12. 开放问题
 
@@ -531,7 +557,7 @@ P1/P2 的 ADR 预留：0077（本地设计记忆与指纹）、0078（导出回�
 
 ## 13. 实施记录（2026-10-24）
 
-### 已完成（P0-1、P0-2、P0-7、P0-8）
+### 已完成（P0-1–P0-8）
 
 - `src/core/document-model/types.ts`：新增 `DesignDirectionProposal` / `DesignDirectionRecord`、`MAX_DESIGN_DIRECTIONS` 与 `designDirections` 字段；方向词汇单独定义，避免文档模型反向依赖 `core/design`。
 - `src/core/document-model/schema.ts`：`CURRENT_SCHEMA_VERSION` 19 → 20，新增方向记录 Schema 与恒等迁移；`v20-document.json` 固定样例包含一条用户选择记录。
@@ -543,13 +569,23 @@ P1/P2 的 ADR 预留：0077（本地设计记忆与指纹）、0078（导出回�
 - `src/core/commands/visual-asset.ts`：`resolveVisualAsset` 增加 `allowHeroOnContent`，默认行为不变。
 - `src/services/ai-service.ts`、`src-tauri/src/commands/ai.rs`：概念合同与提示词开放两个方向；`imagery` 规则按方向分别约束。
 - `tools/design-preview/fixture.ts`：`buildDesignPreviewDocument` 支持 `themePresetId` 与 `conceptPresetId`，为样张与方向对比复用。
+- `src-tauri/src/commands/ai.rs`、`src-tauri/src/lib.rs`：新增并注册 `generate_deck_directions`，一次返回 editorial 与 documentary 两个方向；温度 0.5，沿用取消与超时管线。
+- `src/services/ai-service.ts`：新增 `aiDeckDirectionsSchema`（2–3 个、preset 唯一）与 `generateDeckDirections`；解析失败包装为 `AI_DIRECTIONS_INVALID`，输出按 `CONCEPT_PRESET_IDS` 稳定排序。
+- `src/core/commands/direction-preview.ts`：`buildDirectionPreviewPages` 为每个预览页建单页临时文档，复用 `apply-ai-designed-draft`、真实 `pageContext` 与 `commandBase`；真实文档不被修改。
+- `src/core/commands/commands.ts`、`index.ts`：导出 `toAiBlocks`、`directionContentFingerprint` 与预览构建器；方向过期判断改用草稿语义指纹，避免内容块随机 ID 让记录每次都过期。
+- `src/features/ai/DesignDirectionDialog.tsx`：方向选择对话框（两个方向 × 两张真实预览，选择/跳过/换一组）。
+- `src/app/App.tsx`：在 `generateFromDraft` 的 preset 模式接入方向门；记录随 `generationCommand` 写入；取消任务会释放等待中的选择；方向不可用时给出明确提示而不是静默回退；读取 `designDirectionGate` 设置。
+- `src/services/settings.ts`、`src/services/app-database.ts`、`src/features/settings/SettingsDialog.tsx`：新增“生成前选择设计方向”开关，默认开启，旧库缺字段时保持开启。
+- `src/features/ai/DesignDirectionDialog.tsx`：选择时可选填一句理由，写入 `userWords`。
+- `src/features/editor/InspectorPanel.tsx`：新增“设计方向”面板，显示最近一次选择的名称、预设、选择方式、时间、内容 revision、备选方向与用户原话。
+- `src/services/theme-specimen.ts`、`src/features/ai/ThemePresetPicker.tsx`：8 页样张按需渲染，选择器提供“查看样张”；生产代码不依赖 `tools/`。
 - `src/core/design/taste-lint.ts`：11 条规则、硬底线/软提示、稳定 code、固定排序、`skipped` 未覆盖项；报告不含时间戳，可深度比较。
 - `src/core/rendering/color-analysis.ts`：颜色归一化、HSL、中性色判定。
 - `src/features/editor/InspectorPanel.tsx`：右侧“设计体检”折叠面板；徽标显示硬底线/提示/未覆盖数量；点击问题定位到页与元素；只读，不发命令。
 - `src/features/pptx-export/export-pptx.ts`：`ExportReport.tasteLint` 汇总（硬底线、提示、非零 code）；lint 抛错时字段缺省，报告显示“体检未执行”。
 - `src/app/App.tsx`：导出报告标题行显示体检计数。
-- `src/styles.css`：体检面板样式；顺带删除文件末尾一条被截断的无效选择器（`ble .table-cell .icon-action`），它与上方规则重复且从未生效。
-- `docs/architecture/decisions/0076-deterministic-taste-lint.md`：体检的边界、阈值、误报防护与不持久化决策。
+- `src/styles.css`：体检、方向门与样张对话框样式；顺带删除文件末尾一条被截断的无效选择器（`ble .table-cell .icon-action`），它与上方规则重复且从未生效。
+- `docs/architecture/decisions/0075-design-direction-proposal-and-selection.md`、`0076-deterministic-taste-lint.md`：方向门与体检的架构决策。
 
 ### 验证
 
@@ -559,15 +595,19 @@ P1/P2 的 ADR 预留：0077（本地设计记忆与指纹）、0078（导出回�
 - `src/core/commands/visual-asset.test.ts`：19 项通过（含 `allowHeroOnContent`）。
 - `tools/design-preview/design-preview.test.ts`：7 项通过；十页夹具零发现；两个方向标题轴 0.07/0.04、强调线元素差 1；导出 `tasteLint` 为 `{hard:0,soft:0,codes:{}}`。
 - `src/features/pptx-export/export-pptx.test.ts`：8pt 正文导出成功，报告 `hard=1` 且 code 正确。
-- `src/core/commands/design-direction.test.ts`：5 项通过（持久化、非法 preset、过期指纹、20 条上限、撤销回滚）。
+- `src/core/commands/design-direction.test.ts`：6 项通过（持久化、非法 preset、过期指纹、含内容块的稳定指纹、20 条上限、撤销回滚）。
 - `src/core/document-model/schema.test.ts`：47 项通过（含 v19 → v20 迁移与 v20 样例解析）。
-- 全量：1128 通过、1 跳过（`PPTD_SKIP_VISUAL=1`）；类型检查、ESLint（0 error）、生产构建、`cargo fmt --check`、`cargo check` 通过。
+- `src/services/ai-service.test.ts`：67 项通过（含方向数量/唯一 preset、稳定排序、`AI_DIRECTIONS_INVALID`）。
+- `src/core/commands/direction-preview.test.ts`：4 项通过（单页构建、真实文档不变、标题轴一致、两个方向 surface 差异）。
+- `src/services/theme-specimen.test.ts`：3 项通过（8 页结构、11 套主题、方向差异）。
+- `src/services/settings.test.ts`：12 项通过（方向门默认开启、显式关闭、保存回写）。
+- 全量：1141 通过、1 跳过（`PPTD_SKIP_VISUAL=1`）；类型检查、ESLint（0 error）、生产构建、`cargo fmt --check`、`cargo check` 通过。
 
 ### 未完成
 
-- 未做应用内截图目视验证：面板结构与样式已通过构建，但本会话没有浏览器截图能力；需在 `npm run tauri dev` 中确认折叠、徽标、定位与窄面板换行。
-- 方向提案、两页预览、选择 UI（P0-3/4/5）与样张选择器（P0-6）尚未开始。
-- ADR 0075 尚未创建；方向决策在实现前暂以本文与需求文档为准。
+- 未做应用内截图目视验证：方向对话框、样张对话框与体检面板已通过类型检查和生产构建，但本会话没有浏览器截图能力；需在 `npm run tauri dev` 中确认三处：方向卡片两页预览与按钮、样张 8 页网格、窄面板换行与折叠。
+- 方向门目前只对 preset 模式生效；模板模式仍走单方向，已在 ADR 0075 中记录为边界。
+- “换一组”可能得到相似方向；跨项目外观去重属于 P1 设计记忆。
 
 ### 已知偏差
 

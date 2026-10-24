@@ -50,6 +50,8 @@ import {
   EMU_PER_INCH,
   emu,
   inches,
+  createDocument,
+  type DesignDirectionRecord,
   type ElementId,
   type DocumentId,
   type AnimationEffect,
@@ -65,12 +67,19 @@ import {
 } from "../core/document-model";
 import {
   applyCommand,
+  buildDirectionPreviewPages,
+  directionContentFingerprint,
   importedDeckToDocument,
   type AiSlideDesign,
   type DocumentCommand,
   type ImportReport,
 } from "../core/commands";
-import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../core/design/deck-concept";
+import {
+  defaultEditorialConcept,
+  resolveDeckConcept,
+  type AiDeckConcept,
+  type DeckConcept,
+} from "../core/design/deck-concept";
 import {
   auditThemeDirection,
   themeDirectionForPreset,
@@ -108,6 +117,7 @@ import { fitZoom } from "../core/rendering/viewport";
 import { sceneScale } from "../features/editor/scene-metrics";
 import { useMeasuredWidth } from "../features/editor/use-measured-width";
 import { ContentReview, type ImagePromptAssist } from "../features/ai/ContentReview";
+import { DesignDirectionDialog, type DirectionOptionView } from "../features/ai/DesignDirectionDialog";
 import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
 import { FactPicker } from "../features/ai/FactPicker";
 import { selectedFacts } from "../features/ai/facts";
@@ -149,6 +159,7 @@ import {
   endAiGeneration,
   extractSourceFacts,
   generateDeckConcepts,
+  generateDeckDirections,
   generatePresentationDesign,
   generatePresentationDraft,
   listenAiGenerationProgress,
@@ -170,6 +181,7 @@ import {
   type SplitSlidePage,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
+import { loadRecentLooks, recordDesignLook, recordDesignPreference } from "../services/design-memory";
 import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
@@ -274,6 +286,25 @@ function readInspectorWidth(): number {
 type AppView = "editor" | "ai" | "theme" | "settings";
 type PageMessage = { id: number; text: string; kind: "info" | "success" | "error" };
 type DesignProgress = { percent: number; label: string };
+
+/** The user's answer to the direction gate. */
+type DirectionChoice =
+  { kind: "select"; id: string; words?: string } | { kind: "skip"; words?: string } | { kind: "retry" };
+
+function parityIssueLabel(kind: "missing-slide" | "missing-text" | "picture-count" | "table-count" | "chart-count") {
+  switch (kind) {
+    case "missing-slide":
+      return "页面缺失";
+    case "missing-text":
+      return "文字缺失";
+    case "picture-count":
+      return "图片数量不符";
+    case "table-count":
+      return "表格数量不符";
+    case "chart-count":
+      return "图表数量不符";
+  }
+}
 
 /** 已用时。分钟也按两位显示，进度提示里的数字不会一会儿宽一会儿窄。 */
 function formatElapsed(totalSeconds: number): string {
@@ -920,6 +951,10 @@ export function App() {
   const [themePreviewPresetId, setThemePreviewPresetId] = useState("");
   const [designBusy, setDesignBusy] = useState(false);
   const designBusyRef = useRef(false);
+  /** 方向门：两个真实预览，等用户选择或跳过。 */
+  const [directionOptions, setDirectionOptions] = useState<DirectionOptionView[]>();
+  const [directionRegenerations, setDirectionRegenerations] = useState(0);
+  const directionChoiceRef = useRef<((choice: DirectionChoice) => void) | null>(null);
   const [generatingHistoryId, setGeneratingHistoryId] = useState<string>();
   const designCancelRef = useRef(false);
   /** 设计阶段的后端取消任务号。 */
@@ -2969,28 +3004,187 @@ export function App() {
       const pageFacts = compositionFactsFromDraft(sourceDraft);
       setDesignDetail("已拆出每页的设计目的、视觉意图与信息密度");
       let concept: DeckConcept;
-      setDesignProgress({ percent: 16, label: "正在确定整册设计方向" });
-      setDesignDetail("模型在判断整册的视觉气质、配色与版面节奏");
-      try {
-        const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, {
-          taskId,
-          themeDirection,
-        });
-        concept = resolveDeckConcept({
-          concept: aiConcept,
-          pageFacts,
-          pageCount: sourceDraft.slides.length,
-        }).concept;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (designCancelRef.current || message.includes("CANCELLED")) throw error;
-        // A direction is an enhancement, not a prerequisite. A failed concept
-        // call falls back to the editorial preset and still produces the deck.
-        concept = resolveDeckConcept({
-          concept: defaultEditorialConcept(),
-          pageFacts,
-          pageCount: sourceDraft.slides.length,
-        }).concept;
+      let designDirection: DesignDirectionRecord | undefined;
+
+      /**
+       * Two directions, two real pages each, then the user decides.
+       *
+       * Only preset generations get the gate: a template already owns the
+       * layout, so two directions would preview the same template twice. A
+       * failure reports "unavailable" so the single-direction path can say why;
+       * "undefined" means the gate did not apply at all.
+       */
+      const directionGate = async (): Promise<
+        { concept: DeckConcept; record: DesignDirectionRecord } | { unavailable: true } | undefined
+      > => {
+        if (mode !== "preset" || sourceDraft.slides.length === 0) return undefined;
+        const gateSettings = await loadSettings().catch(() => defaultSettings());
+        if (!gateSettings.designDirectionGate) return undefined;
+        const previewIndexes = (() => {
+          const contentIndex = sourceDraft.slides.findIndex(
+            (slide, index) => index > 0 && slide.body.trim().length >= 60,
+          );
+          const fallback = Math.min(1, sourceDraft.slides.length - 1);
+          const second = contentIndex > 0 ? contentIndex : fallback;
+          return second === 0 ? [0] : [0, second];
+        })();
+        // The previews need a document for page numbers and section labels, but
+        // not a designed one: a neutral draft document carries the reviewed copy.
+        const baseline = createDocument();
+        applyCommand(baseline, { type: "apply-ai-draft", title: sourceDraft.title, slides: sourceDraft.slides });
+        // Local-only look fingerprints; empty when memory is disabled.
+        const recentLooks = gateSettings.designMemoryEnabled ? await loadRecentLooks(3) : [];
+        let regenerations = 0;
+        while (regenerations <= 2) {
+          setDesignProgress({ percent: 16, label: "正在生成两个设计方向" });
+          setDesignDetail("为同一份内容准备两种版面骨架");
+          let proposals: AiDeckConcept[];
+          try {
+            proposals = await generateDeckDirections(sourceDraft, briefs, analysis, {
+              taskId,
+              themeDirection,
+              recentLooks,
+            });
+          } catch (error) {
+            if (designCancelRef.current) throw error;
+            return { unavailable: true };
+          }
+          if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+          setDesignDetail(`已收到 ${proposals.length} 个方向，正在渲染代表页`);
+          const candidates: Array<{
+            id: string;
+            proposal: AiDeckConcept;
+            concept: DeckConcept;
+            images: string[];
+          }> = [];
+          for (const proposal of proposals) {
+            try {
+              const resolved = resolveDeckConcept({
+                concept: proposal,
+                pageFacts,
+                pageCount: sourceDraft.slides.length,
+              }).concept;
+              const previewDraft = {
+                title: sourceDraft.title,
+                slides: previewIndexes.map((index) => sourceDraft.slides[index]!),
+                presentationBrief: sourceDraft.presentationBrief,
+              };
+              const previewBriefs = previewIndexes.map((index) => briefs[index]!);
+              const previewDesign = await generatePresentationDesign(previewDraft, previewBriefs, analysis, {
+                concept: resolved,
+                taskId,
+              });
+              if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+              const pages = buildDirectionPreviewPages({
+                document: baseline,
+                concept: resolved,
+                pageIndexes: previewIndexes,
+                designs: previewDesign.slides,
+                ...(preset ? { commandBase: { themePresetId: preset.id } } : {}),
+                title: sourceDraft.title,
+              });
+              const images: string[] = [];
+              for (const page of pages) {
+                const render = await renderPresentationForVisualReview(page.document, 640);
+                images.push(render.slides[0]!);
+              }
+              candidates.push({ id: crypto.randomUUID(), proposal, concept: resolved, images });
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error);
+              if (designCancelRef.current || message.includes("CANCELLED")) throw error;
+              // A direction whose preview cannot be drawn is not offered.
+            }
+          }
+          if (candidates.length < 2) return { unavailable: true };
+          setDirectionRegenerations(regenerations);
+          setDirectionOptions(
+            candidates.map((candidate) => ({
+              id: candidate.id,
+              name: candidate.proposal.name,
+              idea: candidate.proposal.idea,
+              rationale: candidate.proposal.rationale,
+              presetLabel: candidate.proposal.preset === "documentary" ? "纪实全幅" : "编辑式",
+              images: candidate.images,
+            })),
+          );
+          setDesignDetail("等待你选择设计方向；已审核内容不会改变");
+          const choice = await new Promise<DirectionChoice>((resolve) => {
+            directionChoiceRef.current = resolve;
+          });
+          directionChoiceRef.current = null;
+          setDirectionOptions(undefined);
+          if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+          if (choice.kind === "retry") {
+            if (regenerations >= 2) return { unavailable: true };
+            regenerations += 1;
+            continue;
+          }
+          const chosen =
+            choice.kind === "select"
+              ? (candidates.find((candidate) => candidate.id === choice.id) ?? candidates[0]!)
+              : candidates[0]!;
+          const record: DesignDirectionRecord = {
+            id: crypto.randomUUID(),
+            createdAt: new Date().toISOString(),
+            contentRevision: document.revisions.content,
+            contentFingerprint: directionContentFingerprint(sourceDraft.slides),
+            proposals: candidates.map((candidate) => ({
+              id: candidate.id,
+              preset: candidate.proposal.preset,
+              name: candidate.proposal.name,
+              idea: candidate.proposal.idea,
+              rationale: candidate.proposal.rationale,
+              typeContrast: candidate.proposal.typeContrast,
+              imagery: candidate.concept.imagery,
+              previewPages: previewIndexes.map((index) => ({
+                index,
+                contentFingerprint: directionContentFingerprint([sourceDraft.slides[index]!]),
+              })),
+            })),
+            selectedProposalId: chosen.id,
+            selectedBy: choice.kind === "skip" ? "fallback" : "user",
+            ...(choice.words?.trim() ? { userWords: choice.words.trim().slice(0, 200) } : {}),
+            regenerations,
+            promptVersion: "design-directions-v1",
+          };
+          return { concept: chosen.concept, record };
+        }
+        return { unavailable: true };
+      };
+
+      const gated = await directionGate();
+      if (gated && "concept" in gated) {
+        concept = gated.concept;
+        designDirection = gated.record;
+      } else {
+        if (gated?.unavailable) {
+          // The gate is an enhancement, not a prerequisite. Say so instead of
+          // silently skipping a step the user expected.
+          setTaskStatus("方向预览不可用，已按单方向生成");
+        }
+        setDesignProgress({ percent: 16, label: "正在确定整册设计方向" });
+        setDesignDetail("模型在判断整册的视觉气质、配色与版面节奏");
+        try {
+          const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, {
+            taskId,
+            themeDirection,
+          });
+          concept = resolveDeckConcept({
+            concept: aiConcept,
+            pageFacts,
+            pageCount: sourceDraft.slides.length,
+          }).concept;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (designCancelRef.current || message.includes("CANCELLED")) throw error;
+          // A direction is an enhancement, not a prerequisite. A failed concept
+          // call falls back to the editorial preset and still produces the deck.
+          concept = resolveDeckConcept({
+            concept: defaultEditorialConcept(),
+            pageFacts,
+            pageCount: sourceDraft.slides.length,
+          }).concept;
+        }
       }
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       setDesignProgress({ percent: 20, label: "正在生成逐页版式与配色" });
@@ -3093,6 +3287,7 @@ export function App() {
         slides: sourceDraft.slides,
         designs: design.slides,
         designConcept: concept,
+        ...(designDirection ? { designDirection } : {}),
         pageSize: hasTemplateSize
           ? { width: emu(analysis.slideWidthEmu!), height: emu(analysis.slideHeightEmu!) }
           : undefined,
@@ -3253,6 +3448,24 @@ export function App() {
       }
       // 质量门未过时文档照常产出：问题被逐条列出，PPT 不会因为报错而消失。
       replaceDocument(finalDocument, "both");
+      // Design memory is optional and local. A database failure must not fail a
+      // generation that already succeeded.
+      if (designDirection) {
+        void (async () => {
+          try {
+            const memorySettings = await loadSettings().catch(() => defaultSettings());
+            if (!memorySettings.designMemoryEnabled) return;
+            await recordDesignLook({
+              document: finalDocument,
+              direction: designDirection,
+              ...(preset ? { themePresetId: preset.id } : {}),
+            });
+            if (designDirection.userWords) await recordDesignPreference(designDirection.userWords, "deck");
+          } catch {
+            // Memory is an enhancement, not part of the deliverable.
+          }
+        })();
+      }
       const historyId = historyIdOverride ?? activeHistoryId;
       if (historyId) {
         const history = await saveAiPresentation(historyId, finalDocument);
@@ -6292,6 +6505,27 @@ export function App() {
         </div>
       )}
 
+      {directionOptions && (
+        <DesignDirectionDialog
+          options={directionOptions}
+          regenerations={directionRegenerations}
+          onSelect={(id, words) =>
+            directionChoiceRef.current?.({
+              kind: "select",
+              id,
+              ...(words?.trim() ? { words: words.trim() } : {}),
+            })
+          }
+          onSkip={(words) =>
+            directionChoiceRef.current?.({
+              kind: "skip",
+              ...(words?.trim() ? { words: words.trim() } : {}),
+            })
+          }
+          onRetry={() => directionChoiceRef.current?.({ kind: "retry" })}
+        />
+      )}
+
       {exportReport && (
         <div
           className="upload-dialog-backdrop"
@@ -6332,6 +6566,11 @@ export function App() {
                     {exportReport.tasteLint
                       ? ` · 体检 ${exportReport.tasteLint.hard} 硬底线 / ${exportReport.tasteLint.soft} 提示`
                       : " · 体检未执行"}
+                    {exportReport.parity
+                      ? exportReport.parity.passed
+                        ? ` · 回读 ${exportReport.parity.checked.slides} 页通过`
+                        : ` · 回读 ${exportReport.parity.issues.length} 处不一致`
+                      : " · 回读未执行"}
                   </p>
                 </div>
               </div>
@@ -6351,6 +6590,21 @@ export function App() {
                         {issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页
                       </strong>
                       <p>{issue.message}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {exportReport.parity && !exportReport.parity.passed && (
+              <ul className="export-report-list">
+                {exportReport.parity.issues.slice(0, 12).map((issue, index) => (
+                  <li key={`parity-${issue.slideIndex}-${issue.kind}-${index}`} className="warning">
+                    <CircleAlert />
+                    <div>
+                      <strong>回读不一致 · 第 {issue.slideIndex + 1} 页</strong>
+                      <p>
+                        {parityIssueLabel(issue.kind)}：期望 {String(issue.expected)}，实际 {String(issue.actual)}
+                      </p>
                     </div>
                   </li>
                 ))}
@@ -6476,6 +6730,9 @@ export function App() {
               className="danger"
               onClick={() => {
                 designCancelRef.current = true;
+                // A gate waiting for a choice must be released, or cancel
+                // leaves the task running behind a closed dialog.
+                directionChoiceRef.current?.({ kind: "skip" });
                 setDesignProgress({ percent: designProgress.percent, label: "正在取消任务…" });
                 void cancelAiGeneration(designTaskId.current).catch(() => undefined);
               }}

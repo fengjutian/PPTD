@@ -33,7 +33,6 @@ import {
   captureContentVersion,
   createDocument,
   createSlide,
-  documentContentFingerprint,
   diffContentVersion,
   emu,
   iconForText,
@@ -657,7 +656,7 @@ function cloneElement(element: SlideElement): SlideElement {
 }
 
 /** Strips document block IDs before handing reviewed content back to the renderer. */
-function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | undefined {
+export function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | undefined {
   if (!blocks) return undefined;
   return blocks.map((block): AiContentBlock => {
     if (block.type === "paragraph") return { type: "paragraph", text: block.text };
@@ -695,6 +694,19 @@ function toAiBlocks(blocks: ContentBlock[] | undefined): AiContentBlock[] | unde
     return { type: "process", items: block.items.map((item) => ({ ...item })) };
   });
 }
+
+/**
+ * A stable fingerprint of the reviewed drafts a direction was chosen against.
+ *
+ * It must not use `documentContentFingerprint`: applying a draft creates fresh
+ * block IDs, so the document hash changes on every application even when the
+ * copy is identical. The draft itself has no IDs and is the same input the
+ * direction was shown with.
+ */
+export function directionContentFingerprint(slides: readonly AiSlideDraft[]): string {
+  return stableStringify(slides.map((slide) => [slide.title, slide.body, slide.speakerNotes, slide.blocks ?? []]));
+}
+
 /** The horizontal place of an object on the page. */
 export type HorizontalAlign = "left" | "center" | "right";
 /** The vertical place of an object on the page. */
@@ -4225,7 +4237,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       ) {
         throw new Error("DESIGN_DIRECTION_INVALID");
       }
-      if (direction.contentFingerprint !== documentContentFingerprint(document)) {
+      if (direction.contentFingerprint !== directionContentFingerprint(command.slides)) {
         throw new Error("DESIGN_DIRECTION_STALE");
       }
       document.designDirections = [...(document.designDirections ?? []), direction].slice(-MAX_DESIGN_DIRECTIONS);
