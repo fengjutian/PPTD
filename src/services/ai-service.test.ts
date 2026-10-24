@@ -109,6 +109,24 @@ describe("AI structured outputs", () => {
     });
   });
 
+  it("accepts the process and comparison recipes", () => {
+    for (const recipe of ["process-rail", "comparison"] as const) {
+      const design = aiPresentationDesignSchema.parse({
+        slides: [
+          {
+            layout: "cards",
+            background: "#FFFFFF",
+            accent: "#1F4E79",
+            titleColor: "#12233D",
+            bodyColor: "#465368",
+            recipe,
+          },
+        ],
+      });
+      expect(design.slides[0]?.recipe).toBe(recipe);
+    }
+  });
+
   it("derives page facts for the concept planner without changing content", () => {
     const draft = aiDraftSchema.parse({
       title: "销售分析",

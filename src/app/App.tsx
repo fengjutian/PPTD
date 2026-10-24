@@ -250,6 +250,7 @@ const visualIssueLabels: Record<VisualReview["issues"][number]["issue"], string>
   "repetitive-layout": "版式重复",
   "theme-mismatch": "主题不匹配",
   "weak-visual-focus": "视觉焦点不清",
+  "generic-layout": "版式过于通用",
 };
 /** The narrowest and the widest the property panel may be dragged to. */
 const INSPECTOR_MIN_WIDTH = 220;
@@ -6006,7 +6007,8 @@ export function App() {
                   <p className="design-quality-notes">
                     整册总览：一致性 {designQualityReport.deckReview.consistencyScore}、重复控制{" "}
                     {designQualityReport.deckReview.repetitionScore ?? "未评"}、主题匹配{" "}
-                    {designQualityReport.deckReview.themeFitScore ?? "未评"}
+                    {designQualityReport.deckReview.themeFitScore ?? "未评"}、独特性{" "}
+                    {designQualityReport.deckReview.distinctivenessScore ?? "未评"}
                   </p>
                 )}
                 {designQualityReport.reviewReuse && (
@@ -6026,7 +6028,8 @@ export function App() {
                     {designQualityReport.visualReview.consistencyScore}、重复控制{" "}
                     {designQualityReport.visualReview.repetitionScore ?? "未评"}、主题匹配{" "}
                     {designQualityReport.visualReview.themeFitScore ?? "未评"}、视觉焦点{" "}
-                    {designQualityReport.visualReview.visualFocusScore ?? "未评"}）
+                    {designQualityReport.visualReview.visualFocusScore ?? "未评"}、独特性{" "}
+                    {designQualityReport.visualReview.distinctivenessScore ?? "未评"}）
                   </p>
                 )}
                 {designQualityReport.visualReview.issues.length === 0 ? (

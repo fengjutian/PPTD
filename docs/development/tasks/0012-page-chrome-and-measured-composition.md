@@ -352,6 +352,6 @@ docs/development/v0.1-plan.md                任务表增加 TASK-DESIGN-002
 
 未完成：
 
-- 模板路径仍不接入 `editorial-index` / `data-story`：模板页继续走旧分支，收束页和卡片页下半页仍可能空；`underfilled-page` 会报告，但不会自动重排。这是下一步 TASK-DESIGN-003 的范围。
+- 模板路径接入配方由 [TASK-DESIGN-003](0013-template-recipes.md) 接续；本任务只完成预设路径与旧分支几何。
 - 视觉回归基线未更新：本机 PowerPoint 对图表页的渲染与 10/23 基线有 0.476% 像素差，与本次命令/配方改动无关；本次用 `PPTD_SKIP_VISUAL=1` 跳过，不以跳过冒充通过。
 - `stacked` 分支仍按内容区等分，尚未迁移到 `layoutFlow`；该分支目前只覆盖少量标题正文页，下一步与模板配方一起处理。

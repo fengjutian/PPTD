@@ -209,6 +209,55 @@ describe("设计质检阶段", () => {
     expect(result.designs[1]!.layout).toBe("title-body");
   });
 
+  it("把配方修复写回页面设计", async () => {
+    const review = {
+      ...passingReview,
+      distinctivenessScore: 60,
+      issues: [
+        {
+          slideIndex: 0,
+          severity: "warning" as const,
+          issue: "generic-layout" as const,
+          elementIds: [],
+          suggestion: "换成编号栏",
+        },
+      ],
+    };
+    let calls = 0;
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: defaultPresentationVisualGoal(),
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async () => {
+          const next = calls === 0 ? review : { ...review, distinctivenessScore: 80 };
+          calls += 1;
+          return next;
+        },
+        planRepairs: async () => ({
+          repairs: [
+            {
+              slideIndex: 0,
+              recipe: "editorial-index",
+              backgroundAction: "keep",
+              hierarchyAction: "keep",
+              obstacleRegions: [],
+              elementActions: [],
+              reason: "等权卡片换成编号栏",
+            },
+          ],
+        }),
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+    });
+    expect(result.designs[0]!.recipe).toBe("editorial-index");
+  });
+
   it("质量门未过时列出问题，并保留生成好的文档", async () => {
     // 像素检查认定这页文字读不清：修复会改墨色，但问题仍在时文档必须保留。
     const contrastIssue = { slideIndex: 0, elementId: "text-1", contrastRatio: 1.8, backgroundColor: "#101010" };

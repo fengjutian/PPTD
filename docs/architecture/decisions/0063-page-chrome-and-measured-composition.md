@@ -94,7 +94,7 @@ export interface PageChrome {
 
 ## 未覆盖
 
-- 模板路径接入配方（保留模板底图的同时用 `editorial-index` / `data-story` 排内容）仍待后续任务；本次只统一旧分支几何。
+- 模板路径接入配方已由 [ADR 0064](0064-template-recipes.md) 接续；本决策只负责统一骨架和测量式构图。
 - 章节页、引文页、`process-rail`、`comparison` 配方仍走旧分支；它们的表头会走 `PageChrome`，但构图没有重写。
 - 跨页“标题轴偏差”尚未做成确定性检查；本次先保证同一渲染路径内一致。
 - 视觉评审的 `distinctivenessScore` / `changeRecipe` 仍是 ADR 0046 的 P2。

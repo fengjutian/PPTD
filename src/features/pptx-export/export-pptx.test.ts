@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 import { applyCommand } from "../../core/commands";
 import { createDocument, emu, inches, pageSizeFromInches, type PresentationDocument } from "../../core/document-model";
+import { defaultEditorialConcept, resolveDeckConcept } from "../../core/design/deck-concept";
 import { buildPptx } from "./export-pptx";
 import { validatePptxPackage } from "./pptx-package";
 
@@ -399,6 +400,65 @@ describe("PPTX export", () => {
     expect(layoutXml).toContain("<a:blipFill");
     expect(slideXml).not.toContain("<p:pic>");
     expect(result.report.masters).toContain("内页（浅色）1");
+  });
+
+  it("exports a template recipe page as native text and keeps the artwork on the master", async () => {
+    const document = createDocument();
+    const items = ["肿瘤早筛覆盖率提升", "三代测序渗透率上升", "临床指南更新加快"];
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 3,
+          shortItems: true,
+          longestItemLength: 12,
+          bodyLength: 40,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "title-body",
+        },
+      ],
+      pageCount: 1,
+      id: "export-template-recipe",
+    }).concept;
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "模板配方",
+      slides: [{ title: "精准医疗重塑临床决策", body: items.join("\n"), speakerNotes: "" }],
+      designs: [
+        {
+          layout: "title-body",
+          background: "#FFFFFF",
+          accent: "#3366CC",
+          titleColor: "#273D79",
+          bodyColor: "#4C4C4C",
+        },
+      ],
+      designConcept: concept,
+      templateLayouts: [
+        {
+          index: 1,
+          name: "内页（浅色）",
+          backgroundImageDataUrl:
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==",
+          regions: [
+            { role: "title", frame: { x: 0.052, y: 0.03, width: 0.799, height: 0.059 } },
+            { role: "body", frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+          ],
+        },
+      ],
+    });
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    const entries = unzipSync(result.bytes);
+    const slideXml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain("01");
+    expect(slideXml).toContain(items[0]!);
+    // The artwork stays on the slide master; the recipe text is native.
+    expect(slideXml).not.toContain("<p:pic>");
+    expect(result.report.package.valid).toBe(true);
+    expect(result.report.nativeObjectCount).toBeGreaterThanOrEqual(5);
+    expect(result.report.masters).toContain("内页（浅色）");
   });
 
   it("writes the theme of the template into the theme part of the package", async () => {

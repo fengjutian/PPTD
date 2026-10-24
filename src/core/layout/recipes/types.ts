@@ -25,6 +25,8 @@ export interface RecipeContext {
     accent: string;
     background: string;
     rule: string;
+    /** The surface a recipe may use for a card or panel. */
+    card?: string;
   };
   frame: {
     title: RectEmu;

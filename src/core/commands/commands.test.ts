@@ -3,6 +3,7 @@ import { produce } from "immer";
 import { applyCommand, commandDomain } from "./commands";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
 import { createDocument, inches, type ElementId, type TextElement } from "../document-model";
+import { defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
 import { contrastRatio, contrastRatioAgainstLuminance } from "../rendering/contrast";
 import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 import { VISUAL_ASSET_REQUEST_SIZE } from "./visual-asset";
@@ -1573,6 +1574,293 @@ describe("document commands", () => {
     });
   });
 
+  it("uses a content recipe on a template page while keeping its artwork", () => {
+    const source = createDocument();
+    const items = ["肿瘤早筛覆盖率提升", "三代测序渗透率上升", "临床指南更新加快"];
+    const content = { title: "精准医疗重塑临床决策", body: items.join("\n"), speakerNotes: "" };
+    const design = {
+      layout: "title-body" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#273D79",
+      bodyColor: "#4C4C4C",
+    };
+    const templateLayouts = [
+      {
+        index: 1,
+        name: "内页（浅色）",
+        backgroundImageDataUrl: "data:image/png;base64,AAAA",
+        regions: [
+          { role: "title" as const, frame: { x: 0.052, y: 0.03, width: 0.799, height: 0.059 } },
+          { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+        ],
+      },
+    ];
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 3,
+          shortItems: true,
+          longestItemLength: 12,
+          bodyLength: 40,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "title-body",
+        },
+      ],
+      pageCount: 1,
+      id: "template-recipe",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "模板配方",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+        templateLayouts,
+      }),
+    );
+    const slide = result.slides[0]!;
+    const texts = slide.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(expect.arrayContaining(["01", "02", "03", ...items]));
+    // The template artwork is still the page background.
+    expect(
+      slide.elements.some(
+        (element) =>
+          element.type === "image" &&
+          element.source.kind === "embedded" &&
+          element.source.dataUrl === templateLayouts[0]!.backgroundImageDataUrl,
+      ),
+    ).toBe(true);
+    // The template owns the header line, so the recipe must not draw a second
+    // accent rule under the title.
+    expect(
+      slide.elements.some(
+        (element) =>
+          element.type === "shape" &&
+          element.style.fill === "#3366CC" &&
+          element.frame.width >= source.pageSize.width * 0.1 &&
+          element.frame.width <= source.pageSize.width * 0.13 &&
+          element.frame.height <= inches(0.02),
+      ),
+    ).toBe(false);
+  });
+
+  it("uses the data story on a template metric page", () => {
+    const source = createDocument();
+    const content = {
+      title: "三年关键指标",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        { type: "metric" as const, label: "年检测样本量", value: "38万" },
+        { type: "metric" as const, label: "合作医院", value: "260+" },
+        { type: "metric" as const, label: "平均交付周期", value: "5天" },
+      ],
+    };
+    const design = {
+      layout: "cards" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#273D79",
+      bodyColor: "#4C4C4C",
+    };
+    const templateLayouts = [
+      {
+        index: 1,
+        name: "内页（浅色）",
+        backgroundImageDataUrl: "data:image/png;base64,AAAA",
+        regions: [
+          { role: "title" as const, frame: { x: 0.052, y: 0.03, width: 0.799, height: 0.059 } },
+          { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+        ],
+      },
+    ];
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 0,
+          shortItems: true,
+          longestItemLength: 0,
+          bodyLength: 0,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: true,
+          hasMetric: true,
+          layout: "cards",
+        },
+      ],
+      pageCount: 1,
+      id: "template-metric",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "模板指标",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+        templateLayouts,
+      }),
+    );
+    const slide = result.slides[0]!;
+    const values = slide.elements.filter(
+      (element): element is TextElement => element.type === "text" && element.contentBlockRef?.field === "value",
+    );
+    const labels = slide.elements.filter(
+      (element): element is TextElement => element.type === "text" && element.contentBlockRef?.field === "label",
+    );
+    expect(values).toHaveLength(3);
+    expect(labels).toHaveLength(3);
+    values.forEach((value, index) => {
+      const label = labels[index]!;
+      expect((label.frame.y - (value.frame.y + value.frame.height)) / source.pageSize.height).toBeLessThan(0.05);
+    });
+    expect(
+      slide.elements.some(
+        (element) =>
+          element.type === "image" &&
+          element.source.kind === "embedded" &&
+          element.source.dataUrl === templateLayouts[0]!.backgroundImageDataUrl,
+      ),
+    ).toBe(true);
+  });
+
+  it("uses the process rail on a template page", () => {
+    const source = createDocument();
+    const content = {
+      title: "标准交付流程",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        {
+          type: "process" as const,
+          items: [
+            { label: "样本前处理", text: "48 小时内完成建库" },
+            { label: "上机测序", text: "Illumina NovaSeq 平台" },
+            { label: "生信分析", text: "自动化流程与人工复核" },
+            { label: "报告交付", text: "临床级报告与解读" },
+          ],
+        },
+      ],
+    };
+    const design = {
+      layout: "cards" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#273D79",
+      bodyColor: "#4C4C4C",
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 0,
+          shortItems: true,
+          longestItemLength: 0,
+          bodyLength: 0,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: true,
+          hasProcess: true,
+          layout: "cards",
+        },
+      ],
+      pageCount: 1,
+      id: "template-process",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "流程",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+        templateLayouts: [
+          {
+            index: 1,
+            name: "内页（浅色）",
+            backgroundImageDataUrl: "data:image/png;base64,AAAA",
+            regions: [
+              { role: "title" as const, frame: { x: 0.052, y: 0.03, width: 0.799, height: 0.059 } },
+              { role: "body" as const, frame: { x: 0.052, y: 0.222, width: 0.897, height: 0.621 } },
+            ],
+          },
+        ],
+      }),
+    );
+    const slide = result.slides[0]!;
+    const texts = slide.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(
+      expect.arrayContaining(["01", "02", "03", "04", "样本前处理", "报告交付"]),
+    );
+    const nodes = slide.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(4);
+    expect(slide.elements.some((element) => element.type === "image" && element.source.kind === "embedded")).toBe(true);
+  });
+
+  it("uses the comparison recipe for a comparison block", () => {
+    const source = createDocument();
+    const content = {
+      title: "两种合作模式对比",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        {
+          type: "comparison" as const,
+          leftLabel: "自建实验室",
+          rightLabel: "委托检测",
+          leftItems: ["长期成本更低", "数据完全自主", "需 6 个月建设期"],
+          rightItems: ["启动快", "无需设备投入", "依赖外部排期"],
+        },
+      ],
+    };
+    const design = {
+      layout: "split" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#1E3550",
+      bodyColor: "#5F6B76",
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 6,
+          shortItems: true,
+          longestItemLength: 12,
+          bodyLength: 0,
+          hasQuote: false,
+          hasComparison: true,
+          hasRowBlock: false,
+          layout: "split",
+        },
+      ],
+      pageCount: 1,
+      id: "comparison",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "对比",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+      }),
+    );
+    const texts = result.slides[0]!.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(
+      expect.arrayContaining(["自建实验室", "委托检测", "长期成本更低", "启动快", "VS"]),
+    );
+    expect(result.slides[0]!.elements.some((element) => element.type === "shape" && element.shape === "ellipse")).toBe(
+      true,
+    );
+  });
+
   it("rejects overlapping template regions for split layouts", () => {
     const source = createDocument();
     const content = { title: "双栏", body: "1. 左侧内容 2. 右侧内容", speakerNotes: "" };
@@ -2291,6 +2579,64 @@ describe("document commands", () => {
     expect(title.style.fontFamily).toBe("华文中宋");
     expect(title.style.fontSizePt).toBe(32);
     expect(slide.elements.some((element) => element.type === "shape" && element.style.fill === "#A8642E")).toBe(true);
+  });
+
+  it("keeps the template's white cover ink when a preset is applied", () => {
+    const source = createDocument();
+    const content = { title: "封面标题", body: "副标题", speakerNotes: "" };
+    const design = {
+      layout: "cover" as const,
+      background: "#FFFFFF",
+      accent: "#0F7869",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+    };
+    const templateTheme = {
+      name: "模板",
+      majorFont: "微软雅黑",
+      minorFont: "微软雅黑",
+      colors: [],
+    };
+    const templateLayouts = [
+      {
+        index: 0,
+        name: "封面",
+        backgroundImageDataUrl: "data:image/png;base64,AAAA",
+        regions: [
+          {
+            role: "title" as const,
+            frame: { x: 0.084, y: 0.34, width: 0.832, height: 0.167 },
+            textColor: "#FFFFFF",
+            fontSizePt: 66,
+          },
+          {
+            role: "body" as const,
+            frame: { x: 0.125, y: 0.589, width: 0.75, height: 0.167 },
+            textColor: "#FFFFFF",
+            fontSizePt: 28,
+          },
+        ],
+      },
+    ];
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "封面",
+        slides: [content],
+        designs: [design],
+        templateTheme,
+        templateLayouts,
+        themePresetId: "warm-paper",
+      }),
+    );
+    const texts = result.slides[0]!.elements.filter((element): element is TextElement => element.type === "text");
+    const title = texts.find((element) => element.text === content.title)!;
+    const body = texts.find((element) => element.text === content.body)!;
+    // The template set white ink on a dark cover. Applying a preset must not
+    // flip that ink to the preset's dark primary because the page colour is
+    // white while the artwork is not sampled.
+    expect(title.style.color).toBe("#FFFFFF");
+    expect(body.style.color).toBe("#FFFFFF");
   });
 
   it("paints a local scrim with the page colour instead of the design background", () => {

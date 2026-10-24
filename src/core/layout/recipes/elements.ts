@@ -52,6 +52,20 @@ export function rectElement(frame: RectEmu, fill: string): SlideElement {
   };
 }
 
+/** A generated filled ellipse, used for step nodes and the comparison mark. */
+export function ellipseElement(frame: RectEmu, fill: string): SlideElement {
+  return {
+    id: crypto.randomUUID() as ElementId,
+    type: "shape",
+    frame,
+    rotationMilliDegree: 0,
+    locked: false,
+    origin: "generated",
+    shape: "ellipse",
+    style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: 999 },
+  };
+}
+
 /** A vertical rule in page-relative units. */
 export function verticalRule(
   x: number,

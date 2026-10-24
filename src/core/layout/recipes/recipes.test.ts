@@ -4,13 +4,16 @@ import { inches, type ContentBlock, type SlideContent, type TextElement } from "
 import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../../design/deck-concept";
 import { deriveDesignTokens } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
+import { planPageChrome } from "../page-chrome";
 import { asymmetricSplit } from "./asymmetric-split";
+import { comparison } from "./comparison";
 import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
 import { imageLed } from "./image-led";
+import { processRail } from "./process-rail";
 import { consumptionProblem } from "./plan";
-import type { RecipeContext, RecipePlan } from "./types";
+import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 const page = { width: inches(13.333), height: inches(7.5) };
 
@@ -90,7 +93,7 @@ function context(
   };
 }
 
-function plan(recipe: typeof editorialIndex | typeof asymmetricSplit, ctx: RecipeContext): RecipePlan {
+function plan(recipe: LayoutRecipe, ctx: RecipeContext): RecipePlan {
   const result = recipe.plan(ctx);
   if (!("elements" in result)) throw new Error(`unexpected conflict: ${result.conflict.reason}`);
   return result;
@@ -184,6 +187,29 @@ describe("editorial-index recipe", () => {
     expect(first.style.fontSizePt).toBeGreaterThanOrEqual(20);
     // The group is centred inside the content region, not pinned to its top.
     expect(first.frame.y).toBeGreaterThan(inches(2.55));
+  });
+
+  it("runs on a template artwork page without a second header rule", () => {
+    const items = ["销售收入保持正增长", "移动端成为增长引擎", "资源向高质量业务倾斜"];
+    const pageContent = content(items);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    ctx.chrome = planPageChrome({
+      page,
+      title: ctx.frame.title,
+      content: ctx.frame.content,
+      safe: ctx.frame.safe,
+      showRule: false,
+    });
+    expect(editorialIndex.supports(ctx.facts, ctx.concept, { hasArtwork: true, hasAsset: false })).toBe(true);
+    const result = plan(editorialIndex, ctx);
+    const headerRules = result.elements.filter(
+      (element) =>
+        element.type === "shape" &&
+        element.frame.width >= page.width * 0.1 &&
+        element.frame.width <= page.width * 0.13 &&
+        element.frame.height <= inches(0.02),
+    );
+    expect(headerRules).toHaveLength(0);
   });
 });
 
@@ -386,5 +412,128 @@ describe("asymmetric-split recipe", () => {
       .sort((left, right) => left.frame.y - right.frame.y)[0]!;
     const contentTop = (2.55 / 7.5) * page.height;
     expect(Math.abs(firstRow.frame.y - contentTop) / page.height).toBeLessThan(0.03);
+  });
+});
+
+describe("process-rail recipe", () => {
+  const processContent: SlideContent = {
+    title: "标准交付流程",
+    body: "",
+    blocks: [
+      {
+        id: "process-1",
+        type: "process",
+        items: [
+          { label: "样本前处理", text: "48 小时内完成建库" },
+          { label: "上机测序", text: "Illumina NovaSeq 平台" },
+          { label: "生信分析", text: "自动化流程与人工复核" },
+          { label: "报告交付", text: "临床级报告与解读" },
+        ],
+      },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws four steps as one vertical rail with editable bindings", () => {
+    const ctx = context(processContent, {
+      facts: facts({ itemCount: 0, hasProcess: true, hasRowBlock: true, layout: "cards" }),
+    });
+    expect(processRail.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(processRail, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, processContent)).toBeUndefined();
+    expect(result.consumed.blockIds).toEqual(["process-1"]);
+    const texts = result.elements
+      .filter((element): element is TextElement => element.type === "text")
+      .map((element) => element.text);
+    expect(texts).toEqual(
+      expect.arrayContaining(["01", "02", "03", "04", "样本前处理", "上机测序", "生信分析", "报告交付"]),
+    );
+    const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(4);
+  });
+
+  it("refuses a seventh step instead of compressing it", () => {
+    const seven = {
+      ...processContent,
+      blocks: [
+        {
+          id: "process-1",
+          type: "process" as const,
+          items: Array.from({ length: 7 }, (_, index) => ({ label: `步骤${index + 1}`, text: "说明" })),
+        },
+      ],
+    };
+    const result = processRail.plan(
+      context(seven, { facts: facts({ itemCount: 0, hasProcess: true, hasRowBlock: true }) }),
+    );
+    expect("conflict" in result).toBe(true);
+  });
+});
+
+describe("comparison recipe", () => {
+  const comparisonContent: SlideContent = {
+    title: "两种合作模式对比",
+    body: "",
+    blocks: [
+      {
+        id: "comparison-1",
+        type: "comparison",
+        leftLabel: "自建实验室",
+        rightLabel: "委托检测",
+        leftItems: ["长期成本更低", "数据完全自主", "需 6 个月建设期"],
+        rightItems: ["启动快", "无需设备投入", "依赖外部排期"],
+      },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws two equal columns with a centre mark", () => {
+    const ctx = context(comparisonContent, {
+      facts: facts({ itemCount: 6, hasComparison: true, hasRowBlock: false, layout: "split" }),
+    });
+    expect(comparison.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(comparison, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, comparisonContent)).toBeUndefined();
+    expect(result.consumed.blockIds).toEqual(["comparison-1"]);
+    const texts = result.elements
+      .filter((element): element is TextElement => element.type === "text")
+      .map((element) => element.text);
+    expect(texts).toEqual(
+      expect.arrayContaining([
+        "自建实验室",
+        "委托检测",
+        "长期成本更低",
+        "数据完全自主",
+        "启动快",
+        "依赖外部排期",
+        "VS",
+      ]),
+    );
+    const ellipses = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(ellipses).toHaveLength(1);
+  });
+
+  it("refuses six points in one column", () => {
+    const six = {
+      ...comparisonContent,
+      blocks: [
+        {
+          id: "comparison-1",
+          type: "comparison" as const,
+          leftLabel: "甲",
+          rightLabel: "乙",
+          leftItems: ["一", "二", "三", "四", "五", "六"],
+          rightItems: ["一", "二"],
+        },
+      ],
+    };
+    const result = comparison.plan(
+      context(six, { facts: facts({ itemCount: 8, hasComparison: true, layout: "split" }) }),
+    );
+    expect("conflict" in result).toBe(true);
   });
 });

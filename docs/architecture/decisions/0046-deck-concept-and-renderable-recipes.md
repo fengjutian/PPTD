@@ -191,4 +191,5 @@ P2a 已开始：`cover-statement`、`data-story`、`image-led` 已实现并接�
 仍未完成：
 
 - 10 页样例走真实 AI 接口的端到端验收（本次只用合成内容验证渲染和命令层）。
-- 设计方向选择器、评审新评分与 `changeRecipe`、概念持久化。
+- 设计方向选择器、概念持久化。
+- 评审新评分与 `changeRecipe` 已由 [ADR 0066](0066-visual-review-recipe-change.md) 落地。

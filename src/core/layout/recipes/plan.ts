@@ -19,19 +19,21 @@ export interface RecipeSelectionResult {
 /**
  * The deterministic recipe a page would use if the model did not choose one.
  *
- * It mirrors the two recipes' content conditions, not their visual rules: a
- * page with three to six short points is an index, a page with two to five
- * longer points is a split. Anything else is left to the legacy renderer.
+ * Structured blocks have a recipe of their own before the generic list shapes:
+ * a comparison becomes two equal columns, a process becomes a vertical rail.
+ * The rest mirrors the content conditions of the list recipes rather than their
+ * visual rules.
  */
 export function chooseRecipeId(
   facts: CompositionFacts,
   concept: DeckConcept,
   options: RecipeSelectionOptions,
 ): RecipeId | undefined {
-  if (options.hasArtwork) return undefined;
   if (options.hasAsset) return concept.recipes.includes("image-led") ? "image-led" : undefined;
   if (facts.layout === "cover" && concept.recipes.includes("cover-statement")) return "cover-statement";
   if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return undefined;
+  if (facts.hasComparison && concept.recipes.includes("comparison")) return "comparison";
+  if (facts.hasProcess && concept.recipes.includes("process-rail")) return "process-rail";
   if (
     facts.hasMetric &&
     !facts.hasTimeline &&

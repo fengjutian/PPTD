@@ -515,12 +515,13 @@ pub async fn review_presentation_visuals(
 - repetitionScore：整册对构图、背景和卡片骨架的重复控制；机械复用越多分数越低。
 - themeFitScore：视觉语言与主题、受众和场景的匹配程度；企业科技风用于古典文学等明显错位必须扣分。
 - visualFocusScore：整册各页是否普遍具有明确的第一视觉入口。
+- distinctivenessScore：整册是否有可辨认的设计想法，而不是等权卡片/同一骨架重复；整册越像模板，分数越低。
 - overallScore：整套视觉完成度，不是各项简单平均。
 
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。slideGuidance 必须为空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"issues":[],"slideGuidance":[],"slideScores":[]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"distinctivenessScore":78,"issues":[],"slideGuidance":[],"slideScores":[]}}
 
 【本次整套视觉目标】
 {goal}
@@ -584,6 +585,7 @@ pub async fn review_presentation_visuals(
 - repetitionScore：构图、背景和组件是否机械重复；没有整册总览时只评价本批。
 - themeFitScore：视觉语言是否匹配演示主题、受众和场景。
 - visualFocusScore：每页是否有明确的第一视觉入口，避免所有元素同权。
+- distinctivenessScore：是否有可辨认的设计想法（编辑式编号栏、纵向流程轨、数据故事、非对称分栏等），而不是等权卡片或同一骨架重复；等权卡片阵列、没有第一视觉入口时不得高于 69。
 - overallScore：综合视觉完成度，不是各项简单平均；严重遮挡、正文越界或无法阅读时不得高于 59。
 评分锚点：90–100 可直接交付；80–89 基本专业但有少量明显问题；70–79 可读但设计感不足；60–69 存在多项结构问题；0–59 有严重可读性或布局错误。
 单页只有一个文本块、且内容区保留超过 40% 连续空白时，overallScore 不得高于 69，并必须报告 excessive-empty-space。
@@ -591,7 +593,7 @@ pub async fn review_presentation_visuals(
 【问题分类和严重程度】
 - error：文字被遮挡或越界、对比度导致难以阅读、标题正文层级失效、内容覆盖 Logo/页脚、严重失衡或明显错误版式。
 - warning：页面略显单调、留白不理想、背景重复、局部节奏或对齐仍可提升，但不妨碍阅读。
-- issue 只能是 weak-hierarchy、poor-contrast、visual-imbalance、background-conflict、misalignment、excessive-empty-space、repetitive-layout、theme-mismatch、weak-visual-focus。
+- issue 只能是 weak-hierarchy、poor-contrast、visual-imbalance、background-conflict、misalignment、excessive-empty-space、repetitive-layout、theme-mismatch、weak-visual-focus、generic-layout。
 - suggestion 必须描述设计动作，例如“将内容区移至右侧留白并保持标题左轴”，不得提出改写正文。
 
 【slideGuidance 规则】
@@ -604,13 +606,13 @@ pub async fn review_presentation_visuals(
 
 【slideScores 规则】
 1. 每个被检查页面必须恰好输出一条 slideScores，slideIndex 与 slideGuidance 一致。
-2. overallScore、hierarchyScore、alignmentScore、readabilityScore、visualFocusScore 都是该页自己的分数，不是整批平均，也不是整套分数。
+2. overallScore、hierarchyScore、alignmentScore、readabilityScore、visualFocusScore、distinctivenessScore 都是该页自己的分数，不是整批平均，也不是整套分数。
 3. 一致性是整套指标，不放进 slideScores；不要输出 consistencyScore。
 
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。所有被检查页面的索引必须来自 {indexes}。elementIds 无法从图片确认时返回空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"issues":[{{"slideIndex":0,"severity":"error","issue":"misalignment","elementIds":[],"suggestion":"将标题和主要内容移动到右侧留白区，并保持共同左轴"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}],"slideScores":[{{"slideIndex":0,"overallScore":85,"hierarchyScore":84,"alignmentScore":90,"readabilityScore":88,"visualFocusScore":84}}]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"distinctivenessScore":78,"issues":[{{"slideIndex":0,"severity":"warning","issue":"generic-layout","elementIds":[],"suggestion":"这一页是等权卡片，换成编号栏或非对称分栏，让结论成为第一视觉入口"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}],"slideScores":[{{"slideIndex":0,"overallScore":85,"hierarchyScore":84,"alignmentScore":90,"readabilityScore":88,"visualFocusScore":84,"distinctivenessScore":78}}]}}
 
 【本次整套视觉目标】
 {goal}
@@ -661,6 +663,9 @@ pub struct PlanRepairSlide {
     index: usize,
     title: String,
     layout: String,
+    /// The recipe the page currently uses, when it has one.
+    #[serde(default)]
+    recipe: Option<String>,
 }
 
 /// 让视觉模型给出可执行的修复计划。
@@ -702,6 +707,7 @@ pub async fn plan_presentation_repairs(
 - restyle：改字号和颜色。fontScale 在 0.75–1.5 之间，color 是六位十六进制。target 为 region 时只作用于落在 frame 里的文字。
 - align：对齐。frame 圈出要对齐的那一块，axis 为 left 表示把它们的左轴对齐到 frame.x，为 top 表示顶边对齐到 frame.y。
 - changeLayout：换这一页的版式。
+- recipe：换这一页的页面配方。可用值：cover-statement、data-story、image-led、editorial-index、asymmetric-split、process-rail、comparison。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，流程换 process-rail，对比换 comparison；换配方时不要再叠加 elementActions 的几何修复。
 
 target 只有三种：
 - title：这一页的标题。
@@ -713,6 +719,7 @@ region 的 move 和 resize 必须给出 to；没有 to 的区域移动会被丢�
 三、每一页的字段
 - slideIndex：真实页码索引，必须来自输入的 pages。
 - layout：可选，换成 cover、title-body、split、cards、quote、section、summary 之一。
+- recipe：可选，换成上面的页面配方之一；这是“换一个设计想法”的首选，优先于逐块微调。
 - backgroundAction：keep、replace-compatible 或 simplify。
 - hierarchyAction：keep、strengthen-title、reduce-density 或 increase-whitespace。
 - safeRegion、obstacleRegions：可选，只在确实需要移动内容时给出。
@@ -729,7 +736,7 @@ region 的 move 和 resize 必须给出 to；没有 to 的区域移动会被丢�
 五、输出协议
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
 输出结构：
-{"repairs":[{"slideIndex":2,"layout":"title-body","backgroundAction":"keep","hierarchyAction":"keep","elementActions":[{"action":"align","target":"region","frame":{"x":0.28,"y":0.18,"width":0.62,"height":0.30},"axis":"left"}],"reason":"右栏与标题没有共用左轴"}]}"##;
+{"repairs":[{"slideIndex":2,"layout":"title-body","recipe":"editorial-index","backgroundAction":"keep","hierarchyAction":"keep","elementActions":[],"reason":"等权卡片没有第一视觉入口，换成编号栏"}]}"##;
     let user_prompt = format!(
         "上一轮视觉评审结果：\n{review}\n\n整套视觉目标：\n{goal}\n\n逐页现状（索引、标题、当前版式）：\n{slides}\n\n请为评审指出问题的页面给出修复计划。"
     );
@@ -1353,7 +1360,7 @@ pub async fn generate_deck_concepts(
 本次只开放一个方向：
 - editorial：编辑式。细线、大字号、编号栏、留白，不使用卡片和面板。
 
-不得发明其他 preset；不得声称支持当前方向没有的配方（P1 只有 editorial-index 和 asymmetric-split）。
+不得发明其他 preset；不得声称支持当前方向没有的配方（当前可渲染：cover-statement、data-story、image-led、editorial-index、asymmetric-split、process-rail、comparison）。
 
 四、输出字段
 - preset：固定为 "editorial"。
@@ -1532,9 +1539,11 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - image-led：图片是页面主体，文字收在图片让出的文字区；仅当页面有已生成的视觉素材且没有 quote/comparison/结构化块时使用。
 - editorial-index：标题 + 编号 + 细线 + 正文，适合 3–6 条短要点；不要给卡片页选它。
 - asymmetric-split：左标题栏 + 右正文栏，适合 2–5 条较长要点；不要给两栏对比页选它。
-- 有 quote、comparison、timeline、process、table 内容块的页面不选配方；有 metric 的页面优先 data-story。
+- process-rail：纵向流程轨，步骤序号/标签/说明沿一条轨道排列；仅当页面有 process 内容块且 3–6 步时使用。
+- comparison：等高双栏 + 中轴，栏头强调、条目按测量排列；仅当页面有 comparison 内容块且左右各 2–5 条时使用。
+- 有 quote、timeline、table 内容块的页面不选配方；有 comparison 优先 comparison，有 process 优先 process-rail，有 metric 优先 data-story。
 - 章节页、结尾总结页暂不选配方。
-- 封面优先 cover-statement；有已生成素材优先 image-led；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
+- 封面优先 cover-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
 - variant 只能是 left 或 right；focal 只能是 title、index 或 body；不确定就省略。
 
 九、主题方向

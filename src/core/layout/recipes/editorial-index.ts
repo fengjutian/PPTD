@@ -25,7 +25,7 @@ export const editorialIndex: LayoutRecipe = {
 
   supports(facts, concept, options) {
     if (!concept.recipes.includes("editorial-index")) return false;
-    if (options.hasArtwork || options.hasAsset) return false;
+    if (options.hasAsset) return false;
     if (facts.hasQuote || facts.hasComparison || facts.hasRowBlock) return false;
     if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return false;
     return facts.itemCount >= 3 && facts.itemCount <= 6 && facts.shortItems;
@@ -61,8 +61,8 @@ export const editorialIndex: LayoutRecipe = {
         contentRef: "title",
         lineHeight,
       }),
-      rectElement(frameFromNormalized(chrome.rule, page), colors.accent),
     ];
+    if (chrome.showRule) elements.push(rectElement(frameFromNormalized(chrome.rule, page), colors.accent));
 
     let contentTop = chrome.contentTop;
     if (units.lead) {

@@ -38,6 +38,12 @@ export interface PageChrome {
   contentTop: number;
   /** Bottom of the content region. */
   contentBottom: number;
+  /**
+   * Whether a recipe should draw the accent rule. A template that already
+   * carries a header line or ornament sets this to false so the page does not
+   * get a second rule under the first one.
+   */
+  showRule: boolean;
 }
 
 export interface PageChromeInput {
@@ -48,6 +54,8 @@ export interface PageChromeInput {
   content: RectEmu;
   /** The safe area, when the page has one. Content is clipped to it. */
   safe?: NormalizedRect;
+  /** False when the template owns the header rule. Defaults to true. */
+  showRule?: boolean;
 }
 
 const MIN_SIZE = 0.001;
@@ -126,6 +134,7 @@ export function planPageChrome(input: PageChromeInput): PageChrome {
     content,
     contentTop: content.y,
     contentBottom: content.y + content.height,
+    showRule: input.showRule ?? true,
   };
 }
 

@@ -39,6 +39,8 @@ describe("deck concept", () => {
       "image-led",
       "editorial-index",
       "asymmetric-split",
+      "process-rail",
+      "comparison",
     ]);
     expect(resolved.concept.rhythm).toHaveLength(10);
     expect(resolved.concept.rhythm[0]).toBe("statement");

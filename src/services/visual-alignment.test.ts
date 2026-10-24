@@ -120,6 +120,18 @@ describe("visual alignment loop", () => {
     // overall 已过 85，但 readability 仍低于 88；这个 warning 必须能修。
     expect(result).toEqual([3]);
   });
+
+  it("authorizes a weak-distinctiveness page for a recipe change", () => {
+    const result = affectedSlideIndexes(
+      {
+        ...review(92),
+        distinctivenessScore: 60,
+        issues: [{ slideIndex: 5, severity: "warning", issue: "generic-layout", elementIds: [], suggestion: "换配方" }],
+      },
+      defaultPresentationVisualGoal().minimumScores,
+    );
+    expect(result).toEqual([5]);
+  });
 });
 
 describe("修复计划的规范化", () => {
@@ -216,6 +228,23 @@ describe("修复计划的规范化", () => {
     expect(() => normalizeVisualRepairPlan({ repairs: [{ slideIndex: 0, reason: "没什么可改的" }] }, [0])).toThrow(
       "AI_REPAIR_RESPONSE_UNREPAIRABLE",
     );
+  });
+
+  it("accepts a recipe change as a repair", () => {
+    const plan = normalizeVisualRepairPlan(
+      {
+        repairs: [{ slideIndex: 0, recipe: "process-rail", reason: "等权卡片没有顺序感" }],
+      },
+      [0],
+    );
+    expect(plan.repairs[0]).toMatchObject({ slideIndex: 0, recipe: "process-rail" });
+    expect(plan.repairs[0]!.elementActions).toEqual([]);
+  });
+
+  it("drops an unknown recipe instead of passing it to the renderer", () => {
+    expect(() =>
+      normalizeVisualRepairPlan({ repairs: [{ slideIndex: 0, recipe: "not-a-recipe", reason: "乱写的配方" }] }, [0]),
+    ).toThrow("AI_REPAIR_RESPONSE_UNREPAIRABLE");
   });
 });
 

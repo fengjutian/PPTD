@@ -44,6 +44,13 @@ describe("recipe planning", () => {
     expect(chooseRecipeId(facts({ hasRowBlock: true, hasMetric: true }), concept(), options)).toBe("data-story");
   });
 
+  it("chooses the structured recipes before the list recipes", () => {
+    expect(chooseRecipeId(facts({ hasComparison: true, itemCount: 6 }), concept(), options)).toBe("comparison");
+    expect(chooseRecipeId(facts({ hasProcess: true, hasRowBlock: true, itemCount: 0 }), concept(), options)).toBe(
+      "process-rail",
+    );
+  });
+
   it("chooses the image-led recipe when the page has a picture", () => {
     expect(
       chooseRecipeId(facts({ itemCount: 3 }), concept(), {
@@ -56,7 +63,10 @@ describe("recipe planning", () => {
 
   it("leaves structured pages to the legacy renderer", () => {
     expect(chooseRecipeId(facts({ hasRowBlock: true }), concept(), options)).toBeUndefined();
-    expect(chooseRecipeId(facts(), concept(), { hasArtwork: true, hasAsset: false })).toBeUndefined();
+  });
+
+  it("still chooses a content recipe on a template artwork page", () => {
+    expect(chooseRecipeId(facts(), concept(), { hasArtwork: true, hasAsset: false })).toBe("editorial-index");
   });
 
   it("reports a requested recipe the content cannot carry", () => {

@@ -16,6 +16,8 @@ export const presentationVisualGoalSchema = z.object({
     alignment: z.number().min(0).max(100),
     readability: z.number().min(0).max(100),
     consistency: z.number().min(0).max(100),
+    /** Optional: older reviews and models may not score distinctiveness. */
+    distinctiveness: z.number().min(0).max(100).optional(),
   }),
 });
 export type PresentationVisualGoal = z.infer<typeof presentationVisualGoalSchema>;
@@ -33,6 +35,12 @@ export const visualReviewSchema = z.object({
   /** Strength and clarity of the first visual anchor on each page. */
   visualFocusScore: z.number().min(0).max(100).optional(),
   /**
+   * Whether the deck has a design idea rather than a safe, equal-weight
+   * skeleton. Optional so older reviews remain valid; when present it gives the
+   * repair loop a reason to change a recipe instead of nudging the same one.
+   */
+  distinctivenessScore: z.number().min(0).max(100).optional(),
+  /**
    * 逐页评分。逐页批次每个被检查页应有一条；整册总览不产生逐页评分。
    *
    * 可选：老模型或旧测试桩可能只给批次级分数，缺省时下游退回批次级口径。
@@ -47,6 +55,7 @@ export const visualReviewSchema = z.object({
         alignmentScore: z.number().min(0).max(100),
         readabilityScore: z.number().min(0).max(100),
         visualFocusScore: z.number().min(0).max(100).optional(),
+        distinctivenessScore: z.number().min(0).max(100).optional(),
       }),
     )
     .max(100)
@@ -66,6 +75,7 @@ export const visualReviewSchema = z.object({
           "repetitive-layout",
           "theme-mismatch",
           "weak-visual-focus",
+          "generic-layout",
         ]),
         elementIds: z.array(z.string()).default([]),
         suggestion: z.string().min(1).max(500),
@@ -124,8 +134,19 @@ const visualIssueKinds = [
   "repetitive-layout",
   "theme-mismatch",
   "weak-visual-focus",
+  "generic-layout",
 ] as const;
 const visualLayouts = ["cover", "title-body", "split", "cards", "quote", "section", "summary"] as const;
+const repairLayouts = visualLayouts;
+const repairRecipes = [
+  "cover-statement",
+  "data-story",
+  "image-led",
+  "editorial-index",
+  "asymmetric-split",
+  "process-rail",
+  "comparison",
+] as const;
 type NormalizedRegion = VisualReview["slideGuidance"][number]["safeRegion"];
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -170,6 +191,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     repetitionScore: normalizeScore(input.repetitionScore),
     themeFitScore: normalizeScore(input.themeFitScore),
     visualFocusScore: normalizeScore(input.visualFocusScore),
+    distinctivenessScore: normalizeScore(input.distinctivenessScore),
   };
 
   // 逐页评分只保留本轮实际检查过的页；非法分数、越界页和重复页都丢弃，
@@ -184,6 +206,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     const alignment = normalizeScore(candidate.alignmentScore);
     const readability = normalizeScore(candidate.readabilityScore);
     const visualFocus = normalizeScore(candidate.visualFocusScore);
+    const distinctiveness = normalizeScore(candidate.distinctivenessScore);
     if (overall === undefined || hierarchy === undefined || alignment === undefined || readability === undefined)
       continue;
     slideScoresByIndex.set(candidate.slideIndex, {
@@ -193,6 +216,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
       alignmentScore: alignment,
       readabilityScore: readability,
       ...(visualFocus === undefined ? {} : { visualFocusScore: visualFocus }),
+      ...(distinctiveness === undefined ? {} : { distinctivenessScore: distinctiveness }),
     });
   }
   const slideScores = [...slideScoresByIndex.values()].sort((left, right) => left.slideIndex - right.slideIndex);
@@ -282,6 +306,11 @@ export const visualRepairPlanSchema = z.object({
     z.object({
       slideIndex: z.number().int().nonnegative(),
       layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]).optional(),
+      /**
+       * A page-level recipe change. The recipe owns the skeleton; the command
+       * layer rejects it when the reviewed content cannot carry it.
+       */
+      recipe: z.enum(repairRecipes).optional(),
       backgroundAction: z.enum(["keep", "replace-compatible", "simplify"]).default("keep"),
       hierarchyAction: z.enum(["keep", "strengthen-title", "reduce-density", "increase-whitespace"]).default("keep"),
       safeRegion: z
@@ -377,7 +406,6 @@ export const visualRepairPlanSchema = z.object({
 export type VisualRepairPlan = z.infer<typeof visualRepairPlanSchema>;
 type RepairAction = VisualRepairPlan["repairs"][number]["elementActions"][number];
 
-const repairLayouts = ["cover", "title-body", "split", "cards", "quote", "section", "summary"] as const;
 const repairBackgroundActions = ["keep", "replace-compatible", "simplify"] as const;
 const repairHierarchyActions = ["keep", "strengthen-title", "reduce-density", "increase-whitespace"] as const;
 const repairTargets = ["title", "body", "region"] as const;
@@ -422,6 +450,11 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
         typeof candidate.layout === "string" &&
         repairLayouts.includes(candidate.layout as (typeof repairLayouts)[number])
           ? (candidate.layout as (typeof repairLayouts)[number])
+          : undefined;
+      const recipe =
+        typeof candidate.recipe === "string" &&
+        repairRecipes.includes(candidate.recipe as (typeof repairRecipes)[number])
+          ? (candidate.recipe as (typeof repairRecipes)[number])
           : undefined;
       const backgroundAction =
         typeof candidate.backgroundAction === "string" &&
@@ -492,6 +525,7 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
       if (
         elementActions.length === 0 &&
         layout === undefined &&
+        recipe === undefined &&
         backgroundAction === "keep" &&
         hierarchyAction === "keep"
       )
@@ -500,6 +534,7 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
         {
           slideIndex: candidate.slideIndex,
           ...(layout === undefined ? {} : { layout }),
+          ...(recipe === undefined ? {} : { recipe }),
           backgroundAction,
           hierarchyAction,
           ...(safeRegion === undefined ? {} : { safeRegion }),
@@ -565,7 +600,10 @@ export async function runVisualAlignmentLoop<T>(options: {
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
     const review = visualReviewSchema.parse(await options.review(value, options.goal, iteration));
     lastReview = review;
-    if (review.overallScore > bestScore) {
+    const betterDistinctiveness =
+      review.overallScore === bestScore &&
+      (review.distinctivenessScore ?? -1) > (bestReview?.distinctivenessScore ?? -1);
+    if (review.overallScore > bestScore || betterDistinctiveness) {
       bestScore = review.overallScore;
       bestValue = value;
       bestReview = review;
@@ -577,6 +615,9 @@ export async function runVisualAlignmentLoop<T>(options: {
       review.alignmentScore >= options.goal.minimumScores.alignment &&
       review.readabilityScore >= options.goal.minimumScores.readability &&
       review.consistencyScore >= options.goal.minimumScores.consistency &&
+      (options.goal.minimumScores.distinctiveness === undefined ||
+        review.distinctivenessScore === undefined ||
+        review.distinctivenessScore >= options.goal.minimumScores.distinctiveness) &&
       !review.issues.some((issue) => issue.severity === "error");
     if (reached)
       return {
@@ -606,7 +647,7 @@ export const defaultPresentationVisualGoal = (): PresentationVisualGoal => ({
   density: "medium",
   alignment: "left-grid",
   backgroundRhythm: { coverVariants: 1, contentVariants: 3, repeatLimit: 2 },
-  minimumScores: { overall: 85, hierarchy: 82, alignment: 90, readability: 88, consistency: 85 },
+  minimumScores: { overall: 85, hierarchy: 82, alignment: 90, readability: 88, consistency: 85, distinctiveness: 72 },
 });
 
 /**
@@ -629,7 +670,10 @@ export function affectedSlideIndexes(
         review.hierarchyScore < minimum.hierarchy ||
         review.alignmentScore < minimum.alignment ||
         review.readabilityScore < minimum.readability ||
-        review.consistencyScore < minimum.consistency;
+        review.consistencyScore < minimum.consistency ||
+        (minimum.distinctiveness !== undefined &&
+          review.distinctivenessScore !== undefined &&
+          review.distinctivenessScore < minimum.distinctiveness);
   return [
     ...new Set(
       review.issues.filter((issue) => issue.severity === "error" || belowTarget).map((issue) => issue.slideIndex),

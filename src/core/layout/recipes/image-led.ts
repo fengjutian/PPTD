@@ -65,10 +65,14 @@ export const imageLed: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(
-        frameFromNormalized({ x: textX, y: chrome.rule.y, width: 0.12, height: chrome.rule.height }, page),
-        ctx.colors.accent,
-      ),
+      ...(chrome.showRule
+        ? [
+            rectElement(
+              frameFromNormalized({ x: textX, y: chrome.rule.y, width: 0.12, height: chrome.rule.height }, page),
+              ctx.colors.accent,
+            ),
+          ]
+        : []),
       textElement(title, titleFrame, titleSize, ctx.colors.title, true, "left", headingFamily, {
         contentRef: "title",
         lineHeight,

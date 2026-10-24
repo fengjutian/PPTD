@@ -43,6 +43,16 @@ describe("page chrome", () => {
     expect(chrome.content.y + chrome.content.height).toBeCloseTo(0.7, 3);
   });
 
+  it("marks the header rule visible unless the template owns it", () => {
+    const input = {
+      page,
+      title: { x: inches(0.93), y: inches(0.675), width: inches(11.47), height: inches(1.125) },
+      content: { x: inches(0.93), y: inches(2.55), width: inches(11.47), height: inches(4.125) },
+    };
+    expect(planPageChrome(input).showRule).toBe(true);
+    expect(planPageChrome({ ...input, showRule: false }).showRule).toBe(false);
+  });
+
   it("is deterministic", () => {
     const input = {
       page,

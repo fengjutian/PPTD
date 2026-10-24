@@ -1634,6 +1634,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       throw new Error("AI_DESIGN_INVALID");
     if (command.pageSize) document.pageSize = command.pageSize;
     const templateTheme = readTemplateTheme(command.templateTheme);
+    // A template keeps its own placeholders, ink and type sizes. A preset may
+    // still supply the palette, but it must not strip the template's region
+    // text colour/size: that is what turned a white cover title on a dark
+    // template into dark text on a dark picture.
+    const hasTemplate = Boolean(
+      command.templateLayouts?.length || command.templateDecorations?.length || command.templateTheme,
+    );
     // A preset is the fallback for a deck generated without a template: it owns
     // the palette, the font pairing and the type scale. An explicitly chosen
     // preset wins over the template theme while the template keeps its layout.
@@ -1659,12 +1666,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         document.theme?.minorFont ||
         document.theme?.majorFont ||
         "Microsoft YaHei";
-    // A chosen preset owns the type scale, so the placeholder sizes of the
-    // template no longer override it. The structure of the template is kept.
+    // A chosen preset owns the type scale. On a template page the template's
+    // placeholder ink still wins: a white cover title on a dark template must
+    // not become dark just because a preset was applied on top of it.
     const effectiveLayouts = preset
       ? (command.templateLayouts ?? []).map((layout) => ({
           ...layout,
-          regions: layout.regions.map(({ fontSizePt: _size, textColor: _color, ...region }) => region),
+          regions: layout.regions.map(({ fontSizePt: _size, textColor, ...region }) =>
+            hasTemplate && textColor ? { ...region, textColor } : region,
+          ),
         }))
       : command.templateLayouts;
     // The design replaces every page, so the layouts of the previous template
@@ -1727,7 +1737,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       bold: boolean,
       align: "left" | "center" | "right",
       contentRef?: "title" | "body" | "decorative",
-      background?: BackgroundRange | number,
+      background?: BackgroundRange | number | null,
       minimumPt = 12,
     ): TextElement => {
       const fitted = fittedFontSize(value, box, fontSizePt, minimumPt);
@@ -1735,9 +1745,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const palette = ink(range ? range.darkest : 1);
       const large = isLargeText(fitted, bold);
       const fallback = bold ? palette.strong : palette.soft;
-      const resolved = range
-        ? readableTextColorOnRange(color, range, large, fallback)
-        : readableTextColor(color, 1, large, fallback);
+      // null means "the background is artwork we could not sample". Flipping the
+      // ink against the page colour in that case is what turned a white template
+      // cover title into dark text on a dark picture.
+      const resolved =
+        range === null
+          ? color
+          : range
+            ? readableTextColorOnRange(color, range, large, fallback)
+            : readableTextColor(color, 1, large, fallback);
       return {
         id: crypto.randomUUID() as ElementId,
         type: "text" as const,
@@ -1957,7 +1973,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // white on a light background.
       const titleBackground = keepsArtwork ? recipe?.backgroundLuminance?.title : undefined;
       const bodyBackground = keepsArtwork ? (recipe?.backgroundLuminance?.body ?? titleBackground) : undefined;
-      const titleLuminance = titleBackground ?? pageLuminance;
+      // null: the artwork is present but its luminance was not sampled. The
+      // page colour says nothing about the picture; keep the template/form ink
+      // instead of flipping it against a white page.
+      const titleLuminance = keepsArtwork && !titleBackground ? null : (titleBackground ?? pageLuminance);
       const bodyLuminance = bodyBackground ?? pageLuminance;
       const isSafeRegion = (
         candidate: { x: number; y: number; width: number; height: number } | undefined,
@@ -2151,6 +2170,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           width: safeRight - safeLeft,
           height: safeBottom - safeTop,
         },
+        // A template owns its header line and ornaments. Drawing the recipe
+        // rule under the template's own rule produced a double header on the
+        // generated templates; the content rules stay, the header rule does not.
+        showRule: !hasTemplate,
       });
       // The intent of the page: which composition it is drawn in, which level of
       // the hierarchy carries the weight and how much white space it spends.
@@ -2234,7 +2257,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           ...(crop ? { crop } : {}),
         });
       }
-      const contentTextLuminance = artworkTreatment === "local-scrim" ? scrimLuminance : bodyLuminance;
+      const contentTextLuminance =
+        artworkTreatment === "local-scrim" ? scrimLuminance : keepsArtwork && !bodyBackground ? null : bodyLuminance;
       // A white card on a white page is invisible. Pick a surface that separates
       // the card from the page while keeping dark body ink readable.
       const cardFill = pageLuminance < 0.45 ? "#FFFFFF" : "#F3F5F7";
@@ -2286,12 +2310,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // drop copy throws instead of writing the page.
       const recipePlan = (() => {
         const concept = command.designConcept;
-        // P1 only owns preset decks. A template brings its own masters, safe
-        // regions and artwork; recipes are not allowed to lay over them yet.
-        const hasTemplate = Boolean(
-          command.templateLayouts?.length || command.templateDecorations?.length || command.templateTheme,
-        );
-        if (!concept || keepsArtwork || hasTemplate) return undefined;
+        // A recipe only appends content elements, so a template's background,
+        // Logo and decorations stay in place. The recipe still has to fit the
+        // template's title/body placeholders, which the chrome above carries.
+        if (!concept) return undefined;
         const hasActualAsset = Boolean(visualAsset && assetLayout);
         const selection = selectRecipe({
           facts: compositionFacts,
@@ -2307,6 +2329,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const pageIndex = command.pageContext?.index ?? index;
         const pageTotal = command.pageContext?.total ?? command.slides.length;
         const tokens = deriveDesignTokens(document.theme, document.pageSize, concept);
+        // The template artwork is the background the recipe actually paints on.
+        // A dark artwork needs the title ink as the accent, otherwise the
+        // numbers and rules disappear into the picture.
+        const artworkDark = keepsArtwork
+          ? (bodyBackground?.darkest ?? titleBackground?.darkest ?? pageLuminance) < 0.45
+          : pageLuminance < 0.45;
+        const accentInk = artworkDark ? titleInk : design.accent;
+        const ruleInk = artworkDark ? "#DCE3EA" : "#E2E7EC";
         const plan = selection.recipe.plan({
           content: slide.content,
           facts: compositionFacts,
@@ -2315,9 +2345,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           colors: {
             title: titleInk,
             body: bodyInk,
-            accent: pageLuminance < 0.45 ? titleInk : design.accent,
+            accent: accentInk,
             background: slide.background,
-            rule: pageLuminance < 0.45 ? "#5F6B76" : "#E2E7EC",
+            rule: ruleInk,
+            card: cardFill,
           },
           frame: {
             title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
@@ -3680,23 +3711,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             templateBody ? preferred : shortStatement ? 24 : preferred,
           );
           const measured = blockHeight(content.body, bodyWidth, bodySize, bodyLeading);
-          const bodyY =
-            shortStatement && measured < contentBox.height * 0.55
-              ? contentBox.y + (contentBox.height - measured) / 2
-              : templateBody
-                ? templateBody.y
-                : contentBox.y;
+          const centered = shortStatement && measured < contentBox.height * 0.55;
+          const bodyY = centered
+            ? contentBox.y + (contentBox.height - measured) / 2
+            : templateBody
+              ? templateBody.y
+              : contentBox.y;
+          const bodyFrame = centered
+            ? frame(
+                templateBody ? templateBody.x : contentBox.x,
+                bodyY,
+                bodyWidth,
+                Math.max(0.06, measured * 1.04 + 0.004),
+              )
+            : templateBody
+              ? bodyBox
+              : frame(contentBox.x, bodyY, bodyWidth, Math.max(0.06, measured * 1.04 + 0.004));
           slide.elements.push(
-            text(
-              content.body,
-              templateBody ? bodyBox : frame(contentBox.x, bodyY, bodyWidth, Math.max(0.06, measured * 1.04 + 0.004)),
-              bodySize,
-              bodyInk,
-              false,
-              "left",
-              undefined,
-              contentTextLuminance,
-            ),
+            text(content.body, bodyFrame, bodySize, bodyInk, false, "left", undefined, contentTextLuminance),
           );
         }
       }

@@ -25,7 +25,7 @@ export const dataStory: LayoutRecipe = {
 
   supports(facts, concept, options) {
     if (!concept.recipes.includes("data-story")) return false;
-    if (options.hasArtwork || options.hasAsset) return false;
+    if (options.hasAsset) return false;
     if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return false;
     if (facts.hasQuote || facts.hasComparison) return false;
     if (facts.hasTimeline || facts.hasProcess || facts.hasTable) return false;
@@ -63,8 +63,8 @@ export const dataStory: LayoutRecipe = {
         contentRef: "title",
         lineHeight,
       }),
-      rectElement(frameFromNormalized(chrome.rule, page), ctx.colors.accent),
     ];
+    if (chrome.showRule) elements.push(rectElement(frameFromNormalized(chrome.rule, page), ctx.colors.accent));
 
     let contentTop = chrome.contentTop;
     let bodyCovered = ctx.content.body.trim().length === 0;

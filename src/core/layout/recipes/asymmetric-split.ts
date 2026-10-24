@@ -28,7 +28,7 @@ export const asymmetricSplit: LayoutRecipe = {
 
   supports(facts, concept, options) {
     if (!concept.recipes.includes("asymmetric-split")) return false;
-    if (options.hasArtwork || options.hasAsset) return false;
+    if (options.hasAsset) return false;
     if (facts.hasQuote || facts.hasComparison || facts.hasRowBlock) return false;
     if (facts.layout === "cover" || facts.layout === "section" || facts.layout === "quote") return false;
     return facts.itemCount >= 2 && facts.itemCount <= 5 && facts.longestItemLength <= 48;
@@ -75,14 +75,17 @@ export const asymmetricSplit: LayoutRecipe = {
         contentRef: "title",
         lineHeight,
       }),
-      rectElement(
-        frameFromNormalized(
-          place({ x: chrome.rule.x, y: chrome.rule.y, width: 0.12, height: chrome.rule.height }),
-          page,
-        ),
-        colors.accent,
-      ),
     ];
+    if (chrome.showRule)
+      elements.push(
+        rectElement(
+          frameFromNormalized(
+            place({ x: chrome.rule.x, y: chrome.rule.y, width: 0.12, height: chrome.rule.height }),
+            page,
+          ),
+          colors.accent,
+        ),
+      );
     const dividerX = mirrored ? 1 - DIVIDER_X : DIVIDER_X;
     elements.push(
       verticalRule(dividerX, chrome.contentTop, chrome.contentBottom - chrome.contentTop, 0.0014, page, colors.rule),

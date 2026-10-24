@@ -345,7 +345,15 @@ export const aiPresentationDesignSchema = z.object({
          * old design files keep the legacy composition path.
          */
         recipe: z
-          .enum(["cover-statement", "data-story", "image-led", "editorial-index", "asymmetric-split"])
+          .enum([
+            "cover-statement",
+            "data-story",
+            "image-led",
+            "editorial-index",
+            "asymmetric-split",
+            "process-rail",
+            "comparison",
+          ])
           .optional(),
         variant: z.enum(["left", "right"]).optional(),
         focal: z.enum(["title", "index", "body"]).optional(),

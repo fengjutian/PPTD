@@ -128,6 +128,15 @@ function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualR
     ...(reviews.some((item) => item.visualFocusScore !== undefined)
       ? { visualFocusScore: Math.min(...reviews.map((item) => item.visualFocusScore ?? item.hierarchyScore)) }
       : {}),
+    ...(reviews.some((item) => item.distinctivenessScore !== undefined) ||
+    slideScores.some((item) => item.distinctivenessScore !== undefined)
+      ? {
+          distinctivenessScore: Math.min(
+            ...reviews.map((item) => item.distinctivenessScore ?? item.overallScore),
+            ...slideScores.map((item) => item.distinctivenessScore ?? item.overallScore),
+          ),
+        }
+      : {}),
     issues: reviews.flatMap((item) => item.issues),
     slideGuidance: reviews.flatMap((item) => item.slideGuidance),
     ...(slideScores.length > 0 ? { slideScores } : {}),
@@ -192,6 +201,7 @@ function slideReviewFromBatch(review: VisualReview, slideIndex: number, score?: 
     alignmentScore: ownScore?.alignmentScore ?? review.alignmentScore,
     readabilityScore: ownScore?.readabilityScore ?? review.readabilityScore,
     consistencyScore: review.consistencyScore,
+    ...(ownScore?.distinctivenessScore === undefined ? {} : { distinctivenessScore: ownScore.distinctivenessScore }),
     issues: review.issues.filter((issue) => issue.slideIndex === slideIndex),
     slideGuidance: review.slideGuidance.filter((item) => item.slideIndex === slideIndex),
     ...(ownScore ? { slideScores: [ownScore] } : {}),
@@ -216,6 +226,11 @@ function batchReviewFromSlides(
     alignmentScore: Math.min(...present.map((item) => item.alignmentScore)),
     readabilityScore: Math.min(...present.map((item) => item.readabilityScore)),
     consistencyScore,
+    ...(present.some((item) => item.distinctivenessScore !== undefined)
+      ? {
+          distinctivenessScore: Math.min(...present.map((item) => item.distinctivenessScore ?? item.overallScore)),
+        }
+      : {}),
     issues: present.flatMap((item) => item.issues),
     slideGuidance: present.flatMap((item) => item.slideGuidance),
     ...(slideScores.length > 0 ? { slideScores } : {}),
@@ -592,6 +607,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           index,
           title: document.slides[index]?.content.title ?? "",
           layout: design.layout,
+          ...(design.recipe === undefined ? {} : { recipe: design.recipe }),
         }));
         const plan = await options.vision.planRepairs(review, goal, { deck, taskId: options.taskId });
         // A repair plan may name any page, and a fallback plan may be broader
@@ -613,6 +629,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           return {
             ...slide,
             layout: repair.layout ?? slide.layout,
+            ...(repair.recipe === undefined ? {} : { recipe: repair.recipe }),
             safeRegion: repair.safeRegion ?? slide.safeRegion,
             obstacleRegions: repair.obstacleRegions,
             hierarchyAction: repair.hierarchyAction,
@@ -640,7 +657,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     // 评分和建议是评审留下的结构化结论。用户既要能看到它，也要知道它来自
     // 哪一轮、覆盖了多少页，避免把"评审过了"理解成"页面一定好看"。
     notes.push(
-      `视觉评审最终评分 ${aligned.review.overallScore}（层级 ${aligned.review.hierarchyScore}、对齐 ${aligned.review.alignmentScore}、可读性 ${aligned.review.readabilityScore}、一致性 ${aligned.review.consistencyScore}、重复控制 ${aligned.review.repetitionScore ?? "未评"}、主题匹配 ${aligned.review.themeFitScore ?? "未评"}、视觉焦点 ${aligned.review.visualFocusScore ?? "未评"}），剩余 ${aligned.review.issues.length} 处建议`,
+      `视觉评审最终评分 ${aligned.review.overallScore}（层级 ${aligned.review.hierarchyScore}、对齐 ${aligned.review.alignmentScore}、可读性 ${aligned.review.readabilityScore}、一致性 ${aligned.review.consistencyScore}、重复控制 ${aligned.review.repetitionScore ?? "未评"}、主题匹配 ${aligned.review.themeFitScore ?? "未评"}、视觉焦点 ${aligned.review.visualFocusScore ?? "未评"}、独特性 ${aligned.review.distinctivenessScore ?? "未评"}），剩余 ${aligned.review.issues.length} 处建议`,
     );
     // 逐页低分会拉低整册评分，但分数本身不是修复授权。把低分页列出来，
     // 避免用户只看到总分下降却不知道是哪一页、也避免误以为系统已经改过它。
@@ -649,7 +666,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         score.overallScore < options.goal.minimumScores.overall ||
         score.hierarchyScore < options.goal.minimumScores.hierarchy ||
         score.alignmentScore < options.goal.minimumScores.alignment ||
-        score.readabilityScore < options.goal.minimumScores.readability,
+        score.readabilityScore < options.goal.minimumScores.readability ||
+        (options.goal.minimumScores.distinctiveness !== undefined &&
+          score.distinctivenessScore !== undefined &&
+          score.distinctivenessScore < options.goal.minimumScores.distinctiveness),
     );
     if (weakPages.length > 0) {
       const details = weakPages
