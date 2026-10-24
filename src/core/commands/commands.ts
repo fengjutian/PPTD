@@ -25,6 +25,7 @@ import type {
   SlideTransition,
   TextElement,
   TextElementStyle,
+  TextRun,
 } from "../document-model";
 import {
   BUILTIN_ICONS,
@@ -87,7 +88,9 @@ import { resolveTypeScale } from "../design/type-scale";
 import { findThemePreset } from "../design/theme-presets";
 import { deriveDesignTokens } from "../design/design-tokens";
 import type { DeckConcept } from "../design/deck-concept";
+import { compileDesignPlan } from "../layout/design-compiler";
 import { consumptionProblem, selectRecipe } from "../layout/recipes/plan";
+import type { RecipeContext } from "../layout/recipes/types";
 import { planPageChrome } from "../layout/page-chrome";
 import { coverCrop } from "../rendering/image-fit";
 import {
@@ -1740,8 +1743,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       contentRef?: "title" | "body" | "decorative",
       background?: BackgroundRange | number | null,
       minimumPt = 12,
+      runs?: TextRun[],
     ): TextElement => {
-      const fitted = fittedFontSize(value, box, fontSizePt, minimumPt);
+      // A long sentence set in display type stops being a headline and starts
+      // being a wall. Bold copy over 24 characters is almost always a title, so
+      // it gets a ceiling instead of growing until the frame is full.
+      const longBoldCap = bold ? (value.length > 36 ? 30 : value.length > 24 ? 34 : undefined) : undefined;
+      const fitted = Math.min(fittedFontSize(value, box, fontSizePt, minimumPt), longBoldCap ?? Infinity);
       const range = typeof background === "number" ? { darkest: background, lightest: background } : background;
       const palette = ink(range ? range.darkest : 1);
       const large = isLargeText(fitted, bold);
@@ -1763,6 +1771,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         rotationMilliDegree: 0,
         locked: false,
         text: value,
+        ...(runs && runs.length > 0 ? { runs } : {}),
         style: { fontFamily: majorFont, fontSizePt: fitted, color: resolved, bold, align },
       };
     };
@@ -1787,6 +1796,40 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         .map((value) => value.trim())
         .filter(Boolean);
     const cleanPoint = stripListPrefix;
+    // A two-column card reads as a list; a card whose first clause is bold reads
+    // as an argument. The split is a presentation of the reviewed sentence, not
+    // a rewrite: the run only styles characters that are already there.
+    const emphasisLead = (value: string): TextRun[] | undefined => {
+      const markers = [
+        "可能",
+        "将",
+        "仍",
+        "决定",
+        "需要",
+        "应当",
+        "成为",
+        "导致",
+        "带来",
+        "取决",
+        "释放",
+        "提升",
+        "降低",
+        "增长",
+        "下降",
+        "是",
+      ];
+      let split = -1;
+      for (const marker of markers) {
+        const at = value.indexOf(marker);
+        if (at >= 4 && (split === -1 || at < split)) split = at;
+      }
+      if (split < 4) {
+        const comma = value.search(/[，,]/);
+        if (comma >= 4) split = comma;
+      }
+      if (split < 4 || split > value.length - 2) return undefined;
+      return [{ start: 0, end: split, bold: true }];
+    };
     // 整册的构图在画之前就要定下来：模板版式的选择依赖构图，而构图要看着
     // 整册的节奏来定。逐页独立决定构图会让相邻页长成一个样。
     const pageFacts = command.slides.map((content, index) => {
@@ -2318,6 +2361,61 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         if (!concept) return undefined;
         const hasActualAsset = Boolean(visualAsset && assetLayout);
         const templateImage = recipe ? templateImageRegion(recipe)?.frame : undefined;
+        const pageIndex = command.pageContext?.index ?? index;
+        const pageTotal = command.pageContext?.total ?? command.slides.length;
+        const tokens = deriveDesignTokens(document.theme, document.pageSize, concept);
+        // The template artwork is the background the recipe actually paints on.
+        // A dark artwork needs the title ink as the accent, otherwise the
+        // numbers and rules disappear into the picture.
+        const artworkDark = keepsArtwork
+          ? (bodyBackground?.darkest ?? titleBackground?.darkest ?? pageLuminance) < 0.45
+          : pageLuminance < 0.45;
+        const accentInk = artworkDark ? titleInk : design.accent;
+        const ruleInk = artworkDark ? "#DCE3EA" : "#E2E7EC";
+        const recipeColors: RecipeContext["colors"] = {
+          title: titleInk,
+          body: bodyInk,
+          accent: accentInk,
+          background: slide.background,
+          rule: ruleInk,
+          card: cardFill,
+        };
+        const recipeFrame = {
+          title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
+          content: frame(contentBox.x, contentBox.y, contentBox.width, contentBox.height),
+          safe: {
+            x: safeLeft,
+            y: safeTop,
+            width: safeRight - safeLeft,
+            height: safeBottom - safeTop,
+          },
+          page: { width: pageWidth, height: pageHeight },
+        };
+        // The design agent writes a semantic plan; the compiler owns geometry.
+        // A refused plan falls through to the legacy branch rather than writing
+        // a half-consumed page.
+        if (design.designPlan) {
+          const compiled = compileDesignPlan({
+            plan: design.designPlan,
+            content: slide.content,
+            facts: compositionFacts,
+            concept,
+            tokens,
+            colors: recipeColors,
+            frame: recipeFrame,
+            page: { index: pageIndex, total: pageTotal },
+            chrome,
+            ...(templateImage ? { templateImage } : {}),
+            hasTemplate,
+            hasArtwork: keepsArtwork,
+            hasAsset: hasActualAsset,
+            ...(hasActualAsset && assetPlan.role ? { assetRole: assetPlan.role } : {}),
+          });
+          if (!("elements" in compiled)) return undefined;
+          const problem = consumptionProblem(compiled, slide.content);
+          if (problem) throw new Error(`AI_DESIGN_CONTENT_LOSS: ${problem}`);
+          return compiled;
+        }
         const selection = selectRecipe({
           facts: compositionFacts,
           concept,
@@ -2331,41 +2429,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           },
         });
         if (!selection.recipe) return undefined;
-        const pageIndex = command.pageContext?.index ?? index;
-        const pageTotal = command.pageContext?.total ?? command.slides.length;
-        const tokens = deriveDesignTokens(document.theme, document.pageSize, concept);
-        // The template artwork is the background the recipe actually paints on.
-        // A dark artwork needs the title ink as the accent, otherwise the
-        // numbers and rules disappear into the picture.
-        const artworkDark = keepsArtwork
-          ? (bodyBackground?.darkest ?? titleBackground?.darkest ?? pageLuminance) < 0.45
-          : pageLuminance < 0.45;
-        const accentInk = artworkDark ? titleInk : design.accent;
-        const ruleInk = artworkDark ? "#DCE3EA" : "#E2E7EC";
         const plan = selection.recipe.plan({
           content: slide.content,
           facts: compositionFacts,
           concept,
           tokens,
-          colors: {
-            title: titleInk,
-            body: bodyInk,
-            accent: accentInk,
-            background: slide.background,
-            rule: ruleInk,
-            card: cardFill,
-          },
-          frame: {
-            title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
-            content: frame(contentBox.x, contentBox.y, contentBox.width, contentBox.height),
-            safe: {
-              x: safeLeft,
-              y: safeTop,
-              width: safeRight - safeLeft,
-              height: safeBottom - safeTop,
-            },
-            page: { width: pageWidth, height: pageHeight },
-          },
+          colors: recipeColors,
+          frame: recipeFrame,
           page: { index: pageIndex, total: pageTotal },
           chrome,
           ...(templateImage ? { templateImage } : {}),
@@ -3464,7 +3534,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               { x: 0.08, y: contentBox.y, width: 0.36, height: contentBox.height },
               { x: 0.57, y: contentBox.y, width: 0.35, height: contentBox.height },
             ];
-        const padding = 0.035;
+        const padding = 0.045;
         // The marker owns a gutter of its own, and wrapped lines start at the
         // copy column instead of running back under the bullet. Concatenating
         // "• item" into one paragraph produced a list whose second line started
@@ -3489,8 +3559,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const available = Math.min(slots[0]!.height, slots[1]!.height) - padding * 2;
         // Grow the copy to the room the columns have before shrinking it: a pair
         // of panels filled with 18pt copy on a 7.5in page leaves half the card
-        // empty and reads as a page that was never finished.
-        const maximumSize = Math.min(26, preferredSize + 8);
+        // empty and reads as a page that was never finished. The ceiling matters
+        // more than the floor: 26pt body text in a card reads as a poster, not as
+        // a management deck, so a card column stops at 20pt (22 for sparse copy).
+        const maximumSize = Math.min(sparseColumns ? 22 : 20, preferredSize + 4);
         // A cut at the midpoint is not always the balanced one: five points of
         // different lengths can put three short ones against two long ones and
         // leave one card half empty. Try every cut and keep the one whose two
@@ -3552,6 +3624,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           );
           const width = copyWidth(slot);
           let rowY = panelTop + padding;
+          // A 26pt bullet next to 20pt copy is a second headline. The marker is
+          // punctuation, so it stays well below the copy size.
+          const markerSize = Math.max(10, Math.min(14, Math.round(columnSize * 0.6)));
           column.forEach((item, itemIndex) => {
             const itemHeight = measured[columnIndex]!.heights[itemIndex]!;
             // The marker is its own element, so a wrapped point keeps its
@@ -3559,8 +3634,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
             slide.elements.push(
               text(
                 "•",
-                frame(slot.x + padding, rowY, markerGutter, Math.max(0.02, itemHeight)),
-                columnSize,
+                frame(slot.x + padding, rowY + 0.006, markerGutter, Math.max(0.02, itemHeight)),
+                markerSize,
                 design.accent,
                 false,
                 "left",
@@ -3578,6 +3653,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
                 "left",
                 undefined,
                 cardLuminance,
+                12,
+                emphasisLead(item),
               ),
             );
             rowY += itemHeight + rowGap;

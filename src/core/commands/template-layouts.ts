@@ -9,6 +9,7 @@
  */
 
 import type { BackgroundRange } from "../rendering/contrast";
+import type { PageDesignPlan } from "../design/design-plan";
 import type { RecipeId } from "../design/deck-concept";
 import type { AiComposition, AiDensityTarget, AiEmphasis, AiPalette } from "./design-intent";
 import type { AiVisualAsset } from "./visual-asset";
@@ -71,6 +72,11 @@ export interface AiSlideDesign {
    * renderer falls back to the legacy branch.
    */
   recipe?: RecipeId;
+  /**
+   * The semantic plan written by the design agent. When present the compiler
+   * owns the page geometry; `recipe` remains a hint for old plans.
+   */
+  designPlan?: PageDesignPlan;
   /** A recipe-local variant, for example a mirrored split. */
   variant?: "left" | "right";
   /** Which element the recipe should treat as the page's first visual entry. */

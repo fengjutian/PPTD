@@ -51,7 +51,10 @@ const nextGuideId = (): string => {
 
 export const useCanvasGuidesStore = create<CanvasGuidesState>((set) => ({
   guidesBySlide: {},
-  gridEnabled: true,
+  // The grid is an editing aid, not part of the slide. Showing it by default
+  // made every generated deck look like graph paper before the user had a
+  // chance to judge the design; it is now opt-in.
+  gridEnabled: false,
   gridSnapEnabled: false,
   snapEnabled: true,
   gridSize: DEFAULT_GRID_SIZE,

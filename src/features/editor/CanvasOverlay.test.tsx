@@ -7,6 +7,11 @@ import { CanvasGridView, CanvasGuideView } from "./CanvasOverlay";
 const inch = (value: number) => emu(value * EMU_PER_INCH);
 
 describe("canvas overlay", () => {
+  it("keeps the editing grid opt-in", () => {
+    // 网格是编辑辅助，不是幻灯片内容；默认打开会让新生成的页面先像方格纸。
+    expect(useCanvasGuidesStore.getState().gridEnabled).toBe(false);
+  });
+
   it("draws the grid layer only when the grid is switched on", () => {
     const on = renderToStaticMarkup(<CanvasGridView enabled gridSize={inch(0.1)} scale={0.01} />);
     expect(on).toContain("canvas-grid-layer");

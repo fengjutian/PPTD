@@ -3408,6 +3408,18 @@ describe("document commands", () => {
     const copies = texts.filter((element) => element.text !== content.title && element.text !== "•");
     expect(markers).toHaveLength(items.length);
     expect(copies).toHaveLength(items.length);
+    // A card body is read, not shouted: the old 26pt ceiling read as a poster.
+    expect(copies.every((element) => element.style.fontSizePt <= 20)).toBe(true);
+    expect(markers.every((element) => element.style.fontSizePt <= 14)).toBe(true);
+    // A 30+ character title at 40pt turns into three lines and eats the page.
+    const heading = texts.find((element) => element.text === content.title)!;
+    expect(heading.style.fontSizePt).toBeLessThanOrEqual(30);
+    // The lead clause is bold, the predicate stays regular: hierarchy inside a
+    // card without rewriting the reviewed sentence. Points without a natural
+    // subject/predicate split keep one uniform run.
+    const emphasized = copies.filter((element) => element.runs?.[0]?.start === 0);
+    expect(emphasized.length).toBeGreaterThan(0);
+    expect(emphasized.every((element) => (element.runs?.[0]?.end ?? 0) < element.text.length)).toBe(true);
     // The cut is chosen to balance the two columns by height, so both columns
     // carry points and their first rows sit on one baseline.
     const columns = [

@@ -17,11 +17,13 @@ describe("ten-page design preview", () => {
     const document = buildDesignPreviewDocument();
     expect(document.slides).toHaveLength(10);
 
-    const titleYs = document.slides.slice(2).flatMap((slide) =>
-      slide.elements
-        .filter((element): element is TextElement => element.type === "text" && element.contentRef === "title")
-        .map((element) => element.frame.y / document.pageSize.height),
-    );
+    const titleYs = document.slides
+      .slice(2)
+      .flatMap((slide) =>
+        slide.elements
+          .filter((element): element is TextElement => element.type === "text" && element.contentRef === "title")
+          .map((element) => element.frame.y / document.pageSize.height),
+      );
     expect(titleYs).toHaveLength(8);
     expect(Math.max(...titleYs) - Math.min(...titleYs)).toBeLessThanOrEqual(0.002);
   });
@@ -48,13 +50,11 @@ describe("ten-page design preview", () => {
   it("draws the expected object for each recipe", () => {
     const document = buildDesignPreviewDocument();
     const texts = (index: number) =>
-      document.slides[index]!.elements
-        .filter((element): element is TextElement => element.type === "text")
-        .map((element) => element.text);
-    const ellipses = (index: number) =>
-      document.slides[index]!.elements.filter(
-        (element) => element.type === "shape" && element.shape === "ellipse",
+      document.slides[index]!.elements.filter((element): element is TextElement => element.type === "text").map(
+        (element) => element.text,
       );
+    const ellipses = (index: number) =>
+      document.slides[index]!.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
 
     expect(texts(1)).toEqual(expect.arrayContaining(["02", "第二部分 门店效率"]));
     expect(texts(2)).toEqual(expect.arrayContaining(["01", "客流回升"]));

@@ -325,6 +325,48 @@ const aiPaletteRoleSchema = z.enum([
   "inverse",
   "template-default",
 ]);
+const aiDesignRecipeIds = [
+  "cover-statement",
+  "data-story",
+  "image-led",
+  "editorial-index",
+  "asymmetric-split",
+  "process-rail",
+  "comparison",
+  "timeline-rail",
+  "quote-field",
+  "section-statement",
+] as const;
+
+const pageDesignPlanSchema = z.object({
+  role: z.enum(["cover", "section", "claim", "comparison", "process", "timeline", "quote", "summary"]),
+  composition: z.object({
+    primitive: z.enum(["split", "stack", "grid", "rail", "overlay", "band"]),
+    ratio: z.number().min(0.25).max(0.75).optional(),
+    align: z.enum(["left", "center"]).optional(),
+  }),
+  density: z.enum(["sparse", "normal", "dense"]),
+  templatePolicy: z.enum(["use", "takeover", "ignore"]),
+  recipe: z.enum(aiDesignRecipeIds).optional(),
+  focal: z
+    .object({
+      kind: z.enum(["title", "number", "image", "chart", "none"]),
+      blockId: z.string().max(120).optional(),
+      brief: z.string().max(600).optional(),
+    })
+    .optional(),
+  emphasis: z
+    .array(
+      z.object({
+        blockId: z.string().max(120),
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+      }),
+    )
+    .max(30)
+    .optional(),
+});
+
 export const aiPresentationDesignSchema = z.object({
   slides: z
     .array(
@@ -344,20 +386,9 @@ export const aiPresentationDesignSchema = z.object({
          * The page recipe that draws this page. It is optional so old models and
          * old design files keep the legacy composition path.
          */
-        recipe: z
-          .enum([
-            "cover-statement",
-            "data-story",
-            "image-led",
-            "editorial-index",
-            "asymmetric-split",
-            "process-rail",
-            "comparison",
-            "timeline-rail",
-            "quote-field",
-            "section-statement",
-          ])
-          .optional(),
+        recipe: z.enum(aiDesignRecipeIds).optional(),
+        /** The semantic design plan; absent keeps the legacy design path. */
+        designPlan: pageDesignPlanSchema.optional(),
         variant: z.enum(["left", "right"]).optional(),
         focal: z.enum(["title", "index", "body"]).optional(),
         /** How this page communicates, before choosing a geometric skeleton. */

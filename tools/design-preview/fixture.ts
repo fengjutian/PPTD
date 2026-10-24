@@ -34,10 +34,7 @@ function gradientImage(): string {
   return `data:image/png;base64,${Buffer.from(encodePng(image)).toString("base64")}`;
 }
 
-const designed = (
-  layout: AiSlideDesign["layout"],
-  extra: Partial<AiSlideDesign> = {},
-): AiSlideDesign => ({
+const designed = (layout: AiSlideDesign["layout"], extra: Partial<AiSlideDesign> = {}): AiSlideDesign => ({
   layout,
   background: "#FFFFFF",
   accent: "#0F7869",
