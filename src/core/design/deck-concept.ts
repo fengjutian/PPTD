@@ -12,7 +12,7 @@ import type { CompositionFacts, IntentConflict } from "../commands/design-intent
  * is code. A preset that has no renderer is not part of the enum, so the model
  * cannot promise a picture the system cannot draw.
  */
-export type ConceptPresetId = "editorial";
+export type ConceptPresetId = "editorial" | "documentary";
 
 export type DeckMotif = "rules" | "blocks" | "instrument" | "documentary" | "signal" | "paper";
 export type SurfaceStrategy = "flat" | "rules" | "panels" | "full-bleed";
@@ -56,36 +56,57 @@ export interface DeckConcept extends AiDeckConcept {
   recipes: readonly RecipeId[];
   rhythm: readonly PageBeat[];
   surface: SurfaceStrategy;
+  /**
+   * The imagery roles this direction may use. `imagery` is the strategy chosen
+   * for the deck; this list is what the command layer clamps a page request to.
+   */
+  imageryRoles: readonly ImageryStrategy[];
 }
 
 interface ConceptPreset {
   motif: DeckMotif;
   surface: SurfaceStrategy;
   recipes: readonly RecipeId[];
-  imagery: ImageryStrategy;
+  /**
+   * The imagery strategies the preset can render. A single value made every
+   * preset text-only or image-only; the resolver clamps the model's intent to
+   * this list instead of rejecting it outright.
+   */
+  imagery: readonly ImageryStrategy[];
   typeContrast: TypeContrast;
 }
+
+const EDITORIAL_RECIPES: readonly RecipeId[] = [
+  "cover-statement",
+  "data-story",
+  "chart-story",
+  "image-led",
+  "editorial-index",
+  "asymmetric-split",
+  "process-rail",
+  "comparison",
+  "weighted-split",
+  "timeline-rail",
+  "quote-field",
+  "section-statement",
+];
 
 const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
   editorial: {
     motif: "rules",
     surface: "rules",
-    recipes: [
-      "cover-statement",
-      "data-story",
-      "chart-story",
-      "image-led",
-      "editorial-index",
-      "asymmetric-split",
-      "process-rail",
-      "comparison",
-      "weighted-split",
-      "timeline-rail",
-      "quote-field",
-      "section-statement",
-    ],
-    imagery: "none",
+    recipes: EDITORIAL_RECIPES,
+    imagery: ["none", "hero", "band", "side"],
     typeContrast: "strong",
+  },
+  documentary: {
+    motif: "documentary",
+    surface: "full-bleed",
+    recipes: EDITORIAL_RECIPES,
+    // A documentary direction exists to give the picture the page; a text-only
+    // request is clamped to a picture rather than silently becoming editorial.
+    imagery: ["hero", "band", "side"],
+    typeContrast: "calm",
   },
 };
 
@@ -99,6 +120,17 @@ export function defaultEditorialConcept(): AiDeckConcept {
     typeContrast: "strong",
     imagery: "none",
     rationale: "内容以判断和要点为主，没有可支撑的数字或图片。",
+  };
+}
+
+export function defaultDocumentaryConcept(): AiDeckConcept {
+  return {
+    preset: "documentary",
+    name: "纪实全幅",
+    idea: "让真实图片占住页面，文字退到边缘，像一篇图片报道。",
+    typeContrast: "calm",
+    imagery: "hero",
+    rationale: "内容有真实场景或数据图像，图比字更能说明问题。",
   };
 }
 
@@ -126,28 +158,37 @@ export interface ResolvedDeckConcept {
 export function resolveDeckConcept(input: ResolveDeckConceptInput): ResolvedDeckConcept {
   if (input.pageFacts.length !== input.pageCount) throw new Error("AI_CONCEPT_RHYTHM_INVALID");
   const conflicts: IntentConflict[] = [];
-  const preset = CONCEPT_PRESETS[input.concept.preset] ?? CONCEPT_PRESETS.editorial;
-  if (input.concept.preset !== "editorial") {
+  const preset = CONCEPT_PRESETS[input.concept.preset];
+  if (!preset) {
     conflicts.push({
       intent: `preset=${input.concept.preset}`,
       reason: "该设计方向还没有对应的渲染实现，已回退编辑式",
     });
   }
-  if (input.concept.imagery !== preset.imagery) {
+  const resolvedPreset = preset ?? CONCEPT_PRESETS.editorial;
+  const resolvedPresetId: ConceptPresetId = preset ? input.concept.preset : "editorial";
+  // Clamp the model's imagery intent to what the preset can draw. A clamped
+  // value is reported, never silently accepted: the report has to explain why
+  // the page does not use the picture the model asked for.
+  const imagery = resolvedPreset.imagery.includes(input.concept.imagery)
+    ? input.concept.imagery
+    : resolvedPreset.imagery[0]!;
+  if (imagery !== input.concept.imagery) {
     conflicts.push({
       intent: `imagery=${input.concept.imagery}`,
-      reason: "该设计方向当前只支持无配图，配图意图未生效",
+      reason: `该方向只支持 ${resolvedPreset.imagery.join("/")}，已回退 ${imagery}`,
     });
   }
   return {
     concept: {
       ...input.concept,
-      preset: "editorial",
+      preset: resolvedPresetId,
       id: input.id ?? crypto.randomUUID(),
-      motif: preset.motif,
-      surface: preset.surface,
-      recipes: [...preset.recipes],
-      imagery: preset.imagery,
+      motif: resolvedPreset.motif,
+      surface: resolvedPreset.surface,
+      recipes: [...resolvedPreset.recipes],
+      imagery,
+      imageryRoles: [...resolvedPreset.imagery],
       typeContrast: input.concept.typeContrast,
       rhythm: planConceptRhythm(input.pageFacts, input.pageCount),
     },

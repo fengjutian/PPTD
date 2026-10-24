@@ -88,6 +88,7 @@ import { resolveTypeScale } from "../design/type-scale";
 import { findThemePreset } from "../design/theme-presets";
 import { deriveDesignTokens } from "../design/design-tokens";
 import type { DeckConcept } from "../design/deck-concept";
+import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { compileDesignPlan } from "../layout/design-compiler";
 import { consumptionProblem, selectRecipe } from "../layout/recipes/plan";
 import type { RecipeContext } from "../layout/recipes/types";
@@ -2146,10 +2147,15 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         }
         return candidates.sort((left, right) => right.width * right.height - left.width * left.height)[0] ?? source;
       };
-      const requestedSafe =
-        design.safeRegion && isSafeRegion(design.safeRegion, 0.3, 0.25)
-          ? design.safeRegion
-          : { x: 0.07, y: 0.12, width: 0.86, height: 0.75 };
+      // The deck direction owns the page margin, but only when nothing more
+      // authoritative does: a template's placeholders and a reviewed safe
+      // region both win over the direction's surface profile.
+      const deckConcept = command.designConcept;
+      const deckSurface = deckConcept?.surface;
+      const explicitSafe =
+        design.safeRegion && isSafeRegion(design.safeRegion, 0.3, 0.25) ? design.safeRegion : undefined;
+      const surfaceSafe = !explicitSafe && !hasTemplate && deckSurface ? surfaceSafeRegion(deckSurface) : undefined;
+      const requestedSafe = explicitSafe ?? surfaceSafe ?? { x: 0.07, y: 0.12, width: 0.86, height: 0.75 };
       const visualSafe = largestFreeRegion(requestedSafe);
       const safeLeft = visualSafe?.x ?? DEFAULT_CONTENT_REGION.left;
       const safeRight = visualSafe ? visualSafe.x + visualSafe.width : DEFAULT_CONTENT_REGION.right;
@@ -2229,6 +2235,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
           ),
         );
       });
+      // A direction owns which picture roles a page may use. A hero requested by
+      // a text-first direction becomes a side picture instead of disappearing;
+      // the fallback is reported by the direction resolver, not silently lost.
+      const requestedRole = design.visualAsset?.role;
+      const allowedImagery = deckConcept?.imageryRoles;
+      const clampedRole =
+        requestedRole && allowedImagery && !allowedImagery.includes(requestedRole)
+          ? (allowedImagery.find(
+              (role): role is AiVisualAssetRole => role === "hero" || role === "band" || role === "side",
+            ) ?? undefined)
+          : requestedRole;
+      const imageryEnabled = !allowedImagery || allowedImagery.some((role) => role !== "none");
       // A picture takes its own place on the page and the text moves out of its
       // way. The image is never laid over the copy: a page where the text is
       // unreadable under a picture is worse than a page without a picture.
@@ -2236,8 +2254,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         layout: design.layout,
         itemCount: items.length,
         hasDeterministicBlock,
-        requested: Boolean(visualAsset && design.visualAsset?.enabled),
-        requestedRole: design.visualAsset?.role,
+        requested: Boolean(visualAsset && design.visualAsset?.enabled) && imageryEnabled,
+        requestedRole: clampedRole,
+        allowHeroOnContent: Boolean(deckConcept?.surface === "full-bleed" && deckConcept.imageryRoles.includes("hero")),
       });
       const assetLayout =
         visualAsset && assetPlan.enabled && assetPlan.role
@@ -2264,7 +2283,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // A template owns its header line and ornaments. Drawing the recipe
         // rule under the template's own rule produced a double header on the
         // generated templates; the content rules stay, the header rule does not.
-        showRule: !hasTemplate,
+        showRule: !hasTemplate && (deckSurface ? surfaceShowsRule(deckSurface) : true),
       });
       // The intent of the page: which composition it is drawn in, which level of
       // the hierarchy carries the weight and how much white space it spends.

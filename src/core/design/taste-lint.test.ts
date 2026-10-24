@@ -82,7 +82,12 @@ function addPage(
     status: "approved",
   };
   slide.elements = options.elements ?? [
-    textElement(options.title ?? "季度经营回顾与下一步判断", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 11.5, height: 0.8 }, "title"),
+    textElement(
+      options.title ?? "季度经营回顾与下一步判断",
+      { fontSizePt: 36 },
+      { x: 0.8, y: 0.6, width: 11.5, height: 0.8 },
+      "title",
+    ),
     ...(options.body
       ? [textElement(options.body, { fontSizePt: 14 }, { x: 0.8, y: 1.7, width: 11.5, height: 4.6 }, "body")]
       : []),
@@ -152,7 +157,12 @@ describe("taste lint", () => {
     const document = documentWith(1);
     document.slides[0]!.elements = [
       textElement("标题", { fontSizePt: 36, fontFamily: "华文中宋" }, undefined, "title"),
-      textElement("这是一段足够长的正文内容用于测试字体数量", { fontSizePt: 14, fontFamily: "微软雅黑" }, undefined, "body"),
+      textElement(
+        "这是一段足够长的正文内容用于测试字体数量",
+        { fontSizePt: 14, fontFamily: "微软雅黑" },
+        undefined,
+        "body",
+      ),
       textElement("注释", { fontSizePt: 10, fontFamily: "Arial" }, { x: 0.8, y: 6.6, width: 2, height: 0.3 }),
     ];
     expect(lintTaste(document).counts.FONT_FAMILY_COUNT).toBe(1);
@@ -177,7 +187,12 @@ describe("taste lint", () => {
     const document = documentWith(1);
     document.slides[0]!.elements = [
       textElement("2026 年度经营复盘", { fontSizePt: 9, color: "#888888" }, { x: 0.8, y: 0.2, width: 3, height: 0.25 }),
-      textElement("季度经营回顾与下一步判断", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 11.5, height: 0.8 }, "title"),
+      textElement(
+        "季度经营回顾与下一步判断",
+        { fontSizePt: 36 },
+        { x: 0.8, y: 0.6, width: 11.5, height: 0.8 },
+        "title",
+      ),
       textElement("这是一段足够长的正文内容用于测试标题上方标签", { fontSizePt: 14 }, undefined, "body"),
     ];
     expect(lintTaste(document).counts.DECORATION_KICKER).toBe(1);
@@ -194,7 +209,14 @@ describe("taste lint", () => {
 
     const withSequence = documentWith(1);
     withSequence.slides[0]!.content.blocks = [
-      { id: "process-1", type: "process", items: [{ label: "诊断", text: "找出瓶颈" }, { label: "改造", text: "调整流程" }] },
+      {
+        id: "process-1",
+        type: "process",
+        items: [
+          { label: "诊断", text: "找出瓶颈" },
+          { label: "改造", text: "调整流程" },
+        ],
+      },
     ];
     withSequence.slides[0]!.elements = withoutSequence.slides[0]!.elements.map((element) => ({ ...element }));
     expect(lintTaste(withSequence).counts.DECORATION_INDEX_NUMBER).toBe(0);
@@ -221,7 +243,9 @@ describe("taste lint", () => {
 
   it("flags three consecutive pages with the same skeleton", () => {
     const document = documentWith(6);
-    document.slides[0]!.elements = [textElement("封面", { fontSizePt: 44 }, { x: 0.8, y: 2, width: 11, height: 1 }, "title")];
+    document.slides[0]!.elements = [
+      textElement("封面", { fontSizePt: 44 }, { x: 0.8, y: 2, width: 11, height: 1 }, "title"),
+    ];
     document.slides[0]!.content.body = "";
     for (let index = 1; index <= 3; index += 1) {
       const page = document.slides[index]!;
@@ -240,15 +264,87 @@ describe("taste lint", () => {
     const document = documentWith(1);
     document.slides[0]!.elements = [
       textElement("标题", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 3, height: 0.6 }, "title"),
-      textElement("这是一段足够长的正文内容用于测试留白失衡", { fontSizePt: 14 }, { x: 0.8, y: 1.3, width: 3, height: 0.8 }, "body"),
+      textElement(
+        "这是一段足够长的正文内容用于测试留白失衡",
+        { fontSizePt: 14 },
+        { x: 0.8, y: 1.3, width: 3, height: 0.8 },
+        "body",
+      ),
     ];
     expect(lintTaste(document).counts.WHITESPACE_IMBALANCE).toBe(1);
+  });
+
+  it("does not read cover panels as content filling the page", () => {
+    const document = documentWith(1);
+    document.slides[0]!.elements = [
+      shapeElement("#1E2A32", { x: 0, y: 0, width: 0.5, height: 7.5 }),
+      shapeElement("#2F6B5F", { x: 10.5, y: 0, width: 2.8, height: 7.5 }),
+      textElement("季度经营回顾与下一步判断", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 8, height: 0.8 }, "title"),
+      textElement(
+        "本季度门店效率提升主要来自陈列调整与预约制。",
+        { fontSizePt: 14 },
+        { x: 0.8, y: 1.7, width: 8, height: 4.6 },
+        "body",
+      ),
+    ];
+    expect(lintTaste(document).counts.WHITESPACE_IMBALANCE).toBe(0);
+  });
+
+  it("does not count a one-glyph quote mark as a third font family", () => {
+    const document = documentWith(1);
+    document.slides[0]!.elements = [
+      textElement(
+        "季度经营回顾与下一步判断",
+        { fontSizePt: 36 },
+        { x: 0.8, y: 0.6, width: 11.5, height: 0.8 },
+        "title",
+      ),
+      textElement("“", { fontSizePt: 72, fontFamily: "Georgia" }, { x: 0.8, y: 1.2, width: 0.6, height: 0.8 }),
+      textElement(
+        "本季度门店效率提升主要来自陈列调整与预约制，复购率连续三个月上升。",
+        { fontSizePt: 14 },
+        { x: 1.6, y: 1.7, width: 10.7, height: 4.6 },
+        "body",
+      ),
+    ];
+    expect(lintTaste(document).counts.FONT_FAMILY_COUNT).toBe(0);
+  });
+
+  it("does not flag an index the layout actually uses", () => {
+    const document = documentWith(1);
+    document.slides[0]!.elements = [
+      textElement(
+        "季度经营回顾与下一步判断",
+        { fontSizePt: 36 },
+        { x: 0.8, y: 0.6, width: 11.5, height: 0.8 },
+        "title",
+      ),
+      ...["01", "02", "03"].map((value, index) =>
+        textElement(
+          value,
+          { fontSizePt: 12, color: "#888888" },
+          { x: 0.8, y: 1.2 + index * 0.4, width: 0.5, height: 0.3 },
+        ),
+      ),
+      textElement(
+        "本季度门店效率提升主要来自陈列调整与预约制，复购率连续三个月上升。",
+        { fontSizePt: 14 },
+        { x: 1.6, y: 1.7, width: 10.7, height: 4.6 },
+        "body",
+      ),
+    ];
+    expect(lintTaste(document).counts.DECORATION_INDEX_NUMBER).toBe(0);
   });
 
   it("returns an empty report for a clean page and is deterministic", () => {
     const document = documentWith(1);
     document.slides[0]!.elements = [
-      textElement("季度经营回顾与下一步判断", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 11.5, height: 0.8 }, "title"),
+      textElement(
+        "季度经营回顾与下一步判断",
+        { fontSizePt: 36 },
+        { x: 0.8, y: 0.6, width: 11.5, height: 0.8 },
+        "title",
+      ),
       textElement(
         "本季度门店效率提升主要来自陈列调整与预约制，复购率连续三个月上升。",
         { fontSizePt: 14 },
@@ -272,7 +368,7 @@ describe("taste lint", () => {
         id: crypto.randomUUID() as ElementId,
         type: "image",
         placement: "layout-background",
-        frame: { x: 0, y: 0, width: inches(PAGE.width), height: inches(PAGE.height) },
+        frame: { x: inches(0), y: inches(0), width: inches(PAGE.width), height: inches(PAGE.height) },
         rotationMilliDegree: 0,
         locked: true,
         origin: "generated",

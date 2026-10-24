@@ -66,6 +66,18 @@ describe("视觉素材意图", () => {
     expect(decision.reason).toContain("封面");
   });
 
+  it("allows a hero on a content page only when the direction owns the surface", () => {
+    const decision = resolveVisualAsset({
+      layout: "title-body",
+      itemCount: 2,
+      hasDeterministicBlock: false,
+      requested: true,
+      requestedRole: "hero",
+      allowHeroOnContent: true,
+    });
+    expect(decision).toMatchObject({ enabled: true, role: "hero" });
+  });
+
   it("采纳 AI 指定的内容页配图角色", () => {
     expect(
       resolveVisualAsset({

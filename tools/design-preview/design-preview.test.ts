@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPptx } from "../../src/features/pptx-export/export-pptx";
 import type { ImageElement, TextElement } from "../../src/core/document-model";
+import { lintTaste } from "../../src/core/design/taste-lint";
 import { buildDesignPreviewDocument, previewPage, previewSlides } from "./fixture";
 
 /**
@@ -84,6 +85,35 @@ describe("ten-page design preview", () => {
     expect(previewPage.width).toBe(10);
   });
 
+  it("gives editorial and documentary different geometry, not just colours", () => {
+    const editorial = buildDesignPreviewDocument({ conceptPresetId: "editorial" });
+    const documentary = buildDesignPreviewDocument({ conceptPresetId: "documentary" });
+    const titleX = (document: ReturnType<typeof buildDesignPreviewDocument>, index: number) => {
+      const title = document.slides[index]!.elements.find(
+        (element): element is TextElement => element.type === "text" && element.contentRef === "title",
+      )!;
+      return title.frame.x / document.pageSize.width;
+    };
+    // Full-bleed spends the margin: 0.04 instead of 0.07 of the page width.
+    expect(titleX(editorial, 3)).toBeCloseTo(0.07, 2);
+    expect(titleX(documentary, 3)).toBeCloseTo(0.04, 2);
+    // The editorial direction draws an accent rule under the title; documentary
+    // does not, so the same content produces a different element count.
+    expect(editorial.slides[3]!.elements.length).toBe(documentary.slides[3]!.elements.length + 1);
+  });
+
+  it("passes the deterministic taste lint without a finding", () => {
+    const document = buildDesignPreviewDocument();
+    const report = lintTaste(document);
+    // The fixture is the product's own output. A finding here is either a real
+    // regression or a rule that fires on a deliberate choice; both must be
+    // resolved before the rule ships.
+    expect(report.issues).toEqual([]);
+    // The cover has no body copy, and the report says so instead of passing the
+    // typography checks it never ran.
+    expect(report.skipped).toEqual(["typography:no-body"]);
+  });
+
   it("exports ten pages as native objects", async () => {
     const document = buildDesignPreviewDocument();
     const result = await buildPptx(document, { prevalidatedIssues: [] });
@@ -92,5 +122,6 @@ describe("ten-page design preview", () => {
     expect(result.report.package.slideCount).toBe(10);
     expect(result.report.nativeObjectCount).toBeGreaterThan(30);
     expect(result.bytes.byteLength).toBeGreaterThan(10_000);
+    expect(result.report.tasteLint).toEqual({ hard: 0, soft: 0, codes: {} });
   }, 60_000);
 });

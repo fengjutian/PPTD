@@ -1367,23 +1367,25 @@ pub async fn generate_deck_concepts(
 4. 主题方向缺失时按内容选择 editorial。
 
 三、可选方向
-本次只开放一个方向：
-- editorial：编辑式。细线、大字号、编号栏、留白，不使用卡片和面板。
+本次开放两个方向：
+- editorial：编辑式。细线、大字号、编号栏、留白，不使用卡片和面板。适合以判断、要点和短句为主的内容。
+- documentary：纪实全幅。图片或数据图像占住页面，文字退到边缘，标题上方不画强调线。适合有真实场景、产品图或强数据图像的内容。
 
-不得发明其他 preset；不得声称支持当前方向没有的配方（当前可渲染：cover-statement、data-story、image-led、editorial-index、asymmetric-split、process-rail、comparison）。
+不得发明其他 preset；不得声称支持当前方向没有的配方（当前可渲染：cover-statement、data-story、chart-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement）。
 
 四、输出字段
-- preset：固定为 "editorial"。
-- name：方向名称，1–20 字，例如“编辑式年报”。
+- preset：editorial 或 documentary。
+- name：方向名称，1–20 字，例如“编辑式年报”“纪实全幅”。
 - idea：一句话说明视觉策略，1–80 字；不要复述演示标题。
-- typeContrast：calm、strong、dramatic 之一。内容结论强、要点短时用 strong；不要用 dramatic 掩盖空内容。
-- imagery：只能为 none。当前方向没有配图配方。
+- typeContrast：calm、strong、dramatic 之一。内容结论强、要点短时用 strong，纪实方向用 calm；不要用 dramatic 掩盖空内容。
+- imagery：editorial 可为 none、side、band、hero；documentary 必须为 hero、band、side 之一，不能为 none。
 - rationale：为什么这个方向适合这份内容，1–120 字；只谈版式、信息密度和阅读路径。
 
 五、可行性
-1. 内容以判断、要点和短句为主时，editorial 是合适的。
-2. 内容如果没有数字，不得声称会使用数据图表；如果没有图片，不得声称使用摄影。
-3. 如果内容主要是长段落，仍可选 editorial，但 typeContrast 用 calm。
+1. 内容以判断、要点和短句为主、没有可用图片时，选 editorial。
+2. 内容有真实场景、产品图或数据图像，且希望图片成为页面主体时，选 documentary。
+3. 内容如果没有数字，不得声称会使用数据图表；如果没有图片，不得声称使用摄影。
+4. 如果内容主要是长段落，editorial 的 typeContrast 用 calm；documentary 固定用 calm。
 
 六、输出合同
 只输出一个严格 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。

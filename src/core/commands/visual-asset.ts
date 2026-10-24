@@ -86,6 +86,12 @@ export function resolveVisualAsset(input: {
   requested?: boolean;
   /** AI 指定的角色。 */
   requestedRole?: AiVisualAssetRole;
+  /**
+   * A documentary direction may give a content page a full-height picture. The
+   * default stays conservative: a hero outside cover/section would crowd the
+   * copy, so only a direction that owns the surface opts in.
+   */
+  allowHeroOnContent?: boolean;
 }): { enabled: boolean; role?: AiVisualAssetRole; reason?: string } {
   if (!input.requested) return { enabled: false, reason: "AI 没有为这一页要求配图" };
   if (input.hasDeterministicBlock) {
@@ -95,8 +101,9 @@ export function resolveVisualAsset(input: {
   }
   const isCover = input.layout === "cover" || input.layout === "section";
   if (input.requestedRole === "hero") {
-    // 主视觉要占掉半个页面，文字必须还剩得下一块地方。
-    if (!isCover) return { enabled: false, reason: "主视觉只能用于封面或章节页" };
+    // 主视觉要占掉半个页面，文字必须还剩得下一块地方；只有封面、章节页
+    // 或明确接管整页的纪实方向可以这么做。
+    if (!isCover && !input.allowHeroOnContent) return { enabled: false, reason: "主视觉只能用于封面或章节页" };
     return { enabled: true, role: "hero" };
   }
   if (isCover) {

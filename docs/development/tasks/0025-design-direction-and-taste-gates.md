@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 状态     | 草案（待评审，2026-10-24）                                                                                                                                        |
+| 状态     | 进行中（P0-7、P0-8 已实现，2026-10-24）                                                                                                                           |
 | 优先级   | P0                                                                                                                                                                |
 | 里程碑   | V0.4 设计能力                                                                                                                                                     |
 | 预估     | 10–13 人日                                                                                                                                                        |
@@ -94,11 +94,17 @@ interface ConceptPreset {
   imagery: readonly ImageryStrategy[];
   typeContrast: TypeContrast;
 }
+
+interface DeckConcept extends AiDeckConcept {
+  // ...
+  /** 已解析的白名单，命令层用它收敛逐页配图请求。 */
+  imageryRoles: readonly ImageryStrategy[];
+}
 ```
 
-- `editorial` 保持现有实现：`motif: "rules"`、`surface: "rules"`、`imagery: ["none", "side"]`（当前实际只用到 `side`）。
+- `editorial` 保持现有行为：`motif: "rules"`、`surface: "rules"`、`imagery: ["none", "hero", "band", "side"]`、`typeContrast: "strong"`。原来的单值 `"none"` 会把封面主视觉一起挡掉，所以白名单要包含现有渲染路径实际用到的角色。
 - 新增 `documentary`：`motif: "documentary"`、`surface: "full-bleed"`、`imagery: ["hero", "band", "side"]`、`typeContrast: "calm"`、12 个配方全量。
-- `AiDeckConcept.imagery` 仍是单值；`resolveDeckConcept` 校验它是否在预设白名单内，不在则回退到白名单首项并记 conflict。
+- `AiDeckConcept.imagery` 仍是单值；`resolveDeckConcept` 校验它是否在预设白名单内，不在则回退到白名单首项并记 conflict。`DeckConcept.imageryRoles` 带上完整白名单供命令层使用。
 - 未知 preset 仍回退 `editorial` 并记 conflict，保持旧行为。
 - `CONCEPT_PRESET_IDS` 由实现表派生，模型合同引用同一常量，避免“合同有值、渲染器画不出”。
 
@@ -106,15 +112,15 @@ interface ConceptPreset {
 
 ### 4.1.1 让方向字段真正生效
 
-现状：`DeckConcept` 的 `motif`、`surface`、`imagery` 只被存储，没有进入渲染路径；只有 `typeContrast` 通过 `design-tokens.ts` 影响展示/标题字号。**只新增一个 preset 不会产生任何可见差异**，P0 必须同时接线：
+实现前 `DeckConcept` 的 `motif`、`surface`、`imagery` 只被存储，没有进入渲染路径；只有 `typeContrast` 通过 `design-tokens.ts` 影响展示/标题字号。**只新增一个 preset 不会产生任何可见差异**，因此 P0 同时接线了三处：
 
-1. **typeContrast（已有）**：`CONTRAST_FACTORS` 决定 display/title 比例；确认 `calm` 与 `strong` 在 13.33in 页面上差异可辨（标题字号差 ≥ 15%）。
-2. **imagery**：在命令层把 `design.visualAsset.role` 收敛到 `concept.imagery` 白名单。`editorial` 只允许 `side`（保持现状），`documentary` 允许 `hero` / `band` / `side`；`image-led` 配方仅在 `hasAsset` 且角色被允许时使用（`src/core/layout/recipes/plan.ts:32`、`src/core/layout/recipes/image-led.ts:29`）。不被允许时降级为 `side` 或退回无图配方，并记 conflict。
-3. **surface**：在 `planPageChrome` 的调用点按 `surface` 选择边距档位。`rules` 保持现有标题轴与内容区；`full-bleed` 收窄外边距（标题区上移、内容区左右外扩一档），`showRule` 交给配方决定。页面已有模板安全区时模板优先，`surface` 不覆盖模板占位区。
+1. **typeContrast（已有）**：`CONTRAST_FACTORS` 决定 display/title 比例；`calm` 与 `strong` 在 13.33in 页面上有可辨的标题字号差。
+2. **imagery**：命令层把 `design.visualAsset.role` 收敛到 `concept.imageryRoles`。角色不被允许时优先降级为 `side`，没有可选图片角色时关闭配图；`image-led` 配方仍要求 `hasAsset`（`src/core/layout/recipes/plan.ts:32`、`src/core/layout/recipes/image-led.ts:29`）。`documentary` 额外允许内容页使用主视觉（`resolveVisualAsset` 的 `allowHeroOnContent`），`editorial` 保持“主视觉只在封面/章节页”。
+3. **surface**：新增 `src/core/design/surface-profile.ts`，按 `SurfaceStrategy` 给出安全区。`rules` 与改造前的默认边距完全一致；`full-bleed` 把标题上移、内容区左右外扩，并关闭标题下方的强调线（`surfaceShowsRule`）。模板占位符和评审给出的 `safeRegion` 优先于 surface。
 
 `motif` 本轮只作为元数据保存，不参与渲染，也不写进对外承诺。方向差异由表面策略、图像策略与字阶对比承担。
 
-**验收**：同一份十页夹具分别用两个预设生成，元素序列、页边距、图像角色这三类中至少两类不同；只有颜色或字号不同视为不通过。
+**验收**：同一份十页夹具分别用两个预设生成，元素序列、页边距、图像角色这三类中至少两类不同；只有颜色或字号不同视为不通过。当前由 `tools/design-preview/design-preview.test.ts` 与 `src/core/commands/concept-imagery.test.ts` 覆盖：前两页标题轴 0.07 → 0.04、强调线元素消失；内容页的 hero 请求在 documentary 下成图、在 editorial 下被拒绝。
 
 ### 4.2 方向记录
 
@@ -366,16 +372,21 @@ export interface TasteReport {
   counts: Record<TasteIssueCode, number>;
   /** 无法判定的检查项，例如“模板底图内的装饰”。必须显示为未覆盖。 */
   skipped: string[];
-  checkedAt: string;
 }
 
-export function lintTaste(
-  document: PresentationDocument,
-  options?: { pageRoles?: readonly string[]; minBodyPt?: number },
-): TasteReport;
+export interface TasteLintOptions {
+  minBodyPt?: number;
+  minLabelPt?: number;
+  minBodyLength?: number;
+  minTitleBodyRatio?: number;
+  maxFontFamilies?: number;
+  maxAccentColors?: number;
+}
+
+export function lintTaste(document: PresentationDocument, options?: TasteLintOptions): TasteReport;
 ```
 
-排序：`severity`（hard 优先）→ `slideIndex` → `code` → `elementIds.join()`。保证同一文档输出可深度比较。
+排序：`severity`（hard 优先）→ `slideIndex` → `code` → `elementIds.join()`。报告不含时间戳，同一文档输出可深度比较。
 
 ### 7.2 阈值推导
 
@@ -386,21 +397,28 @@ export function lintTaste(
 | `BODY_TEXT_TOO_SMALL`     | hard | 正文/段落字号 < `max(12, 0.0125 × 页宽pt)`                                                           | 13.33in 页（960pt）→ 12pt；26.67in 页（1920pt）→ 24pt。按页宽比例而不是固定 px，避免不同页面尺寸下失效 |
 | `LABEL_TEXT_TOO_SMALL`    | hard | 标签/注释字号 < `max(9, 0.008 × 页宽pt)`                                                             | 同上，标签允许比正文小一档                                                                             |
 | `TITLE_BODY_RATIO_LOW`    | hard | 标题/正文 < 2.5，且正文 ≥ 20 字                                                                      | 层级需要可辨；短标题页（封面）不判                                                                     |
-| `FONT_FAMILY_COUNT`       | soft | 去重字体族 > 2                                                                                       | 主题主/次字体不计入“额外字体”                                                                          |
-| `COLOR_COUNT`             | soft | 非中性色 > 4                                                                                         | 饱和度 < 0.12 视为中性；同时统计填充、描边、文字色                                                     |
+| `FONT_FAMILY_COUNT`       | soft | 去重字体族 > 2（单字文本不计，视为引号或图标）                                                       | 主题主/次字体不计入“额外字体”                                                                          |
+| `COLOR_COUNT`             | soft | 非中性色 > 4                                                                                         | 饱和度 < 0.12 视为中性；同时统计填充、描边、文字色；全页色块不计                                       |
 | `DECORATION_KICKER`       | soft | 标题上方短标签：字号 < 0.45×标题、垂直距离 < 1.8×标题高、水平左缘差 < 5% 页宽、长度 ≤ 24、无句末标点 | 对应“每个标题上一行全大写小标签”                                                                       |
-| `DECORATION_INDEX_NUMBER` | soft | 独立 `^0?\d{1,2}$` 文本，且本页无 process/timeline/有序列表块                                        | 编号只在真是序列时使用                                                                                 |
+| `DECORATION_INDEX_NUMBER` | soft | 本页只有 1 个独立 `^0?\d{1,2}$` 文本，且无 process/timeline/有序列表块                               | 编号只在真是序列时使用；多个编号视为版面索引                                                           |
 | `DECORATION_EMOJI`        | soft | 文本命中 `\p{Extended_Pictographic}`                                                                 | emoji 图标不在内置图标库内                                                                             |
-| `DECORATION_ACCENT_WORD`  | soft | 标题内仅一个 run 变色，run 词数 < 总词数/2，且总词数 ≥ 3                                             | 对应“标题里只给一个词换色”                                                                             |
-| `RHYTHM_REPEAT`           | soft | 连续 ≥3 个内容页使用相同 `(layout, recipe)`                                                          | 跳过封面、章节、结论                                                                                   |
-| `WHITESPACE_IMBALANCE`    | soft | 非背景元素外接框覆盖页面比例 > 0.92×0.90，或 < 0.12                                                  | 粗代理，只作提示；精确留白交给视觉评审                                                                 |
+| `DECORATION_ACCENT_WORD`  | soft | 标题内只有一种变色 run，覆盖字符 < 标题字符数/2，且标题 ≥ 6 字                                       | 对应“标题里只给一个词换色”                                                                             |
+| `RHYTHM_REPEAT`           | soft | 连续 ≥3 个内容页结构签名相同（元素类型 + contentRef 序列）                                           | 跳过封面与结论页；一个长串只报一条                                                                     |
+| `WHITESPACE_IMBALANCE`    | soft | 文字/图片/图表/表格的外接框覆盖 > 0.92×0.90，或面积 < 0.12                                           | 形状不参与：封面色块与装饰线不是内容；粗代理，精确留白交给视觉评审                                     |
 
 实现细节：
 
-- 颜色分析新增 `src/core/rendering/color-analysis.ts`：`hexToHsl`、`isNeutralHex`、`hueDistance`。不引入新依赖。
-- 字体族比较前先做别名归一（`微软雅黑` / `Microsoft YaHei` 视为一个），新增 `src/core/design/font-alias.ts` 存放别名表。现有 `src/services/font-availability.ts` 只做安装探测，没有别名表，不能直接复用；core 不得依赖 services。
-- 文本 run 解析复用 `textFragments` 与 `resolveFragmentStyle`（`core/document-model`）。
-- 模板底图（`placement: "layout-background"`）不参与颜色统计；全页底图页面跳过 `WHITESPACE_IMBALANCE` 与 `COLOR_COUNT`，并在 `skipped` 中记录原因。
+- 颜色分析新增 `src/core/rendering/color-analysis.ts`：`normalizeHexColor`、`hexToHsl`、`isNeutralColor`。不引入新依赖。
+- 字体族比较前先做别名归一（`微软雅黑` / `Microsoft YaHei` 视为一个）。别名表先内置于 `taste-lint.ts`；出现第二个消费者时再下沉为 `core/design/font-alias.ts`。现有 `src/services/font-availability.ts` 只做安装探测，不能复用。
+- 强调词只读 `run.color` 与偏移，不解析完整片段样式；无 run 的标题直接跳过该规则。
+- 模板底图（`placement: "layout-background"`）或全页图形跳过颜色与留白统计，并在 `skipped` 中记录原因。
+
+**误报防护（已由测试锁定）**：
+
+- 封面两侧通高色块不参与留白统计，否则封面会被判为“页面填满”。
+- 单字文本（引号、图标）不计入字体族数量，否则引用页的 Georgia 引号会被判为第三种字体。
+- 同页出现多个 `01/02/03` 视为版面索引，不再报告“非序列编号”。
+- 结论页与封面不参与连续骨架判断，避免把有意的节奏当成重复。
 
 ### 7.3 与现有 gate、评审、导出的关系
 
@@ -422,12 +440,12 @@ export function lintTaste(
 | 层     | 文件                                           | 覆盖                                                                                                    | CI   |
 | ------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---- |
 | 领域   | `src/core/design/deck-concept.test.ts`         | 两个预设解析、imagery 白名单收敛、未知 preset 回退并记 conflict；十页夹具双预设至少两类结构差异         | 是   |
-| 领域   | `src/core/design/taste-lint.test.ts`           | 11 条规则各 1 例、阈值边界（11.9/12.1pt）、确定性（两次深比较）、十页夹具零误报                         | 是   |
+| 领域   | `src/core/design/taste-lint.test.ts`           | 11 条规则各 1 例、阈值边界（11.9/12.1pt）、确定性（两次深比较）、误报防护（封面面板/引号字形/多编号）   | 是   |
 | 领域   | `src/core/design/direction-preview.test.ts`    | 临时文档页数/页序/`pageContext` 正确、渲染不修改真实文档、两方向预览几何不同                            | 是   |
 | Schema | `src/core/document-model/schema.test.ts`       | 19 → 20 恒等迁移、固定样例、非法方向记录被拒                                                            | 是   |
 | 命令   | `src/core/commands/commands.test.ts`           | 方向记录追加/上限 20/撤销回滚/`contentHash` 与 `contentRevision` 不变/过期返回 `DESIGN_DIRECTION_STALE` | 是   |
 | 服务   | `src/services/ai-service.test.ts`              | 2–3 个方向合法、重复 preset 拒绝、长度越界拒绝、未知 preset 拒绝、失败码 `AI_DIRECTIONS_INVALID`        | 是   |
-| 夹具   | `tools/design-preview/design-preview.test.ts`  | specimen builder 对 11 套预设各产出 8 页，recipe 覆盖与清单一致；不依赖 DOM                             | 是   |
+| 夹具   | `tools/design-preview/design-preview.test.ts`  | 十页夹具体检零发现；specimen builder 对 11 套预设各产出 8 页；不依赖 DOM                                | 是   |
 | 导出   | `src/features/pptx-export/export-pptx.test.ts` | 报告包含体检计数；无体检时不写 0                                                                        | 是   |
 | 回归   | `tools/visual-regression`                      | 样张像素基线（按渲染器分目录，`PPTD_SKIP_VISUAL=1` 跳过）                                               | 条件 |
 
@@ -505,3 +523,42 @@ P1/P2 的 ADR 预留：0077（本地设计记忆与指纹）、0078（导出回�
 3. 体检的字体族统计是否应把模板主题字体计入上限？当前方案不计入。
 4. `documentary` 预设的图像策略依赖 AI 配图；无配图能力时是否降级为 `side` 占位，还是回退 `editorial` 并提示？
 5. 方向记录上限 20 是否足够覆盖长周期项目；超出后是否需要按“每个内容 revision 保留最近一条”裁剪。
+
+## 13. 实施记录（2026-10-24）
+
+### 已完成（P0-1、P0-7、P0-8）
+
+- `src/core/design/deck-concept.ts`：`ConceptPresetId` 增加 `documentary`；预设的 `imagery` 改为白名单；`DeckConcept` 增加 `imageryRoles`；新增 `defaultDocumentaryConcept`；`resolveDeckConcept` 保留合法 preset，不再一律改写为 `editorial`。
+- `src/core/design/surface-profile.ts`：`rules` 复现改造前边距，`full-bleed` 收窄边距并关闭强调线。
+- `src/core/commands/commands.ts`：surface 安全区只在没有模板占位、没有评审 `safeRegion` 时生效；`showRule` 跟随 surface；配图角色按 `imageryRoles` 收敛，`documentary` 允许内容页主视觉。
+- `src/core/commands/visual-asset.ts`：`resolveVisualAsset` 增加 `allowHeroOnContent`，默认行为不变。
+- `src/services/ai-service.ts`、`src-tauri/src/commands/ai.rs`：概念合同与提示词开放两个方向；`imagery` 规则按方向分别约束。
+- `tools/design-preview/fixture.ts`：`buildDesignPreviewDocument` 支持 `themePresetId` 与 `conceptPresetId`，为样张与方向对比复用。
+- `src/core/design/taste-lint.ts`：11 条规则、硬底线/软提示、稳定 code、固定排序、`skipped` 未覆盖项；报告不含时间戳，可深度比较。
+- `src/core/rendering/color-analysis.ts`：颜色归一化、HSL、中性色判定。
+- `src/features/editor/InspectorPanel.tsx`：右侧“设计体检”折叠面板；徽标显示硬底线/提示/未覆盖数量；点击问题定位到页与元素；只读，不发命令。
+- `src/features/pptx-export/export-pptx.ts`：`ExportReport.tasteLint` 汇总（硬底线、提示、非零 code）；lint 抛错时字段缺省，报告显示“体检未执行”。
+- `src/app/App.tsx`：导出报告标题行显示体检计数。
+- `src/styles.css`：体检面板样式；顺带删除文件末尾一条被截断的无效选择器（`ble .table-cell .icon-action`），它与上方规则重复且从未生效。
+- `docs/architecture/decisions/0076-deterministic-taste-lint.md`：体检的边界、阈值、误报防护与不持久化决策。
+
+### 验证
+
+- `src/core/design/taste-lint.test.ts`：18 项通过（规则、边界、确定性、误报防护）。
+- `src/core/design/deck-concept.test.ts`：8 项通过（两个预设、imagery 收敛、未知 preset 回退）。
+- `src/core/commands/concept-imagery.test.ts`：2 项通过（documentary 内容页主视觉、editorial 拒绝）。
+- `src/core/commands/visual-asset.test.ts`：19 项通过（含 `allowHeroOnContent`）。
+- `tools/design-preview/design-preview.test.ts`：7 项通过；十页夹具零发现；两个方向标题轴 0.07/0.04、强调线元素差 1；导出 `tasteLint` 为 `{hard:0,soft:0,codes:{}}`。
+- `src/features/pptx-export/export-pptx.test.ts`：8pt 正文导出成功，报告 `hard=1` 且 code 正确。
+- 全量：1121 通过、1 跳过（`PPTD_SKIP_VISUAL=1`）；类型检查、ESLint（0 error）、生产构建、`cargo fmt --check`、`cargo check` 通过。
+
+### 未完成
+
+- 未做应用内截图目视验证：面板结构与样式已通过构建，但本会话没有浏览器截图能力；需在 `npm run tauri dev` 中确认折叠、徽标、定位与窄面板换行。
+- 方向提案、两页预览、选择记录与 UI（P0-2/3/4/5）、样张选择器（P0-6）尚未开始。
+- ADR 0075 尚未创建；方向决策在实现前暂以本文与需求文档为准。
+
+### 已知偏差
+
+- `RHYTHM_REPEAT` 使用结构签名，而不是 `(layout, recipe)`：文档模型不持久化这两个设计字段，规则以元素类型与 `contentRef` 序列判断骨架。
+- 体检结果不持久化：确定性函数在打开项目与文档变化时重算，导出报告只保存当次快照。

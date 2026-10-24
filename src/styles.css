@@ -10240,6 +10240,109 @@ button {
 :root[data-theme="blue"] .block-table .table-cell .icon-action {
   color: #5f646d;
 }
-ble .table-cell .icon-action {
-  color: #5f646d;
+
+/* Deterministic design review ("体检"). Collapsed by default; the badges stay
+   visible so a hard finding is not hidden behind the fold. */
+.taste-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.taste-badge {
+  padding: 1px 7px;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 999px;
+  color: #8f939b;
+  font-size: 10px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.taste-badge.hard {
+  border-color: #6f3023;
+  background: rgba(211, 82, 48, 0.16);
+  color: #f0a58f;
+}
+.taste-badge.soft {
+  border-color: #5a4a2a;
+  background: rgba(214, 168, 75, 0.14);
+  color: #e0c27a;
+}
+.taste-badge.muted {
+  background: #232529;
+}
+.taste-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.taste-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: #8f939b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.taste-intro svg {
+  flex: none;
+  margin-top: 2px;
+}
+.taste-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.taste-issue {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 8px;
+  background: #1b1d21;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.taste-issue:hover {
+  border-color: #4b4e55;
+  background: #202227;
+}
+.taste-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #8f939b;
+}
+.taste-dot.hard {
+  background: #d35230;
+}
+.taste-dot.soft {
+  background: #d6a84b;
+}
+.taste-issue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.taste-issue-text strong {
+  color: #e9ebee;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.taste-issue-text small {
+  color: #8f939b;
+  font-size: 10px;
+  line-height: 1.4;
 }

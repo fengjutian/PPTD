@@ -1,6 +1,11 @@
 import { applyCommand } from "../../src/core/commands";
 import { createDocument } from "../../src/core/document-model";
-import { defaultEditorialConcept, resolveDeckConcept } from "../../src/core/design/deck-concept";
+import {
+  defaultDocumentaryConcept,
+  defaultEditorialConcept,
+  resolveDeckConcept,
+  type ConceptPresetId,
+} from "../../src/core/design/deck-concept";
 import type { AiSlideDesign, AiSlideDraft } from "../../src/core/commands";
 import type { CompositionFacts } from "../../src/core/commands/design-intent";
 import { encodePng, type PixelImage } from "../../src/core/rendering/png";
@@ -259,10 +264,17 @@ export const previewFacts: CompositionFacts[] = [
   },
 ];
 
-export function buildDesignPreviewDocument() {
+export interface DesignPreviewOptions {
+  /** Built-in theme preset; defaults to the editorial teal used before. */
+  themePresetId?: string;
+  /** Concept preset; defaults to editorial. */
+  conceptPresetId?: ConceptPresetId;
+}
+
+export function buildDesignPreviewDocument(options: DesignPreviewOptions = {}) {
   const document = createDocument();
   const concept = resolveDeckConcept({
-    concept: defaultEditorialConcept(),
+    concept: options.conceptPresetId === "documentary" ? defaultDocumentaryConcept() : defaultEditorialConcept(),
     pageFacts: previewFacts,
     pageCount: previewSlides.length,
     id: "design-preview",
@@ -273,7 +285,7 @@ export function buildDesignPreviewDocument() {
     slides: previewSlides,
     designs: previewDesigns,
     designConcept: concept,
-    themePresetId: "editorial-teal",
+    themePresetId: options.themePresetId ?? "editorial-teal",
     visualAssets: [
       {
         slideIndex: 9,

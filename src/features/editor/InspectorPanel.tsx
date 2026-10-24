@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ICON_LABELS, ICON_NAMES } from "./icon-options";
 import { IconGlyph } from "./IconView";
 import {
@@ -30,6 +30,7 @@ import {
   RotateCcw,
   SendToBack,
   Square,
+  Stethoscope,
   Strikethrough,
   Trash2,
   Type,
@@ -39,6 +40,7 @@ import {
 import {
   type ChartKind,
   type ContentBlock,
+  type ElementId,
   type Emu,
   type ImageCrop,
   type LineDirection,
@@ -55,6 +57,7 @@ import {
   textFragments,
 } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
+import { lintTaste, type TasteIssue } from "../../core/design/taste-lint";
 import {
   colorLuminance,
   contrastRatio,
@@ -141,8 +144,18 @@ export interface InspectorPanelViewProps {
  * than the window. The head of a group sticks to the top of the panel while
  * the group scrolls by, so the user always knows where the fields belong.
  */
-function InspectorSection({ title, tools, children }: { title: string; tools?: ReactNode; children: ReactNode }) {
-  const [open, setOpen] = useState(true);
+function InspectorSection({
+  title,
+  tools,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  tools?: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <section className={`inspector-section${open ? "" : " folded"}`}>
       <div className="section-head">
@@ -159,6 +172,79 @@ function InspectorSection({ title, tools, children }: { title: string; tools?: R
       </div>
       {open && <div className="section-body">{children}</div>}
     </section>
+  );
+}
+
+/**
+ * Deterministic design review, shown next to the properties of the page.
+ *
+ * Collapsed by default: it is a report, not a form. The badge still surfaces a
+ * hard finding so a page with unreadable copy does not pass unnoticed, and the
+ * panel never blocks or edits anything.
+ */
+const SKIPPED_LABELS: Readonly<Record<string, string>> = {
+  "template-artwork:color-whitespace": "模板底图的颜色与留白",
+  "full-bleed-artwork:color-whitespace": "整页图形的颜色与留白",
+  "typography:no-title": "无标题页",
+  "typography:no-body": "无正文页",
+};
+
+function TastePanel() {
+  const document = useEditorStore((state) => state.document);
+  const selectSlide = useEditorStore((state) => state.selectSlide);
+  const selectElements = useEditorStore((state) => state.selectElements);
+  const report = useMemo(() => lintTaste(document), [document]);
+  const hard = report.issues.filter((issue) => issue.severity === "hard").length;
+  const soft = report.issues.length - hard;
+
+  const jumpTo = (issue: TasteIssue) => {
+    selectSlide(issue.slideId as SlideId);
+    if (issue.elementIds.length > 0) selectElements(issue.elementIds as ElementId[]);
+  };
+
+  return (
+    <InspectorSection
+      title="设计体检"
+      defaultOpen={false}
+      tools={
+        <span className="taste-badges" aria-label="体检结果">
+          <span className={`taste-badge${hard > 0 ? " hard" : ""}`}>{hard} 硬底线</span>
+          <span className={`taste-badge${soft > 0 ? " soft" : ""}`}>{soft} 提示</span>
+          {report.skipped.length > 0 && <span className="taste-badge muted">{report.skipped.length} 未覆盖</span>}
+        </span>
+      }
+    >
+      <div className="taste-panel">
+        <p className="taste-intro">
+          <Stethoscope size={14} />
+          仅提示，不影响生成与导出；像素级问题由视觉评审负责。
+        </p>
+        {report.issues.length === 0 ? (
+          <p className="field-help">未发现问题。</p>
+        ) : (
+          <ul className="taste-issues">
+            {report.issues.map((issue, index) => (
+              <li key={`${issue.slideIndex}:${issue.code}:${index}`}>
+                <button type="button" className="taste-issue" onClick={() => jumpTo(issue)}>
+                  <span className={`taste-dot ${issue.severity}`} aria-hidden />
+                  <span className="taste-issue-text">
+                    <strong>{issue.message}</strong>
+                    <small>
+                      第 {issue.slideIndex + 1} 页 · {issue.code}
+                    </small>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {report.skipped.length > 0 && (
+          <p className="field-help">
+            未覆盖：{report.skipped.map((reason) => SKIPPED_LABELS[reason] ?? reason).join("、")}
+          </p>
+        )}
+      </div>
+    </InspectorSection>
   );
 }
 
@@ -1475,6 +1561,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
 
   return (
     <aside className="right-panel">
+      <TastePanel />
       {multiBounds ? (
         <MultiSelectionPanel
           slideId={slide.id}

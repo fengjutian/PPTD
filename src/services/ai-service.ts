@@ -297,11 +297,12 @@ export const slideBriefsSchema = z.object({ briefs: z.array(slideBriefSchema).mi
 export type SlideBrief = z.infer<typeof slideBriefSchema>;
 
 /**
- * The design direction the model proposes. P1 only exposes the editorial
- * preset; a value that has no renderer is not part of the enum.
+ * The design direction the model proposes. Only presets with a renderer are in
+ * the enum: a value the command layer cannot draw must fail validation, not be
+ * silently downgraded after the fact.
  */
 export const aiDeckConceptSchema = z.object({
-  preset: z.enum(["editorial"]),
+  preset: z.enum(["editorial", "documentary"]),
   name: z.string().trim().min(1).max(20),
   idea: z.string().trim().min(1).max(80),
   typeContrast: z.enum(["calm", "strong", "dramatic"]),

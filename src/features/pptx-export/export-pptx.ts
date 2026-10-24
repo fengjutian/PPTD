@@ -27,6 +27,7 @@ import { normalizePackagePartNames } from "./package-parts";
 import { patchImageCrops } from "./image-crop-xml";
 import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
+import { lintTaste } from "../../core/design/taste-lint";
 
 const inch = (value: number) => value / EMU_PER_INCH;
 const color = (value: string) => value.replace(/^#/, "");
@@ -36,6 +37,13 @@ const color = (value: string) => value.replace(/^#/, "");
  * the exporter stays typed.
  */
 const CUSTOM_GEOMETRY = "custGeom" as unknown as PptxGenJS.SHAPE_NAME;
+
+export interface ExportTasteSummary {
+  hard: number;
+  soft: number;
+  /** Non-zero findings by stable code. Absent means the lint did not run. */
+  codes: Record<string, number>;
+}
 
 export interface ExportReport {
   slideCount: number;
@@ -60,6 +68,11 @@ export interface ExportReport {
   nativeAnimationCount: number;
   /** Animations whose effect or target has no native representation. */
   nativeAnimationSkipped: number;
+  /**
+   * Deterministic taste findings at export time. Absent when the lint could not
+   * run; an empty `codes` with zero counts means it ran and found nothing.
+   */
+  tasteLint?: ExportTasteSummary;
   warnings: string[];
   issues: ExportIssue[];
   package: PptxPackageValidation;
@@ -533,6 +546,23 @@ export async function buildPptx(
     throw new Error(`EXPORT_PACKAGE_INVALID: ${packageValidation.issues.join("；")}`);
   }
 
+  // Taste findings are advisory (ADR 0015). A lint failure must never fail the
+  // export; if the pure function ever throws, the report stays silent instead of
+  // claiming a clean deck.
+  const tasteLint = (() => {
+    try {
+      const lint = lintTaste(document);
+      const codes = Object.fromEntries(Object.entries(lint.counts).filter(([, count]) => count > 0));
+      return {
+        hard: lint.issues.filter((issue) => issue.severity === "hard").length,
+        soft: lint.issues.filter((issue) => issue.severity === "soft").length,
+        codes,
+      };
+    } catch {
+      return undefined;
+    }
+  })();
+
   return {
     bytes,
     report: {
@@ -548,6 +578,7 @@ export async function buildPptx(
       nativeTransitionCount,
       nativeAnimationCount: animationResult.written,
       nativeAnimationSkipped: animationResult.skipped,
+      ...(tasteLint ? { tasteLint } : {}),
       warnings: [...issues.map((issue) => issue.message), ...animationWarnings],
       issues,
       package: packageValidation,

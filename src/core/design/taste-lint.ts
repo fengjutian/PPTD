@@ -126,7 +126,7 @@ const TERMINAL_PUNCTUATION = /[。！？；.!?;]$/;
 /** Font aliases that render the same family under a different name. */
 const FAMILY_ALIASES: Readonly<Record<string, string>> = {
   "microsoft yahei": "yahei",
-  "微软雅黑": "yahei",
+  微软雅黑: "yahei",
   simsun: "song",
   宋体: "song",
   simhei: "hei",
@@ -136,7 +136,10 @@ const FAMILY_ALIASES: Readonly<Record<string, string>> = {
 };
 
 function normalizedFamily(name: string): string {
-  const key = name.trim().toLowerCase().replace(/^["']|["']$/g, "");
+  const key = name
+    .trim()
+    .toLowerCase()
+    .replace(/^["']|["']$/g, "");
   return FAMILY_ALIASES[key] ?? key;
 }
 
@@ -145,7 +148,23 @@ function textElements(slide: Slide): TextElement[] {
 }
 
 function isBackgroundElement(element: SlideElement): boolean {
-  return element.type === "image" && (element.placement === "layout-background" || element.placement === "slide-background");
+  return (
+    element.type === "image" && (element.placement === "layout-background" || element.placement === "slide-background")
+  );
+}
+
+/**
+ * A shape or picture that fills the page is a deliberate surface, not content
+ * that happens to reach the edges. Whitespace and colour counts must not read it
+ * as a page crammed with elements.
+ */
+function hasFullBleedArtwork(slide: Slide, pageWidth: number, pageHeight: number): boolean {
+  return slide.elements.some(
+    (element) =>
+      (element.type === "image" || element.type === "shape") &&
+      element.frame.width >= pageWidth * 0.98 &&
+      element.frame.height >= pageHeight * 0.98,
+  );
 }
 
 function isFooter(element: TextElement, pageHeight: number): boolean {
@@ -176,12 +195,16 @@ function bodyOf(slide: Slide, title: TextElement | undefined, pageHeight: number
   const explicit = texts.filter((element) => element.contentRef === "body");
   if (explicit.length > 0) return explicit;
   return texts.filter(
-    (element) =>
-      element !== title && !isFooter(element, pageHeight) && element.text.trim().length >= 40,
+    (element) => element !== title && !isFooter(element, pageHeight) && element.text.trim().length >= 40,
   );
 }
 
-function labelsOf(slide: Slide, title: TextElement | undefined, body: TextElement[], pageHeight: number): TextElement[] {
+function labelsOf(
+  slide: Slide,
+  title: TextElement | undefined,
+  body: TextElement[],
+  pageHeight: number,
+): TextElement[] {
   return textElements(slide).filter((element) => {
     if (element === title || body.includes(element)) return false;
     if (isFooter(element, pageHeight)) return false;
@@ -199,7 +222,7 @@ function colorOf(value: string | undefined): string | undefined {
   return normalizeHexColor(trimmed);
 }
 
-function accentColors(slide: Slide): string[] {
+function accentColors(slide: Slide, pageWidth: number, pageHeight: number): string[] {
   const colors = new Set<string>();
   const add = (value: string | undefined) => {
     const color = colorOf(value);
@@ -210,6 +233,8 @@ function accentColors(slide: Slide): string[] {
       add(element.style.color);
       for (const run of element.runs ?? []) add(run.color);
     } else if (element.type === "shape") {
+      // A full-bleed panel is the page surface, not an accent.
+      if (element.frame.width >= pageWidth * 0.98 && element.frame.height >= pageHeight * 0.98) continue;
       add(element.style.fill);
       add(element.style.stroke);
     } else if (element.type === "line") {
@@ -315,7 +340,9 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
     const hasArtwork = slide.elements.some(
       (element) => element.type === "image" && element.placement === "layout-background",
     );
+    const fullBleed = hasFullBleedArtwork(slide, pageWidth, pageHeight);
     if (hasArtwork) skipped.add("template-artwork:color-whitespace");
+    else if (fullBleed) skipped.add("full-bleed-artwork:color-whitespace");
 
     const title = titleOf(slide);
     const body = bodyOf(slide, title, pageHeight);
@@ -374,7 +401,12 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
       }
     }
 
-    const families = new Set(textElements(slide).map((element) => normalizedFamily(element.style.fontFamily)));
+    // A one-glyph text is a quote mark or an icon, not a third typographic voice.
+    const families = new Set(
+      textElements(slide)
+        .filter((element) => element.text.trim().length > 1)
+        .map((element) => normalizedFamily(element.style.fontFamily)),
+    );
     if (families.size > maxFontFamilies) {
       report(
         "FONT_FAMILY_COUNT",
@@ -387,7 +419,7 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
       );
     }
 
-    const colors = accentColors(slide);
+    const colors = accentColors(slide, pageWidth, pageHeight);
     if (!hasArtwork && colors.length > maxAccentColors) {
       report(
         "COLOR_COUNT",
@@ -439,14 +471,17 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
       }
     }
 
-    const indexed = textElements(slide).find(
+    const indexNumbers = textElements(slide).filter(
       (element) =>
         INDEX_NUMBER_PATTERN.test(element.text.trim()) &&
         !isFooter(element, pageHeight) &&
         !element.contentBlockRef &&
         element.style.fontSizePt < 40,
     );
-    if (indexed && !hasSequenceBlock(slide) && !hasNumberedText(slide)) {
+    // One bare number is a decorative page marker. Several are an index the
+    // layout is actually using, which is a sequence the content shows.
+    if (indexNumbers.length === 1 && !hasSequenceBlock(slide) && !hasNumberedText(slide)) {
+      const indexed = indexNumbers[0]!;
       report(
         "DECORATION_INDEX_NUMBER",
         slideIndex,
@@ -472,10 +507,16 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
       }
     }
 
+    // Whitespace is judged on copy and pictures, not on panels, rules or edge
+    // bands: a cover made of two full-height colour panels is a composition, and
+    // its bounding box says nothing about how much air the page has.
     const painted = slide.elements.filter(
-      (element) => !isBackgroundElement(element) && !(element.type === "text" && isFooter(element, pageHeight)),
+      (element) =>
+        (element.type === "text" || element.type === "image" || element.type === "chart" || element.type === "table") &&
+        !isBackgroundElement(element) &&
+        !(element.type === "text" && isFooter(element, pageHeight)),
     );
-    if (!hasArtwork && painted.length > 0 && body.length > 0) {
+    if (!hasArtwork && !fullBleed && painted.length > 0 && body.length > 0) {
       let left = Number.POSITIVE_INFINITY;
       let top = Number.POSITIVE_INFINITY;
       let right = 0;
@@ -497,9 +538,7 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
           [],
           areaRatio < 0.12 ? "页面内容只占很小一块，留白不像构图" : "页面几乎被填满，没有留白",
           { widthRatio, heightRatio, areaRatio },
-          areaRatio < 0.12
-            ? "把内容放大或重新分布，让留白成为构图的一部分。"
-            : "删掉不承载信息的元素，留出呼吸空间。",
+          areaRatio < 0.12 ? "把内容放大或重新分布，让留白成为构图的一部分。" : "删掉不承载信息的元素，留出呼吸空间。",
         );
       }
     }

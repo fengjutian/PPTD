@@ -71,7 +71,7 @@ describe("AI structured outputs", () => {
     expect(checked.slides[0]!.checks).toEqual([{ blockIndex: 2, kind: "number", status: "unverified" }]);
   });
 
-  it("accepts only the editorial concept that P1 can render", () => {
+  it("accepts only the concept presets the renderer implements", () => {
     const concept = aiDeckConceptSchema.parse({
       preset: "editorial",
       name: "编辑式",
@@ -81,6 +81,15 @@ describe("AI structured outputs", () => {
       rationale: "内容以判断和要点为主。",
     });
     expect(concept.preset).toBe("editorial");
+    expect(
+      aiDeckConceptSchema.parse({
+        ...concept,
+        preset: "documentary",
+        name: "纪实全幅",
+        typeContrast: "calm",
+        imagery: "hero",
+      }).preset,
+    ).toBe("documentary");
     expect(() =>
       aiDeckConceptSchema.parse({
         ...concept,

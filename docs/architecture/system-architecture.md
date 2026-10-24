@@ -28,20 +28,21 @@ flowchart LR
 
 ## 3. 模块职责
 
-| 模块                       | 职责                             | 明确边界               |
-| -------------------------- | -------------------------------- | ---------------------- |
-| `core/document-model`      | 实体、值对象、Schema、迁移       | 不访问文件、网络和 UI  |
-| `core/commands`            | 文档命令、事务、不变量、撤销补丁 | 不直接渲染             |
-| `core/validation`          | 结构、内容状态、溢出和导出前校验 | 不修改文档             |
-| `core/rendering`           | 坐标、几何、文本测量接口         | 不保存状态             |
-| `features/editor`          | 选择、变换、文本编辑、页面操作   | 通过命令修改模型       |
-| `features/project`         | 新建、打开、保存、恢复、最近项目 | 通过持久化端口访问数据 |
-| `features/pptx-export`     | 导出计划及对象映射               | 不承担 PPTX 导入       |
-| `features/template-import` | OOXML 解析和兼容报告             | V0.2 启用              |
-| `features/ai-content`      | 内容提案、审核和内容版本         | V0.4 启用              |
-| `features/ai-design`       | 设计提案和版本冲突检查           | 禁止直接修改内容字段   |
-| `features/scene3d`         | 场景、预览和栅格化导出           | V0.5 启用              |
-| `src-tauri`                | 系统窗口、受控文件访问、原子写入 | 不承载前端领域规则     |
+| 模块                       | 职责                                                            | 明确边界               |
+| -------------------------- | --------------------------------------------------------------- | ---------------------- |
+| `core/document-model`      | 实体、值对象、Schema、迁移                                      | 不访问文件、网络和 UI  |
+| `core/commands`            | 文档命令、事务、不变量、撤销补丁                                | 不直接渲染             |
+| `core/validation`          | 结构、内容状态、溢出和导出前校验                                | 不修改文档             |
+| `core/design/taste-lint`   | 确定性设计体检：字号、字阶、字体/色彩数量、模板装饰、节奏与留白 | 只读、不阻断、不持久化 |
+| `core/rendering`           | 坐标、几何、文本测量接口                                        | 不保存状态             |
+| `features/editor`          | 选择、变换、文本编辑、页面操作                                  | 通过命令修改模型       |
+| `features/project`         | 新建、打开、保存、恢复、最近项目                                | 通过持久化端口访问数据 |
+| `features/pptx-export`     | 导出计划及对象映射                                              | 不承担 PPTX 导入       |
+| `features/template-import` | OOXML 解析和兼容报告                                            | V0.2 启用              |
+| `features/ai-content`      | 内容提案、审核和内容版本                                        | V0.4 启用              |
+| `features/ai-design`       | 设计提案和版本冲突检查                                          | 禁止直接修改内容字段   |
+| `features/scene3d`         | 场景、预览和栅格化导出                                          | V0.5 启用              |
+| `src-tauri`                | 系统窗口、受控文件访问、原子写入                                | 不承载前端领域规则     |
 
 ## 4. 运行时数据流
 

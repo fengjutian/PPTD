@@ -49,6 +49,29 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("reports taste findings without failing the export", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-text", slideId: slide.id });
+    const body = slide.elements[slide.elements.length - 1]!;
+    applyCommand(document, {
+      type: "edit-text",
+      slideId: slide.id,
+      elementId: body.id,
+      text: "这是一段用于触发正文字号下限的测试文本，长度需要超过四十个字符，否则它会被当成注释而不是正文。",
+    });
+    applyCommand(document, {
+      type: "set-text-style",
+      slideId: slide.id,
+      elementId: body.id,
+      style: { fontSizePt: 8 },
+    });
+    const result = await buildPptx(document);
+    expect(result.report.tasteLint?.hard).toBe(1);
+    expect(result.report.tasteLint?.codes.BODY_TEXT_TOO_SMALL).toBe(1);
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("writes a changed page size into the presentation part", async () => {
     const document = createDocument();
     applyCommand(document, { type: "set-page-size", pageSize: pageSizeFromInches(10, 7.5)! });

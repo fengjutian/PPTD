@@ -6329,6 +6329,9 @@ export function App() {
                     {exportReport.nativeTransitionCount > 0
                       ? ` · ${exportReport.nativeTransitionCount} 页原生切换`
                       : ""}
+                    {exportReport.tasteLint
+                      ? ` · 体检 ${exportReport.tasteLint.hard} 硬底线 / ${exportReport.tasteLint.soft} 提示`
+                      : " · 体检未执行"}
                   </p>
                 </div>
               </div>

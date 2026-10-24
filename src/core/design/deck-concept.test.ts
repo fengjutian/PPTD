@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CompositionFacts } from "../commands/design-intent";
 import {
   CONCEPT_PRESET_IDS,
+  defaultDocumentaryConcept,
   defaultEditorialConcept,
   planConceptRhythm,
   resolveDeckConcept,
@@ -53,15 +54,30 @@ describe("deck concept", () => {
     expect(resolved.conflicts).toEqual([]);
   });
 
+  it("resolves the documentary preset with its own surface and imagery", () => {
+    const resolved = resolveDeckConcept({
+      concept: defaultDocumentaryConcept(),
+      pageFacts: [facts()],
+      pageCount: 1,
+      id: "concept-doc",
+    });
+    expect(resolved.concept.preset).toBe("documentary");
+    expect(resolved.concept.surface).toBe("full-bleed");
+    expect(resolved.concept.motif).toBe("documentary");
+    expect(resolved.concept.imagery).toBe("hero");
+    expect(resolved.conflicts).toEqual([]);
+  });
+
   it("clamps an imagery intent the preset cannot render", () => {
     const resolved = resolveDeckConcept({
-      concept: { ...defaultEditorialConcept(), imagery: "hero" },
+      concept: { ...defaultDocumentaryConcept(), imagery: "none" },
       pageFacts: [facts()],
       pageCount: 1,
       id: "concept-2",
     });
-    expect(resolved.concept.imagery).toBe("none");
-    expect(resolved.conflicts[0]?.intent).toBe("imagery=hero");
+    expect(resolved.concept.imagery).toBe("hero");
+    expect(resolved.conflicts[0]?.intent).toBe("imagery=none");
+    expect(resolved.conflicts[0]?.reason).toContain("hero");
   });
 
   it("falls back to editorial for an unknown preset", () => {
@@ -102,7 +118,7 @@ describe("deck concept", () => {
     ).toThrow("AI_CONCEPT_RHYTHM_INVALID");
   });
 
-  it("keeps the P1 preset list honest", () => {
-    expect(CONCEPT_PRESET_IDS).toEqual(["editorial"]);
+  it("keeps the preset list in step with the renderer", () => {
+    expect(CONCEPT_PRESET_IDS).toEqual(["editorial", "documentary"]);
   });
 });
