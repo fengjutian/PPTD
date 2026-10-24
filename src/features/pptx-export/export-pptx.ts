@@ -69,6 +69,8 @@ export interface ExportReport {
   nativeAnimationCount: number;
   /** Animations whose effect or target has no native representation. */
   nativeAnimationSkipped: number;
+  /** Source/licence status of the pictures in the deck. */
+  assetProvenance: { verified: number; pending: number; user: number; missing: number };
   /**
    * Deterministic taste findings at export time. Absent when the lint could not
    * run; an empty `codes` with zero counts means it ran and found nothing.
@@ -93,6 +95,8 @@ export interface ExportOptions {
    * result over; the worker then skips the duplicate pass.
    */
   prevalidatedIssues?: ExportIssue[];
+  /** Run the deterministic taste lint. Disabled by the user setting. */
+  tasteLint?: boolean;
 }
 
 /**
@@ -553,23 +557,35 @@ export async function buildPptx(
   }
   // Read the written package back, independently of the mapping above.
   const parity = verifyExportedPptx(bytes, document);
+  const assetProvenance = { verified: 0, pending: 0, user: 0, missing: 0 };
+  for (const slide of document.slides) {
+    for (const element of slide.elements) {
+      if (element.type !== "image" || element.placement === "layout-background") continue;
+      const verification = element.provenance?.verification;
+      if (verification) assetProvenance[verification] += 1;
+      else assetProvenance.missing += 1;
+    }
+  }
 
   // Taste findings are advisory (ADR 0015). A lint failure must never fail the
   // export; if the pure function ever throws, the report stays silent instead of
   // claiming a clean deck.
-  const tasteLint = (() => {
-    try {
-      const lint = lintTaste(document);
-      const codes = Object.fromEntries(Object.entries(lint.counts).filter(([, count]) => count > 0));
-      return {
-        hard: lint.issues.filter((issue) => issue.severity === "hard").length,
-        soft: lint.issues.filter((issue) => issue.severity === "soft").length,
-        codes,
-      };
-    } catch {
-      return undefined;
-    }
-  })();
+  const tasteLint =
+    options.tasteLint === false
+      ? undefined
+      : (() => {
+          try {
+            const lint = lintTaste(document);
+            const codes = Object.fromEntries(Object.entries(lint.counts).filter(([, count]) => count > 0));
+            return {
+              hard: lint.issues.filter((issue) => issue.severity === "hard").length,
+              soft: lint.issues.filter((issue) => issue.severity === "soft").length,
+              codes,
+            };
+          } catch {
+            return undefined;
+          }
+        })();
 
   return {
     bytes,
@@ -586,6 +602,7 @@ export async function buildPptx(
       nativeTransitionCount,
       nativeAnimationCount: animationResult.written,
       nativeAnimationSkipped: animationResult.skipped,
+      assetProvenance,
       ...(tasteLint ? { tasteLint } : {}),
       parity,
       warnings: [...issues.map((issue) => issue.message), ...animationWarnings],

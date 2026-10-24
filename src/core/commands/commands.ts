@@ -1,4 +1,5 @@
 import type {
+  AssetProvenance,
   BuiltinIconName,
   ChartElementStyle,
   ChartKind,
@@ -35,6 +36,7 @@ import {
   createSlide,
   diffContentVersion,
   emu,
+  hashString,
   iconForText,
   inches,
   MAX_PAGE_SIZE_IN,
@@ -91,6 +93,7 @@ import { findThemePreset } from "../design/theme-presets";
 import { deriveDesignTokens } from "../design/design-tokens";
 import { CONCEPT_PRESET_IDS, type DeckConcept } from "../design/deck-concept";
 import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
+import { resolveChartKind } from "../design/data-relation";
 import { compileDesignPlan } from "../layout/design-compiler";
 import { consumptionProblem, selectRecipe } from "../layout/recipes/plan";
 import type { RecipeContext } from "../layout/recipes/types";
@@ -877,6 +880,12 @@ export type DocumentCommand =
   | { type: "set-icon-style"; slideId: SlideId; elementId: ElementId; style: Partial<IconElementStyle> }
   | { type: "set-icon-name"; slideId: SlideId; elementId: ElementId; name: BuiltinIconName }
   | { type: "set-image-alt-text"; slideId: SlideId; elementId: ElementId; altText: string }
+  | {
+      type: "set-image-provenance";
+      slideId: SlideId;
+      elementId: ElementId;
+      provenance: AssetProvenance | null;
+    }
   | { type: "set-image-crop"; slideId: SlideId; elementId: ElementId; crop: ImageCrop | null }
   | { type: "edit-text"; slideId: SlideId; elementId: ElementId; text: string }
   | { type: "replace-text-edits"; edits: TextReplaceEdit[] }
@@ -2898,8 +2907,14 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         const sameUnit =
           chartMetrics.length > 0 && chartMetrics.every((metric) => metric.unit === chartMetrics[0]!.unit);
         if (chartMetrics.length >= 2 && sameUnit) {
-          // A page with many categories reads better with horizontal bars.
-          const kind = chartMetrics.length > 4 ? "bar" : "column";
+          // The relation decides first: a trend must not be drawn as a pie just
+          // because the model asked for one. Without a relation, the legacy
+          // count-based choice is kept.
+          const kind = resolveChartKind({
+            relation: design.designPlan?.chart?.relation,
+            requestedKind: design.designPlan?.chart?.kind,
+            pointCount: chartMetrics.length,
+          });
           const chartFrame = frame(
             contentBox.x,
             contentBox.y + contentBox.height * 0.06,
@@ -5130,6 +5145,32 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (element.type !== "image") throw new Error("ELEMENT_NOT_IMAGE");
     if (command.altText.length > 500) throw new Error("INVALID_ALT_TEXT");
     element.altText = command.altText;
+    return;
+  }
+  if (command.type === "set-image-provenance") {
+    if (element.type !== "image") throw new Error("ELEMENT_NOT_IMAGE");
+    if (command.provenance === null) {
+      delete element.provenance;
+      return;
+    }
+    const provenance = command.provenance;
+    const sourceUrl = provenance.sourceUrl?.trim();
+    const license = provenance.license?.trim();
+    if (sourceUrl && (sourceUrl.length > 2048 || !/^https?:\/\//i.test(sourceUrl))) {
+      throw new Error("IMAGE_PROVENANCE_URL_INVALID");
+    }
+    if (license && license.length > 200) throw new Error("IMAGE_PROVENANCE_LICENSE_INVALID");
+    if (provenance.verification === "verified" && (!sourceUrl || !license)) {
+      throw new Error("IMAGE_PROVENANCE_INCOMPLETE");
+    }
+    element.provenance = {
+      verification: provenance.verification,
+      ...(sourceUrl ? { sourceUrl } : {}),
+      ...(license ? { license } : {}),
+      checkedAt: provenance.checkedAt ?? new Date().toISOString(),
+      // The hash is over the bytes actually embedded, not the URL.
+      contentHash: hashString(element.source.dataUrl),
+    };
     return;
   }
   if (command.type === "set-image-crop") {

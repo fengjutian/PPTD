@@ -21,6 +21,8 @@ export interface StoredAppSettings {
   designDirectionGate?: boolean;
   /** 是否允许在本机保存设计记忆（外观指纹与偏好原话）。缺省开启。 */
   designMemoryEnabled?: boolean;
+  /** 是否运行确定性设计体检。缺省开启；关闭后不显示、不写导出报告。 */
+  tasteLintEnabled?: boolean;
 }
 
 /** One local design-memory row. The payload never carries reviewed copy. */

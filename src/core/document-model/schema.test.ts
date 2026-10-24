@@ -18,6 +18,7 @@ import versionSeventeenFixture from "./__fixtures__/v17-document.json";
 import versionEighteenFixture from "./__fixtures__/v18-document.json";
 import versionNineteenFixture from "./__fixtures__/v19-document.json";
 import versionTwentyFixture from "./__fixtures__/v20-document.json";
+import versionTwentyOneFixture from "./__fixtures__/v21-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
@@ -212,6 +213,22 @@ describe("presentation document schema", () => {
     expect(parsed.designDirections?.[0]?.selectedBy).toBe("user");
     expect(parsed.designDirections?.[0]?.proposals[1]?.preset).toBe("documentary");
     expect(parsed.designDirections?.[0]?.proposals).toHaveLength(2);
+  });
+
+  it("keeps image provenance from a version 21 fixture", () => {
+    const parsed = parsePresentationDocument(versionTwentyOneFixture);
+    const image = parsed.slides[0]!.elements.find((element) => element.type === "image");
+    expect(image?.type === "image" ? image.provenance : undefined).toMatchObject({
+      verification: "verified",
+      license: "CC BY 4.0",
+      sourceUrl: "https://example.com/photo",
+    });
+  });
+
+  it("migrates a version 20 fixture without inventing provenance", () => {
+    const migrated = parsePresentationDocument(versionTwentyFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.slides[0]!.elements.some((element) => element.type === "image")).toBe(false);
   });
 
   it("migrates a version 19 fixture without inventing a direction", () => {

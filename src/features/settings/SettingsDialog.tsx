@@ -279,6 +279,17 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
               <em>{t("settings.model.designMemoryHelp")}</em>
             </span>
           </label>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={settings.tasteLintEnabled}
+              onChange={(event) => setSettings({ ...settings, tasteLintEnabled: event.target.checked })}
+            />
+            <span>
+              <strong>{t("settings.model.tasteLint")}</strong>
+              <em>{t("settings.model.tasteLintHelp")}</em>
+            </span>
+          </label>
           <div className="settings-memory">
             <span>
               {t("settings.memory.count", {

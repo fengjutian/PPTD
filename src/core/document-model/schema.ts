@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 20 as const;
+export const CURRENT_SCHEMA_VERSION = 21 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -126,6 +126,20 @@ const iconElement = base.extend({
   }),
 });
 
+const assetProvenanceSchema = z
+  .object({
+    verification: z.enum(["verified", "pending", "user"]),
+    sourceUrl: z.string().max(2048).optional(),
+    license: z.string().max(200).optional(),
+    checkedAt: z.string().max(64).optional(),
+    contentHash: z.string().max(64).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.verification === "verified" && (!value.sourceUrl?.trim() || !value.license?.trim())) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "IMAGE_PROVENANCE_INCOMPLETE" });
+    }
+  });
+
 const imageElement = base.extend({
   type: z.literal("image"),
   source: z.object({
@@ -145,6 +159,7 @@ const imageElement = base.extend({
   }),
   altText: z.string().max(500),
   crop: imageCropSchema.optional(),
+  provenance: assetProvenanceSchema.optional(),
   placement: z.enum(["content", "layout-background", "slide-background"]).optional(),
 });
 
@@ -589,6 +604,11 @@ const versionEighteenDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentyDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(20) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionNineteenDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(19) })
   .superRefine(validateUniqueIds)
@@ -739,6 +759,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // optional: an older document keeps every page and simply has no recorded
   // direction, so the next generation asks again instead of guessing.
   19: (document) => ({ ...versionNineteenDocumentSchema.parse(document), schemaVersion: 20 }),
+  // Version 21 adds the source and licence of a picture. The field is optional:
+  // imported and older pictures keep no provenance and are reported as such.
+  20: (document) => ({ ...versionTwentyDocumentSchema.parse(document), schemaVersion: 21 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

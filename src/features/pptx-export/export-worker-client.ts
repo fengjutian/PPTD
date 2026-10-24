@@ -64,13 +64,14 @@ function failWorker(message: string): void {
 export function buildPptxInWorker(
   document: PresentationDocument,
   prevalidatedIssues: ExportIssue[],
+  options: { tasteLint?: boolean } = {},
 ): { promise: Promise<ExportWorkerResult>; cancel: () => void } {
   const currentWorker = ensureWorker();
   const id = nextId++;
   const promise = new Promise<ExportWorkerResult>((resolve, reject) => {
     pending.set(id, { resolve, reject });
   });
-  currentWorker.postMessage({ type: "build", id, document, prevalidatedIssues });
+  currentWorker.postMessage({ type: "build", id, document, prevalidatedIssues, tasteLint: options.tasteLint });
   return {
     promise,
     cancel: () => {

@@ -4155,6 +4155,40 @@ describe("document commands", () => {
     );
   });
 
+  it("lets the data relation override an incompatible chart type", () => {
+    const source = createDocument();
+    const content = {
+      title: "季度趋势",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        { type: "metric" as const, label: "第一季度", value: "38" },
+        { type: "metric" as const, label: "第二季度", value: "52" },
+        { type: "metric" as const, label: "第三季度", value: "61" },
+      ],
+    };
+    const design = {
+      layout: "title-body" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+      designPlan: {
+        role: "claim" as const,
+        composition: { primitive: "stack" as const },
+        density: "normal" as const,
+        templatePolicy: "use" as const,
+        // The model asked for a pie, but the page is about change over time.
+        chart: { kind: "pie" as const, relation: "change" as const },
+      },
+    };
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "apply-ai-designed-draft", title: "标题", slides: [content], designs: [design] }),
+    );
+    const chart = result.slides[0]!.elements.find((element) => element.type === "chart");
+    expect(chart?.type === "chart" && chart.kind).toBe("line");
+  });
+
   it("keeps the stat cards when the metrics do not share one unit", () => {
     const source = createDocument();
     const content = {

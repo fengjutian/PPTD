@@ -1,3 +1,5 @@
+import type { ChartKind } from "../document-model";
+import type { DataRelation } from "./data-relation";
 import type { RecipeId } from "./deck-concept";
 
 /**
@@ -40,7 +42,7 @@ export interface PageDesignPlan {
     brief?: string;
   };
   /** Optional chart form when the page's focal object is a chart. */
-  chart?: { kind: "column" | "bar" | "line" | "pie" };
+  chart?: { kind: ChartKind; relation?: DataRelation };
   /**
    * Character ranges in reviewed blocks that should carry emphasis. The
    * compiler may render these as bold runs; it must not change the text.

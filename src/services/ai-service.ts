@@ -327,6 +327,15 @@ export const aiDeckDirectionsSchema = z
       });
     }
   });
+
+/**
+ * Bumped whenever the direction prompt or its output contract changes.
+ *
+ * The prompt regression fixtures pin this string; a prompt edit without a
+ * version bump fails the regression suite instead of silently invalidating
+ * recorded model outputs.
+ */
+export const DESIGN_DIRECTIONS_PROMPT_VERSION = "design-directions-v1";
 export type AiDeckConceptOutput = z.infer<typeof aiDeckConceptSchema>;
 
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
@@ -410,7 +419,13 @@ const pageDesignPlanSchema = z.object({
       brief: z.string().max(600).optional(),
     })
     .optional(),
-  chart: z.object({ kind: z.enum(["column", "bar", "line", "pie"]) }).optional(),
+  chart: z
+    .object({
+      kind: z.enum(["column", "bar", "line", "pie"]),
+      /** The data relation the page is arguing, before the chart type. */
+      relation: z.enum(["proportion", "change", "composition", "comparison", "magnitude"]).optional(),
+    })
+    .optional(),
   emphasis: z
     .array(
       z.object({

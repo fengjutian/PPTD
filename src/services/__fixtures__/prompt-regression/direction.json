@@ -1,0 +1,77 @@
+{
+  "promptVersion": "design-directions-v1",
+  "cases": [
+    {
+      "name": "editorial-and-documentary",
+      "expect": "accepted",
+      "output": {
+        "directions": [
+          {
+            "preset": "editorial",
+            "name": "编辑式年报",
+            "idea": "用细线和大字号把结论排成编辑部版面。",
+            "typeContrast": "strong",
+            "imagery": "none",
+            "rationale": "内容以判断和要点为主，适合编号栏和留白。"
+          },
+          {
+            "preset": "documentary",
+            "name": "纪实全幅",
+            "idea": "让真实图片占住页面，文字退到边缘。",
+            "typeContrast": "calm",
+            "imagery": "side",
+            "rationale": "内容有现场照片，图片比文字更能说明问题。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "duplicate-preset",
+      "expect": "rejected",
+      "output": {
+        "directions": [
+          {
+            "preset": "editorial",
+            "name": "编辑式",
+            "idea": "细线、编号栏与留白。",
+            "typeContrast": "strong",
+            "imagery": "none",
+            "rationale": "文字为主。"
+          },
+          {
+            "preset": "editorial",
+            "name": "另一种编辑式",
+            "idea": "还是细线，只换了配色。",
+            "typeContrast": "strong",
+            "imagery": "side",
+            "rationale": "只换配色不算两个方向。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown-imagery",
+      "expect": "rejected",
+      "output": {
+        "directions": [
+          {
+            "preset": "editorial",
+            "name": "编辑式",
+            "idea": "细线、编号栏与留白。",
+            "typeContrast": "strong",
+            "imagery": "cards",
+            "rationale": "渲染器没有 cards 图像策略。"
+          },
+          {
+            "preset": "documentary",
+            "name": "纪实全幅",
+            "idea": "图片占住页面。",
+            "typeContrast": "calm",
+            "imagery": "side",
+            "rationale": "有现场照片。"
+          }
+        ]
+      }
+    }
+  ]
+}

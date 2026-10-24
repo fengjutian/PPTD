@@ -36,6 +36,9 @@ const zh = {
   "settings.model.designMemory": "保存本机设计记忆",
   "settings.model.designMemoryHelp":
     "只保存配色、字体、方向、页数和你在方向选择时写下的偏好原话；不保存正文、备注、图片或模型响应。用于下次方向提案时避免重复。",
+  "settings.model.tasteLint": "运行设计体检",
+  "settings.model.tasteLintHelp":
+    "在右侧属性面板检查正文字号、字阶、字体与色彩数量、连续同骨架等确定性项，并在导出报告中记录数量。只提示，不阻断生成或导出。",
   "settings.memory.count": "已记录 {decks} 个外观、{preferences} 条偏好",
   "settings.memory.clear": "清除设计记忆",
   "settings.model.apiBaseUrl": "API 地址",
@@ -129,6 +132,9 @@ const en: Record<UiMessageKey, string> = {
   "settings.model.designMemory": "Save design memory on this computer",
   "settings.model.designMemoryHelp":
     "Stores only palette, fonts, direction, page count and the taste notes you type while choosing a direction. It never stores copy, notes, images or model responses. Used to avoid repeating a look in the next proposal.",
+  "settings.model.tasteLint": "Run the design health check",
+  "settings.model.tasteLintHelp":
+    "Checks body size, type scale, font and colour counts, repeated skeletons and other deterministic items in the inspector, and records counts in the export report. Findings never block generation or export.",
   "settings.memory.count": "{decks} looks and {preferences} preferences saved",
   "settings.memory.clear": "Clear design memory",
   "settings.model.apiBaseUrl": "API endpoint",

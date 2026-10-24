@@ -339,10 +339,11 @@ interface TextFieldProps {
   value: string;
   maxLength?: number;
   disabled?: boolean;
+  placeholder?: string;
   onCommit: (value: string) => void;
 }
 
-export function TextField({ label, value, maxLength, disabled, onCommit }: TextFieldProps) {
+export function TextField({ label, value, maxLength, disabled, placeholder, onCommit }: TextFieldProps) {
   const [draft, setDraft] = useState(value);
   const [dirty, setDirty] = useState(false);
   const draftRef = useRef(draft);
@@ -361,6 +362,7 @@ export function TextField({ label, value, maxLength, disabled, onCommit }: TextF
           value={draft}
           maxLength={maxLength}
           disabled={disabled}
+          placeholder={placeholder}
           onChange={(event) => {
             draftRef.current = event.target.value;
             setDraft(event.target.value);
@@ -397,7 +399,15 @@ interface TextAreaFieldProps {
  * unrelated change cannot move the caret mid-sentence. Only leaving the field
  * commits, which keeps one long note from becoming dozens of undo steps.
  */
-export function TextAreaField({ label, value, placeholder, rows = 4, maxLength, disabled, onCommit }: TextAreaFieldProps) {
+export function TextAreaField({
+  label,
+  value,
+  placeholder,
+  rows = 4,
+  maxLength,
+  disabled,
+  onCommit,
+}: TextAreaFieldProps) {
   const [draft, setDraft] = useState(value);
   const [dirty, setDirty] = useState(false);
   const draftRef = useRef(draft);

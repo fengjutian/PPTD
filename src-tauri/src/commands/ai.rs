@@ -543,12 +543,13 @@ pub async fn review_presentation_visuals(
 - themeFitScore：视觉语言与主题、受众和场景的匹配程度；企业科技风用于古典文学等明显错位必须扣分。
 - visualFocusScore：整册各页是否普遍具有明确的第一视觉入口。
 - distinctivenessScore：整册是否有可辨认的设计想法，而不是等权卡片/同一骨架重复；整册越像模板，分数越低。
+- conceptScore：能否用一句话说出整册的 idea，以及把客户名或标题换掉后是否仍然成立。只换配色或模板不算 idea；概念低于 60 时系统会封顶总分，不要用执行分掩盖空概念。
 - overallScore：整套视觉完成度，不是各项简单平均。
 
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。slideGuidance 必须为空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"distinctivenessScore":78,"issues":[],"slideGuidance":[],"slideScores":[]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"distinctivenessScore":78,"conceptScore":76,"issues":[],"slideGuidance":[],"slideScores":[]}}
 
 【本次整套视觉目标】
 {goal}
@@ -613,6 +614,7 @@ pub async fn review_presentation_visuals(
 - themeFitScore：视觉语言是否匹配演示主题、受众和场景。
 - visualFocusScore：每页是否有明确的第一视觉入口，避免所有元素同权。
 - distinctivenessScore：是否有可辨认的设计想法（编辑式编号栏、纵向流程轨、数据故事、非对称分栏等），而不是等权卡片或同一骨架重复；等权卡片阵列、没有第一视觉入口时不得高于 69。
+- conceptScore：能否用一句话说出这一页的 idea，以及换一个主题或客户名后是否仍然成立。只换配色不算 idea；概念低于 60 时系统会封顶总分，不要用执行分掩盖空概念。
 - overallScore：综合视觉完成度，不是各项简单平均；严重遮挡、正文越界或无法阅读时不得高于 59。
 评分锚点：90–100 可直接交付；80–89 基本专业但有少量明显问题；70–79 可读但设计感不足；60–69 存在多项结构问题；0–59 有严重可读性或布局错误。
 单页只有一个文本块、且内容区保留超过 40% 连续空白时，overallScore 不得高于 69，并必须报告 excessive-empty-space。
@@ -633,13 +635,13 @@ pub async fn review_presentation_visuals(
 
 【slideScores 规则】
 1. 每个被检查页面必须恰好输出一条 slideScores，slideIndex 与 slideGuidance 一致。
-2. overallScore、hierarchyScore、alignmentScore、readabilityScore、visualFocusScore、distinctivenessScore 都是该页自己的分数，不是整批平均，也不是整套分数。
+2. overallScore、hierarchyScore、alignmentScore、readabilityScore、visualFocusScore、distinctivenessScore、conceptScore 都是该页自己的分数，不是整批平均，也不是整套分数。
 3. 一致性是整套指标，不放进 slideScores；不要输出 consistencyScore。
 
 【输出协议】
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释、前言或额外字段。所有被检查页面的索引必须来自 {indexes}。elementIds 无法从图片确认时返回空数组。
 输出结构：
-{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"distinctivenessScore":78,"issues":[{{"slideIndex":0,"severity":"warning","issue":"generic-layout","elementIds":[],"suggestion":"这一页是等权卡片，换成编号栏或非对称分栏，让结论成为第一视觉入口"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}],"slideScores":[{{"slideIndex":0,"overallScore":85,"hierarchyScore":84,"alignmentScore":90,"readabilityScore":88,"visualFocusScore":84,"distinctivenessScore":78}}]}}
+{{"overallScore":85,"hierarchyScore":85,"alignmentScore":90,"readabilityScore":88,"consistencyScore":85,"repetitionScore":82,"themeFitScore":90,"visualFocusScore":84,"distinctivenessScore":78,"conceptScore":76,"issues":[{{"slideIndex":0,"severity":"warning","issue":"generic-layout","elementIds":[],"suggestion":"这一页是等权卡片，换成编号栏或非对称分栏，让结论成为第一视觉入口"}}],"slideGuidance":[{{"slideIndex":0,"safeRegion":{{"x":0.28,"y":0.16,"width":0.64,"height":0.70}},"logoRegions":[{{"x":0.03,"y":0.03,"width":0.18,"height":0.12}}],"busyRegions":[{{"x":0.00,"y":0.72,"width":1.00,"height":0.28}}],"focalPoint":{{"x":0.18,"y":0.45}},"recommendedLayout":"title-body"}}],"slideScores":[{{"slideIndex":0,"overallScore":85,"hierarchyScore":84,"alignmentScore":90,"readabilityScore":88,"visualFocusScore":84,"distinctivenessScore":78,"conceptScore":76}}]}}
 
 【本次整套视觉目标】
 {goal}
@@ -1696,7 +1698,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - templatePolicy：use 表示填模板占位；takeover 表示保留模板页眉/Logo/页脚，但用干净内容面覆盖正文卡片后重新构图；ignore 暂不使用。
 - recipe 可选，必须是已实现配方；designPlan 存在时由编译器决定几何，recipe 只是首选。
 - emphasis 只标 blockId 和字符范围，不得改文案；focal 只描述第一视觉入口，不输出坐标。
-- 指标页需要图表时给 chart.kind：column、bar、line、pie；时间趋势用 line，占比用 pie，类别比较用 column/bar。数据仍来自 metric 内容块，不得在 designPlan 里写数值。
+- 数据页先判断 chart.relation：proportion（占整体的份额）、change（随时间变化）、composition（由哪些部分组成）、comparison（类别之间对比）、magnitude（量级大小）；再给 chart.kind：proportion/composition 用 pie（≤5 类）或 bar，change 用 line，comparison/magnitude 用 column/bar。kind 与 relation 不匹配时编译器会改用关系对应的图型；数据仍来自 metric 内容块，不得在 designPlan 里写数值。
 - 只有正文页使用 takeover；封面、章节、引文页不要 takeover。
 示例：
 {"role":"claim","composition":{"primitive":"split","ratio":0.38},"density":"normal","templatePolicy":"takeover","recipe":"asymmetric-split"}

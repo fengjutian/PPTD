@@ -41,6 +41,14 @@ export const visualReviewSchema = z.object({
    */
   distinctivenessScore: z.number().min(0).max(100).optional(),
   /**
+   * Whether the page has an idea a viewer could state in one sentence, and
+   * whether that idea survives a change of client or topic. Low concept scores
+   * cap the total; execution cannot rescue an empty concept.
+   */
+  conceptScore: z.number().min(0).max(100).optional(),
+  /** True when the concept score capped the total. */
+  conceptCapApplied: z.boolean().optional(),
+  /**
    * 逐页评分。逐页批次每个被检查页应有一条；整册总览不产生逐页评分。
    *
    * 可选：老模型或旧测试桩可能只给批次级分数，缺省时下游退回批次级口径。
@@ -56,6 +64,7 @@ export const visualReviewSchema = z.object({
         readabilityScore: z.number().min(0).max(100),
         visualFocusScore: z.number().min(0).max(100).optional(),
         distinctivenessScore: z.number().min(0).max(100).optional(),
+        conceptScore: z.number().min(0).max(100).optional(),
       }),
     )
     .max(100)
@@ -197,6 +206,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     themeFitScore: normalizeScore(input.themeFitScore),
     visualFocusScore: normalizeScore(input.visualFocusScore),
     distinctivenessScore: normalizeScore(input.distinctivenessScore),
+    conceptScore: normalizeScore(input.conceptScore),
   };
 
   // 逐页评分只保留本轮实际检查过的页；非法分数、越界页和重复页都丢弃，
@@ -212,6 +222,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
     const readability = normalizeScore(candidate.readabilityScore);
     const visualFocus = normalizeScore(candidate.visualFocusScore);
     const distinctiveness = normalizeScore(candidate.distinctivenessScore);
+    const concept = normalizeScore(candidate.conceptScore);
     if (overall === undefined || hierarchy === undefined || alignment === undefined || readability === undefined)
       continue;
     slideScoresByIndex.set(candidate.slideIndex, {
@@ -222,6 +233,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
       readabilityScore: readability,
       ...(visualFocus === undefined ? {} : { visualFocusScore: visualFocus }),
       ...(distinctiveness === undefined ? {} : { distinctivenessScore: distinctiveness }),
+      ...(concept === undefined ? {} : { conceptScore: concept }),
     });
   }
   const slideScores = [...slideScoresByIndex.values()].sort((left, right) => left.slideIndex - right.slideIndex);
@@ -298,13 +310,42 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
   // `title-body` layout, which the rule-based repair then applied as if the
   // model had asked for it. Missing guidance must stay missing.
   const slideGuidance = [...guidanceBySlide.values()].sort((left, right) => left.slideIndex - right.slideIndex);
-  return visualReviewSchema.parse({
-    ...scores,
-    ...Object.fromEntries(Object.entries(optionalScores).filter(([, value]) => value !== undefined)),
-    issues,
-    slideScores,
-    slideGuidance,
-  });
+  return applyConceptCap(
+    visualReviewSchema.parse({
+      ...scores,
+      ...Object.fromEntries(Object.entries(optionalScores).filter(([, value]) => value !== undefined)),
+      issues,
+      slideScores,
+      slideGuidance,
+    }),
+  );
+}
+
+/** A concept below this score caps the total: execution cannot rescue an empty idea. */
+export const CONCEPT_SCORE_THRESHOLD = 60;
+export const CONCEPT_SCORE_CAP = 69;
+
+/**
+ * Applies the concept ceiling after normalization.
+ *
+ * The model still reports its own overall score; the cap is deterministic and
+ * lives here so a generous model cannot talk its way past an empty concept. The
+ * flag is what the report shows next to the capped score.
+ */
+export function applyConceptCap(review: VisualReview): VisualReview {
+  const concept = review.conceptScore;
+  if (concept === undefined || concept >= CONCEPT_SCORE_THRESHOLD) return review;
+  const cappedSlides = review.slideScores?.map((score) =>
+    score.conceptScore !== undefined && score.conceptScore < CONCEPT_SCORE_THRESHOLD
+      ? { ...score, overallScore: Math.min(score.overallScore, CONCEPT_SCORE_CAP) }
+      : score,
+  );
+  return {
+    ...review,
+    overallScore: Math.min(review.overallScore, CONCEPT_SCORE_CAP),
+    conceptCapApplied: true,
+    ...(cappedSlides ? { slideScores: cappedSlides } : {}),
+  };
 }
 export const visualRepairPlanSchema = z.object({
   repairs: z.array(

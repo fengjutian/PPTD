@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "name": "change-overrides-pie",
+      "relation": "change",
+      "requestedKind": "pie",
+      "pointCount": 4,
+      "expectedKind": "line"
+    },
+    {
+      "name": "proportion-four-points",
+      "relation": "proportion",
+      "requestedKind": "column",
+      "pointCount": 4,
+      "expectedKind": "pie"
+    },
+    {
+      "name": "proportion-many-points",
+      "relation": "proportion",
+      "requestedKind": "pie",
+      "pointCount": 7,
+      "expectedKind": "bar"
+    },
+    {
+      "name": "comparison-keeps-bar",
+      "relation": "comparison",
+      "requestedKind": "bar",
+      "pointCount": 3,
+      "expectedKind": "bar"
+    },
+    {
+      "name": "legacy-column",
+      "requestedKind": "column",
+      "pointCount": 3,
+      "expectedKind": "column"
+    }
+  ]
+}

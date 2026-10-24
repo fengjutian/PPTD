@@ -7,7 +7,11 @@ import type { SlideContent } from "./types";
  * the content identity that a design task must pin.
  */
 export function hashSlideContent(content: Pick<SlideContent, "title" | "body" | "speakerNotes" | "blocks">): string {
-  const value = JSON.stringify([content.title, content.body, content.speakerNotes, content.blocks ?? []]);
+  return hashString(JSON.stringify([content.title, content.body, content.speakerNotes, content.blocks ?? []]));
+}
+
+/** FNV-1a 64-bit over an arbitrary string; the same hash the content uses. */
+export function hashString(value: string): string {
   let hash = 14_695_981_039_346_656_037n;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= BigInt(value.charCodeAt(index));

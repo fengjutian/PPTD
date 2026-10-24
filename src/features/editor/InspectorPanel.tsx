@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { loadSettings } from "../../services/settings";
 import { ICON_LABELS, ICON_NAMES } from "./icon-options";
 import { IconGlyph } from "./IconView";
 import {
@@ -38,6 +39,7 @@ import {
   Unlink,
 } from "lucide-react";
 import {
+  type AssetProvenance,
   type ChartKind,
   type ContentBlock,
   type ElementId,
@@ -194,6 +196,21 @@ function TastePanel() {
   const selectSlide = useEditorStore((state) => state.selectSlide);
   const selectElements = useEditorStore((state) => state.selectElements);
   const report = useMemo(() => lintTaste(document), [document]);
+  const [tasteLintEnabled, setTasteLintEnabled] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void loadSettings()
+      .then((settings) => {
+        if (active) setTasteLintEnabled(settings.tasteLintEnabled);
+      })
+      .catch(() => {
+        // A read failure keeps the panel visible; hiding it would look like a
+        // clean bill of health.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const hard = report.issues.filter((issue) => issue.severity === "hard").length;
   const soft = report.issues.length - hard;
 
@@ -201,6 +218,8 @@ function TastePanel() {
     selectSlide(issue.slideId as SlideId);
     if (issue.elementIds.length > 0) selectElements(issue.elementIds as ElementId[]);
   };
+
+  if (!tasteLintEnabled) return null;
 
   return (
     <InspectorSection
@@ -445,6 +464,21 @@ export function InspectorPanelView({
     const limit = 0.99 - value;
     if (next[opposite] > limit) next[opposite] = limit;
     onCommand({ type: "set-image-crop", slideId, elementId: element.id, crop: next });
+  };
+
+  const updateProvenance = (patch: Partial<AssetProvenance>) => {
+    if (element.type !== "image") return;
+    const current = element.provenance;
+    const next: AssetProvenance = {
+      ...current,
+      ...patch,
+      verification: patch.verification ?? current?.verification ?? "pending",
+    };
+    // A picture cannot stay "verified" after its source or licence is removed.
+    if (next.verification === "verified" && !(next.sourceUrl?.trim() && next.license?.trim())) {
+      next.verification = "pending";
+    }
+    onCommand({ type: "set-image-provenance", slideId, elementId: element.id, provenance: next });
   };
 
   const contrast = element.type === "text" ? contrastRatio(element.style.color, background) : undefined;
@@ -1337,6 +1371,58 @@ export function InspectorPanelView({
               disabled={locked}
               onCommit={(altText) => onCommand({ type: "set-image-alt-text", slideId, elementId: element.id, altText })}
             />
+            <div className="field-label">素材来源</div>
+            <TextField
+              label="来源 URL"
+              value={element.provenance?.sourceUrl ?? ""}
+              maxLength={2048}
+              disabled={locked}
+              placeholder="https://…"
+              onCommit={(value) => updateProvenance({ sourceUrl: value })}
+            />
+            <TextField
+              label="许可说明"
+              value={element.provenance?.license ?? ""}
+              maxLength={200}
+              disabled={locked}
+              placeholder="例如 CC BY 4.0 / 已购买授权"
+              onCommit={(value) => updateProvenance({ license: value })}
+            />
+            <div className="field-row">
+              <span
+                className={`taste-badge${
+                  element.provenance?.verification === "verified" ? " hard" : element.provenance ? " muted" : ""
+                }`}
+              >
+                {element.provenance?.verification === "verified"
+                  ? "已核验"
+                  : element.provenance?.verification === "user"
+                    ? "用户素材"
+                    : element.provenance
+                      ? "待核验"
+                      : "未标注"}
+              </span>
+              <button
+                type="button"
+                className="toggle-button"
+                disabled={locked || !element.provenance?.sourceUrl?.trim() || !element.provenance?.license?.trim()}
+                onClick={() => updateProvenance({ verification: "verified" })}
+              >
+                标记已核验
+              </button>
+              {element.provenance && (
+                <button
+                  type="button"
+                  className="toggle-button"
+                  disabled={locked}
+                  onClick={() =>
+                    onCommand({ type: "set-image-provenance", slideId, elementId: element.id, provenance: null })
+                  }
+                >
+                  清除来源
+                </button>
+              )}
+            </div>
             <div className="field-label crop-label">裁剪（源图切去的比例）</div>
             <div className="property-grid">
               <NumberField

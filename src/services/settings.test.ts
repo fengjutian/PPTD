@@ -9,6 +9,8 @@ const store = vi.hoisted(() => ({
     aiModel: string;
     visionReviewEnabled?: boolean;
     designDirectionGate?: boolean;
+    designMemoryEnabled?: boolean;
+    tasteLintEnabled?: boolean;
   } | null,
   saved: [] as {
     theme: string;
@@ -18,6 +20,8 @@ const store = vi.hoisted(() => ({
     aiModel: string;
     visionReviewEnabled?: boolean;
     designDirectionGate?: boolean;
+    designMemoryEnabled?: boolean;
+    tasteLintEnabled?: boolean;
   }[],
 }));
 
@@ -155,5 +159,28 @@ describe("设计方向门开关", () => {
     store.saved.length = 0;
     await saveSettings({ ...defaultSettings(), designDirectionGate: false });
     expect(store.saved.at(-1)?.designDirectionGate).toBe(false);
+  });
+});
+
+describe("设计体检开关", () => {
+  it("老库没有这个字段时默认开启", async () => {
+    store.value = { theme: "dark", uiFont: "sans", aiProviderId: "minimax", aiModel: "MiniMax-M3" };
+    expect((await loadSettings()).tasteLintEnabled).toBe(true);
+  });
+
+  it("显式关闭会被读到，并在保存时原样写回", async () => {
+    stubDom();
+    store.value = {
+      theme: "dark",
+      uiFont: "sans",
+      aiProviderId: "minimax",
+      aiModel: "MiniMax-M3",
+      tasteLintEnabled: false,
+    };
+    expect((await loadSettings()).tasteLintEnabled).toBe(false);
+
+    store.saved.length = 0;
+    await saveSettings({ ...defaultSettings(), tasteLintEnabled: false });
+    expect(store.saved.at(-1)?.tasteLintEnabled).toBe(false);
   });
 });

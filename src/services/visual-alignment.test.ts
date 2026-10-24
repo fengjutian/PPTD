@@ -297,6 +297,35 @@ describe("visual review normalization", () => {
     expect(result.slideGuidance[0]!.focalPoint).toEqual({ x: 1, y: 0 });
   });
 
+  it("caps the total when the concept score is low", () => {
+    const result = normalizeVisualReview(
+      {
+        ...review(92),
+        conceptScore: 40,
+        slideScores: [
+          {
+            slideIndex: 0,
+            overallScore: 95,
+            hierarchyScore: 92,
+            alignmentScore: 92,
+            readabilityScore: 92,
+            conceptScore: 40,
+          },
+        ],
+      },
+      [0],
+    );
+    expect(result.overallScore).toBe(69);
+    expect(result.conceptCapApplied).toBe(true);
+    expect(result.slideScores?.[0]?.overallScore).toBe(69);
+  });
+
+  it("keeps a strong total when the concept is strong", () => {
+    const result = normalizeVisualReview({ ...review(92), conceptScore: 80 }, [0]);
+    expect(result.overallScore).toBe(92);
+    expect(result.conceptCapApplied).toBeUndefined();
+  });
+
   it("drops findings for unrequested slides and rejects missing scores", () => {
     const result = normalizeVisualReview(
       { ...review(80), issues: [{ slideIndex: 9, severity: "error", issue: "misalignment", suggestion: "move" }] },

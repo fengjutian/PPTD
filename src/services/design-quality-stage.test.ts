@@ -107,6 +107,7 @@ describe("设计质检阶段", () => {
     expect(result.visualReviewCoverage).toBeUndefined();
     // 用户主动关闭是选择，不是评审失败：界面不应因此弹报告。
     expect(result.visualPassed).toBeUndefined();
+    expect(result.visualEvidence).toMatchObject({ renderer: "none", evidence: "indicator" });
   });
 
   it("文稿超过评审上限时说明未做视觉评审，而不是笼统降级", async () => {
@@ -368,6 +369,7 @@ describe("设计质检阶段", () => {
 
     expect(reviewed).toEqual([["data:image/jpeg;base64,UkVBTA=="]]);
     expect(result.notes.join("；")).toContain("视觉评审基于导出的 PPTX 真实渲染");
+    expect(result.visualEvidence).toEqual({ renderer: "powerpoint", evidence: "final" });
     expect(result.degraded).toBe(false);
     // 评审结论与覆盖范围要原样带到结果里，供界面逐条展示模型建议。
     expect(result.visualReview).toEqual(passingReview);
@@ -1009,6 +1011,7 @@ describe("设计质检阶段", () => {
     expect(result.degraded).toBe(true);
     expect(result.notes.join("；")).toContain("视觉评审改用画布预览渲染");
     expect(result.notes.join("；")).toContain("本机没有可用的 PowerPoint 渲染");
+    expect(result.visualEvidence).toMatchObject({ renderer: "canvas", evidence: "layout" });
     // 降级不影响文稿产出。
     expect(result.document.slides).toHaveLength(1);
   });

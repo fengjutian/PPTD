@@ -181,6 +181,7 @@ import {
   type SplitSlidePage,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
+import { DESIGN_DIRECTIONS_PROMPT_VERSION } from "../services/ai-service";
 import { loadRecentLooks, recordDesignLook, recordDesignPreference } from "../services/design-memory";
 import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
@@ -228,6 +229,7 @@ import {
   documentContentFingerprint,
   runDesignQualityStage,
   summarizeQualityIssues,
+  type ReviewEvidence,
 } from "../services/design-quality-stage";
 import type { PresentationQualityIssue } from "../services/presentation-quality-gate";
 import { DisabledVisionReviewPort, TauriVisionReviewPort } from "../services/vision-review-port";
@@ -304,6 +306,16 @@ function parityIssueLabel(kind: "missing-slide" | "missing-text" | "picture-coun
     case "chart-count":
       return "图表数量不符";
   }
+}
+
+function reviewEvidenceLabel(evidence: ReviewEvidence): string {
+  if (evidence.renderer === "powerpoint" && evidence.evidence === "final") {
+    return "PowerPoint 真实渲染导出文稿（最终画面）";
+  }
+  if (evidence.renderer === "canvas" && evidence.evidence === "layout") {
+    return `画布近似渲染（版式预览，非最终断行与字体度量）${evidence.reason ? "；真实渲染不可用" : ""}`;
+  }
+  return "仅确定性校验（视觉评审未运行）";
 }
 
 /** 已用时。分钟也按两位显示，进度提示里的数字不会一会儿宽一会儿窄。 */
@@ -984,6 +996,7 @@ export function App() {
     contactSheet?: string;
     deckReview?: VisualReview;
     reviewReuse?: { reviewed: number; reused: number };
+    visualEvidence?: ReviewEvidence;
     slideSignatures: string[];
     reviewedAt: number;
     reviewSource?: "真实 PPTX" | "画布预览";
@@ -1618,7 +1631,8 @@ export function App() {
         throw new Error(`EXPORT_VALIDATION_FAILED: ${blocking.map((issue) => issue.message).join("；")}`);
       }
       const { buildPptxInWorker } = await import("../features/pptx-export/export-worker-client");
-      const task = buildPptxInWorker(exportDocument, issues);
+      const exportSettings = await loadSettings().catch(() => defaultSettings());
+      const task = buildPptxInWorker(exportDocument, issues, { tasteLint: exportSettings.tasteLintEnabled });
       exportCancelRef.current = task.cancel;
       const { bytes, report } = await task.promise;
       const path = await choosePptxPath(document.title);
@@ -3145,7 +3159,7 @@ export function App() {
             selectedBy: choice.kind === "skip" ? "fallback" : "user",
             ...(choice.words?.trim() ? { userWords: choice.words.trim().slice(0, 200) } : {}),
             regenerations,
-            promptVersion: "design-directions-v1",
+            promptVersion: DESIGN_DIRECTIONS_PROMPT_VERSION,
           };
           return { concept: chosen.concept, record };
         }
@@ -3499,6 +3513,7 @@ export function App() {
         contactSheet: stage.contactSheet,
         deckReview: stage.deckReview,
         reviewReuse: stage.reviewReuse,
+        visualEvidence: stage.visualEvidence,
         slideSignatures: finalDocument.slides.map((slide) => JSON.stringify(slide)),
         reviewedAt: Date.now(),
         reviewSource: stage.notes.some((note) => note.includes("真实渲染"))
@@ -3974,6 +3989,14 @@ export function App() {
               slideSignatures: refreshedSignatures,
               reviewedAt: Date.now(),
               reviewSource: result.source,
+              visualEvidence:
+                result.source === "真实 PPTX"
+                  ? { renderer: "powerpoint", evidence: "final" }
+                  : {
+                      renderer: "canvas",
+                      evidence: "layout",
+                      ...(result.degradedReason ? { reason: result.degradedReason } : {}),
+                    },
               notes: [
                 ...previous.notes.filter((note) => !note.startsWith("手动复检")),
                 `手动复检 ${result.reviewedIndexes.length} 页；整册总览已刷新${result.degradedReason ? `；真实渲染降级：${result.degradedReason}` : ""}`,
@@ -6314,12 +6337,19 @@ export function App() {
                     <figcaption>整册 Contact Sheet · 检查页面节奏、深浅分布、主题一致性、重复版式与前后跳变</figcaption>
                   </figure>
                 )}
+                {designQualityReport.visualEvidence && (
+                  <p className="design-quality-notes">
+                    评审依据：{reviewEvidenceLabel(designQualityReport.visualEvidence)}
+                  </p>
+                )}
                 {designQualityReport.deckReview && (
                   <p className="design-quality-notes">
                     整册总览：一致性 {designQualityReport.deckReview.consistencyScore}、重复控制{" "}
                     {designQualityReport.deckReview.repetitionScore ?? "未评"}、主题匹配{" "}
                     {designQualityReport.deckReview.themeFitScore ?? "未评"}、独特性{" "}
-                    {designQualityReport.deckReview.distinctivenessScore ?? "未评"}
+                    {designQualityReport.deckReview.distinctivenessScore ?? "未评"}、概念{" "}
+                    {designQualityReport.deckReview.conceptScore ?? "未评"}
+                    {designQualityReport.deckReview.conceptCapApplied ? "（总分已封顶）" : ""}
                   </p>
                 )}
                 {designQualityReport.reviewReuse && (
@@ -6340,7 +6370,9 @@ export function App() {
                     {designQualityReport.visualReview.repetitionScore ?? "未评"}、主题匹配{" "}
                     {designQualityReport.visualReview.themeFitScore ?? "未评"}、视觉焦点{" "}
                     {designQualityReport.visualReview.visualFocusScore ?? "未评"}、独特性{" "}
-                    {designQualityReport.visualReview.distinctivenessScore ?? "未评"}）
+                    {designQualityReport.visualReview.distinctivenessScore ?? "未评"}、概念{" "}
+                    {designQualityReport.visualReview.conceptScore ?? "未评"}
+                    {designQualityReport.visualReview.conceptCapApplied ? "（总分已封顶）" : ""}）
                   </p>
                 )}
                 {designQualityReport.visualReview.issues.length === 0 ? (
@@ -6571,6 +6603,13 @@ export function App() {
                         ? ` · 回读 ${exportReport.parity.checked.slides} 页通过`
                         : ` · 回读 ${exportReport.parity.issues.length} 处不一致`
                       : " · 回读未执行"}
+                    {exportReport.assetProvenance.verified +
+                      exportReport.assetProvenance.pending +
+                      exportReport.assetProvenance.user +
+                      exportReport.assetProvenance.missing >
+                    0
+                      ? ` · 素材 已核验 ${exportReport.assetProvenance.verified} / 待核验 ${exportReport.assetProvenance.pending} / 未标注 ${exportReport.assetProvenance.missing}`
+                      : ""}
                   </p>
                 </div>
               </div>

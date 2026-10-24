@@ -34,6 +34,13 @@ export interface AppSettings {
    * 响应；关闭后不再记录，也不再在方向提案里引用历史。
    */
   designMemoryEnabled: boolean;
+  /**
+   * 是否运行确定性设计体检。
+   *
+   * 体检只读、不阻断；关闭后属性面板不显示，导出报告也不写体检字段，避免
+   * 用户看到一份没有要求过的检查结果。
+   */
+  tasteLintEnabled: boolean;
 }
 let systemThemeQuery: MediaQueryList | undefined;
 let systemThemeListener: (() => void) | undefined;
@@ -93,6 +100,7 @@ export function defaultSettings(): AppSettings {
     visionReviewEnabled: true,
     designDirectionGate: true,
     designMemoryEnabled: true,
+    tasteLintEnabled: true,
   };
 }
 
@@ -111,6 +119,7 @@ export async function loadSettings(): Promise<AppSettings> {
   // 方向门同理：缺省开启，旧库不会因为升级突然多出一个步骤或少一个步骤。
   const designDirectionGate = stored.designDirectionGate !== false;
   const designMemoryEnabled = stored.designMemoryEnabled !== false;
+  const tasteLintEnabled = stored.tasteLintEnabled !== false;
   return {
     theme,
     uiFont,
@@ -120,6 +129,7 @@ export async function loadSettings(): Promise<AppSettings> {
     visionReviewEnabled,
     designDirectionGate,
     designMemoryEnabled,
+    tasteLintEnabled,
   };
 }
 
@@ -133,6 +143,7 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
     visionReviewEnabled: settings.visionReviewEnabled,
     designDirectionGate: settings.designDirectionGate,
     designMemoryEnabled: settings.designMemoryEnabled,
+    tasteLintEnabled: settings.tasteLintEnabled,
   });
   applyTheme(settings.theme);
   applyUiFont(settings.uiFont);

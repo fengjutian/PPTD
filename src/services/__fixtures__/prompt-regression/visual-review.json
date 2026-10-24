@@ -1,0 +1,39 @@
+{
+  "cases": [
+    {
+      "name": "low-concept-caps-total",
+      "input": {
+        "overallScore": 92,
+        "hierarchyScore": 92,
+        "alignmentScore": 92,
+        "readabilityScore": 92,
+        "consistencyScore": 92,
+        "conceptScore": 40
+      },
+      "expected": { "overallScore": 69, "conceptCapApplied": true }
+    },
+    {
+      "name": "strong-concept-keeps-total",
+      "input": {
+        "overallScore": 92,
+        "hierarchyScore": 92,
+        "alignmentScore": 92,
+        "readabilityScore": 92,
+        "consistencyScore": 92,
+        "conceptScore": 80
+      },
+      "expected": { "overallScore": 92 }
+    },
+    {
+      "name": "legacy-review-without-concept",
+      "input": {
+        "overallScore": 85,
+        "hierarchyScore": 85,
+        "alignmentScore": 85,
+        "readabilityScore": 85,
+        "consistencyScore": 85
+      },
+      "expected": { "overallScore": 85 }
+    }
+  ]
+}

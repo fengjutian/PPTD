@@ -342,12 +342,33 @@ export interface ImageCrop {
   right: number;
 }
 
+export type AssetVerification = "verified" | "pending" | "user";
+
+/**
+ * Where a picture came from.
+ *
+ * Design state, not content: it never enters the content hash. "verified" means
+ * the user supplied a source URL and a licence; without both, the picture stays
+ * "pending" and must not be presented as an official asset.
+ */
+export interface AssetProvenance {
+  verification: AssetVerification;
+  sourceUrl?: string;
+  license?: string;
+  /** ISO timestamp of the last verification edit. */
+  checkedAt?: string;
+  /** FNV-1a fingerprint of the embedded data URL, to detect a replaced picture. */
+  contentHash?: string;
+}
+
 export interface ImageElement extends ElementBase {
   type: "image";
   source: { kind: "embedded"; dataUrl: string; mimeType: SupportedImageMimeType };
   altText: string;
   /** Crop of the source image. Absent means the whole picture is shown. */
   crop?: ImageCrop;
+  /** Source and licence of the picture. Absent on imported or unlabelled images. */
+  provenance?: AssetProvenance;
   /**
    * "layout-background" marks the artwork of the template layout itself. The
    * canvas still paints it, but the exporter moves it into the slide master so

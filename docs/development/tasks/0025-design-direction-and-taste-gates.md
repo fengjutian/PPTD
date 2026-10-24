@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 状态     | 已实现（P0-1–P0-8、设置开关与记录查看，2026-10-24；UI 待目视验证）                                                                                                |
+| 状态     | P0/P1/P2 全部；体检开关与手工复检证据已收尾（2026-10-24；UI 待目视验证）                                                                                          |
 | 优先级   | P0                                                                                                                                                                |
 | 里程碑   | V0.4 设计能力                                                                                                                                                     |
 | 预估     | 10–13 人日                                                                                                                                                        |
@@ -523,29 +523,7 @@ export function lintTaste(document: PresentationDocument, options?: TasteLintOpt
 - `README.md` “当前实现范围”与“已知限制”：方向数量、样张覆盖、体检边界（像素级不覆盖）。
 - `docs/development/v0.1-plan.md` 不修改（本任务属于 V0.4）。
 
-P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导出回读独立性，已创建）、0079（评审概念分与封顶，待做）。
-
-## 14. P1 实施记录（2026-10-24）
-
-### 本地设计记忆（FR-D6）
-
-- Rust `storage`：`design_memory` 表（`kind` / `scope` / `payload_json` / `created_at`），SQLite `user_version` 2 → 3；上限 50 个外观 / 100 条偏好，写入后裁剪最旧；payload ≤8 KB，kind/scope 在 Rust 端校验。
-- `src/services/design-memory.ts`：从文档与方向记录生成外观指纹（配色、字体、概念、页数），记录偏好原话，读取最近 3 个外观供提案去重；清除与汇总。
-- `src/app/App.tsx`：方向提案带 `recentLooks`；生成成功并提交后记录外观与 `userWords`；数据库失败不影响生成。
-- `src/features/settings/SettingsDialog.tsx`：设计记忆开关、数量显示、一键清除。
-- `design-memory.test.ts`：4 项通过，断言 payload 不含正文。
-
-### 导出回读（FR-D8）
-
-- `verify-export.ts`：独立解压并解析 slide XML，比对文字、图片/表格/图表数量；明确 `skipped`；包不可读时返回 error 而不是让导出失败。
-- `ExportReport.parity` 与导出报告界面；4 项测试覆盖正常、丢文字、丢图片、表格/图表计数。
-- ADR 0078。
-
-### 验证
-
-- 新增 `design-memory.test.ts` 4 项、`verify-export.test.ts` 4 项、`settings.test.ts` 增至 12 项。
-- Rust `cargo test storage`：18 项通过。
-- 全量前端测试、类型检查、ESLint、生产构建通过（以最近一次全量输出为准）。
+P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导出回读独立性，已创建）、0079（评审概念分与封顶，已创建）、0080（图片来源，已创建）、0081（评审证据等级，已创建）、0082（数据页关系，已创建）。
 
 ## 12. 开放问题
 
@@ -614,3 +592,100 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 - `RHYTHM_REPEAT` 使用结构签名，而不是 `(layout, recipe)`：文档模型不持久化这两个设计字段，规则以元素类型与 `contentRef` 序列判断骨架。
 - 体检结果不持久化：确定性函数在打开项目与文档变化时重算，导出报告只保存当次快照。
 - `apply-ai-designed-draft` 按 `both` 分类，store 会递增 `contentRevision`，即使逐页 `contentHash` 未变；方向记录本身不触发内容 revision，严格的“设计不改内容 revision”需要另拆 command scope。
+
+## 14. P1 实施记录（2026-10-24）
+
+### 本地设计记忆（FR-D6）
+
+- Rust `storage`：`design_memory` 表（`kind` / `scope` / `payload_json` / `created_at`），SQLite `user_version` 2 → 3；上限 50 个外观 / 100 条偏好，写入后裁剪最旧；payload ≤8 KB，kind/scope 在 Rust 端校验。
+- `src/services/design-memory.ts`：从文档与方向记录生成外观指纹（配色、字体、概念、页数），记录偏好原话，读取最近 3 个外观供提案去重；清除与汇总。
+- `src/app/App.tsx`：方向提案带 `recentLooks`；生成成功并提交后记录外观与 `userWords`；数据库失败不影响生成。
+- `src/features/settings/SettingsDialog.tsx`：设计记忆开关、数量显示、一键清除。
+- ADR 0077。
+
+### 导出回读（FR-D8）
+
+- `verify-export.ts`：独立解压并解析 slide XML，比对文字、图片/表格/图表数量；明确 `skipped`；包不可读时返回 error 而不是让导出失败。
+- `ExportReport.parity` 与导出报告界面。
+- ADR 0078。
+
+### 图片来源（FR-D7）
+
+- `ImageElement.provenance`：来源 URL、许可说明、核验状态、检查时间与图片字节指纹；Schema 20 → 21，旧图片没有来源时显示“未标注”。
+- `set-image-provenance` 命令：`verified` 必须同时有 URL 与许可，URL 只接受 http(s)，哈希由命令按当前 data URL 计算；清除来源不改变图片。
+- 属性面板“图片”区可编辑来源与许可、标记已核验、清除来源；导出报告统计 verified/pending/user/missing。
+- ADR 0080。
+
+### 验证
+
+- `design-memory.test.ts` 4 项、`verify-export.test.ts` 4 项、`image-provenance.test.ts` 4 项、`settings.test.ts` 12 项、`theme-specimen.test.ts` 3 项。
+- `schema.test.ts` 49 项（含 v20 → v21 迁移与 v21 provenance 样例）。
+- Rust `cargo test storage`：18 项通过。
+- 全量：1156 通过、1 跳过（`PPTD_SKIP_VISUAL=1`）；类型检查、ESLint（0 error）、生产构建、`cargo fmt --check`、`cargo check` 通过。
+
+## 15. P2 实施记录（2026-10-24）
+
+### 概念分与总分封顶（FR-D9）
+
+- `visual-alignment.ts`：`VisualReview` 与逐页评分增加可选 `conceptScore`；`applyConceptCap` 在归一化后执行——概念 <60 时总分与对应页总分封顶 69，并记录 `conceptCapApplied`。
+- 评审合并保留最低概念分与封顶标记；整册总览的概念分优先。
+- Rust 整册与逐页评审提示词增加概念分定义与输出字段；系统不要求模型自行压分。
+- 设计质量报告显示整册/逐页概念分，封顶时注明“总分已封顶”。
+- ADR 0079。
+
+### 验证
+
+- `visual-alignment.test.ts` 22 项通过（含概念 40 → 69、概念 80 → 92）。
+- 全量：1158 通过、1 跳过；类型检查、ESLint、生产构建、`cargo fmt --check`、`cargo check` 通过。
+
+## 16. P2 实施记录：评审证据等级（2026-10-24）
+
+- `design-quality-stage.ts`：新增 `ReviewEvidence { renderer, evidence, reason }`，结果携带 `visualEvidence`；证据取自被采用的 `bestIteration` 轮次，而不是最后一次渲染。
+- 三种等级：PowerPoint 真实渲染 `powerpoint/final`、画布近似 `canvas/layout`、仅确定性校验 `none/indicator`。
+- 真实渲染失败时保留原因；报告显示“画布近似渲染；真实渲染不可用”，不冒充最终画面。
+- 设计质量报告顶部显示“评审依据：…”。
+- ADR 0081。
+
+### 验证
+
+- `design-quality-stage.test.ts` 23 项通过（真实渲染、降级画布、关闭视觉评审三条路径）。
+- 全量测试、类型检查、ESLint、生产构建通过。
+
+## 17. P2 实施记录：数据页关系（2026-10-24）
+
+- `src/core/design/data-relation.ts`：五种关系（占比/变化/构成/对比/量级）、兼容矩阵、按点数选图型；`resolveChartKind` 让关系优先于模型点选的图型。
+- `PageDesignPlan.chart` 增加可选 `relation`；`aiPresentationDesignSchema` 接受该字段；Rust 设计提示词要求先判断关系再给图型。
+- `apply-ai-designed-draft` 在指标同单位时按关系决定图表类型；模型请求 pie + change 会生成 line；没有 relation 时保持旧行为。
+- 关系不持久化，文档只保存最终图型，Schema 不变；手工加图表与改图型不受限制。
+- ADR 0082。
+
+### 验证
+
+- `data-relation.test.ts` 4 项通过；`commands.test.ts` 新增关系覆盖用例。
+- 全量：1163 通过、1 跳过；类型检查、ESLint、生产构建、`cargo fmt --check`、`cargo check` 通过。
+
+## 18. P2 实施记录：提示词回归（2026-10-24）
+
+- `src/services/__fixtures__/prompt-regression/`：方向、视觉评审、设计输出、数据关系四组录制样例，保存模型原始形状。
+- `src/services/prompt-regression.test.ts`：校验方向 Schema（重复 preset/非法 imagery）、概念分封顶、设计必填字段、数据关系选图型；`npm run test:prompts` 单独运行。
+- `DESIGN_DIRECTIONS_PROMPT_VERSION` 与 `direction.json` 的 `promptVersion` 绑定，提示词改动未升版本会失败。
+- 覆盖边界写入 `docs/development/prompt-regression.md`：不评价真实模型质量，不做提示词文本快照。
+- 全量：1177 通过、1 跳过；类型检查、ESLint、生产构建、`cargo fmt --check`、`cargo check` 通过。
+
+## 19. 收尾（2026-10-24）
+
+### 设计体检开关
+
+- `tasteLintEnabled` 设置默认开启；关闭后属性面板不渲染体检区，导出 Worker 不计算、报告不写 `tasteLint` 字段。
+- 设置页新增“运行设计体检”，中英文案齐全；设置测试覆盖默认值与显式关闭。
+- 读取设置失败时面板保持可见，不把“读不到”伪装成“没问题”。
+
+### 手工复检证据等级
+
+- 手动复检结果按 `result.source` 写入 `visualEvidence`：真实 PPTX → `powerpoint/final`，画布 → `canvas/layout`，并保留降级原因。
+- ADR 0081 的限制说明同步修正：手工复检也携带证据，但仍受渲染器限制。
+
+### 验证
+
+- `settings.test.ts` 14 项、`export-pptx.test.ts` 39 项通过。
+- 全量：1180 通过、1 跳过；类型检查、ESLint、生产构建通过。

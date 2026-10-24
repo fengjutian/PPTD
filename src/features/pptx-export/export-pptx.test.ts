@@ -3,6 +3,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { applyCommand } from "../../core/commands";
 import { createDocument, emu, inches, pageSizeFromInches, type PresentationDocument } from "../../core/document-model";
 import { defaultEditorialConcept, resolveDeckConcept } from "../../core/design/deck-concept";
+import { buildSpecimenDocument } from "../../services/theme-specimen";
 import { buildPptx } from "./export-pptx";
 import { validatePptxPackage } from "./pptx-package";
 
@@ -70,6 +71,28 @@ describe("PPTX export", () => {
     expect(result.report.tasteLint?.hard).toBe(1);
     expect(result.report.tasteLint?.codes.BODY_TEXT_TOO_SMALL).toBe(1);
     expect(result.report.package.valid).toBe(true);
+  });
+
+  it("omits taste findings when the check is disabled", async () => {
+    const document = createDocument();
+    const result = await buildPptx(document, { tasteLint: false });
+    expect(result.report.tasteLint).toBeUndefined();
+  });
+
+  it("reports the provenance status of pictures", async () => {
+    const document = buildSpecimenDocument();
+    const slide = document.slides.find((candidate) =>
+      candidate.elements.some((element) => element.type === "image" && element.placement === "content"),
+    )!;
+    const image = slide.elements.find((element) => element.type === "image" && element.placement === "content")!;
+    applyCommand(document, {
+      type: "set-image-provenance",
+      slideId: slide.id,
+      elementId: image.id,
+      provenance: { verification: "verified", sourceUrl: "https://example.com/photo", license: "CC BY 4.0" },
+    });
+    const result = await buildPptx(document);
+    expect(result.report.assetProvenance).toEqual({ verified: 1, pending: 0, user: 0, missing: 0 });
   });
 
   it("writes a changed page size into the presentation part", async () => {

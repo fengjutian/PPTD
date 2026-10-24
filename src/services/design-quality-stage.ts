@@ -13,6 +13,7 @@ import {
 } from "./presentation-renderer";
 import {
   affectedSlideIndexes,
+  CONCEPT_SCORE_THRESHOLD,
   runVisualAlignmentLoop,
   type PresentationVisualGoal,
   type VisualReview,
@@ -84,6 +85,14 @@ export interface DesignQualityStageResult {
   visualPassed?: boolean;
   /** 最终采用轮次的整册缩略图墙，可直接在报告中展示。 */
   contactSheet?: string;
+  /**
+   * What the visual conclusion is actually based on.
+   *
+   * "final" means the exported PPTX was rasterized by PowerPoint; "layout"
+   * means the canvas approximation was reviewed; "indicator" means no visual
+   * review ran and only deterministic checks contributed.
+   */
+  visualEvidence?: ReviewEvidence;
   /** 只看整册缩略图所得的节奏、一致性和主题结论。 */
   deckReview?: VisualReview;
   /** 最终采用轮次中逐页评审的请求与复用数量。 */
@@ -91,6 +100,13 @@ export interface DesignQualityStageResult {
 }
 
 /** 取消不是失败：取消必须一路向上抛出，不能被降级逻辑吞掉。 */
+export interface ReviewEvidence {
+  renderer: "powerpoint" | "canvas" | "none";
+  evidence: "final" | "layout" | "indicator";
+  /** Why the stronger evidence was not available. */
+  reason?: string;
+}
+
 export function isGenerationCancelled(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("AI_GENERATION_CANCELLED") || message.includes("AI_REQUEST_CANCELLED");
@@ -139,6 +155,23 @@ function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualR
             ...slideScores.map((item) => item.distinctivenessScore ?? item.overallScore),
           ),
         }
+      : {}),
+    ...(overview?.conceptScore !== undefined ||
+    reviews.some((item) => item.conceptScore !== undefined) ||
+    slideScores.some((item) => item.conceptScore !== undefined)
+      ? {
+          conceptScore:
+            overview?.conceptScore ??
+            Math.min(
+              ...reviews.map((item) => item.conceptScore ?? 100),
+              ...slideScores.map((item) => item.conceptScore ?? 100),
+            ),
+        }
+      : {}),
+    ...(overview?.conceptCapApplied ||
+    reviews.some((item) => item.conceptCapApplied) ||
+    slideScores.some((item) => item.conceptScore !== undefined && item.conceptScore < CONCEPT_SCORE_THRESHOLD)
+      ? { conceptCapApplied: true }
       : {}),
     issues: reviews.flatMap((item) => item.issues),
     slideGuidance: reviews.flatMap((item) => item.slideGuidance),
@@ -205,6 +238,7 @@ function slideReviewFromBatch(review: VisualReview, slideIndex: number, score?: 
     readabilityScore: ownScore?.readabilityScore ?? review.readabilityScore,
     consistencyScore: review.consistencyScore,
     ...(ownScore?.distinctivenessScore === undefined ? {} : { distinctivenessScore: ownScore.distinctivenessScore }),
+    ...(ownScore?.conceptScore === undefined ? {} : { conceptScore: ownScore.conceptScore }),
     issues: review.issues.filter((issue) => issue.slideIndex === slideIndex),
     slideGuidance: review.slideGuidance.filter((item) => item.slideIndex === slideIndex),
     ...(ownScore ? { slideScores: [ownScore] } : {}),
@@ -233,6 +267,9 @@ function batchReviewFromSlides(
       ? {
           distinctivenessScore: Math.min(...present.map((item) => item.distinctivenessScore ?? item.overallScore)),
         }
+      : {}),
+    ...(present.some((item) => item.conceptScore !== undefined)
+      ? { conceptScore: Math.min(...present.map((item) => item.conceptScore ?? 100)) }
       : {}),
     issues: present.flatMap((item) => item.issues),
     slideGuidance: present.flatMap((item) => item.slideGuidance),
@@ -314,6 +351,8 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   const inspect = options.inspectContrast ?? inspectRenderedTextContrast;
   /** 评审实际看到的画面来自哪里。 */
   let reviewSource: "真实 PPTX" | "画布预览" | undefined;
+  /** 最终采用结论所在的那一轮，用于报告证据等级。 */
+  let finalReviewRound: ReviewRound | undefined;
   /** 真实渲染走不通的原因。 */
   let realRenderFailure: string | undefined;
   /** 最近一轮评审实际覆盖的页数和总页数。 */
@@ -662,6 +701,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     // 返回的结论可能来自较早的一轮；覆盖范围和降级说明必须跟着那一轮，
     // 不能用最后一轮的数字去描述更早的结论。
     const finalRound = reviewRounds.get(aligned.bestIteration);
+    finalReviewRound = finalRound;
     const finalCoverage = finalRound?.coverage ?? { reviewed: reviewedSlideCount, total: reviewSlideCount };
     visualReviewCoverage = finalCoverage;
     contactSheet = finalRound?.contactSheet;
@@ -820,6 +860,21 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   }
   const issues = [...gateIssues, ...contrastIssues(contrast.issues)];
   const passed = gatePassed && issues.length === 0;
+  // Evidence follows the round whose conclusions were adopted, not the last
+  // render attempt. A canvas preview must never be reported as a final render.
+  const visualEvidence: ReviewEvidence = finalReviewRound
+    ? finalReviewRound.source === "真实 PPTX"
+      ? { renderer: "powerpoint", evidence: "final" }
+      : {
+          renderer: "canvas",
+          evidence: "layout",
+          ...(finalReviewRound.realRenderFailure ? { reason: finalReviewRound.realRenderFailure } : {}),
+        }
+    : {
+        renderer: "none",
+        evidence: "indicator",
+        reason: visualReview ? "visual-evidence-unavailable" : "visual-review-unavailable",
+      };
   if (!passed) {
     const pages = [...new Set(issues.map((issue) => issue.slideIndex + 1))].join("、");
     notes.push(
@@ -839,6 +894,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     visualReviewCoverage,
     visualPassed,
     contactSheet,
+    visualEvidence,
     deckReview: finalDeckReview,
     reviewReuse,
   };

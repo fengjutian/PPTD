@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "name": "chart-page-with-relation",
+      "expect": "accepted",
+      "output": {
+        "slides": [
+          {
+            "layout": "title-body",
+            "background": "#FFFFFF",
+            "accent": "#3366CC",
+            "titleColor": "#111111",
+            "bodyColor": "#333333",
+            "designPlan": {
+              "role": "claim",
+              "composition": { "primitive": "stack" },
+              "density": "normal",
+              "templatePolicy": "use",
+              "chart": { "kind": "pie", "relation": "change" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "missing-body-color",
+      "expect": "rejected",
+      "output": {
+        "slides": [
+          {
+            "layout": "cover",
+            "background": "#FFFFFF",
+            "accent": "#3366CC",
+            "titleColor": "#111111"
+          }
+        ]
+      }
+    }
+  ]
+}

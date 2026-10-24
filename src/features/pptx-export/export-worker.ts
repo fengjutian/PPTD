@@ -16,6 +16,7 @@ interface BuildRequest {
   id: number;
   document: PresentationDocument;
   prevalidatedIssues: ExportIssue[];
+  tasteLint?: boolean;
 }
 
 interface CancelRequest {
@@ -38,6 +39,7 @@ self.onmessage = async (event: MessageEvent<BuildRequest | CancelRequest>) => {
     const { bytes, report } = await buildPptx(message.document, {
       signal: controller.signal,
       prevalidatedIssues: message.prevalidatedIssues,
+      tasteLint: message.tasteLint,
     });
     controllers.delete(message.id);
     self.postMessage({ type: "done", id: message.id, bytes, report } satisfies {
