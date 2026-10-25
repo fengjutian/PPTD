@@ -3551,6 +3551,17 @@ export function App() {
       // The review report used to live only in this session. Store its scores
       // in the document so reopening the project still shows what was reviewed.
       if (stage.visualReview) {
+        const templateFitCounts = stage.templateFit
+          ? Object.fromEntries(
+              Object.entries(
+                stage.templateFit.issues.reduce<Record<string, number>>((counts, issue) => {
+                  counts[issue.code] = (counts[issue.code] ?? 0) + 1;
+                  return counts;
+                }, {}),
+              ).filter(([, count]) => count > 0),
+            )
+          : undefined;
+        const traceTemplate = finalDocument.templateStyle;
         finalDocument.reviewTraces = [
           ...(finalDocument.reviewTraces ?? []),
           {
@@ -3558,6 +3569,15 @@ export function App() {
             createdAt: new Date().toISOString(),
             overallScore: stage.visualReview.overallScore,
             ...(stage.templateFit?.checked ? { templateFitScore: stage.templateFit.score } : {}),
+            ...(traceTemplate === undefined
+              ? {}
+              : {
+                  templateName: traceTemplate.name,
+                  ...(traceTemplate.templateHash === undefined ? {} : { templateHash: traceTemplate.templateHash }),
+                }),
+            ...(templateFitCounts === undefined || Object.keys(templateFitCounts).length === 0
+              ? {}
+              : { templateFitCounts }),
             issueCount: stage.visualReview.issues.length,
             slides: (stage.visualReview.slideScores ?? []).map((item) => ({
               slideIndex: item.slideIndex,
@@ -4040,6 +4060,32 @@ export function App() {
       setTaskStatus(`已选择主题：${selectedTemplate.name}`);
     }
     closeThemeDrawer();
+  };
+  const refreshTemplateTarget = () => {
+    const target =
+      selectedTemplate && templateAnalysis
+        ? buildTemplateReviewTarget(templateAnalysis, selectedTemplate.name)
+        : undefined;
+    if (!target) {
+      setTaskStatus("请先选择模板并完成模板分析，才能重新编译验收目标");
+      return;
+    }
+    execute({ type: "set-template-style", templateStyle: target });
+    setTaskStatus(`已更新模板验收目标：${target.name}`);
+  };
+  const clearTemplateTarget = () => {
+    execute({ type: "set-template-style" });
+    setDesignQualityReport((previous) =>
+      previous
+        ? {
+            ...previous,
+            templateFit: undefined,
+            templateTargetName: undefined,
+            notes: [...previous.notes, "已清除模板验收目标"],
+          }
+        : previous,
+    );
+    setTaskStatus("已清除模板验收目标");
   };
   const runManualReview = async (scope: "current" | "changed" | "issues" | "all") => {
     if (manualReviewBusy || !designQualityReport) return;
@@ -5980,6 +6026,13 @@ export function App() {
                             </dd>
                           </div>
                           <div>
+                            <dt>对齐</dt>
+                            <dd>
+                              标题 {templateTargetPreview.titleAlign ?? "未声明"} / 正文{" "}
+                              {templateTargetPreview.bodyAlign ?? "未声明"}
+                            </dd>
+                          </div>
+                          <div>
                             <dt>字体</dt>
                             <dd>
                               {templateTargetPreview.majorFont ?? "未定义"} /{" "}
@@ -6518,6 +6571,21 @@ export function App() {
             {designQualityReport.templateFit && (
               <div className="design-quality-template">
                 <h3>模板符合度</h3>
+                <div className="design-review-toolbar">
+                  <span>模板目标</span>
+                  <div>
+                    <button
+                      type="button"
+                      disabled={!selectedTemplate || !templateAnalysis}
+                      onClick={refreshTemplateTarget}
+                    >
+                      重新编译目标
+                    </button>
+                    <button type="button" onClick={clearTemplateTarget}>
+                      清除目标
+                    </button>
+                  </div>
+                </div>
                 {designQualityReport.templateFit.checked ? (
                   <>
                     <p className="design-quality-notes">

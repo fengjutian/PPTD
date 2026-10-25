@@ -254,18 +254,30 @@ export function ContentHistory({
               {reviewTraces
                 .slice()
                 .reverse()
-                .map((trace) => (
-                  <li key={trace.id}>
-                    <strong>
-                      {trace.overallScore} 分
-                      {trace.templateFitScore !== undefined ? ` · 模板符合度 ${trace.templateFitScore}` : ""}
-                    </strong>
-                    <span>{new Date(trace.createdAt).toLocaleString("zh-CN")}</span>
-                    <span>
-                      {trace.issueCount} 条问题 · {trace.slides.length} 页有评分
-                    </span>
-                  </li>
-                ))}
+                .map((trace) => {
+                  const fitCount = trace.templateFitCounts
+                    ? Object.values(trace.templateFitCounts).reduce((sum, count) => sum + count, 0)
+                    : 0;
+                  return (
+                    <li key={trace.id}>
+                      <strong>
+                        {trace.overallScore} 分
+                        {trace.templateFitScore !== undefined ? ` · 模板符合度 ${trace.templateFitScore}` : ""}
+                      </strong>
+                      <span>{new Date(trace.createdAt).toLocaleString("zh-CN")}</span>
+                      {trace.templateName && (
+                        <span>
+                          模板：{trace.templateName}
+                          {trace.templateHash ? ` · ${trace.templateHash.slice(0, 8)}` : ""}
+                        </span>
+                      )}
+                      {fitCount > 0 && <span>模板偏差 {fitCount} 处</span>}
+                      <span>
+                        {trace.issueCount} 条问题 · {trace.slides.length} 页有评分
+                      </span>
+                    </li>
+                  );
+                })}
             </ul>
           </div>
         )}

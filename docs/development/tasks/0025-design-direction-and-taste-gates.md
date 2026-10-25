@@ -836,9 +836,10 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
   - 前端 `app-log.ts` 提供 `errorCodeOf` / `recordAppLog` / `recordAppError` / `appLogLocation`，fire-and-forget，任何异常都被吞掉。
   - 接入导出、AI 内容生成、AI 重新生成、AI 设计生成、方向提案、方向预览、自动保存、打开与保存；方向候选不足 4 个记一条 `AI_DIRECTIONS_INCOMPLETE` warn。
   - 设置 → 模型服务新增“诊断日志”区块，显示文件路径与“不含正文、备注或图片”的边界；浏览器预览显示无本地日志。
+  - 左侧导航新增“日志”按钮：打开只读面板，按时间倒序显示最近 200 条（时间、级别、错误码、阶段、计数），可刷新；`read_app_log(limit)` 读取，坏行跳过，文件不存在返回空列表。
 - 方向门四路设计请求与 8 页本地渲染改为并行：墙钟等待从约 4 倍单方向降到约 1 倍；单个方向失败仍只丢弃该方向，候选不足 4 个时仍回退单方向。
 
 ### 验证
 
-- `app-log.test.ts` 9 项、`SettingsDialog.test.tsx` 5 项通过；Rust `cargo test --lib app_log` 4 项通过。
-- 全量 1233 通过、1 跳过；类型检查、ESLint、生产构建通过。
+- `app-log.test.ts` 12 项、`LogPanel.test.tsx` 5 项、`SettingsDialog.test.tsx` 5 项通过；Rust `cargo test --lib app_log` 6 项通过。
+- 全量 1241 通过、1 跳过；类型检查、ESLint、生产构建通过。

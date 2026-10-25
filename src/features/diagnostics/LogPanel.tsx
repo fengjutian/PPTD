@@ -2,6 +2,7 @@ import { RefreshCw, ScrollText, X } from "lucide-react";
 import { useMemo } from "react";
 import type { AppLogRecord } from "../../services/app-log";
 import { createTranslator, type UiLanguage } from "../../services/i18n";
+import { formatLogTime } from "./log-time";
 
 export interface LogPanelProps {
   language: UiLanguage;
@@ -11,13 +12,6 @@ export interface LogPanelProps {
   location?: string;
   onRefresh: () => void;
   onClose: () => void;
-}
-
-/** 时间按本地时区显示；解析不了就原样显示，不吞掉原始值。 */
-export function formatLogTime(at: string): string {
-  const parsed = new Date(at);
-  if (Number.isNaN(parsed.getTime())) return at;
-  return parsed.toLocaleString("zh-CN", { hour12: false });
 }
 
 /**
@@ -55,14 +49,10 @@ export function LogPanel({ language, records, loading, location, onRefresh, onCl
             <RefreshCw size={14} />
             {loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.refresh")}
           </button>
-          <code className="diagnostics-location">
-            {location ?? t("diagnostics.panel.unavailable")}
-          </code>
+          <code className="diagnostics-location">{location ?? t("diagnostics.panel.unavailable")}</code>
         </div>
         {ordered.length === 0 ? (
-          <p className="diagnostics-empty">
-            {loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.empty")}
-          </p>
+          <p className="diagnostics-empty">{loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.empty")}</p>
         ) : (
           <ul className="diagnostics-list">
             {ordered.map((record, index) => (

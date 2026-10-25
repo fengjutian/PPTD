@@ -93,6 +93,9 @@ describe("content history", () => {
         createdAt: "2026-10-23T10:00:00.000Z",
         overallScore: 86,
         templateFitScore: 92,
+        templateName: "示例模板",
+        templateHash: "abcdef123456",
+        templateFitCounts: { "template-title-axis": 2, "template-font": 1 },
         issueCount: 3,
         slides: [{ slideIndex: 0, overallScore: 90 }],
       },
@@ -108,6 +111,9 @@ describe("content history", () => {
     expect(markup).toContain("AI 视觉评审记录");
     expect(markup).toContain("86 分");
     expect(markup).toContain("模板符合度 92");
+    expect(markup).toContain("示例模板");
+    expect(markup).toContain("abcdef12");
+    expect(markup).toContain("模板偏差 3 处");
   });
 
   it("offers a design restore when the layout changed after the version", () => {

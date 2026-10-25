@@ -10768,3 +10768,101 @@ button {
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 10px;
 }
+
+.diagnostics-dialog {
+  width: min(860px, 94vw);
+  max-width: 860px;
+}
+.diagnostics-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #2c2e33;
+}
+.diagnostics-meta button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid #3a3d44;
+  border-radius: 6px;
+  background: transparent;
+  color: #cfd2d7;
+  font-size: 11px;
+  cursor: pointer;
+}
+.diagnostics-meta button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.diagnostics-location {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #777b82;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}
+.diagnostics-empty {
+  padding: 26px 20px;
+  text-align: center;
+  color: #8f939b;
+  font-size: 12px;
+}
+.diagnostics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(62vh, 620px);
+  margin: 0;
+  padding: 10px 14px 14px;
+  overflow: auto;
+  list-style: none;
+}
+.diagnostics-entry {
+  padding: 7px 10px;
+  border: 1px solid #2c2e33;
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: #1b1c1f;
+}
+.diagnostics-entry.diagnostics-error {
+  border-left-color: #c65d3b;
+}
+.diagnostics-entry.diagnostics-warn {
+  border-left-color: #a67c2e;
+}
+.diagnostics-entry.diagnostics-info {
+  border-left-color: #486a67;
+}
+.diagnostics-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9da1a8;
+  font-size: 10px;
+}
+.diagnostics-entry-head code {
+  color: #cfd2d7;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}
+.diagnostics-level {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.diagnostics-entry p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: #cfd2d7;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.diagnostics-entry pre {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: #8f939b;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  white-space: pre-wrap;
+}

@@ -5,7 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
 import { isDesktopRuntime } from "./project-files";
-import { createLogPayload, errorCodeOf, recordAppError, recordAppLog } from "./app-log";
+import { createLogPayload, errorCodeOf, readAppLog, recordAppError, recordAppLog } from "./app-log";
 
 describe("errorCodeOf", () => {
   it("takes the stable prefix from a coded error", () => {
@@ -105,5 +105,35 @@ describe("recordAppError", () => {
     expect(entry.message).toContain("导出 PPTX");
     expect(entry.message).toContain("缺少 ppt/presentation.xml");
     expect(entry.context).toEqual({ slides: 6 });
+  });
+});
+
+describe("readAppLog", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+    vi.mocked(isDesktopRuntime).mockReturnValue(true);
+  });
+
+  it("reads the latest records through the Tauri command", async () => {
+    vi.mocked(invoke).mockResolvedValue([
+      { at: "2026-10-25T06:00:00.000Z", level: "error", code: "AI_DESIGN_JSON_INVALID", message: "m" },
+    ]);
+
+    const records = await readAppLog(50);
+
+    expect(invoke).toHaveBeenCalledWith("read_app_log", { limit: 50 });
+    expect(records).toHaveLength(1);
+    expect(records[0]?.code).toBe("AI_DESIGN_JSON_INVALID");
+  });
+
+  it("returns an empty list in the browser preview", async () => {
+    vi.mocked(isDesktopRuntime).mockReturnValue(false);
+    await expect(readAppLog()).resolves.toEqual([]);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty list when the log file cannot be read", async () => {
+    vi.mocked(invoke).mockRejectedValue(new Error("APP_LOG_READ_TASK_FAILED"));
+    await expect(readAppLog()).resolves.toEqual([]);
   });
 });

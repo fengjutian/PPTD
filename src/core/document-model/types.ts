@@ -549,6 +549,11 @@ export interface ReviewTrace {
   overallScore: number;
   /** Template adherence of the same review, when a template target existed. */
   templateFitScore?: number;
+  /** Display name and source fingerprint of the template used for the review. */
+  templateName?: string;
+  templateHash?: string;
+  /** Template findings by stable code, e.g. { "template-title-axis": 2 }. */
+  templateFitCounts?: Record<string, number>;
   issueCount: number;
   slides: Array<{ slideIndex: number; overallScore: number }>;
 }

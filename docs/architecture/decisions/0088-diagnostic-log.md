@@ -16,9 +16,10 @@ AGENTS.md 第 6 节要求长任务“必须支持取消、进度报告和可诊�
 
 ### 1. 一个只追加的 JSONL 文件
 
-新增两个 Tauri command：
+新增三个 Tauri command：
 
 - `append_app_log(entry)`：追加一条记录；
+- `read_app_log(limit)`：按时间顺序返回最后 `limit` 条（默认 200，上限 1 000），坏行跳过；
 - `app_log_location()`：返回日志文件绝对路径。
 
 文件位于 Tauri 的 `app_log_dir`，Windows 上是 `%LOCALAPPDATA%\com.pptd.desktop\logs\app.log`。每行一条 JSON：
@@ -72,9 +73,13 @@ AGENTS.md 第 6 节要求长任务“必须支持取消、进度报告和可诊�
 | 自动保存    | 自动保存的失败回调           | 起始文档 revision          |
 | 打开/保存   | 两个操作的 catch             | 页数                       |
 
-### 6. 用户可见入口
+### 6. 界面入口
 
-设置 → 模型服务 → “诊断日志”，显示文件路径和“不含正文、备注或图片”的说明。浏览器预览显示“没有本地日志”。不再需要用户去猜目录。
+- 左侧导航“日志”按钮：打开只读面板，按时间倒序显示最近 200 条（时间、级别、错误码、阶段、计数），可刷新；入口位置与“主题”同级，不新增主视图。
+- 面板显示文件绝对路径；浏览器预览显示“没有本地日志”。
+- 设置 → 模型服务仍保留“诊断日志”一行路径，方便直接复制文件位置。
+
+这样用户不必离开应用去猜目录，排查时先看面板，需要完整文件时再取 `app.log`。
 
 ## 后果
 
@@ -103,4 +108,5 @@ AGENTS.md 第 6 节要求长任务“必须支持取消、进度报告和可诊�
 - `src/services/app-log.test.ts`：错误码提取、非桌面不调用、命令失败不抛、消息截断、上下文超长丢弃、阶段与计数组装。
 - `src-tauri/src/commands/app_log.rs` 单测：每行一条 JSON、截断与上下文丢弃、超过 2 MB 轮转、缺省时间戳。
 - `src/features/settings/SettingsDialog.test.tsx`：路径与“不含正文”说明、浏览器预览的降级文案。
-- 全量 Vitest 151 文件 / 1 233 项、TypeScript 类型检查、ESLint、生产构建通过；Rust `cargo test --lib app_log` 4 项通过。
+- `src/features/diagnostics/LogPanel.test.tsx`：最新记录在前、错误码/阶段/计数可见、空状态、读取中、浏览器预览的路径降级。
+- 全量 Vitest 152 文件 / 1 241 项、TypeScript 类型检查、ESLint、生产构建通过；Rust `cargo test --lib app_log` 6 项通过。

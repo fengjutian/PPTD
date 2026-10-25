@@ -208,7 +208,13 @@ pub async fn read_app_log(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
+
+    /// 沙箱下系统 Temp 根目录不可写；项目已忽略的 `.tmp` 可以。
+    fn test_directory() -> tempfile::TempDir {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../.tmp");
+        fs::create_dir_all(&base).expect("create test tmp directory");
+        tempfile::tempdir_in(base).expect("create test directory")
+    }
 
     fn entry(message: &str) -> AppLogEntry {
         AppLogEntry {
@@ -230,7 +236,7 @@ mod tests {
 
     #[test]
     fn appends_one_json_line_per_entry() {
-        let directory = tempdir().unwrap();
+        let directory = test_directory();
         let path = directory.path().join("app.log");
         append_at(&path, entry("第一行")).unwrap();
         append_at(&path, entry("第二行")).unwrap();
@@ -244,7 +250,7 @@ mod tests {
 
     #[test]
     fn truncates_long_messages_and_drops_oversized_context() {
-        let directory = tempdir().unwrap();
+        let directory = test_directory();
         let path = directory.path().join("app.log");
         let mut record = entry(&"长".repeat(MAX_MESSAGE_CHARS + 50));
         record.context = Some(serde_json::json!({ "body": "字".repeat(MAX_CONTEXT_CHARS) }));
@@ -259,7 +265,7 @@ mod tests {
 
     #[test]
     fn rotates_the_file_when_it_exceeds_the_limit() {
-        let directory = tempdir().unwrap();
+        let directory = test_directory();
         let path = directory.path().join("app.log");
         fs::write(&path, vec![b'x'; MAX_LOG_BYTES as usize + 1]).unwrap();
         append_at(&path, entry("旋转后写入")).unwrap();
@@ -272,7 +278,7 @@ mod tests {
 
     #[test]
     fn uses_the_unix_timestamp_when_the_caller_omits_one() {
-        let directory = tempdir().unwrap();
+        let directory = test_directory();
         let path = directory.path().join("app.log");
         let mut record = entry("无时间");
         record.at = None;
@@ -284,7 +290,7 @@ mod tests {
 
     #[test]
     fn reads_only_the_latest_records_and_skips_broken_lines() {
-        let directory = tempdir().unwrap();
+        let directory = test_directory();
         let path = directory.path().join("app.log");
         for index in 0..5 {
             append_at(&path, entry(&format!("第 {index} 条"))).unwrap();
@@ -302,7 +308,7 @@ mod tests {
 
     #[test]
     fn reading_a_missing_log_returns_an_empty_list() {
-        let directory = tempdir().unwrap();
+        let directory = test_directory();
         let missing = directory.path().join("missing.log");
         assert!(read_at(&missing, 10).unwrap().is_empty());
     }

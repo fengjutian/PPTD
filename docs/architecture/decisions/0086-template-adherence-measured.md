@@ -94,7 +94,7 @@ passed = checked && errors === 0 && score >= minimumFit
 
 ### 8. 模板目标随项目保存
 
-`TemplateReviewTarget` 进入文档设计态（`PresentationDocument.templateStyle`，Schema 22），不进入内容哈希，也不改变内容 revision。生成时写入，重新打开项目后手动复检直接复用；预设模式会清掉旧目标。目标保存模板文件的 SHA-256，来源可追溯；手动复检拿到新的模板分析时，通过 `set-template-style` 设计命令把新目标写回项目。内容版本的设计快照也保存它，选择“同时恢复版式”时会一起恢复。`ReviewTrace` 同时记录 `templateFitScore`，历史记录里能看到当次模板符合度。手动复检、视觉评审阶段和导出报告都会核对页面尺寸、主题名和版式名：目标与当前文档不一致时视为过期，不用旧轴评审新稿。
+`TemplateReviewTarget` 进入文档设计态（`PresentationDocument.templateStyle`，Schema 22），不进入内容哈希，也不改变内容 revision。生成时写入，重新打开项目后手动复检直接复用；预设模式会清掉旧目标。目标保存模板文件的 SHA-256，来源可追溯；手动复检拿到新的模板分析时，通过 `set-template-style` 设计命令把新目标写回项目。内容版本的设计快照也保存它，选择“同时恢复版式”时会一起恢复。`ReviewTrace` 同时记录 `templateFitScore`、模板名、模板哈希和分项偏差数量，历史记录里能看到当次模板符合度与来源。质检报告提供“重新编译目标”和“清除目标”两个操作：前者用当前模板分析重建并写回契约，后者通过 `set-template-style` 删除契约。手动复检、视觉评审阶段和导出报告都会核对页面尺寸、主题名和版式名：目标与当前文档不一致时视为过期，不用旧轴评审新稿。
 
 ## 后果
 
@@ -118,7 +118,7 @@ passed = checked && errors === 0 && score >= minimumFit
 - `design-quality-stage.test.ts` 25 项：模板目标参与评审输入、修复计划、达标判断与报告；视觉评审关闭时仍生成模板符合度报告。
 - `visual-alignment.test.ts` 23 项：`templateFitScore` 低于阈值时循环不算达标。
 - `export-pptx.test.ts` 40 项（含导出报告的模板符合度摘要）、`content-version-restore.test.ts` 9 项（含模板目标随设计快照恢复）通过。
-- Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 1214 项通过（含导出视觉回归）。
+- Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 1241 项通过（含导出视觉回归）。
 
 ## 备选方案
 
