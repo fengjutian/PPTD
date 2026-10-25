@@ -55,6 +55,52 @@ export function supportedDirectionRecipe(
  */
 const SHARED_LIST_RECIPES: readonly RecipeId[] = ["editorial-index", "asymmetric-split"];
 
+/**
+ * The recipes that need a picture on the page.
+ *
+ * Exported because the command layer has to route these pages to a template
+ * layout with a picture placeholder before the recipe runs; a list kept in two
+ * places is how a new composition silently lands on a text-only template.
+ */
+export const IMAGE_RECIPE_IDS: readonly RecipeId[] = [
+  "image-led",
+  "full-bleed-image",
+  "side-image-text",
+];
+
+export function isImageRecipe(id: RecipeId | undefined): boolean {
+  return id !== undefined && IMAGE_RECIPE_IDS.includes(id);
+}
+
+/**
+ * Which of the picture compositions a page should take.
+ *
+ * Before this, every page with a picture became `image-led` — same right-hand
+ * column, same copy beside it — so a documentary deck read as one page repeated.
+ * The choice is content-shaped rather than random: a statement page with two
+ * lines wants the picture to be the page, a page with four or five points wants
+ * a measured column beside a framed plate, and anything else keeps the original
+ * edge-to-edge column. A band picture only fits the page-wide compositions,
+ * because cropping a wide strip into a tall column throws the frame away.
+ */
+function chooseImageRecipeId(
+  facts: CompositionFacts,
+  concept: DeckConcept,
+  options: RecipeSelectionOptions,
+): RecipeId | undefined {
+  const statement = facts.layout === "cover" || facts.layout === "section" || facts.itemCount <= 2;
+  const preference: readonly RecipeId[] = statement
+    ? ["full-bleed-image", "image-led", "side-image-text"]
+    : options.assetRole === "band"
+      ? ["image-led", "full-bleed-image", "side-image-text"]
+      : ["side-image-text", "image-led", "full-bleed-image"];
+  for (const id of preference) {
+    if (!concept.recipes.includes(id)) continue;
+    if (findRecipe(id)?.supports(facts, concept, options)) return id;
+  }
+  return undefined;
+}
+
 export function directionOwnsRequest(requested: RecipeId): boolean {
   return SHARED_LIST_RECIPES.includes(requested);
 }
@@ -72,7 +118,7 @@ export function chooseRecipeId(
   concept: DeckConcept,
   options: RecipeSelectionOptions,
 ): RecipeId | undefined {
-  if (options.hasAsset) return concept.recipes.includes("image-led") ? "image-led" : undefined;
+  if (options.hasAsset) return chooseImageRecipeId(facts, concept, options);
   if (facts.layout === "cover" && concept.recipes.includes("cover-statement")) return "cover-statement";
   if (facts.layout === "section" && concept.recipes.includes("section-statement")) return "section-statement";
   if (facts.hasQuote && facts.layout === "quote" && concept.recipes.includes("quote-field")) return "quote-field";

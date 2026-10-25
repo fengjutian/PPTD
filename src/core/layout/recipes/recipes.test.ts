@@ -8,7 +8,7 @@ import {
   resolveDeckConcept,
   type DeckConcept,
 } from "../../design/deck-concept";
-import { deriveDesignTokens } from "../../design/design-tokens";
+import { deriveDesignTokens, deriveSemanticColors } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
 import { contrastRatio } from "../../rendering/contrast";
 import { planPageChrome } from "../page-chrome";
@@ -95,6 +95,7 @@ function context(
       background: "#FFFFFF",
       rule: "#E2E7EC",
       panel: "#1F4E79",
+      ...deriveSemanticColors({ surface: "#FFFFFF", ink: "#465368", accent: "#1F4E79" }),
     },
     frame: {
       title,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDocument, inches, type SlideContent } from "../document-model";
 import { defaultConceptForPreset, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
-import { deriveDesignTokens } from "../design/design-tokens";
+import { deriveDesignTokens, deriveSemanticColors } from "../design/design-tokens";
 import type { CompositionFacts } from "../commands/design-intent";
 import { compileDesignPlan, planRecipeId } from "./design-compiler";
 import { planPageChrome } from "./page-chrome";
@@ -44,6 +44,7 @@ function input(plan: Parameters<typeof compileDesignPlan>[0]["plan"]) {
     background: "#486A67",
     rule: "#DCE3EA",
     panel: "#B08A2E",
+    ...deriveSemanticColors({ surface: "#486A67", ink: "#293241", accent: "#B08A2E" }),
   };
   const frame: RecipeContext["frame"] = { title, content, safe, page };
   const concept = resolveDeckConcept({

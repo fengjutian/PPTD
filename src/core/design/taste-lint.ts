@@ -96,6 +96,14 @@ export interface TasteLintOptions {
   minTitleBodyRatio?: number;
   maxFontFamilies?: number;
   maxAccentColors?: number;
+  /**
+   * Highlighted phrases allowed in one headline.
+   *
+   * One is a design device: the page's single emphasis, set in the accent. Two
+   * or more is a headline being decorated word by word, which is the template
+   * look this check exists for.
+   */
+  maxAccentRuns?: number;
 }
 
 const DEFAULTS = {
@@ -105,7 +113,21 @@ const DEFAULTS = {
   minTitleBodyRatio: 2.5,
   maxFontFamilies: 2,
   maxAccentColors: 4,
+  maxAccentRuns: 1,
 } as const;
+
+/**
+ * A highlighted phrase inside a headline.
+ *
+ * Adjacent runs of the same color are one phrase: bold-and-colored text arrives
+ * as two runs, and counting that as two emphases would forbid exactly the case
+ * the allowance is for.
+ */
+export interface AccentRun {
+  start: number;
+  end: number;
+  color: string;
+}
 
 /** Body floor as the larger of an absolute pt value and a share of page width. */
 export function minimumBodyPt(document: PresentationDocument, options: TasteLintOptions = {}): number {
@@ -277,20 +299,24 @@ function containsEmoji(value: string): boolean {
   return EMOJI_PATTERN.test(value);
 }
 
-function accentWordRuns(title: TextElement): { length: number; colors: string[] } {
+function accentWordRuns(title: TextElement): AccentRun[] {
   const base = colorOf(title.style.color);
-  let length = 0;
-  const colors = new Set<string>();
-  for (const run of title.runs ?? []) {
+  const runs: AccentRun[] = [];
+  const source = [...(title.runs ?? [])].sort((left, right) => left.start - right.start);
+  for (const run of source) {
     const color = colorOf(run.color);
     if (!color || color === base) continue;
     const from = Math.max(0, run.start);
     const to = Math.min(title.text.length, run.end);
     if (to <= from) continue;
-    length += to - from;
-    colors.add(color);
+    const previous = runs[runs.length - 1];
+    if (previous && previous.color === color && previous.end >= from) {
+      previous.end = Math.max(previous.end, to);
+      continue;
+    }
+    runs.push({ start: from, end: to, color });
   }
-  return { length, colors: [...colors] };
+  return runs;
 }
 
 function emptyCounts(): Record<TasteIssueCode, number> {
@@ -312,6 +338,7 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
   const minTitleBodyRatio = options.minTitleBodyRatio ?? DEFAULTS.minTitleBodyRatio;
   const maxFontFamilies = options.maxFontFamilies ?? DEFAULTS.maxFontFamilies;
   const maxAccentColors = options.maxAccentColors ?? DEFAULTS.maxAccentColors;
+  const maxAccentRuns = options.maxAccentRuns ?? DEFAULTS.maxAccentRuns;
 
   const report = (
     code: TasteIssueCode,
@@ -401,21 +428,35 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
       }
     }
 
-    // A one-glyph text is a quote mark or an icon, not a third typographic voice.
-    const families = new Set(
-      textElements(slide)
-        .filter((element) => element.text.trim().length > 1)
-        .map((element) => normalizedFamily(element.style.fontFamily)),
+    // A page may set its headline in a display face: that is one additional
+    // family, and only at title size. A face that also sets body copy is a text
+    // family and keeps the original cap, so "three fonts because the theme has
+    // three" is still refused — while a designed display pairing is not.
+    const sizedText = textElements(slide).filter((element) => element.text.trim().length > 1);
+    const isDisplaySize = (element: TextElement) =>
+      title !== undefined && element.style.fontSizePt >= title.style.fontSizePt * 0.9;
+    const displayFamilies = new Set(
+      sizedText.filter(isDisplaySize).map((element) => normalizedFamily(element.style.fontFamily)),
     );
-    if (families.size > maxFontFamilies) {
+    const textFamilies = new Set(
+      sizedText.filter((element) => !isDisplaySize(element)).map((element) => normalizedFamily(element.style.fontFamily)),
+    );
+    for (const family of textFamilies) displayFamilies.delete(family);
+    if (textFamilies.size > maxFontFamilies || displayFamilies.size > 1) {
+      const total = textFamilies.size + displayFamilies.size;
       report(
         "FONT_FAMILY_COUNT",
         slideIndex,
         slide,
         [],
-        `本页使用了 ${families.size} 种字体，建议不超过 ${maxFontFamilies} 种`,
-        { count: families.size, families: [...families].sort().join(", ") },
-        "正文与标题各一种即可，用字重和字号制造变化。",
+        `本页用了 ${total} 种字体：正文 ${textFamilies.size} 种（上限 ${maxFontFamilies}），标题 ${displayFamilies.size} 种（上限 1）`,
+        {
+          count: total,
+          text: textFamilies.size,
+          display: displayFamilies.size,
+          families: [...textFamilies, ...displayFamilies].sort().join(", "),
+        },
+        "正文与标题各一种即可；标题可以另用一种 display 字体。",
       );
     }
 
@@ -458,15 +499,15 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
       }
 
       const runs = accentWordRuns(title);
-      if (title.text.trim().length >= 6 && runs.length > 0 && runs.length < title.text.length / 2) {
+      if (runs.length > maxAccentRuns) {
         report(
           "DECORATION_ACCENT_WORD",
           slideIndex,
           slide,
           [title.id],
-          "标题里只有一个词被单独换色",
-          { highlightedChars: runs.length, totalChars: title.text.length },
-          "强调靠整句的字重或位置；单字变色是模板装饰。",
+          `标题里有 ${runs.length} 处单独换色，最多允许 ${maxAccentRuns} 处`,
+          { runs: runs.length, highlightedChars: runs.reduce((total, run) => total + (run.end - run.start), 0) },
+          "一处强调是设计；逐词换色是模板装饰。",
         );
       }
     }

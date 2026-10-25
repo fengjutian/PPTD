@@ -143,7 +143,7 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
   documentary: {
     motif: "documentary",
     surface: "full-bleed",
-    recipes: EDITORIAL_RECIPES,
+    recipes: DOCUMENTARY_RECIPES,
     // A documentary direction exists to give the picture the page; a text-only
     // request is clamped to a picture rather than silently becoming editorial.
     imagery: ["hero", "band", "side"],

@@ -388,6 +388,8 @@ const aiDesignRecipeIds = [
   "data-story",
   "chart-story",
   "image-led",
+  "full-bleed-image",
+  "side-image-text",
   "editorial-index",
   "asymmetric-split",
   "process-rail",

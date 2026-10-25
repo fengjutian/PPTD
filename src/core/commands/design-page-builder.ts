@@ -42,7 +42,7 @@ import { deriveDesignTokens, deriveSemanticColors } from "../design/design-token
 import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { resolveChartKind } from "../design/data-relation";
 import { compileDesignPlan } from "../layout/design-compiler";
-import { consumptionProblem, selectRecipe } from "../layout/recipes/plan";
+import { consumptionProblem, isImageRecipe, selectRecipe } from "../layout/recipes/plan";
 import type { RecipeContext } from "../layout/recipes/types";
 import { planPageChrome } from "../layout/page-chrome";
 import { coverCrop } from "../rendering/image-fit";
@@ -309,7 +309,7 @@ export function createDesignContext(
     const composition = deckPlan.compositions[index]!;
     if (design.layout === "cover") return "cover";
     if (design.layout === "section") return "section";
-    if (design.recipe === "image-led" || design.visualAsset?.enabled) return "image";
+    if (isImageRecipe(design.recipe) || design.visualAsset?.enabled) return "image";
     if (hasBlock("comparison")) return "split";
     if (hasBlock("timeline") || hasBlock("process") || hasBlock("metric")) return "cards";
     if (design.layout === "quote") return "quote";
