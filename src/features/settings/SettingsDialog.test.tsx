@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DesignMemoryDetails, SettingsWorkspace } from "./SettingsDialog";
+import { DesignMemoryDetails, DiagnosticsLog, SettingsWorkspace } from "./SettingsDialog";
 
 describe("SettingsWorkspace 语言", () => {
   it("按英文界面渲染设置分类和模型表单", () => {
@@ -48,5 +48,21 @@ describe("SettingsWorkspace 语言", () => {
     expect(markup).toContain("太素了");
     expect(markup).toContain("deck");
     expect(markup).toContain("删除这条记忆");
+  });
+
+  it("shows where the diagnostic log lives", () => {
+    const markup = renderToStaticMarkup(
+      <DiagnosticsLog language="zh" path={"C:\\Users\\demo\\AppData\\Local\\com.pptd.desktop\\logs\\app.log"} />,
+    );
+    expect(markup).toContain("诊断日志");
+    expect(markup).toContain("app.log");
+    // The help text is the user-facing promise about what the log does not contain.
+    expect(markup).toContain("不含正文");
+  });
+
+  it("explains that the browser preview has no local log", () => {
+    const markup = renderToStaticMarkup(<DiagnosticsLog language="en" />);
+    expect(markup).toContain("Diagnostic log");
+    expect(markup).toContain("no local log");
   });
 });

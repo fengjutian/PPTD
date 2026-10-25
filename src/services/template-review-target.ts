@@ -415,7 +415,28 @@ const colorBelongsToPalette = (color: string, palette: string[], channelToleranc
   });
 };
 
-const normalizeFontFamily = (value: string): string => value.replace(/["']/g, "").trim().toLowerCase();
+/**
+ * Common CJK/English aliases of the same font. Template themes frequently name
+ * "Microsoft YaHei" while the renderer or a preset uses "微软雅黑"; without the
+ * alias table that is a false template-font warning.
+ */
+const FONT_ALIASES: Readonly<Record<string, string>> = {
+  微软雅黑: "microsoft yahei",
+  "microsoft yahei ui": "microsoft yahei",
+  宋体: "simsun",
+  新宋体: "nsimsun",
+  黑体: "simhei",
+  楷体: "kaiti",
+  仿宋: "fangsong",
+  等线: "dengxian",
+  思源黑体: "source han sans",
+  思源宋体: "source han serif",
+};
+
+const normalizeFontFamily = (value: string): string => {
+  const normalized = value.replace(/["']/g, "").trim().toLowerCase();
+  return FONT_ALIASES[normalized] ?? normalized;
+};
 
 const fontBelongsToTemplate = (fontFamily: string, target: TemplateReviewTarget): boolean => {
   const fonts = [target.majorFont, target.minorFont].filter(
@@ -536,6 +557,21 @@ export function checkTemplateFit(
             grid.bodyTop - bounds.y,
             bounds.y + bounds.height - grid.bodyBottom,
           ),
+        });
+      }
+      if (
+        target.palette.length > 0 &&
+        bodies[0]?.type === "text" &&
+        !colorBelongsToPalette(bodies[0].style.color, target.palette, target.tolerances.colorChannel)
+      ) {
+        issues.push({
+          slideIndex,
+          code: "template-palette",
+          severity: "warning",
+          message: `正文颜色 ${bodies[0].style.color} 不在模板色板中`,
+          suggestion: "把正文颜色换回模板主题色或中性墨色",
+          elementIds: [bodies[0].id],
+          role: "body",
         });
       }
       if (resolved.bodySizePt !== undefined && slide.content.blocks === undefined && bodies[0]?.type === "text") {

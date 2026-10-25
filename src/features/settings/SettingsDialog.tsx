@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { CONCEPT_PRESET_LABELS, type ConceptPresetId } from "../../core/design/deck-concept";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
+import { appLogLocation } from "../../services/app-log";
 import {
   clearDesignMemory,
   designMemorySummary,
@@ -131,6 +132,29 @@ export function DesignMemoryDetails({ language, looks, preferences, onRemove }: 
   );
 }
 
+export interface DiagnosticsLogProps {
+  language: UiLanguage;
+  /** 日志文件的绝对路径；读取失败或浏览器预览时为 undefined。 */
+  path?: string;
+}
+
+/**
+ * 诊断日志的位置。
+ *
+ * 失败提示只在状态栏停留几秒。用户回头说"生成报错了"时，既没有错误码也
+ * 没有失败阶段。把文件位置放在设置里，下一次可以直接取文件，而不是靠回忆。
+ */
+export function DiagnosticsLog({ language, path }: DiagnosticsLogProps) {
+  const t = useMemo(() => createTranslator(language), [language]);
+  return (
+    <div className="settings-diagnostics">
+      <h3>{t("settings.diagnostics.title")}</h3>
+      <p>{t("settings.diagnostics.help")}</p>
+      <code className="settings-diagnostics-path">{path ?? t("settings.diagnostics.unavailable")}</code>
+    </div>
+  );
+}
+
 export function SettingsWorkspace({ language, onLanguageChange, onMessage }: SettingsWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<"model" | "appearance" | "font" | "language">("model");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -139,6 +163,7 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
   const [busy, setBusy] = useState(false);
   const [testState, setTestState] = useState<{ kind: "success" | "error"; message: string }>();
   const [installedFonts, setInstalledFonts] = useState<Record<string, boolean>>({});
+  const [logPath, setLogPath] = useState<string>();
   const [memory, setMemory] = useState<DesignMemorySummary>();
   const [memoryDetails, setMemoryDetails] = useState<{ looks: DesignLook[]; preferences: DesignPreference[] }>({
     looks: [],
@@ -177,6 +202,16 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
     const detected: Record<string, boolean> = {};
     for (const option of UI_FONT_OPTIONS) detected[option.id] = probeUiFont(option);
     setInstalledFonts(detected);
+  }, []);
+  // 日志位置只在桌面端存在；浏览器预览没有文件可给，保持 undefined。
+  useEffect(() => {
+    let active = true;
+    void appLogLocation().then((location) => {
+      if (active) setLogPath(location);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
   const refreshMemory = async () => {
     const [summary, looks, preferences] = await Promise.all([
@@ -460,6 +495,7 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
               {testState.message}
             </div>
           )}
+          <DiagnosticsLog language={language} path={logPath} />
         </section>
       )}
       {activeTab === "appearance" && (

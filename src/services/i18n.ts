@@ -57,6 +57,10 @@ const zh = {
   "settings.model.testing": "正在测试…",
   "settings.model.deleteKey": "删除 API Key",
   "settings.model.testFailed": "连接失败：{detail}",
+  "settings.diagnostics.title": "诊断日志",
+  "settings.diagnostics.help":
+    "生成、设计、导出或保存失败时会追加一条记录：时间、错误码、失败阶段和计数，不含正文、备注或图片。把该文件发给开发者即可定位上次失败。",
+  "settings.diagnostics.unavailable": "浏览器预览模式没有本地日志；桌面端写入系统日志目录。",
 
   "settings.appearance.title": "应用主题",
   "settings.appearance.description": "只调整 PPTD 界面外观，不影响 PPT 模板和演示文稿设计。",
@@ -157,6 +161,11 @@ const en: Record<UiMessageKey, string> = {
   "settings.model.testing": "Testing…",
   "settings.model.deleteKey": "Delete API Key",
   "settings.model.testFailed": "Connection failed: {detail}",
+  "settings.diagnostics.title": "Diagnostic log",
+  "settings.diagnostics.help":
+    "Every failed generation, design, export or save appends one record: time, error code, stage and counts, never body copy, notes or images. Send that file to the developer to diagnose the last failure.",
+  "settings.diagnostics.unavailable":
+    "The browser preview has no local log; the desktop app writes one into the system log directory.",
 
   "settings.appearance.title": "Appearance",
   "settings.appearance.description":

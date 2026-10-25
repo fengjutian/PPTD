@@ -10743,3 +10743,28 @@ button {
   color: #777b82;
   font-size: 9px;
 }
+
+.settings-diagnostics {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2c2e33;
+  color: #8f939b;
+  font-size: 11px;
+}
+.settings-diagnostics h3 {
+  margin: 0 0 4px;
+  color: #9da1a8;
+  font-size: 10px;
+  font-weight: 500;
+}
+.settings-diagnostics p {
+  margin: 0 0 6px;
+  line-height: 1.55;
+}
+.settings-diagnostics-path {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #cfd2d7;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}

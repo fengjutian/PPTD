@@ -75,8 +75,8 @@ passed = checked && errors === 0 && score >= minimumFit
 
 模板色板（主题色、占位符墨色、默认底色）和主题字体进入目标。`checkTemplateFit` 还会检查：
 
-- 标题墨色是否属于模板色板，中性色始终允许，逐通道容差 12；
-- 标题/正文字体族是否属于模板主字体或次字体，名称做去引号、去空白、小写归一化。
+- 标题和正文墨色是否属于模板色板，中性色始终允许，逐通道容差 12；
+- 标题/正文字体族是否属于模板主字体或次字体，名称做去引号、去空白、小写归一化，并识别常见中英文别名（微软雅黑/Microsoft YaHei、宋体/SimSun、思源黑体/Source Han Sans 等）。
 
 这两个检查只产生 `warning`（`template-palette` / `template-font`），不是硬错误：模板色板经常被设计系统扩展，字体别名也很常见。它们会降低 `templateFitScore`，但不会单独把页面判为不可交付。模板目标同时保存占位符墨色；确定性修复会用 `restyle` 把标题颜色和主/次字体恢复到模板值。
 
@@ -92,7 +92,7 @@ passed = checked && errors === 0 && score >= minimumFit
 
 ### 8. 模板目标随项目保存
 
-`TemplateReviewTarget` 进入文档设计态（`PresentationDocument.templateStyle`，Schema 22），不进入内容哈希，也不改变内容 revision。生成时写入，重新打开项目后手动复检直接复用；预设模式会清掉旧目标。内容版本的设计快照也保存它，选择“同时恢复版式”时会一起恢复。`ReviewTrace` 同时记录 `templateFitScore`，历史记录里能看到当次模板符合度。手动复检、视觉评审阶段和导出报告都会核对页面尺寸、主题名和版式名：目标与当前文档不一致时视为过期，不用旧轴评审新稿。
+`TemplateReviewTarget` 进入文档设计态（`PresentationDocument.templateStyle`，Schema 22），不进入内容哈希，也不改变内容 revision。生成时写入，重新打开项目后手动复检直接复用；预设模式会清掉旧目标。目标保存模板文件的 SHA-256，来源可追溯；手动复检拿到新的模板分析时，通过 `set-template-style` 设计命令把新目标写回项目。内容版本的设计快照也保存它，选择“同时恢复版式”时会一起恢复。`ReviewTrace` 同时记录 `templateFitScore`，历史记录里能看到当次模板符合度。手动复检、视觉评审阶段和导出报告都会核对页面尺寸、主题名和版式名：目标与当前文档不一致时视为过期，不用旧轴评审新稿。
 
 ## 后果
 
@@ -112,7 +112,7 @@ passed = checked && errors === 0 && score >= minimumFit
 
 ## 验证
 
-- `template-review-target.test.ts` 11 项：网格/字号/轴语言、无占位返回 undefined、通过页、标题偏移、正文越界、色板/字体 warning、自由构图名称与几何、目标继承阈值、过期目标识别。
+- `template-review-target.test.ts` 13 项：网格/字号/轴语言、无占位返回 undefined、通过页、标题偏移、正文越界、标题/正文色板/字体 warning、字体别名、自由构图名称与几何、目标继承阈值、过期目标识别。
 - `design-quality-stage.test.ts` 25 项：模板目标参与评审输入、修复计划、达标判断与报告；视觉评审关闭时仍生成模板符合度报告。
 - `visual-alignment.test.ts` 23 项：`templateFitScore` 低于阈值时循环不算达标。
 - `export-pptx.test.ts` 40 项（含导出报告的模板符合度摘要）、`content-version-restore.test.ts` 9 项（含模板目标随设计快照恢复）通过。

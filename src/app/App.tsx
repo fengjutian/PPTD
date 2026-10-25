@@ -3122,53 +3122,59 @@ export function App() {
           }
           if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
           setDesignDetail(`已收到 ${proposals.length} 个方向，正在渲染代表页`);
-          const candidates: Array<{
+          type DirectionCandidate = {
             id: string;
             proposal: AiDeckConcept;
             concept: DeckConcept;
             images: string[];
-          }> = [];
-          for (const proposal of proposals) {
-            try {
-              const resolved = resolveDeckConcept({
-                concept: proposal,
-                pageFacts,
-                pageCount: sourceDraft.slides.length,
-              }).concept;
-              const previewDraft = {
-                title: sourceDraft.title,
-                slides: previewIndexes.map((index) => sourceDraft.slides[index]!),
-                presentationBrief: sourceDraft.presentationBrief,
-              };
-              const previewBriefs = previewIndexes.map((index) => briefs[index]!);
-              const previewDesign = await generatePresentationDesign(previewDraft, previewBriefs, analysis, {
-                concept: resolved,
-                taskId,
-              });
-              if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-              const pages = buildDirectionPreviewPages({
-                document: baseline,
-                concept: resolved,
-                pageIndexes: previewIndexes,
-                designs: previewDesign.slides,
-                ...(preset ? { commandBase: { themePresetId: preset.id } } : {}),
-                title: sourceDraft.title,
-              });
-              const images: string[] = [];
-              for (const page of pages) {
-                const render = await renderPresentationForVisualReview(page.document, 640);
-                images.push(render.slides[0]!);
+          };
+          // 四个方向各自有一次模型请求和两次本地渲染。串行执行把等待时间乘以
+          // 四，是"设计阶段超时"最直接的原因；这里按方向并行，单个方向失败
+          // 仍然只丢弃它自己，不影响其余三个。
+          const previews = await Promise.all(
+            proposals.map(async (proposal): Promise<DirectionCandidate | undefined> => {
+              try {
+                const resolved = resolveDeckConcept({
+                  concept: proposal,
+                  pageFacts,
+                  pageCount: sourceDraft.slides.length,
+                }).concept;
+                const previewDraft = {
+                  title: sourceDraft.title,
+                  slides: previewIndexes.map((index) => sourceDraft.slides[index]!),
+                  presentationBrief: sourceDraft.presentationBrief,
+                };
+                const previewBriefs = previewIndexes.map((index) => briefs[index]!);
+                const previewDesign = await generatePresentationDesign(previewDraft, previewBriefs, analysis, {
+                  concept: resolved,
+                  taskId,
+                });
+                if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+                const pages = buildDirectionPreviewPages({
+                  document: baseline,
+                  concept: resolved,
+                  pageIndexes: previewIndexes,
+                  designs: previewDesign.slides,
+                  ...(preset ? { commandBase: { themePresetId: preset.id } } : {}),
+                  title: sourceDraft.title,
+                });
+                // 渲染是本机画布工作，两页之间没有依赖，没有理由排队。
+                const rendered = await Promise.all(
+                  pages.map(async (page) => (await renderPresentationForVisualReview(page.document, 640)).slides[0]!),
+                );
+                return { id: crypto.randomUUID(), proposal, concept: resolved, images: rendered };
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                if (designCancelRef.current || message.includes("CANCELLED")) throw error;
+                // A direction whose preview cannot be drawn is not offered.
+                // Which direction failed is the only way to tell a bad concept
+                // from a renderer gap, so it goes to the diagnostic log.
+                void recordAppError("设计方向预览", error, { preset: proposal.preset });
+                return undefined;
               }
-              candidates.push({ id: crypto.randomUUID(), proposal, concept: resolved, images });
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              if (designCancelRef.current || message.includes("CANCELLED")) throw error;
-              // A direction whose preview cannot be drawn is not offered.
-              // Which direction failed is the only way to tell a bad concept
-              // from a renderer gap, so it goes to the diagnostic log.
-              void recordAppError("设计方向预览", error, { preset: proposal.preset });
-            }
-          }
+            }),
+          );
+          const candidates = previews.filter((candidate): candidate is DirectionCandidate => candidate !== undefined);
           if (candidates.length < 4) {
             // 四个方向是产品约定。不足四个说明提案或预览掉了，退回单方向，
             // 但不展示一张残缺的对比表；原因必须留下来，否则这次静默回退
@@ -5952,6 +5958,14 @@ export function App() {
                               {templateTargetPreview.minimumFit}
                             </dd>
                           </div>
+                          {templateTargetPreview.templateHash && (
+                            <div>
+                              <dt>来源指纹</dt>
+                              <dd title={templateTargetPreview.templateHash}>
+                                {templateTargetPreview.templateHash.slice(0, 12)}
+                              </dd>
+                            </div>
+                          )}
                         </dl>
                       ) : (
                         <div className="template-analysis-warning">

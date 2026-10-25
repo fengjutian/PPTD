@@ -1032,6 +1032,40 @@ describe("document commands", () => {
     expect(title?.type === "text" && title.frame.x).toBe(Math.round(0.1 * result.pageSize.width));
   });
 
+  it("stores and clears the persisted template target as design state", () => {
+    const document = createDocument();
+    const grid = {
+      left: 0.05,
+      right: 0.95,
+      top: 0.08,
+      bottom: 0.9,
+      titleX: 0.05,
+      titleY: 0.08,
+      titleWidth: 0.9,
+      titleHeight: 0.1,
+      bodyTop: 0.24,
+      bodyBottom: 0.9,
+    };
+    applyCommand(document, {
+      type: "set-template-style",
+      templateStyle: {
+        name: "示例模板",
+        templateHash: "abc123",
+        page: { widthEmu: document.pageSize.width, heightEmu: document.pageSize.height },
+        grid,
+        layouts: [{ name: "内页", grid, freeComposition: false }],
+        palette: [],
+        alignment: "left-grid",
+        confidence: "high",
+        minimumFit: 90,
+        tolerances: { axis: 0.01, axisY: 0.005, margin: 0.01, fontSizePt: 1.5, colorChannel: 12 },
+      },
+    });
+    expect(document.templateStyle?.templateHash).toBe("abc123");
+    applyCommand(document, { type: "set-template-style" });
+    expect(document.templateStyle).toBeUndefined();
+  });
+
   it("区域移动把整块内容按比例搬到目标位置", () => {
     const source = createDocument();
     const content = { title: "标题", body: "正文", speakerNotes: "" };

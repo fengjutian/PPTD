@@ -124,6 +124,7 @@ describe("template review target", () => {
     expect(target!.grid.right).toBeCloseTo(0.94375, 4);
     expect(target!.grid.titleX).toBeCloseTo(0.05625, 4);
     expect(target!.grid.titleY).toBeCloseTo(0.086667, 3);
+    expect(target!.templateHash).toBe("hash:test");
     expect(target!.titleSizePt).toBe(28);
     expect(target!.bodySizePt).toBe(16);
     expect(target!.titleInk).toBe("#111827");
@@ -182,6 +183,28 @@ describe("template review target", () => {
     const report = checkTemplateFit(document, target);
     expect(report.issues.some((issue) => issue.code === "template-palette")).toBe(true);
     expect(report.passed).toBe(true);
+  });
+
+  it("warns when body text colour falls outside the template palette", () => {
+    const target = buildTemplateReviewTarget(analysis())!;
+    const document = withBody();
+    const body = document.slides[0]!.elements[1]!;
+    if (body.type !== "text") throw new Error("fixture body must be text");
+    body.style = { ...body.style, color: "#FF00AA" };
+    const report = checkTemplateFit(document, target);
+    expect(report.issues.some((issue) => issue.code === "template-palette" && issue.role === "body")).toBe(true);
+  });
+
+  it("accepts a CJK alias of the template font", () => {
+    const target = buildTemplateReviewTarget(analysis({ majorFont: "Microsoft YaHei", minorFont: "Microsoft YaHei" }))!;
+    const document = withBody();
+    const title = titleOf(document);
+    title.style = { ...title.style, fontFamily: "微软雅黑" };
+    const body = document.slides[0]!.elements[1]!;
+    if (body.type !== "text") throw new Error("fixture body must be text");
+    body.style = { ...body.style, fontFamily: "微软雅黑" };
+    const report = checkTemplateFit(document, target);
+    expect(report.issues.some((issue) => issue.code === "template-font")).toBe(false);
   });
 
   it("warns when a title font is not one of the template fonts", () => {

@@ -2035,22 +2035,7 @@ pub async fn analyze_pptx_template(
         if !path.starts_with(&root) || !path.is_file() {
             return Err("TEMPLATE_NOT_FOUND".into());
         }
-        let content_hash = {
-            let mut file =
-                File::open(&path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
-            let mut hasher = Sha256::new();
-            let mut buffer = [0u8; 64 * 1024];
-            loop {
-                let read = file
-                    .read(&mut buffer)
-                    .map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
-                if read == 0 {
-                    break;
-                }
-                hasher.update(&buffer[..read]);
-            }
-            format!("{:x}", hasher.finalize())
-        };
+        let content_hash = template_content_hash(&path)?;
         let file = File::open(path).map_err(|error| format!("TEMPLATE_READ_FAILED: {error}"))?;
         let mut archive =
             ZipArchive::new(file).map_err(|error| format!("PPTX_ARCHIVE_INVALID: {error}"))?;
