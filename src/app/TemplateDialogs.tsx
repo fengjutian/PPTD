@@ -38,6 +38,7 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
     chooseVariant,
     discardVariantBatch,
     cancelVariantBatch,
+    renderVariantPreview,
     designQualityReport,
     designQualityReportOpen,
     setDesignQualityReportOpen,
@@ -697,7 +698,12 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
         </div>
       )}
       {variantOptions && variantOptions.length > 0 && (
-        <VariantGalleryDialog options={variantOptions} onSelect={chooseVariant} onDiscard={discardVariantBatch} />
+        <VariantGalleryDialog
+          options={variantOptions}
+          onSelect={chooseVariant}
+          onDiscard={discardVariantBatch}
+          renderPages={renderVariantPreview}
+        />
       )}
     </>
   );

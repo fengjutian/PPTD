@@ -188,7 +188,7 @@ import {
   templateTargetMatchesDocument,
   type TemplateFitReport,
 } from "../services/template-review-target";
-import { renderPresentationForVisualReview } from "../services/presentation-renderer";
+import { renderPresentationForVisualReview, renderPresentationPages } from "../services/presentation-renderer";
 import {
   initialAgentWorkflow,
   startAgentWorkflow,
@@ -3251,6 +3251,7 @@ export function useAppRuntime() {
             description: preset.description,
             reason: choice.reason,
             images: rendered.filter((image): image is string => image !== undefined),
+            pageCount: sourceDraft.slides.length,
             issueCount: issues.length,
           });
         } catch (error) {
@@ -3323,6 +3324,32 @@ export function useAppRuntime() {
     designCancelRef.current = true;
     setDesignProgress((current) => ({ percent: current.percent, label: "正在取消批量生成…" }));
     void cancelAiGeneration(designTaskId.current).catch(() => undefined);
+  };
+
+  /**
+   * 整册预览：把这一版已经排好的设计重新应用到已审核草稿，逐页渲染。
+   *
+   * 只读路径。设计数据在 ref 里，重放一次比常驻六份整册文档省内存；不用预览
+   * 结果写项目、不动 revision，也不补配图。渲染宽度取 960：够看清版式与断行，
+   * 又不至于让一册二十页的 data URL 压满内存。
+   */
+  const renderVariantPreview = async (id: string) => {
+    const variant = variantDesignsRef.current.get(id);
+    const sourceDraft = aiDraft;
+    if (!variant || !sourceDraft) throw new Error("VARIANT_PREVIEW_MISSING");
+    const preview = createDocument();
+    applyCommand(preview, {
+      type: "apply-ai-designed-draft",
+      title: sourceDraft.title,
+      slides: sourceDraft.slides,
+      designs: variant.design.slides,
+      designConcept: variant.concept,
+      themePresetId: variant.presetId,
+      // 与批量生成、与最终保留的那一版使用同一套背景节奏。
+      backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+    });
+    if (preview.slides.length === 0) throw new Error("VARIANT_PREVIEW_MISSING");
+    return renderPresentationPages(preview, 960);
   };
 
   const handleChooseTemplate = async () => {
@@ -4097,6 +4124,7 @@ export function useAppRuntime() {
     chooseVariant,
     discardVariantBatch,
     cancelVariantBatch,
+    renderVariantPreview,
     designQualityReport,
     designQualityReportOpen,
     setDesignQualityReportOpen,

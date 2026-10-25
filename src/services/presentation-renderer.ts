@@ -804,6 +804,17 @@ export async function composeContactSheetFromDataUrls(
   return composeContactSheet(images, pageSize);
 }
 
+/**
+ * 整册逐页渲染，不拼缩略图墙。
+ *
+ * 画廊预览只要每一页的画面；缩略图墙是给评审模型看整册节奏用的，打开预览不该
+ * 为它多付一次拼图成本。逐页仍走 renderSlide，预览看到的就是质检看到的画面。
+ */
+export async function renderPresentationPages(document: PresentationDocument, width = 960): Promise<string[]> {
+  const canvases = await Promise.all(document.slides.map((slide) => renderSlide(document, slide, width, true, true)));
+  return canvases.map((canvas) => canvas.toDataURL("image/jpeg", 0.88));
+}
+
 export async function renderPresentationForVisualReview(
   document: PresentationDocument,
   width = 1280,

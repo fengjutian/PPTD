@@ -106,6 +106,8 @@ export interface VariantOptionView {
   reason: string;
   /** Two representative rendered pages, cover first. */
   images: string[];
+  /** Pages in the designed deck, so the full preview can say how much it will render. */
+  pageCount: number;
   issueCount: number;
 }
 

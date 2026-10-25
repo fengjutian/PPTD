@@ -1563,7 +1563,23 @@
  * The picker is light, so the gallery that continues the same decision is light
  * too. Every card is a real deck, which is why the previews are the largest
  * element on it and the copy stays three short lines.
+ *
+ * The surfaces are explicit rather than inherited: the cards and the enlarged
+ * preview are hard-coded light, and a white card on a dark dialog read as a
+ * rendering mistake. The enlarged preview continues the same comparison and is
+ * therefore given the same surface.
  */
+.variant-gallery-dialog,
+.variant-preview-dialog {
+  color: #26333f;
+  background: #fff;
+  border-color: #d3dae1;
+}
+.variant-gallery-dialog .upload-dialog-heading > button:hover,
+.variant-preview-dialog .upload-dialog-heading > button:hover {
+  color: #25282d;
+  background: #eceef1;
+}
 .variant-gallery-dialog {
   width: min(1180px, 100%);
   max-height: calc(100vh - 48px);
@@ -1586,17 +1602,23 @@
   color: inherit;
   background: #fff;
   text-align: left;
-  cursor: pointer;
-}
-.variant-gallery-card:hover,
-.variant-gallery-card:focus-visible {
-  border-color: var(--ppt-accent);
-  box-shadow: 0 8px 20px rgb(23 44 71 / 12%);
-  outline: none;
 }
 .variant-gallery-previews {
+  position: relative;
   display: grid;
   gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.variant-gallery-previews:focus-visible {
+  outline: none;
+}
+.variant-gallery-previews:hover img,
+.variant-gallery-previews:focus-visible img {
+  box-shadow: 0 0 0 2px var(--ppt-accent);
 }
 .variant-gallery-previews img {
   width: 100%;
@@ -1604,6 +1626,28 @@
   object-fit: cover;
   border-radius: 6px;
   background: #f1f4f7;
+}
+.variant-gallery-preview-cue {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(18 28 38 / 74%);
+  font-size: 9px;
+  line-height: 1;
+  pointer-events: none;
+}
+.variant-gallery-previews:hover .variant-gallery-preview-cue,
+.variant-gallery-previews:focus-visible .variant-gallery-preview-cue {
+  background: var(--ppt-accent);
+}
+.variant-gallery-preview-cue svg {
+  width: 12px;
 }
 .variant-gallery-no-preview {
   display: grid;
@@ -1669,11 +1713,25 @@
   color: #a8671c;
 }
 .variant-gallery-pick {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin-top: 2px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--ppt-accent) 28%, #fff);
+  border-radius: 7px;
   color: var(--ppt-accent);
+  background: color-mix(in srgb, var(--ppt-accent) 6%, #fff);
   font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.variant-gallery-pick:hover,
+.variant-gallery-pick:focus-visible {
+  border-color: var(--ppt-accent);
+  background: color-mix(in srgb, var(--ppt-accent) 12%, #fff);
+  outline: none;
 }
 .variant-gallery-note {
   margin: 14px 20px 0;
@@ -1692,6 +1750,252 @@
     grid-template-columns: 1fr;
   }
 }
+
+/*
+ * Full-deck preview: a card only fits two pages, so the pages themselves open
+ * a dialog that can be read at presentation size. The version chips switch in
+ * place — comparing two looks should not require closing the dialog.
+ */
+.variant-preview-backdrop {
+  z-index: 21;
+}
+.variant-preview-dialog {
+  width: min(1120px, 100%);
+  height: min(840px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  overflow: hidden;
+}
+.variant-preview-versions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.variant-preview-versions button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #dce1e7;
+  border-radius: 999px;
+  color: #4c5a68;
+  background: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+.variant-preview-versions button:hover {
+  border-color: #b8c4d0;
+}
+.variant-preview-versions button[aria-pressed="true"] {
+  border-color: var(--ppt-accent);
+  color: var(--ppt-accent);
+  background: color-mix(in srgb, var(--ppt-accent) 7%, #fff);
+  font-weight: 600;
+}
+.variant-preview-versions em {
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--ppt-accent);
+  background: color-mix(in srgb, var(--ppt-accent) 10%, #fff);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 400;
+}
+.variant-preview-stage {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px 58px;
+  border: 1px solid #e1e6eb;
+  border-radius: 10px;
+  background: #f2f5f8;
+  overflow: hidden;
+}
+.variant-preview-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(23 44 71 / 18%);
+}
+.variant-preview-stage.loading img {
+  opacity: 0.35;
+  filter: blur(2px);
+}
+.variant-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: #5b6a78;
+  font-size: 12px;
+}
+.variant-preview-loading svg {
+  width: 20px;
+  animation: variant-preview-spin 0.9s linear infinite;
+}
+@keyframes variant-preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.variant-preview-fallback {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: 560px;
+  text-align: center;
+}
+.variant-preview-fallback strong {
+  color: #35424f;
+  font-size: 13px;
+}
+.variant-preview-fallback p {
+  margin: 0;
+  color: #7a8590;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.variant-preview-fallback-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.variant-preview-fallback-images img {
+  width: 220px;
+  max-width: 45%;
+  border-radius: 4px;
+}
+.variant-preview-step {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d3dae1;
+  border-radius: 50%;
+  color: #3b4753;
+  background: #fff;
+  box-shadow: 0 6px 18px rgb(23 44 71 / 16%);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.variant-preview-step.prev {
+  left: 10px;
+}
+.variant-preview-step.next {
+  right: 10px;
+}
+.variant-preview-step:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+  color: var(--ppt-accent);
+}
+.variant-preview-step:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.variant-preview-step svg {
+  width: 18px;
+}
+.variant-preview-counter {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(18 28 38 / 72%);
+  font-size: 10px;
+  transform: translateX(-50%);
+}
+.variant-preview-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.variant-preview-strip button {
+  position: relative;
+  flex: none;
+  width: 104px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: #eef2f6;
+  overflow: hidden;
+  cursor: pointer;
+}
+.variant-preview-strip button[aria-current="true"] {
+  border-color: var(--ppt-accent);
+}
+.variant-preview-strip button:hover {
+  border-color: #b8c4d0;
+}
+.variant-preview-strip img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.variant-preview-strip span {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgb(18 28 38 / 70%);
+  font-size: 8px;
+}
+.variant-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 18px;
+  color: #7a8590;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.variant-preview-meta > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.variant-preview-dialog > .upload-dialog-actions {
+  justify-content: space-between;
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid #e1e5e9;
+}
+@media (max-width: 820px) {
+  .variant-preview-dialog {
+    height: calc(100vh - 32px);
+    max-height: calc(100vh - 32px);
+    padding: 16px;
+  }
+  .variant-preview-stage {
+    padding: 8px 40px;
+  }
+  .variant-preview-step {
+    width: 32px;
+    height: 32px;
+  }
+}
+
 
 /* Theme specimen: eight real pages, rendered on demand. */
 .theme-specimen-open {
