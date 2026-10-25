@@ -29,6 +29,18 @@ export type RecipeId =
   | "data-story"
   | "chart-story"
   | "image-led"
+  /**
+   * The other two ways a picture can own a page.
+   *
+   * `image-led` gives the picture the page edge and keeps the copy beside it.
+   * `full-bleed-image` makes the page the picture and sets the copy on a solid
+   * plate; `side-image-text` frames the picture as an inset plate and opens a
+   * measured copy column next to it. Without them a deck of ten picture pages
+   * was ten copies of one composition, and the visual review had nothing to
+   * alternate with.
+   */
+  | "full-bleed-image"
+  | "side-image-text"
   | "editorial-index"
   | "asymmetric-split"
   | "process-rail"
@@ -92,6 +104,7 @@ const EDITORIAL_RECIPES: readonly RecipeId[] = [
   "data-story",
   "chart-story",
   "image-led",
+  "side-image-text",
   "editorial-index",
   "asymmetric-split",
   "process-rail",
@@ -101,6 +114,18 @@ const EDITORIAL_RECIPES: readonly RecipeId[] = [
   "quote-field",
   "section-statement",
 ];
+
+/**
+ * The documentary direction is the one that spends the page on a picture, so it
+ * is the only one whose recipe set includes the full-bleed composition.
+ *
+ * A full-bleed photo on the `paper` direction would contradict the narrow
+ * measured column the user picked; on `instrument` it would contradict the rail.
+ * The vocabulary is per direction on purpose — the cover path can still promote
+ * a side picture on any preset, but the page-level composition stays inside the
+ * direction.
+ */
+const DOCUMENTARY_RECIPES: readonly RecipeId[] = [...EDITORIAL_RECIPES, "full-bleed-image"];
 
 /** The editorial set plus the prose column the paper direction draws itself. */
 const PAPER_RECIPES: readonly RecipeId[] = [...EDITORIAL_RECIPES, "paper-column"];

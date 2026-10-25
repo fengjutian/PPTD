@@ -1,6 +1,55 @@
 import { EMU_PER_INCH, type DocumentTheme, type Emu } from "../document-model";
+import { colorLuminance } from "../rendering/contrast";
+import { mixHex } from "./shape-gradient";
 import { resolveTypeScale } from "./type-scale";
 import type { DeckConcept } from "./deck-concept";
+
+/**
+ * The color roles beyond the four inks a page needs to be readable.
+ *
+ * The palette used to carry one accent, one surface and a muted ink, so every
+ * page could only separate things with a hairline: a card had no fill that was
+ * not literally the page, and a tinted band had no tint. These four roles are
+ * the missing steps — the Radix-style split between *the page*, *something on
+ * the page*, and *the line between them* — kept to the smallest set that makes
+ * a plate and a card possible.
+ *
+ * They are roles, not decoration: a recipe may paint a panel with
+ * `surfaceRaised` and stroke it with `border`, and still be refused by the
+ * taste lint if it overdraws the page.
+ */
+export interface SemanticColors {
+  /** A surface that sits above the page: a card, a plate, a caption bar. */
+  surfaceRaised: string;
+  /** A hairline, a card stroke, a column separator. */
+  border: string;
+  /** Secondary copy: captions, source lines, figure credits. */
+  textMuted: string;
+  /** The accent as a low-intensity fill that body ink still reads on. */
+  accentSubtle: string;
+}
+
+/**
+ * Derives the four semantic roles from a page's own surface, ink and accent.
+ *
+ * Deriving beats hard-coding here because the same function serves two callers:
+ * a built-in preset (whose values are written into the theme once) and a page
+ * painted on an imported template (whose surface and ink are resolved per
+ * page). On a dark page the raised surface goes *towards* white and the text
+ * mute goes towards the surface, which is the opposite direction from a light
+ * page; a single fixed mix would make a card on a navy page darker than the
+ * navy and therefore invisible.
+ */
+export function deriveSemanticColors(input: { surface: string; ink: string; accent: string }): SemanticColors {
+  const dark = (colorLuminance(input.surface) ?? 1) < 0.45;
+  const towards = dark ? "#FFFFFF" : input.ink;
+  return {
+    surfaceRaised: mixHex(input.surface, towards, dark ? 0.1 : 0.05),
+    border: mixHex(input.surface, towards, dark ? 0.2 : 0.14),
+    textMuted: mixHex(input.ink, input.surface, 0.38),
+    accentSubtle: mixHex(input.surface, input.accent, dark ? 0.22 : 0.12),
+  };
+}
 
 /**
  * The measurements every page recipe shares.
@@ -15,7 +64,19 @@ import type { DeckConcept } from "./deck-concept";
  * them by accident.
  */
 export interface DesignTokens {
-  fonts: { heading: string; body: string };
+  fonts: {
+    /**
+     * The display face: titles that carry the page.
+     *
+     * It defaults to the heading face, so a theme that never sets one keeps
+     * exactly its previous typography. A theme that does set one gets a second
+     * typographic voice at display size only — which is what the taste lint
+     * allows one of, not an extra family for body copy.
+     */
+    display: string;
+    heading: string;
+    body: string;
+  };
   type: {
     displayPt: number;
     titlePt: number;
@@ -77,6 +138,7 @@ export function deriveDesignTokens(
   const spaceScale = clamp(heightInches / 7.5, 0.8, 1.25);
   return {
     fonts: {
+      display: theme?.displayFont ?? theme?.majorFont ?? "Microsoft YaHei",
       heading: theme?.majorFont ?? "Microsoft YaHei",
       body: theme?.minorFont ?? theme?.majorFont ?? "Microsoft YaHei",
     },

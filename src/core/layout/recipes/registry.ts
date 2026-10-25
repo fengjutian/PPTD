@@ -5,12 +5,14 @@ import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { chartStory } from "./chart-story";
 import { editorialIndex } from "./editorial-index";
+import { fullBleedImage } from "./full-bleed-image";
 import { imageLed } from "./image-led";
 import { instrumentColumns } from "./instrument-columns";
 import { paperColumn } from "./paper-column";
 import { processRail } from "./process-rail";
 import { quoteField } from "./quote-field";
 import { sectionStatement } from "./section-statement";
+import { sideImageText } from "./side-image-text";
 import { timelineRail } from "./timeline-rail";
 import { weightedSplit } from "./weighted-split";
 import type { LayoutRecipe } from "./types";
@@ -22,6 +24,8 @@ const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
   "editorial-index": editorialIndex,
   "asymmetric-split": asymmetricSplit,
   "image-led": imageLed,
+  "full-bleed-image": fullBleedImage,
+  "side-image-text": sideImageText,
   "process-rail": processRail,
   comparison: comparison,
   "weighted-split": weightedSplit,

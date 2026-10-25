@@ -37,7 +37,7 @@ import {
 } from "./layout-capacity";
 import { resolveTypeScale } from "../design/type-scale";
 import { findThemePreset } from "../design/theme-presets";
-import { deriveDesignTokens } from "../design/design-tokens";
+import { deriveDesignTokens, deriveSemanticColors } from "../design/design-tokens";
 
 import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { resolveChartKind } from "../design/data-relation";
@@ -902,6 +902,18 @@ export function buildDesignedSlide(
       : pageLuminance < 0.45;
     const accentInk = artworkDark ? titleInk : design.accent;
     const ruleInk = artworkDark ? "#DCE3EA" : "#E2E7EC";
+    // The four semantic roles come from the design system when the deck has
+    // one, and from the page's own inks otherwise. A template page has no
+    // preset to ask, and its background may be a photograph: deriving from the
+    // ink that this page actually uses is the only way a card on it is not the
+    // color of the page.
+    const semantic = deriveSemanticColors({
+      surface: slide.background,
+      ink: bodyInk,
+      accent: design.accent,
+    });
+    const semanticOf = <K extends keyof typeof semantic>(slot: K): string =>
+      paletteOf(slot) ?? semantic[slot];
     const recipeColors: RecipeContext["colors"] = {
       title: titleInk,
       body: bodyInk,
@@ -917,6 +929,10 @@ export function buildDesignedSlide(
       // field rather than a second accent hue: a teal chapter page with a blue
       // block reads as two unrelated brands.
       panel: fillForInk("#FFFFFF", pageLuminance < 0.45 ? slide.background : design.accent),
+      surfaceRaised: semanticOf("surfaceRaised"),
+      border: semanticOf("border"),
+      textMuted: semanticOf("textMuted"),
+      accentSubtle: semanticOf("accentSubtle"),
     };
     const recipeFrame = {
       title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),

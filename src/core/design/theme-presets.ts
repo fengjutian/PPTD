@@ -1,4 +1,5 @@
 import type { DocumentTextStyles, DocumentTheme } from "../document-model";
+import { deriveSemanticColors, type SemanticColors } from "./design-tokens";
 
 /**
  * A built-in design system.
@@ -39,12 +40,34 @@ function theme(
   minorFont: string,
   colors: Record<string, string>,
   textStyles: DocumentTextStyles,
+  overrides: Partial<SemanticColors> = {},
 ): DocumentTheme {
+  /**
+   * The four semantic roles are derived from the preset's own surface, ink and
+   * accent, then written into the theme.
+   *
+   * Writing them once means every consumer — the page builder, the theme
+   * picker, a future export — reads the same four values instead of each
+   * deriving its own tint. The derivation is the same function a template page
+   * uses, so a preset deck and a template deck cannot drift apart on what
+   * "raised" or "border" means.
+   */
+  const semantic = {
+    ...deriveSemanticColors({
+      surface: colors.surface ?? "#FFFFFF",
+      ink: colors.primary ?? "#1A1A1A",
+      accent: colors.accent ?? "#1F4E79",
+    }),
+    ...overrides,
+  };
   return {
     name,
     majorFont,
     minorFont,
-    colors: Object.entries(colors).map(([slot, value]) => ({ name: slot, value })),
+    colors: [...Object.entries(colors), ...Object.entries(semantic)].map(([slot, value]) => ({
+      name: slot,
+      value,
+    })),
     textStyles,
   };
 }

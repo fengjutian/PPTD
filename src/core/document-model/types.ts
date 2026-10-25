@@ -342,6 +342,15 @@ export interface DocumentTheme {
   name: string;
   majorFont: string;
   minorFont: string;
+  /**
+   * A second face for display-size type only.
+   *
+   * A theme that omits it keeps using `majorFont` for titles, so a template
+   * without a display face is rendered exactly as before. It is design state,
+   * never learned from the content, and the taste lint allows at most one such
+   * family — confined to text at title size or larger.
+   */
+  displayFont?: string;
   /** Theme color slots in scheme order, e.g. dk1, lt1, accent1. */
   colors: Array<{ name: string; value: string }>;
   /** Named type levels. Absent levels fall back to the generator defaults. */

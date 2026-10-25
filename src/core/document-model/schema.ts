@@ -233,6 +233,9 @@ const themeSchema = z.object({
   name: z.string().min(1).max(200),
   majorFont: z.string().min(1).max(200),
   minorFont: z.string().min(1).max(200),
+  // Optional so a document written before display faces existed still loads;
+  // nothing is inferred from it, it only selects a heading family for titles.
+  displayFont: z.string().min(1).max(200).optional(),
   colors: z.array(z.object({ name: z.string().min(1).max(64), value: hexColor })).max(64),
   textStyles: z
     .object({

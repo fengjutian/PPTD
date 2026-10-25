@@ -36,6 +36,20 @@ export interface RecipeContext {
      * slot is always a saturated tone that can carry white text.
      */
     panel: string;
+    /**
+     * A surface that sits above the page: a plate under a picture, a card.
+     *
+     * The four roles below are the reason a page can separate things without a
+     * 0.75pt line. They are resolved per page, so a dark page gets them from
+     * the dark surface and a template page from the template's own inks.
+     */
+    surfaceRaised: string;
+    /** A hairline or a card stroke, in the page's own ink rather than a fixed grey. */
+    border: string;
+    /** Secondary copy: captions, source lines, figure credits. */
+    textMuted: string;
+    /** The accent at low intensity, safe behind body ink. */
+    accentSubtle: string;
   };
   frame: {
     title: RectEmu;
