@@ -49,7 +49,17 @@ export function VariantGalleryDialog({ options, onSelect, onDiscard, renderPages
           </div>
           <div className="variant-gallery-grid" role="list">
             {options.map((option, index) => (
-              <article key={option.id} className="variant-gallery-card" role="listitem">
+              <article
+                key={option.id}
+                className="variant-gallery-card"
+                role="listitem"
+                onClick={(event) => {
+                  // The card stays a one-click keep target from the batch result;
+                  // the two inner buttons carry the real semantics, so their
+                  // clicks belong to them and must not also pick the version.
+                  if (!(event.target as HTMLElement).closest("button")) onSelect(option.id);
+                }}
+              >
                 <button
                   type="button"
                   className="variant-gallery-previews"

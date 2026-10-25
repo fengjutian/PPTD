@@ -35,6 +35,7 @@
 - `generateFromDraft(..., prepared)`：跳过方向门与设计调用的续跑入口。
 - `generateVariantBatch / chooseVariant / discardVariantBatch / cancelVariantBatch`。
 - 选择器批量条、`VariantGalleryDialog` 画廊、样式与测试。
+- `VariantPreviewDialog` 整册预览：按需逐页渲染某一版、原位切换版本、页缩略图与翻页；`presentation-renderer.renderPresentationPages` 提供不带缩略图墙的逐页渲染。
 
 ### 3.2 不包含
 
@@ -42,13 +43,15 @@
 - 并行设计调用（共用 taskId 的流式进度会互相覆盖）。
 - 把 8 个版本全部导出为文件；产品语义是挑一版。
 - 用模型给模板排序。
+- 整册预览的配图、导出或编辑能力；它只读，不写项目，也不改变内容/设计 revision。
 
 ## 4. 流程
 
 1. 内容审核完成 → 进入主题步骤，选择器标记 `AI 推荐`，详情里给出推荐理由。
 2. 点"生成 N 个版本" → 1 次概念调用 + N 次设计调用，逐版渲染封面与首页。
 3. 画廊展示 N 张卡：真实渲染、AI 理由、确定性排版问题数。
-4. 选一版 → 续跑配图、质量门、视觉复评并写入项目；返回则丢弃全部版本。
+4. 点卡片上的渲染页 → 打开整册预览，逐页查看并可在版本间切换；预览内也能直接"用这个版本"。
+5. 选一版 → 续跑配图、质量门、视觉复评并写入项目；返回则丢弃全部版本。
 
 ## 5. 验收
 
@@ -58,11 +61,13 @@
 - **AC-4** 画廊卡片数等于实际成功版本数；单版失败不拖垮整批。
 - **AC-5** 选定版本后不再调用设计模型；配图与质检照常执行。
 - **AC-6** 取消批量不写入项目文档，项目内容与 revision 不变。
+- **AC-7** 整册预览按需渲染所选版本的全部页面，翻页与版本切换不重新生成设计；渲染失败时显示降级说明且仍可选择该版本；打开与关闭预览不写项目、不改 revision。
 
 ## 6. 测试
 
 - `src/core/design/theme-preset-ranking.test.ts`：题材优先、场合匹配、数据页贴合、确定性、数量夹取、同色系上限、概念兜底。
-- `src/features/ai/VariantGalleryDialog.test.tsx`：卡片数量、推荐标记唯一、问题数、预览说明。
+- `src/features/ai/VariantGalleryDialog.test.tsx`：卡片数量、推荐标记唯一、问题数、预览说明、整册预览入口与页数。
+- `src/features/ai/VariantPreviewDialog.test.tsx`：打开的版本、页数说明、版本切换控件、问题数与选择入口。
 - 全量 `vitest run` 与 `npm run build`。
 
 ## 7. 风险

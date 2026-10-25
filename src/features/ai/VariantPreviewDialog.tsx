@@ -51,7 +51,14 @@ export function VariantPreviewDialog({
     if (pagesById[optionId] || failedIds[optionId] || pendingRef.current.has(optionId)) return;
     pendingRef.current.add(optionId);
     void renderPages(optionId)
-      .then((images) => setPagesById((current) => ({ ...current, [optionId]: images })))
+      .then((images) => {
+        // An empty render is not a deck with zero pages; it is a failed preview.
+        if (images.length === 0) {
+          setFailedIds((current) => ({ ...current, [optionId]: true }));
+          return;
+        }
+        setPagesById((current) => ({ ...current, [optionId]: images }));
+      })
       .catch(() => setFailedIds((current) => ({ ...current, [optionId]: true })))
       .finally(() => pendingRef.current.delete(optionId));
   }, [failedIds, optionId, pagesById, renderPages]);
@@ -101,7 +108,7 @@ export function VariantPreviewDialog({
             <div>
               <h2 id="variant-preview-title">{option.name} · 整册预览</h2>
               <p>
-                同一份已审核内容 · 共 {option.pageCount} 页 · 第 {currentPage + 1} / {totalPages} 页
+                同一份已审核内容 · 共 {option.pageCount} 页 · 第 {currentPage + 1} / {totalPages} 页 · 预览版不含配图
               </p>
             </div>
           </div>
@@ -124,7 +131,7 @@ export function VariantPreviewDialog({
           ))}
         </div>
 
-        <div className={`variant-preview-stage${page ? "" : " loading"}`}>
+        <div className={`variant-preview-stage${page || failed ? "" : " loading"}`}>
           {page ? (
             <img src={page} alt={`${option.name} 第 ${currentPage + 1} 页整册预览`} />
           ) : failed ? (
@@ -134,7 +141,11 @@ export function VariantPreviewDialog({
               {option.images.length > 0 && (
                 <span className="variant-preview-fallback-images">
                   {option.images.map((source, index) => (
-                    <img key={`${option.id}-fallback-${index}`} src={source} alt={`${option.name} 第 ${index + 1} 页预览`} />
+                    <img
+                      key={`${option.id}-fallback-${index}`}
+                      src={source}
+                      alt={`${option.name} 第 ${index + 1} 页预览`}
+                    />
                   ))}
                 </span>
               )}
@@ -145,7 +156,7 @@ export function VariantPreviewDialog({
               <span>正在渲染整册，共 {option.pageCount} 页…</span>
             </div>
           )}
-          {totalPages > 1 && (
+          {page && totalPages > 1 && (
             <>
               <button
                 type="button"

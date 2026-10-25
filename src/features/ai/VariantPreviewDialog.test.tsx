@@ -44,6 +44,7 @@ describe("VariantPreviewDialog", () => {
     expect(markup).toContain("藏青 · 整册预览");
     expect(markup).toContain("共 8 页");
     expect(markup).toContain("正在渲染整册，共 8 页…");
+    expect(markup).toContain("预览版不含配图");
     expect(markup).toContain("用这个版本");
     expect(markup).toContain("返回对比");
   });
