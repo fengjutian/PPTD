@@ -3,14 +3,7 @@ import type { Emu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
-import {
-  fittedFontSize,
-  fittedFontSizeWithoutOrphan,
-  frameFromNormalized,
-  ruleHeight,
-  textFits,
-  textHeightPt,
-} from "./measure";
+import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 /** The side margin of the copy that sits on the plate. */
@@ -128,19 +121,26 @@ export const fullBleedImage: LayoutRecipe = {
     const itemLines = units.items.length > 0 ? units.items : [];
     const itemSize = Math.max(12, Math.min(ctx.tokens.type.bodyPt, 15));
     const itemHeights = itemLines.map((item) =>
-      pointsToNormalized(textHeightPt(item, textWidth * pageWidthIn * 72, itemSize, bodyFamily, lineHeight), page.height),
+      pointsToNormalized(
+        textHeightPt(item, textWidth * pageWidthIn * 72, itemSize, bodyFamily, lineHeight),
+        page.height,
+      ),
     );
     const itemsGap = itemLines.length > 0 ? 0.014 : 0;
+    // The accent mark needs its own band above the headline. Drawn at the same
+    // y as the copy it crossed the first line's ascenders; the block below
+    // reserves the mark plus the air under it before the headline starts.
+    const barHeight = pointsToNormalized(ACCENT_BAR.heightPt, page.height);
+    const barBlock = chrome.showRule ? barHeight + 0.016 : 0;
 
     const plateHeight = Math.max(
       MIN_PLATE_HEIGHT,
       PLATE_PADDING * 2 +
+        barBlock +
         titleHeight +
         (lead ? PLATE_BLOCK_GAP + leadHeight : 0) +
         (itemLines.length > 0
-          ? itemsGap +
-            itemHeights.reduce((total, height) => total + height, 0) +
-            itemsGap * (itemLines.length - 1)
+          ? itemsGap + itemHeights.reduce((total, height) => total + height, 0) + itemsGap * (itemLines.length - 1)
           : 0),
     );
     if (plateHeight > 0.62) return conflict("body", "全幅图页的文字板会吃掉大半个画面");
@@ -154,10 +154,7 @@ export const fullBleedImage: LayoutRecipe = {
       // A hairline along the top edge is what makes the plate read as a plane
       // laid over the picture rather than a crop of it.
       rectElement(
-        frameFromNormalized(
-          { x: 0, y: plateTop, width: 1, height: pointsToNormalized(0.75, page.height) },
-          page,
-        ),
+        frameFromNormalized({ x: 0, y: plateTop, width: 1, height: pointsToNormalized(0.75, page.height) }, page),
         ctx.colors.border,
       ),
     ];
@@ -167,9 +164,9 @@ export const fullBleedImage: LayoutRecipe = {
           frameFromNormalized(
             {
               x: textX,
-              y: plateTop + PLATE_PADDING * 0.45,
+              y: plateTop + PLATE_PADDING,
               width: ACCENT_BAR.width,
-              height: ruleHeight(ACCENT_BAR.heightPt, page.height),
+              height: barHeight,
             },
             page,
           ),
@@ -178,14 +175,11 @@ export const fullBleedImage: LayoutRecipe = {
       );
     }
 
-    let cursor = plateTop + PLATE_PADDING;
+    let cursor = plateTop + PLATE_PADDING + barBlock;
     elements.push(
       textElement(
         title,
-        frameFromNormalized(
-          { x: textX, y: cursor, width: textWidth, height: titleHeight + 0.004 },
-          page,
-        ),
+        frameFromNormalized({ x: textX, y: cursor, width: textWidth, height: titleHeight + 0.004 }, page),
         titleSize,
         ctx.colors.title,
         true,

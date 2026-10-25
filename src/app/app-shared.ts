@@ -19,6 +19,10 @@ export const themeColorRoleLabels: Record<string, string> = {
   muted: "次要文字",
   surface: "页面底色",
   surfaceAlt: "浅色底",
+  surfaceRaised: "浮起面",
+  border: "分隔线",
+  textMuted: "图注与来源",
+  accentSubtle: "强调色带",
 };
 export const themeAudienceLabels: Record<ThemeAudience, string> = {
   general: "通用",

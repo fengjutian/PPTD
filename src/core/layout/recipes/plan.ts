@@ -62,11 +62,7 @@ const SHARED_LIST_RECIPES: readonly RecipeId[] = ["editorial-index", "asymmetric
  * layout with a picture placeholder before the recipe runs; a list kept in two
  * places is how a new composition silently lands on a text-only template.
  */
-export const IMAGE_RECIPE_IDS: readonly RecipeId[] = [
-  "image-led",
-  "full-bleed-image",
-  "side-image-text",
-];
+export const IMAGE_RECIPE_IDS: readonly RecipeId[] = ["image-led", "full-bleed-image", "side-image-text"];
 
 export function isImageRecipe(id: RecipeId | undefined): boolean {
   return id !== undefined && IMAGE_RECIPE_IDS.includes(id);

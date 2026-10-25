@@ -4,13 +4,7 @@ import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
-import {
-  fittedFontSize,
-  fittedFontSizeWithoutOrphan,
-  frameFromNormalized,
-  textFits,
-  textHeightPt,
-} from "./measure";
+import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 /** The picture plate, as a share of the content width. */
@@ -92,21 +86,13 @@ export const sideImageText: LayoutRecipe = {
     // On a narrow body placeholder the plate gives way to the copy instead of
     // the page being refused: the two columns are still columns, just smaller.
     const preferredPicture = Math.max(0.2, area.width * PICTURE_SHARE);
-    const textWidth = templateImage
-      ? area.width
-      : Math.max(MIN_TEXT_WIDTH, area.width - preferredPicture - COLUMN_GAP);
-    const pictureWidth = templateImage
-      ? templateImage.width
-      : Math.max(0.16, area.width - textWidth - COLUMN_GAP);
+    const textWidth = templateImage ? area.width : Math.max(MIN_TEXT_WIDTH, area.width - preferredPicture - COLUMN_GAP);
+    const pictureWidth = templateImage ? templateImage.width : Math.max(0.16, area.width - textWidth - COLUMN_GAP);
     if (textWidth < MIN_TEXT_WIDTH) return conflict("title", "对开图文页的文字栏太窄");
     // A `left` variant puts the plate on the left and the copy on the right, so
     // two picture pages in a row do not mirror the same side.
     const pictureLeft = ctx.variant === "left";
-    const pictureX = templateImage
-      ? templateImage.x
-      : pictureLeft
-        ? area.x
-        : area.x + area.width - pictureWidth;
+    const pictureX = templateImage ? templateImage.x : pictureLeft ? area.x : area.x + area.width - pictureWidth;
     const textX = templateImage || !pictureLeft ? area.x : area.x + pictureWidth + COLUMN_GAP;
     const separatorX = pictureLeft ? pictureX + pictureWidth + COLUMN_GAP / 2 : pictureX - COLUMN_GAP / 2;
 
@@ -136,17 +122,28 @@ export const sideImageText: LayoutRecipe = {
       textHeightPt(title, titleWidth * pageWidthIn * 72, titleSize, displayFamily, titleLineHeight),
       page.height,
     );
+    // The band is at least as tall as the title frame the chrome gave the page.
+    // The line estimate and PowerPoint disagree by a character at the wrap
+    // boundary, and a band that covers one of two lines is worse than a band
+    // with a little air in it.
+    const bandHeight = Math.max(titleHeight, Math.min(0.32, chrome.title.height)) + BAND_PADDING * 2;
+    const bandTop = chrome.title.y - BAND_PADDING;
+    // The headline stays top-aligned on the shared title axis: centring it in
+    // the band would move a one-line page's headline below a two-line page's,
+    // and the axis is what makes two pages read as one deck.
+    const titleTop = chrome.title.y;
 
     const elements: RecipePlan["elements"] = [
-      // The band is behind the headline and only as tall as the line box: a
-      // tint that filled the title frame's full height would read as a masthead.
+      // The band is behind the headline, not behind the whole title frame: it
+      // marks the line block, and a tint that filled the frame would read as a
+      // masthead.
       rectElement(
         frameFromNormalized(
           {
             x: chrome.title.x - BAND_PADDING,
-            y: chrome.title.y - BAND_PADDING,
+            y: bandTop,
             width: Math.min(1 - chrome.title.x + BAND_PADDING, titleWidth + BAND_PADDING * 2),
-            height: titleHeight + BAND_PADDING * 2,
+            height: bandHeight,
           },
           page,
         ),
@@ -169,10 +166,7 @@ export const sideImageText: LayoutRecipe = {
           ]),
       textElement(
         title,
-        frameFromNormalized(
-          { x: chrome.title.x, y: chrome.title.y, width: titleWidth, height: titleHeight + 0.004 },
-          page,
-        ),
+        frameFromNormalized({ x: chrome.title.x, y: titleTop, width: titleWidth, height: titleHeight + 0.004 }, page),
         titleSize,
         ctx.colors.title,
         true,

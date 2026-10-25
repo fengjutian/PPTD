@@ -912,8 +912,7 @@ export function buildDesignedSlide(
       ink: bodyInk,
       accent: design.accent,
     });
-    const semanticOf = <K extends keyof typeof semantic>(slot: K): string =>
-      paletteOf(slot) ?? semantic[slot];
+    const semanticOf = <K extends keyof typeof semantic>(slot: K): string => paletteOf(slot) ?? semantic[slot];
     const recipeColors: RecipeContext["colors"] = {
       title: titleInk,
       body: bodyInk,

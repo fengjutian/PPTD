@@ -421,9 +421,9 @@ describe("side-image-text recipe", () => {
   });
 
   it("refuses a band picture and uses the template placeholder as given", () => {
-    expect(
-      sideImageText.supports(facts(), concept(), { hasArtwork: false, hasAsset: true, assetRole: "band" }),
-    ).toBe(false);
+    expect(sideImageText.supports(facts(), concept(), { hasArtwork: false, hasAsset: true, assetRole: "band" })).toBe(
+      false,
+    );
     const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
     ctx.templateImage = { x: 0.56, y: 0.2, width: 0.38, height: 0.6 };
     const result = plan(sideImageText, ctx);
@@ -562,10 +562,7 @@ describe("cover-statement recipe", () => {
       speakerNotes: "",
       status: "approved" as const,
     };
-    const result = plan(
-      coverStatement,
-      context(pageContent, { facts: facts({ layout: "cover", itemCount: 1 }) }),
-    );
+    const result = plan(coverStatement, context(pageContent, { facts: facts({ layout: "cover", itemCount: 1 }) }));
     const texts = result.elements.filter((element): element is TextElement => element.type === "text");
     const headline = texts.find((element) => element.contentRef === "title")!;
     const eyebrow = texts.find((element) => element.contentRef === undefined && element.text.startsWith("Alphabet"))!;
@@ -590,10 +587,7 @@ describe("cover-statement recipe", () => {
       speakerNotes: "",
       status: "approved" as const,
     };
-    const result = plan(
-      coverStatement,
-      context(pageContent, { facts: facts({ layout: "cover", itemCount: 1 }) }),
-    );
+    const result = plan(coverStatement, context(pageContent, { facts: facts({ layout: "cover", itemCount: 1 }) }));
     const texts = result.elements.filter((element): element is TextElement => element.type === "text");
     const titles = texts.filter((element) => element.contentRef === "title");
     expect(titles).toHaveLength(1);

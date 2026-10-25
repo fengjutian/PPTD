@@ -439,7 +439,9 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
       sizedText.filter(isDisplaySize).map((element) => normalizedFamily(element.style.fontFamily)),
     );
     const textFamilies = new Set(
-      sizedText.filter((element) => !isDisplaySize(element)).map((element) => normalizedFamily(element.style.fontFamily)),
+      sizedText
+        .filter((element) => !isDisplaySize(element))
+        .map((element) => normalizedFamily(element.style.fontFamily)),
     );
     for (const family of textFamilies) displayFamilies.delete(family);
     if (textFamilies.size > maxFontFamilies || displayFamilies.size > 1) {
