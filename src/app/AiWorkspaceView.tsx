@@ -1,132 +1,81 @@
-import type { AppRuntime } from "./app-runtime";
-
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  Check,
-  ChartColumn,
-  Circle,
-  CircleAlert,
-  CircleCheck,
-  ClipboardPaste,
-  Copy,
-  Download,
-  FilePlus2,
-  FilePenLine,
-  FolderClock,
-  FileUp,
-  Grid2x2,
-  Grid3x3,
-  ImagePlus,
-  Images,
-  Info,
-  LayoutDashboard,
-  Magnet,
-  Minus,
-  MoveHorizontal,
-  MoveVertical,
-  MousePointer2,
-  Palette,
-  Play,
-  Plus,
-  Redo2,
-  RotateCcw,
-  Save,
-  SaveAll,
-  Scissors,
-  ScrollText,
-  Search,
-  Settings,
-  Sparkles,
-  Square,
-  Table2,
-  Trash2,
-  Type,
-  Undo2,
-  Upload,
-  Wand2,
-  X,
-} from "lucide-react";
-
-import { EMU_PER_INCH, type AnimationEffect, type SlideAnimation } from "../core/document-model";
-
-import { contrastRatio } from "../core/rendering/contrast";
-
-import { LogPanel } from "../features/diagnostics/LogPanel";
-import { InspectorPanel } from "../features/editor/InspectorPanel";
-import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
-import { FindReplaceBar } from "../features/editor/FindReplaceBar";
-import { PageSizeControls } from "../features/editor/PageSizeControls";
-import { ShapePicker } from "../features/editor/ShapePicker";
-import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
-import { ImportModeDialog, ImportReportDialog } from "../features/editor/PptxImportDialogs";
-import {
-  ANIMATION_EFFECT_LABELS,
-  ANIMATION_EFFECT_OPTIONS,
-  ANIMATION_PHASE_LABELS,
-} from "../features/editor/animation-options";
-
-import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
-import { ContentHistory } from "../features/editor/ContentHistory";
-import { LayerList } from "../features/editor/LayerList";
-
-import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
+import { ArrowLeft, ArrowRight, Check, CircleAlert, RotateCcw, Sparkles, Upload, Wand2, X } from "lucide-react";
 
 import { ContentReview } from "../features/ai/ContentReview";
-import { DesignDirectionDialog } from "../features/ai/DesignDirectionDialog";
-import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
+
 import { FactPicker } from "../features/ai/FactPicker";
 
-import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
-import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
-import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
-import { DeckReviewDialog } from "../features/ai/DeckReviewDialog";
-import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
-import { ThemeSpecimenDialog } from "../features/ai/ThemeSpecimenDialog";
-
-import { AiImageDialog } from "../features/editor/AiImageDialog";
-import { InsertTableDialog } from "../features/editor/InsertTableDialog";
-import { InsertChartDialog } from "../features/editor/InsertChartDialog";
-
-import { SettingsWorkspace } from "../features/settings/SettingsDialog";
-
-import { removeRecentProject } from "../services/app-database";
-import { cancelAiGeneration } from "../services/ai-service";
-
-import { isDesktopRuntime } from "../services/project-files";
-
-import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
-
-import type { BuiltinIconName } from "../core/document-model";
-import { IconPicker } from "../features/editor/IconPicker";
-
-import { ElementView } from "../features/editor/ElementView";
-import { SlideThumbnail } from "../features/editor/SlideThumbnail";
-import { ToolButton } from "../features/editor/ToolButton";
-
-import { ProjectHome } from "./ProjectHome";
 import type { AppRuntime } from "./app-runtime";
-import {
-  CANVAS_WIDTH,
-  themeColorRoleLabels,
-  themeAudienceLabels,
-  themePageTypeLabels,
-  themeDensityLabels,
-  visualIssueLabels,
-  templateFitLabels,
-  parityIssueLabel,
-  reviewEvidenceLabel,
-  formatElapsed,
-} from "./app-shared";
 
 export function AiWorkspaceView({ app }: { app: AppRuntime }) {
-  const { activeView, aiDraft, returnToAiStart, agentWorkflow, aiDraftBlockingIssues, aiDraftBlockHint, handleRegenerateDraft, aiRegenerating, aiDraftBlockReason, continueToTheme, aiHistory, openAiHistory, aiTopic, aiPolishing, aiBusy, handlePolishAiTopic, setAiTopic, aiMaterial, setAiMaterial, resetAiFacts, handleMaterialFile, aiExtracting, handleExtractFacts, aiFacts, aiExcludedFacts, setAiExcludedFacts, setAiFacts, aiSlideCount, setAiSlideCount, handleAiGenerate, aiProgress, aiGenerationLabel, aiGenerationPercent, aiOriginalDraft, activeDraftSlideIndex, aiSaveState, aiRestoreUndoSlideIds, aiContentUndo, aiContentRedo, selectAiDraftSlide, updateAiDraftTitle, updateAiSlide, updateAiVisualAsset, updateAiBlocks, updateAiChecks, updateAiSlideReviewed, reviewAllAiSlides, addAiSlide, duplicateAiSlide, deleteAiSlide, moveAiSlide, restoreAiSlide, undoRestoreAiSlide, openSlideRewrite, runTitleAssist, runNotesAssist, runSplitAssist, runDeckReview, imagePromptAssist, runImagePromptAssist, dismissImagePrompts, undoAiContent, redoAiContent } = app;
+  const {
+    activeView,
+    aiDraft,
+    returnToAiStart,
+    agentWorkflow,
+    aiDraftBlockingIssues,
+    aiDraftBlockHint,
+    handleRegenerateDraft,
+    aiRegenerating,
+    aiDraftBlockReason,
+    continueToTheme,
+    aiHistory,
+    openAiHistory,
+    aiTopic,
+    aiPolishing,
+    aiBusy,
+    handlePolishAiTopic,
+    setAiTopic,
+    aiMaterial,
+    setAiMaterial,
+    resetAiFacts,
+    handleMaterialFile,
+    aiExtracting,
+    handleExtractFacts,
+    aiFacts,
+    aiExcludedFacts,
+    setAiExcludedFacts,
+    setAiFacts,
+    aiSlideCount,
+    setAiSlideCount,
+    handleAiGenerate,
+    aiProgress,
+    aiGenerationLabel,
+    aiGenerationPercent,
+    aiOriginalDraft,
+    activeDraftSlideIndex,
+    aiSaveState,
+    aiRestoreUndoSlideIds,
+    aiContentUndo,
+    aiContentRedo,
+    selectAiDraftSlide,
+    updateAiDraftTitle,
+    updateAiSlide,
+    updateAiVisualAsset,
+    updateAiBlocks,
+    updateAiChecks,
+    updateAiSlideReviewed,
+    reviewAllAiSlides,
+    addAiSlide,
+    duplicateAiSlide,
+    deleteAiSlide,
+    moveAiSlide,
+    restoreAiSlide,
+    undoRestoreAiSlide,
+    openSlideRewrite,
+    runTitleAssist,
+    runNotesAssist,
+    runSplitAssist,
+    runDeckReview,
+    imagePromptAssist,
+    runImagePromptAssist,
+    dismissImagePrompts,
+    undoAiContent,
+    redoAiContent,
+  } = app;
 
   return (
     <>
-{activeView === "ai" && (
+      {activeView === "ai" && (
         <main className="feature-workspace ai-workspace">
           <header className="feature-header">
             <div>

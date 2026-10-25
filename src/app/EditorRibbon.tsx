@@ -1,15 +1,9 @@
-import type { AppRuntime } from "./app-runtime";
-
 import {
   ArrowDown,
-  ArrowLeft,
   ArrowRight,
   ArrowUp,
-  Check,
   ChartColumn,
   Circle,
-  CircleAlert,
-  CircleCheck,
   ClipboardPaste,
   Copy,
   Download,
@@ -20,8 +14,6 @@ import {
   Grid2x2,
   Grid3x3,
   ImagePlus,
-  Images,
-  Info,
   LayoutDashboard,
   Magnet,
   Minus,
@@ -32,101 +24,100 @@ import {
   Play,
   Plus,
   Redo2,
-  RotateCcw,
   Save,
   SaveAll,
   Scissors,
-  ScrollText,
   Search,
-  Settings,
   Sparkles,
   Square,
   Table2,
   Trash2,
   Type,
   Undo2,
-  Upload,
   Wand2,
-  X,
 } from "lucide-react";
 
-import { EMU_PER_INCH, type AnimationEffect, type SlideAnimation } from "../core/document-model";
+import { type AnimationEffect, type SlideAnimation } from "../core/document-model";
 
-import { contrastRatio } from "../core/rendering/contrast";
-
-import { LogPanel } from "../features/diagnostics/LogPanel";
-import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
-import { FindReplaceBar } from "../features/editor/FindReplaceBar";
+
 import { PageSizeControls } from "../features/editor/PageSizeControls";
 import { ShapePicker } from "../features/editor/ShapePicker";
 import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
-import { ImportModeDialog, ImportReportDialog } from "../features/editor/PptxImportDialogs";
-import {
-  ANIMATION_EFFECT_LABELS,
-  ANIMATION_EFFECT_OPTIONS,
-  ANIMATION_PHASE_LABELS,
-} from "../features/editor/animation-options";
 
-import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
-import { ContentHistory } from "../features/editor/ContentHistory";
-import { LayerList } from "../features/editor/LayerList";
-
-import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
-
-import { ContentReview } from "../features/ai/ContentReview";
-import { DesignDirectionDialog } from "../features/ai/DesignDirectionDialog";
-import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
-import { FactPicker } from "../features/ai/FactPicker";
-
-import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
-import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
-import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
-import { DeckReviewDialog } from "../features/ai/DeckReviewDialog";
-import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
-import { ThemeSpecimenDialog } from "../features/ai/ThemeSpecimenDialog";
-
-import { AiImageDialog } from "../features/editor/AiImageDialog";
-import { InsertTableDialog } from "../features/editor/InsertTableDialog";
-import { InsertChartDialog } from "../features/editor/InsertChartDialog";
-
-import { SettingsWorkspace } from "../features/settings/SettingsDialog";
-
-import { removeRecentProject } from "../services/app-database";
-import { cancelAiGeneration } from "../services/ai-service";
+import { ANIMATION_EFFECT_OPTIONS, ANIMATION_PHASE_LABELS } from "../features/editor/animation-options";
 
 import { isDesktopRuntime } from "../services/project-files";
 
-import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
-
-import type { BuiltinIconName } from "../core/document-model";
-import { IconPicker } from "../features/editor/IconPicker";
-
-import { ElementView } from "../features/editor/ElementView";
-import { SlideThumbnail } from "../features/editor/SlideThumbnail";
 import { ToolButton } from "../features/editor/ToolButton";
 
-import { ProjectHome } from "./ProjectHome";
 import type { AppRuntime } from "./app-runtime";
-import {
-  CANVAS_WIDTH,
-  themeColorRoleLabels,
-  themeAudienceLabels,
-  themePageTypeLabels,
-  themeDensityLabels,
-  visualIssueLabels,
-  templateFitLabels,
-  parityIssueLabel,
-  reviewEvidenceLabel,
-  formatElapsed,
-} from "./app-shared";
 
 export function EditorRibbon({ app }: { app: AppRuntime }) {
-  const { editorCanvasOpen, editorRibbonTab, setEditorRibbonTab, handleNew, handleOpenOrImport, setRecentProjectsOpen, refreshRecentProjects, saving, handleSave, handleSaveAs, handleRenameProject, handleDuplicateProject, undo, undoStack, redo, redoStack, execute, activeSlide, document, selectedElementIds, copySelection, clipboard, pasteSelection, setFindOpen, selectedTextElements, imageInputRef, setIconPickerOpen, setInsertTableOpen, setInsertChartOpen, setAiImageError, setAiImageOpen, aiImageBusy, handleImageFile, setTaskStatus, fitToWindow, gridEnabled, toggleGrid, gridSnapEnabled, toggleGridSnap, snapEnabled, toggleSnap, addGuide, clearGuidesOnSlide, activeGuides, changeActiveView, selected, selectedAnimation, previewSelectedAnimation, previewSlideAnimations, animationPreviews, stopAnimationPreview, newAnimationEffect, setNewAnimationEffect, setSelectedAnimationId, selectedAnimationIndex, exportBusy, handleExport, setExportPreflightOpen } = app;
+  const {
+    editorCanvasOpen,
+    editorRibbonTab,
+    setEditorRibbonTab,
+    handleNew,
+    handleOpenOrImport,
+    setRecentProjectsOpen,
+    refreshRecentProjects,
+    saving,
+    handleSave,
+    handleSaveAs,
+    handleRenameProject,
+    handleDuplicateProject,
+    undo,
+    undoStack,
+    redo,
+    redoStack,
+    execute,
+    activeSlide,
+    document,
+    selectedElementIds,
+    copySelection,
+    clipboard,
+    pasteSelection,
+    setFindOpen,
+    selectedTextElements,
+    imageInputRef,
+    setIconPickerOpen,
+    setInsertTableOpen,
+    setInsertChartOpen,
+    setAiImageError,
+    setAiImageOpen,
+    aiImageBusy,
+    handleImageFile,
+    setTaskStatus,
+    fitToWindow,
+    gridEnabled,
+    toggleGrid,
+    gridSnapEnabled,
+    toggleGridSnap,
+    snapEnabled,
+    toggleSnap,
+    addGuide,
+    clearGuidesOnSlide,
+    activeGuides,
+    changeActiveView,
+    selected,
+    selectedAnimation,
+    previewSelectedAnimation,
+    previewSlideAnimations,
+    animationPreviews,
+    stopAnimationPreview,
+    newAnimationEffect,
+    setNewAnimationEffect,
+    setSelectedAnimationId,
+    selectedAnimationIndex,
+    exportBusy,
+    handleExport,
+    setExportPreflightOpen,
+  } = app;
 
   return (
     <>
-{editorCanvasOpen && (
+      {editorCanvasOpen && (
         <header className="topbar" data-ribbon-tab={editorRibbonTab}>
           <nav className="ribbon-tabs" aria-label="编辑功能区">
             {(

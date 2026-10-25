@@ -1,182 +1,49 @@
-import type { AppRuntime } from "./app-runtime";
+import { Check, Copy, FileUp, Images, Palette, X } from "lucide-react";
 
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  Check,
-  ChartColumn,
-  Circle,
-  CircleAlert,
-  CircleCheck,
-  ClipboardPaste,
-  Copy,
-  Download,
-  FilePlus2,
-  FilePenLine,
-  FolderClock,
-  FileUp,
-  Grid2x2,
-  Grid3x3,
-  ImagePlus,
-  Images,
-  Info,
-  LayoutDashboard,
-  Magnet,
-  Minus,
-  MoveHorizontal,
-  MoveVertical,
-  MousePointer2,
-  Palette,
-  Play,
-  Plus,
-  Redo2,
-  RotateCcw,
-  Save,
-  SaveAll,
-  Scissors,
-  ScrollText,
-  Search,
-  Settings,
-  Sparkles,
-  Square,
-  Table2,
-  Trash2,
-  Type,
-  Undo2,
-  Upload,
-  Wand2,
-  X,
-} from "lucide-react";
-
-import { EMU_PER_INCH, type AnimationEffect, type SlideAnimation } from "../core/document-model";
+import { EMU_PER_INCH } from "../core/document-model";
 
 import { contrastRatio } from "../core/rendering/contrast";
 
-import { LogPanel } from "../features/diagnostics/LogPanel";
-import { InspectorPanel } from "../features/editor/InspectorPanel";
-import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
-import { FindReplaceBar } from "../features/editor/FindReplaceBar";
-import { PageSizeControls } from "../features/editor/PageSizeControls";
-import { ShapePicker } from "../features/editor/ShapePicker";
-import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
-import { ImportModeDialog, ImportReportDialog } from "../features/editor/PptxImportDialogs";
-import {
-  ANIMATION_EFFECT_LABELS,
-  ANIMATION_EFFECT_OPTIONS,
-  ANIMATION_PHASE_LABELS,
-} from "../features/editor/animation-options";
-
-import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
-import { ContentHistory } from "../features/editor/ContentHistory";
-import { LayerList } from "../features/editor/LayerList";
-
-import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
-
-import { ContentReview } from "../features/ai/ContentReview";
-import { DesignDirectionDialog } from "../features/ai/DesignDirectionDialog";
-import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
-import { FactPicker } from "../features/ai/FactPicker";
-
-import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
-import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
-import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
-import { DeckReviewDialog } from "../features/ai/DeckReviewDialog";
 import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
 import { ThemeSpecimenDialog } from "../features/ai/ThemeSpecimenDialog";
 
-import { AiImageDialog } from "../features/editor/AiImageDialog";
-import { InsertTableDialog } from "../features/editor/InsertTableDialog";
-import { InsertChartDialog } from "../features/editor/InsertChartDialog";
+import { THEME_PRESETS } from "../core/design/theme-presets";
 
-import { SettingsWorkspace } from "../features/settings/SettingsDialog";
-
-import { removeRecentProject } from "../services/app-database";
-import { cancelAiGeneration } from "../services/ai-service";
-
-import { isDesktopRuntime } from "../services/project-files";
-
-import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
-
-import type { BuiltinIconName } from "../core/document-model";
-import { IconPicker } from "../features/editor/IconPicker";
-
-import { ElementView } from "../features/editor/ElementView";
-import { SlideThumbnail } from "../features/editor/SlideThumbnail";
-import { ToolButton } from "../features/editor/ToolButton";
-
-import { ProjectHome } from "./ProjectHome";
 import type { AppRuntime } from "./app-runtime";
-import {
-  CANVAS_WIDTH,
-  themeColorRoleLabels,
-  themeAudienceLabels,
-  themePageTypeLabels,
-  themeDensityLabels,
-  visualIssueLabels,
-  templateFitLabels,
-  parityIssueLabel,
-  reviewEvidenceLabel,
-  formatElapsed,
-} from "./app-shared";
+import { themeColorRoleLabels, themeAudienceLabels, themePageTypeLabels, themeDensityLabels } from "./app-shared";
 
 export function ThemeWorkspaceView({ app }: { app: AppRuntime }) {
-  const { t, activeView, changeActiveView, diagnosticsOpen, openDiagnostics, agentWorkflow, setTemplateUploadOpen, themePresetId, handleSelectThemePreset, templateLibrary, selectedTemplate, handleSelectTemplate, setTemplateMenu, themeDrawerOpen, drawerThemePreset, closeThemeDrawer, themePreviewLocked, drawerThemeGuidance, drawerThemeMetadata, drawerSurfaceColor, clipboard, setTaskStatus, drawerThemeAiPrompt, templatePreviewBusy, templatePreview, templateAnalysis, templateTargetPreview, setThemeSpecimenPresetId, applyDrawerTheme, themeSpecimenPresetId } = app;
+  const {
+    activeView,
+    agentWorkflow,
+    setTemplateUploadOpen,
+    themePresetId,
+    handleSelectThemePreset,
+    templateLibrary,
+    selectedTemplate,
+    handleSelectTemplate,
+    setTemplateMenu,
+    themeDrawerOpen,
+    drawerThemePreset,
+    closeThemeDrawer,
+    themePreviewLocked,
+    drawerThemeGuidance,
+    drawerThemeMetadata,
+    drawerSurfaceColor,
+    setTaskStatus,
+    drawerThemeAiPrompt,
+    templatePreviewBusy,
+    templatePreview,
+    templateAnalysis,
+    templateTargetPreview,
+    setThemeSpecimenPresetId,
+    applyDrawerTheme,
+    themeSpecimenPresetId,
+  } = app;
 
   return (
     <>
-<nav className="nav-rail" aria-label={t("shell.navAria")}>
-        <button
-          className={activeView === "editor" ? "active" : ""}
-          aria-current={activeView === "editor" ? "page" : undefined}
-          title={t("shell.editorTitle")}
-          onClick={() => changeActiveView("editor")}
-        >
-          <LayoutDashboard />
-          <span>{t("shell.editor")}</span>
-        </button>
-        <button
-          className={activeView === "ai" ? "active" : ""}
-          aria-current={activeView === "ai" ? "page" : undefined}
-          title={t("shell.aiTitle")}
-          onClick={() => changeActiveView("ai")}
-          disabled={!isDesktopRuntime()}
-        >
-          <Sparkles />
-          <span>{t("shell.ai")}</span>
-        </button>
-        <button
-          className={activeView === "theme" ? "active" : ""}
-          aria-current={activeView === "theme" ? "page" : undefined}
-          title={t("shell.themeTitle")}
-          onClick={() => changeActiveView("theme")}
-        >
-          <Palette />
-          <span>{t("shell.theme")}</span>
-        </button>
-        <button
-          className={diagnosticsOpen ? "active" : ""}
-          aria-expanded={diagnosticsOpen}
-          aria-haspopup="dialog"
-          title={t("shell.logTitle")}
-          onClick={openDiagnostics}
-        >
-          <ScrollText />
-          <span>{t("shell.log")}</span>
-        </button>
-        <div className="nav-spacer" />
-        <button
-          className={activeView === "settings" ? "active" : ""}
-          aria-current={activeView === "settings" ? "page" : undefined}
-          title={t("shell.settings")}
-          onClick={() => changeActiveView("settings")}
-        >
-          <Settings />
-          <span>{t("shell.settings")}</span>
-        </button>
-      </nav>
-{activeView === "theme" && (
+      {activeView === "theme" && (
         <main className="feature-workspace theme-workspace">
           <header className="feature-header">
             <div>
@@ -271,7 +138,7 @@ export function ThemeWorkspaceView({ app }: { app: AppRuntime }) {
           </div>
         </main>
       )}
-{activeView === "theme" && themeDrawerOpen && (drawerThemePreset || selectedTemplate) && (
+      {activeView === "theme" && themeDrawerOpen && (drawerThemePreset || selectedTemplate) && (
         <div
           className="theme-drawer-backdrop"
           role="presentation"
@@ -693,7 +560,7 @@ export function ThemeWorkspaceView({ app }: { app: AppRuntime }) {
           </aside>
         </div>
       )}
-{activeView === "theme" && themeSpecimenPresetId && (
+      {activeView === "theme" && themeSpecimenPresetId && (
         <ThemeSpecimenDialog
           presetId={themeSpecimenPresetId}
           aboveDrawer

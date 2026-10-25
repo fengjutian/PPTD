@@ -1,231 +1,53 @@
-import type { AppRuntime } from "./app-runtime";
-
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  Check,
-  ChartColumn,
-  Circle,
-  CircleAlert,
-  CircleCheck,
-  ClipboardPaste,
-  Copy,
-  Download,
-  FilePlus2,
-  FilePenLine,
-  FolderClock,
-  FileUp,
-  Grid2x2,
-  Grid3x3,
-  ImagePlus,
-  Images,
-  Info,
-  LayoutDashboard,
-  Magnet,
-  Minus,
-  MoveHorizontal,
-  MoveVertical,
-  MousePointer2,
-  Palette,
-  Play,
-  Plus,
-  Redo2,
-  RotateCcw,
-  Save,
-  SaveAll,
-  Scissors,
-  ScrollText,
-  Search,
-  Settings,
-  Sparkles,
-  Square,
-  Table2,
-  Trash2,
-  Type,
-  Undo2,
-  Upload,
-  Wand2,
-  X,
-} from "lucide-react";
-
-import { EMU_PER_INCH, type AnimationEffect, type SlideAnimation } from "../core/document-model";
-
-import { contrastRatio } from "../core/rendering/contrast";
-
-import { LogPanel } from "../features/diagnostics/LogPanel";
-import { InspectorPanel } from "../features/editor/InspectorPanel";
-import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
-import { FindReplaceBar } from "../features/editor/FindReplaceBar";
-import { PageSizeControls } from "../features/editor/PageSizeControls";
-import { ShapePicker } from "../features/editor/ShapePicker";
-import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
-import { ImportModeDialog, ImportReportDialog } from "../features/editor/PptxImportDialogs";
-import {
-  ANIMATION_EFFECT_LABELS,
-  ANIMATION_EFFECT_OPTIONS,
-  ANIMATION_PHASE_LABELS,
-} from "../features/editor/animation-options";
-
-import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
-import { ContentHistory } from "../features/editor/ContentHistory";
-import { LayerList } from "../features/editor/LayerList";
-
-import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
-
-import { ContentReview } from "../features/ai/ContentReview";
-import { DesignDirectionDialog } from "../features/ai/DesignDirectionDialog";
-import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
-import { FactPicker } from "../features/ai/FactPicker";
-
-import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
-import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
-import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
-import { DeckReviewDialog } from "../features/ai/DeckReviewDialog";
-import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
-import { ThemeSpecimenDialog } from "../features/ai/ThemeSpecimenDialog";
-
-import { AiImageDialog } from "../features/editor/AiImageDialog";
-import { InsertTableDialog } from "../features/editor/InsertTableDialog";
-import { InsertChartDialog } from "../features/editor/InsertChartDialog";
-
-import { SettingsWorkspace } from "../features/settings/SettingsDialog";
-
-import { removeRecentProject } from "../services/app-database";
-import { cancelAiGeneration } from "../services/ai-service";
-
-import { isDesktopRuntime } from "../services/project-files";
+import { ArrowRight, Check, CircleAlert, FileUp, Palette, Sparkles, X } from "lucide-react";
 
 import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
 
-import type { BuiltinIconName } from "../core/document-model";
-import { IconPicker } from "../features/editor/IconPicker";
-
-import { ElementView } from "../features/editor/ElementView";
-import { SlideThumbnail } from "../features/editor/SlideThumbnail";
-import { ToolButton } from "../features/editor/ToolButton";
-
-import { ProjectHome } from "./ProjectHome";
 import type { AppRuntime } from "./app-runtime";
-import {
-  CANVAS_WIDTH,
-  themeColorRoleLabels,
-  themeAudienceLabels,
-  themePageTypeLabels,
-  themeDensityLabels,
-  visualIssueLabels,
-  templateFitLabels,
-  parityIssueLabel,
-  reviewEvidenceLabel,
-  formatElapsed,
-} from "./app-shared";
+import { visualIssueLabels, templateFitLabels, reviewEvidenceLabel, formatElapsed } from "./app-shared";
 
-export function DialogStack({ app }: { app: AppRuntime }) {
-  const { insertTableOpen, setInsertTableOpen, execute, activeSlide, setTaskStatus, insertChartOpen, setInsertChartOpen, aiImageOpen, aiImageBusy, aiImageError, setAiImageOpen, handleAiImageGenerate, iconPickerOpen, setIconPickerOpen, recentProjectsOpen, setRecentProjectsOpen, recentProjects, handleOpenRecent, setRecentProjects, message, templateUploadOpen, setTemplateUploadOpen, handleChooseTemplate, templatePickerOpen, designBusy, setTemplatePickerOpen, themePresetId, recommendedThemePreset, handleSelectThemePreset, templateLibrary, selectedTemplate, handleSelectTemplate, designProgress, designDetail, designElapsed, pickerThemePreset, aiDraft, pickerThemeGuidance, templatePreviewBusy, templatePreview, templateAnalysis, generateFromDraft, designQualityReport, designQualityReportOpen, setDesignQualityReportOpen, manualReviewBusy, runManualReview, cancelManualReview, qualityStaleIndexes, openQualityTarget, refreshTemplateTarget, clearTemplateTarget, document, deckReview, setDesignQualityReport, setActiveView, setEditorSurface, exportPreflightOpen, exportBusy, setExportPreflightOpen, revisionLabel, handleExport, directionOptions, directionRegenerations, directionChoiceRef, exportReport, setExportReport, templateMenu, setTemplateMenu, handleRenameTemplate, handleDeleteTemplate, importChoice, importBusy, importProgress, handleCancelImport, setImportChoice, handleImportContent, handleExtractTemplate, importPreview, setImportPreview, handleConfirmImport, contentHistoryOpen, setContentHistoryOpen, restoreContentVersion, restoreContentVersionWithDesign, editorCanvasOpen, findOpen, setFindOpen, setMessage, designCancelRef, setDesignProgress, designTaskId, activeSlideIndex, activeSlideVisualScore, activeSlideVisualIssues, slideRewrite, rewriteSlide, runSlideRewrite, applySlideRewrite, closeSlideRewrite, slideAssist, assistSlide, applyTitleAssist, runTitleAssist, closeSlideAssist, applyNotesAssist, runNotesAssist, applySplitAssist, runSplitAssist, jumpToDeckReviewIssue, rewriteFromDeckReviewIssue, runDeckReview, closeDeckReview } = app;
+export function TemplateDialogs({ app }: { app: AppRuntime }) {
+  const {
+    templateUploadOpen,
+    setTemplateUploadOpen,
+    handleChooseTemplate,
+    templatePickerOpen,
+    designBusy,
+    setTemplatePickerOpen,
+    themePresetId,
+    recommendedThemePreset,
+    handleSelectThemePreset,
+    templateLibrary,
+    selectedTemplate,
+    handleSelectTemplate,
+    designProgress,
+    designDetail,
+    designElapsed,
+    pickerThemePreset,
+    aiDraft,
+    pickerThemeGuidance,
+    templatePreviewBusy,
+    templatePreview,
+    templateAnalysis,
+    generateFromDraft,
+    designQualityReport,
+    designQualityReportOpen,
+    setDesignQualityReportOpen,
+    manualReviewBusy,
+    runManualReview,
+    cancelManualReview,
+    qualityStaleIndexes,
+    openQualityTarget,
+    refreshTemplateTarget,
+    clearTemplateTarget,
+    document,
+    setDesignQualityReport,
+    setActiveView,
+    setEditorSurface,
+  } = app;
 
   return (
     <>
-{insertTableOpen && (
-        <InsertTableDialog
-          onClose={() => setInsertTableOpen(false)}
-          onInsert={(columns, rows) => {
-            execute({ type: "add-table", slideId: activeSlide.id, columns, rows });
-            setInsertTableOpen(false);
-            setTaskStatus(`已插入 ${rows + 1} 行 × ${columns} 列表格`);
-          }}
-        />
-      )}
-{insertChartOpen && (
-        <InsertChartDialog
-          onClose={() => setInsertChartOpen(false)}
-          onInsert={(kind) => {
-            execute({ type: "add-chart", slideId: activeSlide.id, kind });
-            setInsertChartOpen(false);
-            setTaskStatus("已插入图表；可在属性面板修改示例指标");
-          }}
-        />
-      )}
-{aiImageOpen && (
-        <AiImageDialog
-          busy={aiImageBusy}
-          error={aiImageError}
-          onClose={() => setAiImageOpen(false)}
-          onGenerate={(prompt, role) => void handleAiImageGenerate(prompt, role)}
-        />
-      )}
-{iconPickerOpen && (
-        <IconPicker
-          onClose={() => setIconPickerOpen(false)}
-          onPick={(name: BuiltinIconName) => {
-            execute({ type: "add-icon", slideId: activeSlide.id, name });
-            setIconPickerOpen(false);
-          }}
-        />
-      )}
-{recentProjectsOpen && (
-        <div
-          className="upload-dialog-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setRecentProjectsOpen(false);
-          }}
-        >
-          <section className="upload-dialog" role="dialog" aria-modal="true" aria-labelledby="recent-projects-title">
-            <div className="upload-dialog-heading">
-              <div>
-                <FolderClock />
-                <div>
-                  <h2 id="recent-projects-title">最近项目</h2>
-                  <p>项目文件仍保存在原位置；这里仅保存最近访问记录。</p>
-                </div>
-              </div>
-              <button type="button" aria-label="关闭最近项目" onClick={() => setRecentProjectsOpen(false)}>
-                <X />
-              </button>
-            </div>
-            {recentProjects.length === 0 ? (
-              <div className="template-empty">还没有保存或打开过项目</div>
-            ) : (
-              <div className="ai-history">
-                {recentProjects.map((entry) => (
-                  <div key={entry.path} className="recent-project-row">
-                    <button
-                      type="button"
-                      className="recent-project-open"
-                      disabled={entry.missing}
-                      title={entry.path}
-                      onClick={() => void handleOpenRecent(entry)}
-                    >
-                      <FolderClock />
-                      <div>
-                        <strong>{entry.title}</strong>
-                        <span>{entry.missing ? "文件已移动或删除" : entry.path}</span>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="recent-project-remove"
-                      aria-label={`从最近项目移除 ${entry.title}`}
-                      title="仅从最近项目移除，不删除文件"
-                      onClick={() => {
-                        void removeRecentProject(entry.path)
-                          .then(setRecentProjects)
-                          .catch((error: unknown) =>
-                            setTaskStatus(`移除失败：${error instanceof Error ? error.message : String(error)}`),
-                          );
-                      }}
-                    >
-                      <Trash2 />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
-{templateUploadOpen && (
+      {templateUploadOpen && (
         <div
           className="upload-dialog-backdrop"
           role="presentation"
@@ -260,7 +82,7 @@ export function DialogStack({ app }: { app: AppRuntime }) {
           </section>
         </div>
       )}
-{templatePickerOpen && (
+      {templatePickerOpen && (
         <div
           className="upload-dialog-backdrop"
           role="presentation"
@@ -471,7 +293,7 @@ export function DialogStack({ app }: { app: AppRuntime }) {
           </section>
         </div>
       )}
-{designQualityReport && designQualityReportOpen && (
+      {designQualityReport && designQualityReportOpen && (
         <div
           className="upload-dialog-backdrop"
           role="presentation"
@@ -789,458 +611,6 @@ export function DialogStack({ app }: { app: AppRuntime }) {
             </div>
           </section>
         </div>
-      )}
-{exportPreflightOpen && !exportBusy && (
-        <div
-          className="upload-dialog-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setExportPreflightOpen(false);
-          }}
-        >
-          <section
-            className="upload-dialog export-preflight-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="export-preflight-title"
-          >
-            <div className="upload-dialog-heading">
-              <div>
-                <Download />
-                <div>
-                  <h2 id="export-preflight-title">导出前摘要</h2>
-                  <p>本次导出将读取当前不可变文档快照，不会修改项目或撤销栈。</p>
-                </div>
-              </div>
-              <button type="button" aria-label="关闭导出前摘要" onClick={() => setExportPreflightOpen(false)}>
-                <X />
-              </button>
-            </div>
-            <dl className="export-preflight-summary">
-              <div>
-                <dt>文档版本</dt>
-                <dd>{revisionLabel}</dd>
-              </div>
-              <div>
-                <dt>内容审核</dt>
-                <dd>
-                  {document.slides.filter((slide) => slide.content.status === "approved").length}/
-                  {document.slides.length} 页已确认
-                </dd>
-              </div>
-              <div>
-                <dt>视觉覆盖</dt>
-                <dd>
-                  {designQualityReport?.visualReviewCoverage
-                    ? `${designQualityReport.visualReviewCoverage.reviewed}/${designQualityReport.visualReviewCoverage.total} 页`
-                    : "未执行"}
-                </dd>
-              </div>
-              <div>
-                <dt>待复检页面</dt>
-                <dd>{qualityStaleIndexes.length} 页</dd>
-              </div>
-              <div>
-                <dt>视觉问题</dt>
-                <dd>{designQualityReport?.visualReview?.issues.length ?? 0} 条</dd>
-              </div>
-              <div>
-                <dt>确定性问题</dt>
-                <dd>{designQualityReport?.issues.length ?? 0} 条</dd>
-              </div>
-            </dl>
-            {qualityStaleIndexes.length > 0 && (
-              <p className="design-quality-warning">
-                有 {qualityStaleIndexes.length} 页在上次视觉评审后发生变化。可以继续导出，但建议先复检变化页。
-              </p>
-            )}
-            {!designQualityReport?.visualReview && (
-              <p className="design-quality-warning">当前没有可追溯的视觉评审结论；导出仍会执行字体、越界和结构预检。</p>
-            )}
-            <div className="upload-dialog-actions">
-              <button type="button" className="secondary-action" onClick={() => setExportPreflightOpen(false)}>
-                返回编辑
-              </button>
-              {designQualityReport && qualityStaleIndexes.length > 0 && (
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={() => {
-                    setExportPreflightOpen(false);
-                    setDesignQualityReportOpen(true);
-                  }}
-                >
-                  先复检变化页
-                </button>
-              )}
-              <button
-                type="button"
-                className="primary-action"
-                onClick={() => {
-                  setExportPreflightOpen(false);
-                  void handleExport();
-                }}
-              >
-                继续导出 PPTX
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-{directionOptions && (
-        <DesignDirectionDialog
-          options={directionOptions}
-          regenerations={directionRegenerations}
-          onSelect={(id, words) =>
-            directionChoiceRef.current?.({
-              kind: "select",
-              id,
-              ...(words?.trim() ? { words: words.trim() } : {}),
-            })
-          }
-          onSkip={(words) =>
-            directionChoiceRef.current?.({
-              kind: "skip",
-              ...(words?.trim() ? { words: words.trim() } : {}),
-            })
-          }
-          onRetry={() => directionChoiceRef.current?.({ kind: "retry" })}
-        />
-      )}
-{exportReport && (
-        <div
-          className="upload-dialog-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setExportReport(undefined);
-          }}
-        >
-          <section
-            className="upload-dialog export-report-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="export-report-title"
-          >
-            <div className="upload-dialog-heading">
-              <div>
-                <CircleCheck />
-                <div>
-                  <h2 id="export-report-title">导出报告</h2>
-                  <p>
-                    {exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象
-                    {exportReport.nativeChartCount > 0 ? ` · ${exportReport.nativeChartCount} 个原生图表` : ""}
-                    {exportReport.nativeTableCount > 0 ? ` · ${exportReport.nativeTableCount} 个原生表格` : ""} · ZIP{" "}
-                    {exportReport.package.entryCount} 个条目
-                    {exportReport.masters.length > 0
-                      ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）`
-                      : ""}
-                    {exportReport.themeColors.length > 0
-                      ? ` · 主题色 ${exportReport.themeColors.join("、")}（${exportReport.themeColorReferences} 处对象引用）`
-                      : ""}
-                    {exportReport.nativeAnimationCount > 0 ? ` · ${exportReport.nativeAnimationCount} 个原生动画` : ""}
-                    {exportReport.nativeAnimationSkipped > 0
-                      ? ` · ${exportReport.nativeAnimationSkipped} 个动画未写入`
-                      : ""}
-                    {exportReport.nativeTransitionCount > 0
-                      ? ` · ${exportReport.nativeTransitionCount} 页原生切换`
-                      : ""}
-                    {exportReport.tasteLint
-                      ? ` · 体检 ${exportReport.tasteLint.hard} 硬底线 / ${exportReport.tasteLint.soft} 提示`
-                      : " · 体检未执行"}
-                    {exportReport.templateFit
-                      ? exportReport.templateFit.checked
-                        ? ` · 模板符合度 ${exportReport.templateFit.score}/100${exportReport.templateFit.passed ? "" : "（未达标）"}`
-                        : " · 模板符合度未执行"
-                      : ""}
-                    {exportReport.parity
-                      ? exportReport.parity.passed
-                        ? ` · 回读 ${exportReport.parity.checked.slides} 页通过`
-                        : ` · 回读 ${exportReport.parity.issues.length} 处不一致`
-                      : " · 回读未执行"}
-                    {exportReport.assetProvenance.verified +
-                      exportReport.assetProvenance.pending +
-                      exportReport.assetProvenance.user +
-                      exportReport.assetProvenance.missing >
-                    0
-                      ? ` · 素材 已核验 ${exportReport.assetProvenance.verified} / 待核验 ${exportReport.assetProvenance.pending} / 未标注 ${exportReport.assetProvenance.missing}`
-                      : ""}
-                  </p>
-                </div>
-              </div>
-              <button type="button" aria-label="关闭导出报告" onClick={() => setExportReport(undefined)}>
-                <X />
-              </button>
-            </div>
-            {exportReport.issues.length === 0 ? (
-              <div className="template-empty">未发现导出问题</div>
-            ) : (
-              <ul className="export-report-list">
-                {exportReport.issues.map((issue, index) => (
-                  <li key={`${issue.code}-${issue.slideIndex}-${issue.elementId ?? index}`} className={issue.severity}>
-                    <CircleAlert />
-                    <div>
-                      <strong>
-                        {issue.severity === "error" ? "错误" : "提示"} · 第 {issue.slideIndex + 1} 页
-                      </strong>
-                      <p>{issue.message}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {exportReport.parity && !exportReport.parity.passed && (
-              <ul className="export-report-list">
-                {exportReport.parity.issues.slice(0, 12).map((issue, index) => (
-                  <li key={`parity-${issue.slideIndex}-${issue.kind}-${index}`} className="warning">
-                    <CircleAlert />
-                    <div>
-                      <strong>回读不一致 · 第 {issue.slideIndex + 1} 页</strong>
-                      <p>
-                        {parityIssueLabel(issue.kind)}：期望 {String(issue.expected)}，实际 {String(issue.actual)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="upload-dialog-actions">
-              <button type="button" className="secondary-action" onClick={() => setExportReport(undefined)}>
-                关闭
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-{templateMenu && (
-        <div
-          className="template-menu-backdrop"
-          role="presentation"
-          onMouseDown={() => setTemplateMenu(undefined)}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setTemplateMenu(undefined);
-          }}
-        >
-          <div
-            className="template-context-menu"
-            role="menu"
-            style={{ left: templateMenu.x, top: templateMenu.y }}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <strong>{templateMenu.template.name}</strong>
-            <button type="button" role="menuitem" onClick={() => void handleRenameTemplate(templateMenu.template)}>
-              重命名
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              onClick={() => void handleDeleteTemplate(templateMenu.template)}
-            >
-              删除
-            </button>
-          </div>
-        </div>
-      )}
-{importChoice && (
-        <ImportModeDialog
-          fileName={importChoice.name}
-          busy={importBusy}
-          progress={importProgress}
-          onCancelImport={importProgress ? () => void handleCancelImport() : undefined}
-          onClose={() => {
-            setImportChoice(undefined);
-            setTaskStatus("已取消打开");
-          }}
-          onImportContent={() => void handleImportContent()}
-          onExtractTemplate={() => void handleExtractTemplate()}
-        />
-      )}
-{importPreview && (
-        <ImportReportDialog
-          fileName={importPreview.fileName}
-          report={importPreview.report}
-          onCancel={() => {
-            setImportPreview(undefined);
-            setTaskStatus("已取消导入，当前项目未改变");
-          }}
-          onConfirm={() => void handleConfirmImport()}
-        />
-      )}
-{contentHistoryOpen && (
-        <ContentHistory
-          document={document}
-          onClose={() => setContentHistoryOpen(false)}
-          onRestore={restoreContentVersion}
-          onRestoreDesign={restoreContentVersionWithDesign}
-        />
-      )}
-{editorCanvasOpen && findOpen && <FindReplaceBar onClose={() => setFindOpen(false)} />}
-{message && (
-        <div className={`page-message ${message.kind}`} role="status" aria-live="polite">
-          {message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}
-          <span>{message.text}</span>
-          <button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}>
-            <X />
-          </button>
-        </div>
-      )}
-{designBusy && !templatePickerOpen && (
-        <aside className="background-task-card" role="status" aria-live="polite" aria-label="AI 设计后台任务">
-          <div className="background-task-heading">
-            <span>
-              <Sparkles />
-              <strong>AI 正在后台生成 PPT</strong>
-            </span>
-            <b>{designProgress.percent}%</b>
-          </div>
-          <p>
-            {designProgress.label}
-            {designDetail ? ` · ${designDetail}` : ""} · 已用时 {formatElapsed(designElapsed)}
-          </p>
-          <div
-            className="background-task-progress"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={designProgress.percent}
-          >
-            <i style={{ width: `${designProgress.percent}%` }} />
-          </div>
-          <div className="background-task-actions">
-            <button type="button" onClick={() => setTemplatePickerOpen(true)}>
-              查看任务
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={() => {
-                designCancelRef.current = true;
-                // A gate waiting for a choice must be released, or cancel
-                // leaves the task running behind a closed dialog.
-                directionChoiceRef.current?.({ kind: "skip" });
-                setDesignProgress({ percent: designProgress.percent, label: "正在取消任务…" });
-                void cancelAiGeneration(designTaskId.current).catch(() => undefined);
-              }}
-            >
-              取消任务
-            </button>
-          </div>
-        </aside>
-      )}
-{designQualityReport && !designQualityReportOpen && !designBusy && (
-        <aside className="background-task-card complete" role="status" aria-live="polite">
-          <div className="background-task-heading">
-            <span>
-              <CircleCheck />
-              <strong>PPT 已生成，质检报告可查看</strong>
-            </span>
-          </div>
-          <p>生成结果已保留，当前操作不会被打断。</p>
-          <div className="background-task-actions">
-            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>
-              查看质检报告
-            </button>
-            <button type="button" onClick={() => setDesignQualityReport(undefined)}>
-              稍后处理
-            </button>
-          </div>
-        </aside>
-      )}
-{editorCanvasOpen && designQualityReport && !designQualityReportOpen && (
-        <aside className="current-slide-quality-card" aria-label="当前页视觉质检">
-          <div>
-            <strong>第 {activeSlideIndex + 1} 页质检</strong>
-            <span>
-              {qualityStaleIndexes.includes(activeSlideIndex)
-                ? "结果已过期"
-                : activeSlideVisualScore
-                  ? `${activeSlideVisualScore.overallScore} 分`
-                  : "未逐页评分"}
-            </span>
-          </div>
-          <p>
-            {activeSlideVisualIssues.length > 0
-              ? `${activeSlideVisualIssues.length} 条视觉建议：${activeSlideVisualIssues
-                  .slice(0, 2)
-                  .map((issue) => visualIssueLabels[issue.issue])
-                  .join("、")}`
-              : qualityStaleIndexes.includes(activeSlideIndex)
-                ? "本页在上次评审后发生变化。"
-                : "本页没有未解决的视觉建议。"}
-          </p>
-          <div>
-            <button type="button" disabled={manualReviewBusy} onClick={() => void runManualReview("current")}>
-              复检本页
-            </button>
-            <button type="button" onClick={() => setDesignQualityReportOpen(true)}>
-              查看整册报告
-            </button>
-          </div>
-        </aside>
-      )}
-{slideRewrite && rewriteSlide && (
-        <SlideRewriteDialog
-          slideIndex={slideRewrite.index}
-          title={rewriteSlide.title}
-          body={rewriteSlide.body}
-          speakerNotes={rewriteSlide.speakerNotes}
-          status={slideRewrite.status}
-          proposal={slideRewrite.proposal}
-          error={slideRewrite.error}
-          defaultInstruction={slideRewrite.instruction}
-          onGenerate={(instruction) => void runSlideRewrite(instruction)}
-          onApply={applySlideRewrite}
-          onClose={closeSlideRewrite}
-        />
-      )}
-{slideAssist?.kind === "title" && assistSlide && (
-        <SlideTitleDialog
-          slideIndex={slideAssist.index}
-          currentTitle={assistSlide.title}
-          status={slideAssist.status}
-          candidates={slideAssist.candidates}
-          error={slideAssist.error}
-          onPick={applyTitleAssist}
-          onRetry={() => void runTitleAssist(slideAssist.index)}
-          onClose={closeSlideAssist}
-        />
-      )}
-{slideAssist?.kind === "notes" && assistSlide && (
-        <SpeakerNotesDialog
-          slideIndex={slideAssist.index}
-          title={assistSlide.title}
-          currentNotes={assistSlide.speakerNotes}
-          status={slideAssist.status}
-          proposal={slideAssist.proposal}
-          error={slideAssist.error}
-          onApply={applyNotesAssist}
-          onRetry={() => void runNotesAssist(slideAssist.index)}
-          onClose={closeSlideAssist}
-        />
-      )}
-{slideAssist?.kind === "split" && assistSlide && (
-        <SplitSlideDialog
-          slideIndex={slideAssist.index}
-          title={assistSlide.title}
-          status={slideAssist.status}
-          pages={slideAssist.pages}
-          error={slideAssist.error}
-          onApply={applySplitAssist}
-          onRetry={() => void runSplitAssist(slideAssist.index)}
-          onClose={closeSlideAssist}
-        />
-      )}
-{deckReview && (
-        <DeckReviewDialog
-          status={deckReview.status}
-          issues={deckReview.issues}
-          error={deckReview.error}
-          onJump={jumpToDeckReviewIssue}
-          onRewriteIssue={rewriteFromDeckReviewIssue}
-          onRetry={() => void runDeckReview()}
-          onClose={closeDeckReview}
-        />
       )}
     </>
   );

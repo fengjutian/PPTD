@@ -1,132 +1,51 @@
-import type { AppRuntime } from "./app-runtime";
+import { ArrowDown, ArrowUp, Copy, Plus, Sparkles, Trash2 } from "lucide-react";
 
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
-  Check,
-  ChartColumn,
-  Circle,
-  CircleAlert,
-  CircleCheck,
-  ClipboardPaste,
-  Copy,
-  Download,
-  FilePlus2,
-  FilePenLine,
-  FolderClock,
-  FileUp,
-  Grid2x2,
-  Grid3x3,
-  ImagePlus,
-  Images,
-  Info,
-  LayoutDashboard,
-  Magnet,
-  Minus,
-  MoveHorizontal,
-  MoveVertical,
-  MousePointer2,
-  Palette,
-  Play,
-  Plus,
-  Redo2,
-  RotateCcw,
-  Save,
-  SaveAll,
-  Scissors,
-  ScrollText,
-  Search,
-  Settings,
-  Sparkles,
-  Square,
-  Table2,
-  Trash2,
-  Type,
-  Undo2,
-  Upload,
-  Wand2,
-  X,
-} from "lucide-react";
-
-import { EMU_PER_INCH, type AnimationEffect, type SlideAnimation } from "../core/document-model";
-
-import { contrastRatio } from "../core/rendering/contrast";
-
-import { LogPanel } from "../features/diagnostics/LogPanel";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
-import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
-import { FindReplaceBar } from "../features/editor/FindReplaceBar";
-import { PageSizeControls } from "../features/editor/PageSizeControls";
-import { ShapePicker } from "../features/editor/ShapePicker";
-import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
-import { ImportModeDialog, ImportReportDialog } from "../features/editor/PptxImportDialogs";
-import {
-  ANIMATION_EFFECT_LABELS,
-  ANIMATION_EFFECT_OPTIONS,
-  ANIMATION_PHASE_LABELS,
-} from "../features/editor/animation-options";
 
-import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
-import { ContentHistory } from "../features/editor/ContentHistory";
+import { ANIMATION_EFFECT_LABELS, ANIMATION_PHASE_LABELS } from "../features/editor/animation-options";
+
 import { LayerList } from "../features/editor/LayerList";
 
 import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOverlay";
 
-import { ContentReview } from "../features/ai/ContentReview";
-import { DesignDirectionDialog } from "../features/ai/DesignDirectionDialog";
-import { SlideRewriteDialog } from "../features/ai/SlideRewriteDialog";
-import { FactPicker } from "../features/ai/FactPicker";
-
-import { SlideTitleDialog } from "../features/ai/SlideTitleDialog";
-import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
-import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
-import { DeckReviewDialog } from "../features/ai/DeckReviewDialog";
-import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
-import { ThemeSpecimenDialog } from "../features/ai/ThemeSpecimenDialog";
-
-import { AiImageDialog } from "../features/editor/AiImageDialog";
-import { InsertTableDialog } from "../features/editor/InsertTableDialog";
-import { InsertChartDialog } from "../features/editor/InsertChartDialog";
-
-import { SettingsWorkspace } from "../features/settings/SettingsDialog";
-
-import { removeRecentProject } from "../services/app-database";
-import { cancelAiGeneration } from "../services/ai-service";
-
-import { isDesktopRuntime } from "../services/project-files";
-
-import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
-
-import type { BuiltinIconName } from "../core/document-model";
-import { IconPicker } from "../features/editor/IconPicker";
-
 import { ElementView } from "../features/editor/ElementView";
 import { SlideThumbnail } from "../features/editor/SlideThumbnail";
-import { ToolButton } from "../features/editor/ToolButton";
 
-import { ProjectHome } from "./ProjectHome";
 import type { AppRuntime } from "./app-runtime";
-import {
-  CANVAS_WIDTH,
-  themeColorRoleLabels,
-  themeAudienceLabels,
-  themePageTypeLabels,
-  themeDensityLabels,
-  visualIssueLabels,
-  templateFitLabels,
-  parityIssueLabel,
-  reviewEvidenceLabel,
-  formatElapsed,
-} from "./app-shared";
+import { CANVAS_WIDTH } from "./app-shared";
 
 export function EditorWorkspaceView({ app }: { app: AppRuntime }) {
-  const { editorCanvasOpen, leftTab, setLeftTab, execute, document, activeSlide, selectSlide, selectedElementIds, selectElement, toggleElement, workspaceRef, formatPainterStyle, zoom, canvasHeight, marquee, scale, selected, snapContext, animationPreviews, startInspectorResize, editorRibbonTab, selectedAnimation, setSelectedAnimationId, previewSelectedAnimation, previewSlideAnimations, stopAnimationPreview } = app;
+  const {
+    editorCanvasOpen,
+    leftTab,
+    setLeftTab,
+    execute,
+    document,
+    activeSlide,
+    selectSlide,
+    selectedElementIds,
+    selectElement,
+    toggleElement,
+    workspaceRef,
+    formatPainterStyle,
+    zoom,
+    canvasHeight,
+    marquee,
+    scale,
+    snapContext,
+    animationPreviews,
+    startInspectorResize,
+    editorRibbonTab,
+    selectedAnimation,
+    setSelectedAnimationId,
+    previewSelectedAnimation,
+    previewSlideAnimations,
+    stopAnimationPreview,
+  } = app;
 
   return (
     <>
-{editorCanvasOpen && (
+      {editorCanvasOpen && (
         <>
           <aside className="left-panel">
             <div className="panel-heading">
