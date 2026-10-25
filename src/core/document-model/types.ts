@@ -545,6 +545,8 @@ export interface ReviewTrace {
   /** ISO timestamp of the review. */
   createdAt: string;
   overallScore: number;
+  /** Template adherence of the same review, when a template target existed. */
+  templateFitScore?: number;
   issueCount: number;
   slides: Array<{ slideIndex: number; overallScore: number }>;
 }
@@ -591,6 +593,60 @@ export interface DesignDirectionRecord {
   model?: string;
 }
 
+/**
+ * A grid compiled from the uploaded template.
+ *
+ * It is design state: it never contains reviewed copy and therefore does not
+ * enter the content hash. Persisting it lets a reopened project keep using the
+ * template as the review target without re-running template analysis.
+ */
+export interface TemplateGrid {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  titleX: number;
+  titleY: number;
+  titleWidth: number;
+  titleHeight: number;
+  bodyTop: number;
+  bodyBottom: number;
+}
+
+export interface TemplateLayoutTarget {
+  name: string;
+  grid: TemplateGrid;
+  titleSizePt?: number;
+  bodySizePt?: number;
+  /** Cover, section, quote and image-led pages may break the content grid. */
+  freeComposition: boolean;
+}
+
+export interface TemplateTolerances {
+  axis: number;
+  axisY: number;
+  margin: number;
+  fontSizePt: number;
+  colorChannel: number;
+}
+
+/** The measurable target derived from an uploaded template. */
+export interface TemplateReviewTarget {
+  name: string;
+  page: { widthEmu: number; heightEmu: number };
+  grid: TemplateGrid;
+  layouts: TemplateLayoutTarget[];
+  palette: string[];
+  majorFont?: string;
+  minorFont?: string;
+  titleSizePt?: number;
+  bodySizePt?: number;
+  alignment: "left-grid" | "centered-grid";
+  confidence: "high" | "low";
+  minimumFit: number;
+  tolerances: TemplateTolerances;
+}
+
 export interface PresentationDocument {
   id: DocumentId;
   schemaVersion: SchemaVersion;
@@ -600,6 +656,11 @@ export interface PresentationDocument {
   slides: Slide[];
   theme?: DocumentTheme;
   layouts?: SlideLayoutSpec[];
+  /**
+   * Template target used by visual review. Design state: editing it never
+   * increments the content revision or invalidates reviewed copy.
+   */
+  templateStyle?: TemplateReviewTarget;
   /** Confirmed content snapshots, oldest first. Capped by the document model. */
   contentVersions?: ContentVersion[];
   /** Visual review summaries, oldest first. Capped by the document model. */

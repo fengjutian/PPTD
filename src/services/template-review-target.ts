@@ -1,6 +1,19 @@
-import type { PresentationDocument } from "../core/document-model";
+import type {
+  PresentationDocument,
+  TemplateGrid,
+  TemplateLayoutTarget,
+  TemplateReviewTarget,
+  TemplateTolerances,
+} from "../core/document-model";
 import type { PresentationVisualGoal, VisualReview } from "./visual-alignment";
 import type { TemplateAnalysis, TemplateLayoutSummary, TemplateRegion } from "./project-files";
+
+export type {
+  TemplateGrid,
+  TemplateLayoutTarget,
+  TemplateReviewTarget,
+  TemplateTolerances,
+} from "../core/document-model";
 
 /**
  * The measurable target a reviewed deck is compared against when the user
@@ -17,66 +30,13 @@ import type { TemplateAnalysis, TemplateLayoutSummary, TemplateRegion } from "./
  * layout: a template without a title or content placeholder simply yields fewer
  * layouts, and pages that do not resolve to one fall back to the deck-wide grid.
  */
-export interface TemplateGrid {
-  /** Left edge shared by the title and the content placeholder. */
-  left: number;
-  /** Right edge shared by the title and the content placeholder. */
-  right: number;
-  /** Top edge of the title placeholder. */
-  top: number;
-  /** Bottom edge of the content placeholder. */
-  bottom: number;
-  titleX: number;
-  titleY: number;
-  titleWidth: number;
-  titleHeight: number;
-  bodyTop: number;
-  bodyBottom: number;
-}
-
-export interface TemplateLayoutTarget {
-  name: string;
-  grid: TemplateGrid;
-  titleSizePt?: number;
-  bodySizePt?: number;
-  /**
-   * Cover, section, quote and closing pages are allowed to break the content
-   * grid on purpose. Applying the content page axis to them would penalize the
-   * template's own composition.
-   */
-  freeComposition: boolean;
-}
-
-export interface TemplateTolerances {
-  /** Normalized page-width tolerance for a vertical axis (left/right). */
-  axis: number;
-  /** Normalized page-height tolerance for a horizontal axis (top/bottom). */
-  axisY: number;
-  /** Allowed distance outside the content placeholder. */
-  margin: number;
-  /** Allowed title/body font size difference in points. */
-  fontSizePt: number;
-}
-
-export interface TemplateReviewTarget {
-  name: string;
-  page: { widthEmu: number; heightEmu: number };
-  /** Deck-wide fallback, built from the content layouts of the template. */
-  grid: TemplateGrid;
-  layouts: TemplateLayoutTarget[];
-  /** Normalized hex values of the template theme, used by the review prompt. */
-  palette: string[];
-  titleSizePt?: number;
-  bodySizePt?: number;
-  /** Axis language the review goal should use for this template. */
-  alignment: "left-grid" | "centered-grid";
-  confidence: "high" | "low";
-  minimumFit: number;
-  tolerances: TemplateTolerances;
-}
-
 export type TemplateFitCode =
-  "template-title-axis" | "template-content-bounds" | "template-title-size" | "template-body-size";
+  | "template-title-axis"
+  | "template-content-bounds"
+  | "template-title-size"
+  | "template-body-size"
+  | "template-palette"
+  | "template-font";
 
 export interface TemplateFitIssue {
   slideIndex: number;
@@ -107,9 +67,32 @@ const DEFAULT_TOLERANCES: TemplateTolerances = {
   axisY: 0.005,
   margin: 0.01,
   fontSizePt: 1.5,
+  colorChannel: 12,
 };
 const FREE_LAYOUT_PATTERN =
   /封面|标题幻灯片|扉页|章节|篇章|过渡|分隔|结束|谢谢|引用|引言|金句|cover|section|quote|closing|end/i;
+
+/**
+ * Whether a layout is allowed to ignore the content grid.
+ *
+ * The name is the strongest signal, but a layout with no body placeholder (a
+ * cover or a section divider) is structurally free even when the template
+ * author did not name it that way. A nearly full-page picture with almost no
+ * body area is the image-led variant of the same case.
+ */
+function isFreeLayout(layout: TemplateLayoutSummary, label: string, widthEmu: number, heightEmu: number): boolean {
+  if (FREE_LAYOUT_PATTERN.test(label)) return true;
+  const bodies = layout.regions.filter((region) => region.role === "body");
+  if (bodies.length === 0) return true;
+  const pageArea = Math.max(1, widthEmu * heightEmu);
+  const bodyArea = Math.max(...bodies.map((region) => region.width * region.height)) / pageArea;
+  const imageArea =
+    Math.max(
+      0,
+      ...layout.regions.filter((region) => region.role === "image").map((region) => region.width * region.height),
+    ) / pageArea;
+  return imageArea > 0.4 && bodyArea < 0.15;
+}
 
 const median = (values: number[]): number | undefined => {
   if (values.length === 0) return undefined;
@@ -202,7 +185,7 @@ export function buildTemplateReviewTarget(
       grid: compiled.grid,
       ...(compiled.titleSizePt === undefined ? {} : { titleSizePt: compiled.titleSizePt }),
       ...(compiled.bodySizePt === undefined ? {} : { bodySizePt: compiled.bodySizePt }),
-      freeComposition: FREE_LAYOUT_PATTERN.test(label),
+      freeComposition: isFreeLayout(layout, label, widthEmu, heightEmu),
     });
   }
   // Some templates expose usable placeholder geometry on their sample slides
@@ -211,17 +194,14 @@ export function buildTemplateReviewTarget(
   // confidence.
   if (layouts.length === 0) {
     for (const sample of analysis.slides) {
-      const compiled = layoutGrid(
-        {
-          index: sample.index,
-          name: sample.title,
-          backgroundColor: sample.backgroundColor,
-          decorations: sample.decorations,
-          regions: sample.regions,
-        },
-        widthEmu,
-        heightEmu,
-      );
+      const sampleLayout: TemplateLayoutSummary = {
+        index: sample.index,
+        name: sample.title,
+        backgroundColor: sample.backgroundColor,
+        decorations: sample.decorations,
+        regions: sample.regions,
+      };
+      const compiled = layoutGrid(sampleLayout, widthEmu, heightEmu);
       if (!compiled) continue;
       const label = sample.title?.trim() || `模板样张 ${sample.index + 1}`;
       layouts.push({
@@ -229,7 +209,7 @@ export function buildTemplateReviewTarget(
         grid: compiled.grid,
         ...(compiled.titleSizePt === undefined ? {} : { titleSizePt: compiled.titleSizePt }),
         ...(compiled.bodySizePt === undefined ? {} : { bodySizePt: compiled.bodySizePt }),
-        freeComposition: sample.index === 0 || FREE_LAYOUT_PATTERN.test(label),
+        freeComposition: sample.index === 0 || isFreeLayout(sampleLayout, label, widthEmu, heightEmu),
       });
     }
   }
@@ -266,14 +246,23 @@ export function buildTemplateReviewTarget(
     (layout) => layout.titleSizePt !== undefined || layout.bodySizePt !== undefined,
   ).length;
   const confident = measuredLayouts >= 2 && completeLayouts >= 1;
+  const palette = [
+    ...new Set(
+      [
+        ...analysis.themeColors.map((color) => normalizeHex(color.value)),
+        normalizeHex(analysis.defaultBackgroundColor),
+        ...analysis.layouts.flatMap((layout) => layout.regions.map((region) => normalizeHex(region.textColor))),
+      ].filter((value): value is string => value !== undefined),
+    ),
+  ];
   return {
     name,
     page: { widthEmu, heightEmu },
     grid,
     layouts,
-    palette: analysis.themeColors
-      .map((color) => normalizeHex(color.value))
-      .filter((value): value is string => value !== undefined),
+    palette,
+    ...(analysis.majorFont?.trim() ? { majorFont: analysis.majorFont.trim() } : {}),
+    ...(analysis.minorFont?.trim() ? { minorFont: analysis.minorFont.trim() } : {}),
     ...(titleSizePt === undefined ? {} : { titleSizePt }),
     ...(bodySizePt === undefined ? {} : { bodySizePt }),
     alignment: centered ? "centered-grid" : "left-grid",
@@ -341,6 +330,47 @@ const unionRect = (rects: Array<{ x: number; y: number; width: number; height: n
   return { x: left, y: top, width: right - left, height: bottom - top };
 };
 
+const parseHex = (value: string): [number, number, number] | undefined => {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(value.trim());
+  if (!match) return undefined;
+  return [Number.parseInt(match[1]!, 16), Number.parseInt(match[2]!, 16), Number.parseInt(match[3]!, 16)];
+};
+
+/**
+ * Neutral ink is always allowed: templates and contrast repair legitimately
+ * use white, black and grey text that need not be a named theme slot.
+ */
+const isNeutralInk = ([red, green, blue]: [number, number, number]): boolean =>
+  Math.max(red, green, blue) - Math.min(red, green, blue) <= 16;
+
+const colorBelongsToPalette = (color: string, palette: string[], channelTolerance: number): boolean => {
+  const value = parseHex(color);
+  // A colour we cannot parse is not a finding. Invalid input is the schema's
+  // job, not the template checker's.
+  if (!value) return true;
+  if (isNeutralInk(value)) return true;
+  return palette.some((candidate) => {
+    const reference = parseHex(candidate);
+    if (!reference) return false;
+    return (
+      Math.abs(value[0] - reference[0]) <= channelTolerance &&
+      Math.abs(value[1] - reference[1]) <= channelTolerance &&
+      Math.abs(value[2] - reference[2]) <= channelTolerance
+    );
+  });
+};
+
+const normalizeFontFamily = (value: string): string => value.replace(/["']/g, "").trim().toLowerCase();
+
+const fontBelongsToTemplate = (fontFamily: string, target: TemplateReviewTarget): boolean => {
+  const fonts = [target.majorFont, target.minorFont].filter(
+    (font): font is string => font !== undefined && font.trim().length > 0,
+  );
+  if (fonts.length === 0) return true;
+  const normalized = normalizeFontFamily(fontFamily);
+  return fonts.some((font) => normalizeFontFamily(font) === normalized);
+};
+
 /**
  * Measures a document against the uploaded template.
  *
@@ -403,6 +433,29 @@ export function checkTemplateFit(
           });
         }
       }
+      if (
+        target.palette.length > 0 &&
+        !colorBelongsToPalette(title.style.color, target.palette, target.tolerances.colorChannel)
+      ) {
+        issues.push({
+          slideIndex,
+          code: "template-palette",
+          severity: "warning",
+          message: `标题颜色 ${title.style.color} 不在模板色板中`,
+          suggestion: "把标题颜色换回模板主题色或中性墨色",
+          elementIds: [title.id],
+        });
+      }
+      if (!fontBelongsToTemplate(title.style.fontFamily, target)) {
+        issues.push({
+          slideIndex,
+          code: "template-font",
+          severity: "warning",
+          message: `标题字体 ${title.style.fontFamily} 不属于模板字体（${[target.majorFont, target.minorFont].filter(Boolean).join(" / ")}）`,
+          suggestion: "把标题字体换回模板主题字体",
+          elementIds: [title.id],
+        });
+      }
     }
     if (bodies.length > 0) {
       const bounds = unionRect(bodies.map((body) => rectOf(body.frame, pageWidth, pageHeight)));
@@ -441,6 +494,16 @@ export function checkTemplateFit(
           });
         }
       }
+      if (bodies[0]?.type === "text" && !fontBelongsToTemplate(bodies[0].style.fontFamily, target)) {
+        issues.push({
+          slideIndex,
+          code: "template-font",
+          severity: "warning",
+          message: `正文字体 ${bodies[0].style.fontFamily} 不属于模板字体`,
+          suggestion: "把正文字体换回模板主题字体",
+          elementIds: [bodies[0].id],
+        });
+      }
     }
   }
   const checked = checkedSlides > 0;
@@ -464,7 +527,12 @@ export function templateFitVisualIssues(report: TemplateFitReport): VisualReview
     slideIndex: issue.slideIndex,
     severity: issue.severity,
     issue:
-      issue.code === "template-title-size" || issue.code === "template-body-size" ? "theme-mismatch" : "misalignment",
+      issue.code === "template-title-size" ||
+      issue.code === "template-body-size" ||
+      issue.code === "template-palette" ||
+      issue.code === "template-font"
+        ? "theme-mismatch"
+        : "misalignment",
     elementIds: issue.elementIds,
     suggestion: issue.suggestion,
     code: issue.code,

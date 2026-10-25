@@ -225,6 +225,65 @@ describe("presentation document schema", () => {
     });
   });
 
+  it("migrates a version 21 fixture without inventing a template target", () => {
+    const parsed = parsePresentationDocument(versionTwentyOneFixture);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.templateStyle).toBeUndefined();
+  });
+
+  it("persists and re-reads the template review target", () => {
+    const document = createDocument();
+    document.templateStyle = {
+      name: "示例模板",
+      page: { widthEmu: 12_192_000, heightEmu: 6_858_000 },
+      grid: {
+        left: 0.05625,
+        right: 0.94375,
+        top: 0.086667,
+        bottom: 0.84,
+        titleX: 0.05625,
+        titleY: 0.086667,
+        titleWidth: 0.8875,
+        titleHeight: 0.106667,
+        bodyTop: 0.24,
+        bodyBottom: 0.84,
+      },
+      layouts: [
+        {
+          name: "内页",
+          grid: {
+            left: 0.05625,
+            right: 0.94375,
+            top: 0.086667,
+            bottom: 0.84,
+            titleX: 0.05625,
+            titleY: 0.086667,
+            titleWidth: 0.8875,
+            titleHeight: 0.106667,
+            bodyTop: 0.24,
+            bodyBottom: 0.84,
+          },
+          titleSizePt: 28,
+          bodySizePt: 16,
+          freeComposition: false,
+        },
+      ],
+      palette: ["#0EA58C", "#111827"],
+      majorFont: "Source Han Sans",
+      minorFont: "Source Han Sans",
+      titleSizePt: 28,
+      bodySizePt: 16,
+      alignment: "left-grid",
+      confidence: "high",
+      minimumFit: 90,
+      tolerances: { axis: 0.01, axisY: 0.005, margin: 0.01, fontSizePt: 1.5, colorChannel: 12 },
+    };
+    const parsed = parsePresentationDocument(document);
+    expect(parsed.templateStyle?.grid.titleX).toBeCloseTo(0.05625);
+    expect(parsed.templateStyle?.layouts[0]?.freeComposition).toBe(false);
+    expect(parsed.templateStyle?.minimumFit).toBe(90);
+  });
+
   it("migrates a version 20 fixture without inventing provenance", () => {
     const migrated = parsePresentationDocument(versionTwentyFixture);
     expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);

@@ -96,12 +96,14 @@ const templateTarget = (): TemplateReviewTarget => ({
     },
   ],
   palette: ["#0EA58C"],
+  majorFont: "Microsoft YaHei",
+  minorFont: "Microsoft YaHei",
   titleSizePt: 28,
   bodySizePt: 16,
   alignment: "left-grid",
   confidence: "high",
   minimumFit: 90,
-  tolerances: { axis: 0.01, axisY: 0.005, margin: 0.01, fontSizePt: 1.5 },
+  tolerances: { axis: 0.01, axisY: 0.005, margin: 0.01, fontSizePt: 1.5, colorChannel: 12 },
 });
 
 describe("设计质检阶段", () => {

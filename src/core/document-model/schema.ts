@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 21 as const;
+export const CURRENT_SCHEMA_VERSION = 22 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -431,6 +431,51 @@ const designDirectionRecordSchema = z.object({
   model: z.string().min(1).max(120).optional(),
 });
 
+const templateGridSchema = z.object({
+  left: z.number(),
+  right: z.number(),
+  top: z.number(),
+  bottom: z.number(),
+  titleX: z.number(),
+  titleY: z.number(),
+  titleWidth: z.number(),
+  titleHeight: z.number(),
+  bodyTop: z.number(),
+  bodyBottom: z.number(),
+});
+
+const templateLayoutTargetSchema = z.object({
+  name: z.string().min(1).max(200),
+  grid: templateGridSchema,
+  titleSizePt: z.number().positive().max(400).optional(),
+  bodySizePt: z.number().positive().max(400).optional(),
+  freeComposition: z.boolean(),
+});
+
+const templateTolerancesSchema = z.object({
+  axis: z.number().min(0).max(1),
+  axisY: z.number().min(0).max(1),
+  margin: z.number().min(0).max(1),
+  fontSizePt: z.number().min(0).max(100),
+  colorChannel: z.number().min(0).max(255),
+});
+
+const templateReviewTargetSchema = z.object({
+  name: z.string().min(1).max(200),
+  page: z.object({ widthEmu: positiveEmu, heightEmu: positiveEmu }),
+  grid: templateGridSchema,
+  layouts: z.array(templateLayoutTargetSchema).min(1).max(200),
+  palette: z.array(z.string().max(32)).max(100),
+  majorFont: z.string().min(1).max(200).optional(),
+  minorFont: z.string().min(1).max(200).optional(),
+  titleSizePt: z.number().positive().max(400).optional(),
+  bodySizePt: z.number().positive().max(400).optional(),
+  alignment: z.enum(["left-grid", "centered-grid"]),
+  confidence: z.enum(["high", "low"]),
+  minimumFit: z.number().min(0).max(100),
+  tolerances: templateTolerancesSchema,
+});
+
 const baseDocumentSchema = z.object({
   id: z.string().uuid(),
   schemaVersion: z.number().int(),
@@ -444,6 +489,7 @@ const baseDocumentSchema = z.object({
   slides: z.array(slideSchema).min(1),
   theme: themeSchema.optional(),
   layouts: z.array(slideLayoutSchema).max(200).optional(),
+  templateStyle: templateReviewTargetSchema.optional(),
   contentVersions: z.array(contentVersionSchema).max(MAX_CONTENT_VERSIONS).optional(),
   designDirections: z.array(designDirectionRecordSchema).max(MAX_DESIGN_DIRECTIONS).optional(),
   reviewTraces: z
@@ -452,6 +498,7 @@ const baseDocumentSchema = z.object({
         id: z.string().uuid(),
         createdAt: z.string(),
         overallScore: z.number(),
+        templateFitScore: z.number().min(0).max(100).optional(),
         issueCount: z.number().int().nonnegative(),
         slides: z.array(z.object({ slideIndex: z.number().int().nonnegative(), overallScore: z.number() })).max(500),
       }),
@@ -601,6 +648,11 @@ export const presentationDocumentSchema = baseDocumentSchema
 
 const versionEighteenDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(18) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionTwentyOneDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(21) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
@@ -762,6 +814,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 21 adds the source and licence of a picture. The field is optional:
   // imported and older pictures keep no provenance and are reported as such.
   20: (document) => ({ ...versionTwentyDocumentSchema.parse(document), schemaVersion: 21 }),
+  // Version 22 adds the persisted template review target. The field is
+  // optional: an older project simply has no template target to reuse.
+  21: (document) => ({ ...versionTwentyOneDocumentSchema.parse(document), schemaVersion: 22 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

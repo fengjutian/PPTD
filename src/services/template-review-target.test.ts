@@ -79,15 +79,27 @@ const analysis = (overrides: Partial<TemplateAnalysis> = {}): TemplateAnalysis =
   ...overrides,
 });
 
+const titleOf = (document: PresentationDocument) => {
+  const element = document.slides[0]!.elements[0]!;
+  if (element.type !== "text") throw new Error("fixture title must be text");
+  return element;
+};
+
 const withBody = (): PresentationDocument => {
   const document = createDocument();
   const slide = document.slides[0]!;
+  const title = titleOf(document);
   slide.content.title = "页面标题";
-  slide.elements[0]!.frame = {
+  title.frame = {
     x: x(0.05625),
     y: y(0.086667),
     width: x(0.8875),
     height: y(0.106667),
+  };
+  title.style = {
+    ...title.style,
+    color: "#111827",
+    fontFamily: "Source Han Sans",
   };
   slide.elements.push({
     id: crypto.randomUUID() as ElementId,
@@ -97,7 +109,7 @@ const withBody = (): PresentationDocument => {
     rotationMilliDegree: 0,
     locked: false,
     text: "正文",
-    style: { fontFamily: "Microsoft YaHei", fontSizePt: 16, color: "#293241", bold: false, align: "left" },
+    style: { fontFamily: "Source Han Sans", fontSizePt: 16, color: "#293241", bold: false, align: "left" },
   });
   return document;
 };
@@ -152,6 +164,59 @@ describe("template review target", () => {
     body.frame = { ...body.frame, x: emu(0), width: x(0.4) };
     const report = checkTemplateFit(document, target);
     expect(report.issues.some((issue) => issue.code === "template-content-bounds")).toBe(true);
+  });
+
+  it("warns when a title colour falls outside the template palette", () => {
+    const target = buildTemplateReviewTarget(analysis())!;
+    const document = withBody();
+    const title = titleOf(document);
+    title.style = {
+      ...title.style,
+      color: "#FF00AA",
+    };
+    const report = checkTemplateFit(document, target);
+    expect(report.issues.some((issue) => issue.code === "template-palette")).toBe(true);
+    expect(report.passed).toBe(true);
+  });
+
+  it("warns when a title font is not one of the template fonts", () => {
+    const target = buildTemplateReviewTarget(analysis())!;
+    const document = withBody();
+    const title = titleOf(document);
+    title.style = {
+      ...title.style,
+      fontFamily: "Comic Sans MS",
+    };
+    const report = checkTemplateFit(document, target);
+    expect(report.issues.some((issue) => issue.code === "template-font")).toBe(true);
+    expect(report.passed).toBe(true);
+  });
+
+  it("treats a title-only layout as free composition even without a cover name", () => {
+    const target = buildTemplateReviewTarget(
+      analysis({
+        layouts: [
+          {
+            index: 0,
+            name: "内页",
+            backgroundColor: "#FFFFFF",
+            decorations: [],
+            regions: [
+              {
+                role: "title",
+                x: x(0.2),
+                y: y(0.4),
+                width: x(0.6),
+                height: y(0.2),
+                textColor: "#111827",
+                fontSizePt: 40,
+              },
+            ],
+          },
+        ],
+      }),
+    )!;
+    expect(target.layouts[0]?.freeComposition).toBe(true);
   });
 
   it("skips free-composition cover pages", () => {

@@ -284,6 +284,8 @@ const templateFitLabels: Record<TemplateFitCode, string> = {
   "template-content-bounds": "正文超出模板内容区",
   "template-title-size": "标题字号偏离模板",
   "template-body-size": "正文字号偏离模板",
+  "template-palette": "颜色偏离模板色板",
+  "template-font": "字体偏离模板",
 };
 /** The narrowest and the widest the property panel may be dragged to. */
 const INSPECTOR_MIN_WIDTH = 220;
@@ -3472,6 +3474,10 @@ export function App() {
       });
       if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
       const finalDocument = stage.document;
+      // Keep the compiled target in design state so reopening the project can
+      // review against the same template without re-running template analysis.
+      if (templateTarget) finalDocument.templateStyle = templateTarget;
+      else delete finalDocument.templateStyle;
       setAgentWorkflow((state) =>
         canTransitionAgentWorkflow(state.stage, "ready-to-export")
           ? transitionAgentWorkflow(state, "ready-to-export")
@@ -3487,6 +3493,7 @@ export function App() {
             id: crypto.randomUUID(),
             createdAt: new Date().toISOString(),
             overallScore: stage.visualReview.overallScore,
+            ...(stage.templateFit?.checked ? { templateFitScore: stage.templateFit.score } : {}),
             issueCount: stage.visualReview.issues.length,
             slides: (stage.visualReview.slideScores ?? []).map((item) => ({
               slideIndex: item.slideIndex,
@@ -4000,7 +4007,7 @@ export function App() {
       const manualTarget =
         selectedTemplate && templateAnalysis
           ? buildTemplateReviewTarget(templateAnalysis, selectedTemplate.name)
-          : undefined;
+          : document.templateStyle;
       const manualGoal = manualTarget
         ? applyTemplateToGoal(defaultPresentationVisualGoal(), manualTarget)
         : defaultPresentationVisualGoal();

@@ -256,7 +256,10 @@ export function ContentHistory({
                 .reverse()
                 .map((trace) => (
                   <li key={trace.id}>
-                    <strong>{trace.overallScore} 分</strong>
+                    <strong>
+                      {trace.overallScore} 分
+                      {trace.templateFitScore !== undefined ? ` · 模板符合度 ${trace.templateFitScore}` : ""}
+                    </strong>
                     <span>{new Date(trace.createdAt).toLocaleString("zh-CN")}</span>
                     <span>
                       {trace.issueCount} 条问题 · {trace.slides.length} 页有评分

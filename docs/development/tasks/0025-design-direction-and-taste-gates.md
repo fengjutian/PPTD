@@ -765,15 +765,15 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 ## 26. 模板符合度决策与回归（2026-10-25）
 
-- 新增 ADR 0086：模板符合度是确定性测量，不是模型评分；记录目标编译、自由构图、四类偏差、分数公式、置信度/阈值、与评审循环合并方式。
-- 删除从未产生的 `template-palette` 错误码与界面标签，避免“永远不会出现的合同”。
+- 新增 ADR 0086：模板符合度是确定性测量，不是模型评分；记录目标编译、自由构图、六类偏差、分数公式、置信度/阈值、与评审循环合并方式。
+- `template-palette` 最初只声明未产生，后在色板/字体检查中真正实现；现在类型、检查、界面标签一致，`template-font` 同样。
 - `prompt-regression/visual-review.json` 增加 `template-mismatch` 样例，锁住问题类型与归一化。
-- `template-review-target.test.ts` 覆盖网格/字号/轴语言、无占位、通过、标题偏移、正文越界、自由构图、目标阈值继承。
+- `template-review-target.test.ts` 覆盖网格/字号/轴语言、无占位、通过、标题偏移、正文越界、色板/字体 warning、自由构图、目标阈值继承。
 
 ### 验证
 
-- `prompt-regression.test.ts` 15 项、`template-review-target.test.ts` 7 项通过。
-- 全量：1199 通过、1 跳过；类型检查、ESLint、生产构建通过。
+- `prompt-regression.test.ts` 15 项、`template-review-target.test.ts` 10 项通过。
+- 全量：1203 通过、1 跳过；类型检查、ESLint、生产构建通过。
 
 ## 27. 逐页样式字段合同（2026-10-25）
 
@@ -783,3 +783,14 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 ### 验证
 
 - `design-contract.test.ts` 2 项通过；全量 1199 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 28. 手工复检的模板验收（2026-10-25）
+
+- `manual-visual-review.test.ts` 新增模板场景：标题偏离模板轴线时，即使模型评审给通过分，手工复检仍返回 `templateFit.passed=false`，并把确定性分数写进 `review.templateFitScore`、把偏差并入 `misalignment`。
+- 模板检查扩展到色板与字体：新增 `template-palette` / `template-font` 警告与 `colorChannel` 容差；手工复检测试夹具同步补齐容差字段，界面标签与报告对齐。
+- ADR 0086 的边界同步：色板/字体现在是警告级确定性检查，不是强制匹配。
+
+### 验证
+
+- `manual-visual-review.test.ts` 2 项、`template-review-target.test.ts` 10 项通过。
+- 全量：1203 通过、1 跳过；类型检查、ESLint、生产构建通过。
