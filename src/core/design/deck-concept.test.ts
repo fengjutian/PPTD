@@ -4,6 +4,8 @@ import {
   CONCEPT_PRESET_IDS,
   defaultDocumentaryConcept,
   defaultEditorialConcept,
+  defaultInstrumentConcept,
+  defaultPaperConcept,
   planConceptRhythm,
   resolveDeckConcept,
   type ConceptPresetId,
@@ -68,6 +70,32 @@ describe("deck concept", () => {
     expect(resolved.conflicts).toEqual([]);
   });
 
+  it("resolves the paper and instrument presets as separate skeletons", () => {
+    const paper = resolveDeckConcept({
+      concept: defaultPaperConcept(),
+      pageFacts: [facts()],
+      pageCount: 1,
+      id: "concept-paper",
+    });
+    expect(paper.concept.preset).toBe("paper");
+    expect(paper.concept.surface).toBe("column");
+    expect(paper.concept.motif).toBe("paper");
+    expect(paper.concept.imagery).toBe("none");
+    expect(paper.conflicts).toEqual([]);
+
+    const instrument = resolveDeckConcept({
+      concept: defaultInstrumentConcept(),
+      pageFacts: [facts()],
+      pageCount: 1,
+      id: "concept-instrument",
+    });
+    expect(instrument.concept.preset).toBe("instrument");
+    expect(instrument.concept.surface).toBe("rail");
+    expect(instrument.concept.motif).toBe("instrument");
+    expect(instrument.concept.typeContrast).toBe("dramatic");
+    expect(instrument.conflicts).toEqual([]);
+  });
+
   it("clamps an imagery intent the preset cannot render", () => {
     const resolved = resolveDeckConcept({
       concept: { ...defaultDocumentaryConcept(), imagery: "none" },
@@ -119,6 +147,6 @@ describe("deck concept", () => {
   });
 
   it("keeps the preset list in step with the renderer", () => {
-    expect(CONCEPT_PRESET_IDS).toEqual(["editorial", "documentary"]);
+    expect(CONCEPT_PRESET_IDS).toEqual(["editorial", "documentary", "paper", "instrument"]);
   });
 });

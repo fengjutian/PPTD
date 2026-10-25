@@ -26,6 +26,13 @@ const PROFILES: Readonly<Record<SurfaceStrategy, SurfaceSafeRegion>> = {
   // Full-bleed spends the page edge: the title moves up and the content widens.
   // The bottom keeps a little more room than the top for the footer band.
   "full-bleed": { x: 0.04, y: 0.075, width: 0.92, height: 0.855 },
+  // A column surface is the opposite bet: a measured, centred text column with
+  // wide side margins. The title axis moves inward with it, so the page reads as
+  // a printed essay rather than an editorial slide.
+  column: { x: 0.17, y: 0.1, width: 0.66, height: 0.8 },
+  // A rail surface keeps the copy off the left edge. The command layer draws the
+  // vertical rail at the inner edge of this profile; the margin is the skeleton.
+  rail: { x: 0.22, y: 0.085, width: 0.72, height: 0.845 },
 };
 
 export function surfaceSafeRegion(surface: SurfaceStrategy): SurfaceSafeRegion {

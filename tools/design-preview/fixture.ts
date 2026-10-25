@@ -1,8 +1,7 @@
 import { applyCommand } from "../../src/core/commands";
 import { createDocument } from "../../src/core/document-model";
 import {
-  defaultDocumentaryConcept,
-  defaultEditorialConcept,
+  defaultConceptForPreset,
   resolveDeckConcept,
   type ConceptPresetId,
 } from "../../src/core/design/deck-concept";
@@ -274,7 +273,7 @@ export interface DesignPreviewOptions {
 export function buildDesignPreviewDocument(options: DesignPreviewOptions = {}) {
   const document = createDocument();
   const concept = resolveDeckConcept({
-    concept: options.conceptPresetId === "documentary" ? defaultDocumentaryConcept() : defaultEditorialConcept(),
+    concept: defaultConceptForPreset(options.conceptPresetId ?? "editorial"),
     pageFacts: previewFacts,
     pageCount: previewSlides.length,
     id: "design-preview",

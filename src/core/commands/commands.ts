@@ -1355,12 +1355,16 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       const contentChanged = diffContentVersion(version, document).length > 0;
       if (!command.includeDesign) return contentChanged ? "content" : null;
       if (!version.design) return contentChanged ? "content" : null;
-      const designChanged = version.design.slides.some((snapshot) => {
-        const slide = document.slides.find((item) => item.id === snapshot.slideId);
-        if (!slide) return false;
-        const { slideId: _slideId, ...expected } = snapshot;
-        return JSON.stringify(slideDesignOf(slide)) !== JSON.stringify(expected);
-      });
+      const templateChanged =
+        JSON.stringify(document.templateStyle ?? null) !== JSON.stringify(version.design.templateStyle ?? null);
+      const designChanged =
+        templateChanged ||
+        version.design.slides.some((snapshot) => {
+          const slide = document.slides.find((item) => item.id === snapshot.slideId);
+          if (!slide) return false;
+          const { slideId: _slideId, ...expected } = snapshot;
+          return JSON.stringify(slideDesignOf(slide)) !== JSON.stringify(expected);
+        });
       if (contentChanged && designChanged) return "both";
       return designChanged ? "design" : contentChanged ? "content" : null;
     }
@@ -2315,6 +2319,18 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
         // generated templates; the content rules stay, the header rule does not.
         showRule: !hasTemplate && (deckSurface ? surfaceShowsRule(deckSurface) : true),
       });
+      // A rail surface needs its rail drawn: the wide left margin alone reads as
+      // a mistake. One hairline at the inner edge is the direction's signature,
+      // and it is drawn here so every recipe shares it. Templates own their own
+      // ornaments, so the rail never appears on a template page.
+      if (!hasTemplate && deckSurface === "rail") {
+        slide.elements.push(
+          shape(
+            frame(chrome.title.x - 0.035, chrome.title.y, 0.004, Math.max(0.1, chrome.contentBottom - chrome.title.y)),
+            design.accent,
+          ),
+        );
+      }
       // The intent of the page: which composition it is drawn in, which level of
       // the hierarchy carries the weight and how much white space it spends.
       // The composition is checked against the reviewed content, so an intent
@@ -4393,6 +4409,8 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       else delete document.theme;
       if (design.layouts) document.layouts = structuredClone(design.layouts);
       else delete document.layouts;
+      if (design.templateStyle) document.templateStyle = structuredClone(design.templateStyle);
+      else delete document.templateStyle;
       const designById = new Map(design.slides.map((snapshot) => [snapshot.slideId, snapshot]));
       for (const page of document.slides) {
         const snapshot = designById.get(page.id);

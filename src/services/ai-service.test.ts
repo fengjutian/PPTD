@@ -83,24 +83,18 @@ describe("AI structured outputs", () => {
       rationale: "内容以判断和要点为主。",
     });
     expect(concept.preset).toBe("editorial");
-    expect(
-      aiDeckConceptSchema.parse({
-        ...concept,
-        preset: "documentary",
-        name: "纪实全幅",
-        typeContrast: "calm",
-        imagery: "hero",
-      }).preset,
-    ).toBe("documentary");
+    for (const preset of ["documentary", "paper", "instrument"] as const) {
+      expect(aiDeckConceptSchema.parse({ ...concept, preset }).preset).toBe(preset);
+    }
     expect(() =>
       aiDeckConceptSchema.parse({
         ...concept,
-        preset: "instrument",
+        preset: "collage",
       }),
     ).toThrow();
   });
 
-  it("requires two directions with different presets", () => {
+  it("requires four directions with different presets", () => {
     const editorial = {
       preset: "editorial",
       name: "编辑式",
@@ -109,16 +103,24 @@ describe("AI structured outputs", () => {
       imagery: "none",
       rationale: "内容以判断和要点为主。",
     };
+    const documentary = { ...editorial, preset: "documentary", name: "纪实", imagery: "hero", typeContrast: "calm" };
+    const paper = { ...editorial, preset: "paper", name: "纸本", imagery: "none", typeContrast: "calm" };
+    const instrument = { ...editorial, preset: "instrument", name: "仪表", imagery: "band", typeContrast: "dramatic" };
     const parsed = aiDeckDirectionsSchema.parse({
-      directions: [
-        editorial,
-        { ...editorial, preset: "documentary", name: "纪实", imagery: "hero", typeContrast: "calm" },
-      ],
+      directions: [editorial, documentary, paper, instrument],
     });
-    expect(parsed.directions.map((direction) => direction.preset)).toEqual(["editorial", "documentary"]);
-    // The same skeleton twice is a colour swap, not a choice.
-    expect(() => aiDeckDirectionsSchema.parse({ directions: [editorial, editorial] })).toThrow();
-    expect(() => aiDeckDirectionsSchema.parse({ directions: [editorial] })).toThrow();
+    expect(parsed.directions.map((direction) => direction.preset)).toEqual([
+      "editorial",
+      "documentary",
+      "paper",
+      "instrument",
+    ]);
+    // The same skeleton twice is a colour swap, not a fifth choice.
+    expect(() =>
+      aiDeckDirectionsSchema.parse({ directions: [editorial, editorial, paper, instrument] }),
+    ).toThrow();
+    // A short list would make the gate promise four options and show three.
+    expect(() => aiDeckDirectionsSchema.parse({ directions: [editorial, documentary, paper] })).toThrow();
   });
 
   it("sorts proposed directions by catalog order, not model order", async () => {
@@ -129,12 +131,28 @@ describe("AI structured outputs", () => {
     vi.mocked(invoke).mockResolvedValueOnce({
       directions: [
         {
+          preset: "instrument",
+          name: "仪表",
+          idea: "让数字先说话。",
+          typeContrast: "dramatic",
+          imagery: "none",
+          rationale: "内容有指标和对比。",
+        },
+        {
           preset: "documentary",
           name: "纪实",
           idea: "让图片占住页面。",
           typeContrast: "calm",
           imagery: "hero",
           rationale: "内容有现场照片。",
+        },
+        {
+          preset: "paper",
+          name: "纸本",
+          idea: "把论述收进窄栏。",
+          typeContrast: "calm",
+          imagery: "none",
+          rationale: "内容有长段判断。",
         },
         {
           preset: "editorial",
@@ -160,7 +178,12 @@ describe("AI structured outputs", () => {
       taskId: 7,
       preferences: [{ text: "想要更像杂志", scope: "deck" }],
     });
-    expect(result.map((direction) => direction.preset)).toEqual(["editorial", "documentary"]);
+    expect(result.map((direction) => direction.preset)).toEqual([
+      "editorial",
+      "documentary",
+      "paper",
+      "instrument",
+    ]);
     expect(invoke).toHaveBeenCalledWith(
       "generate_deck_directions",
       expect.objectContaining({

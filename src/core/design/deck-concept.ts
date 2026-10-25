@@ -12,10 +12,10 @@ import type { CompositionFacts, IntentConflict } from "../commands/design-intent
  * is code. A preset that has no renderer is not part of the enum, so the model
  * cannot promise a picture the system cannot draw.
  */
-export type ConceptPresetId = "editorial" | "documentary";
+export type ConceptPresetId = "editorial" | "documentary" | "paper" | "instrument";
 
 export type DeckMotif = "rules" | "blocks" | "instrument" | "documentary" | "signal" | "paper";
-export type SurfaceStrategy = "flat" | "rules" | "panels" | "full-bleed";
+export type SurfaceStrategy = "flat" | "rules" | "panels" | "full-bleed" | "column" | "rail";
 export type ImageryStrategy = "none" | "hero" | "band" | "side" | "texture";
 export type TypeContrast = "calm" | "strong" | "dramatic";
 export type PageBeat = "statement" | "evidence" | "quiet" | "close";
@@ -108,6 +108,36 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
     imagery: ["hero", "band", "side"],
     typeContrast: "calm",
   },
+  // The paper direction spends the page on a measured, centred column. It is a
+  // skeleton difference, not a colour: the title axis, the measure and the
+  // accent rule all move inward, so the same copy reads as an essay spread.
+  paper: {
+    motif: "paper",
+    surface: "column",
+    recipes: EDITORIAL_RECIPES,
+    // Covers in every preset may promote a side/band request to a hero. Hero is
+    // listed so the clamp table matches what the cover path can actually draw;
+    // the prompt still keeps image-led pages on documentary.
+    imagery: ["none", "side", "hero"],
+    typeContrast: "calm",
+  },
+  // The instrument direction sets the copy off to the right of a rail and lets
+  // the type scale carry the numbers. Data pages keep their charts; the rail is
+  // drawn by the command layer so every recipe shares one geometry.
+  instrument: {
+    motif: "instrument",
+    surface: "rail",
+    recipes: EDITORIAL_RECIPES,
+    imagery: ["none", "band", "hero"],
+    typeContrast: "dramatic",
+  },
+};
+
+export const CONCEPT_PRESET_LABELS: Readonly<Record<ConceptPresetId, string>> = {
+  editorial: "编辑式",
+  documentary: "纪实全幅",
+  paper: "纸本专栏",
+  instrument: "数据仪表",
 };
 
 export const CONCEPT_PRESET_IDS = Object.keys(CONCEPT_PRESETS) as ConceptPresetId[];
@@ -132,6 +162,42 @@ export function defaultDocumentaryConcept(): AiDeckConcept {
     imagery: "hero",
     rationale: "内容有真实场景或数据图像，图比字更能说明问题。",
   };
+}
+
+export function defaultPaperConcept(): AiDeckConcept {
+  return {
+    preset: "paper",
+    name: "纸本专栏",
+    idea: "把内容收进居中的窄栏，用字号和留白控制阅读节奏。",
+    typeContrast: "calm",
+    imagery: "none",
+    rationale: "内容以长段判断为主，窄栏比满版更适合连续阅读。",
+  };
+}
+
+export function defaultInstrumentConcept(): AiDeckConcept {
+  return {
+    preset: "instrument",
+    name: "数据仪表",
+    idea: "让数字和对比占住视线，文字收进右侧栏内。",
+    typeContrast: "dramatic",
+    imagery: "none",
+    rationale: "内容有指标和对比，读者先看数再读解释。",
+  };
+}
+
+/** The default concept of a preset, for fixtures and the specimen builder. */
+export function defaultConceptForPreset(preset: ConceptPresetId): AiDeckConcept {
+  switch (preset) {
+    case "documentary":
+      return defaultDocumentaryConcept();
+    case "paper":
+      return defaultPaperConcept();
+    case "instrument":
+      return defaultInstrumentConcept();
+    default:
+      return defaultEditorialConcept();
+  }
 }
 
 export interface ResolveDeckConceptInput {

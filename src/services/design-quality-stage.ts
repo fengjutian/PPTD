@@ -23,6 +23,7 @@ import {
   templateFitVisualIssues,
   templateTargetForPrompt,
   templateTargetForSlide,
+  templateTargetMatchesDocument,
   type TemplateFitReport,
   type TemplateReviewTarget,
 } from "./template-review-target";
@@ -448,8 +449,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         // rendered review. It is not a model score: it measures the title axis,
         // content bounds and placeholder type size against the uploaded
         // template, so a generous model cannot talk the deck past the template.
-        const templateFit = options.template ? checkTemplateFit(document, options.template) : undefined;
-        const promptTemplate = options.template ? templateTargetForPrompt(options.template, document) : undefined;
+        const activeTemplate =
+          options.template && templateTargetMatchesDocument(options.template, document) ? options.template : undefined;
+        const templateFit = activeTemplate ? checkTemplateFit(document, activeTemplate) : undefined;
+        const promptTemplate = activeTemplate ? templateTargetForPrompt(activeTemplate, document) : undefined;
         // 优先评审真实导出的 PPTX。画布渲染是近似值：PowerPoint 自行断行，
         // 字体度量与估算略有出入，图表和表格更是由 PowerPoint 自己画的。
         // 只有真实渲染走不通时才退回画布预览。
@@ -705,7 +708,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         options.onProgress?.("视觉评审已收到问题，正在生成修复计划", roundBase(currentIteration) + 7);
         // 修复计划由模型出，模型需要知道每页的标题和当前版式才能决定改什么。
         const document = options.buildDocument(current);
-        const promptTemplate = options.template ? templateTargetForPrompt(options.template, document) : undefined;
+        const activeTemplate =
+          options.template && templateTargetMatchesDocument(options.template, document) ? options.template : undefined;
+        const promptTemplate = activeTemplate ? templateTargetForPrompt(activeTemplate, document) : undefined;
         const deck = current.map((design, index) => ({
           index,
           title: document.slides[index]?.content.title ?? "",
@@ -724,12 +729,12 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         const plannedRepairs = [...plan.repairs];
         // The model can miss a measured template violation. The deterministic
         // findings are authoritative, so add the repair action ourselves.
-        if (options.template) {
+        if (activeTemplate) {
           const bySlide = new Map(plannedRepairs.map((repair) => [repair.slideIndex, repair]));
           for (const issue of review.issues) {
             let action: Exclude<AiElementRepair, { action: "changeLayout" }> | undefined;
             if (issue.code === "template-title-axis") {
-              const resolved = templateTargetForSlide(document, options.template, issue.slideIndex);
+              const resolved = templateTargetForSlide(document, activeTemplate, issue.slideIndex);
               action = {
                 action: "move",
                 target: "title",
@@ -741,14 +746,14 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
                 },
               };
             } else if (issue.code === "template-font" && issue.role !== undefined) {
-              const template = options.template;
+              const template = activeTemplate;
               const fontFamily =
                 issue.role === "title"
                   ? (template.majorFont ?? template.minorFont)
                   : (template.minorFont ?? template.majorFont);
               if (fontFamily) action = { action: "restyle", target: issue.role, fontFamily };
             } else if (issue.code === "template-palette" && issue.role !== undefined) {
-              const resolved = templateTargetForSlide(document, options.template, issue.slideIndex);
+              const resolved = templateTargetForSlide(document, activeTemplate, issue.slideIndex);
               const color = issue.role === "title" ? resolved.titleInk : resolved.bodyInk;
               if (color) action = { action: "restyle", target: issue.role, color };
             }
@@ -985,9 +990,17 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   // Template adherence is deterministic, so it still runs when the visual
   // review is disabled or fails. The report must say what the template check
   // found even when no model was involved.
-  const templateFitReport = options.template ? checkTemplateFit(document, options.template) : undefined;
+  const finalTemplate =
+    options.template && templateTargetMatchesDocument(options.template, document) ? options.template : undefined;
+  const templateFitReport = finalTemplate ? checkTemplateFit(document, finalTemplate) : undefined;
   if (options.template) {
-    if (templateFitReport?.checked) {
+    if (!finalTemplate) {
+      // The persisted contract describes a different page size, theme or
+      // layout set. It must not be used to claim the new deck is on-template.
+      visualPassed = false;
+      degraded = true;
+      notes.push("模板目标与当前文档不一致，已跳过模板符合度检查");
+    } else if (templateFitReport?.checked) {
       // A measured template violation is a failed acceptance even when the
       // visual model happened to give every dimension a passing score.
       if (!templateFitReport.passed) visualPassed = false;

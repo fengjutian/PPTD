@@ -85,21 +85,28 @@ describe("ten-page design preview", () => {
     expect(previewPage.width).toBe(10);
   });
 
-  it("gives editorial and documentary different geometry, not just colours", () => {
+  it("gives every direction different geometry, not just colours", () => {
     const editorial = buildDesignPreviewDocument({ conceptPresetId: "editorial" });
     const documentary = buildDesignPreviewDocument({ conceptPresetId: "documentary" });
+    const paper = buildDesignPreviewDocument({ conceptPresetId: "paper" });
+    const instrument = buildDesignPreviewDocument({ conceptPresetId: "instrument" });
     const titleX = (document: ReturnType<typeof buildDesignPreviewDocument>, index: number) => {
       const title = document.slides[index]!.elements.find(
         (element): element is TextElement => element.type === "text" && element.contentRef === "title",
       )!;
       return title.frame.x / document.pageSize.width;
     };
-    // Full-bleed spends the margin: 0.04 instead of 0.07 of the page width.
+    // Full-bleed spends the margin, paper centres a narrower column, and the
+    // instrument direction keeps the copy off the left rail.
     expect(titleX(editorial, 3)).toBeCloseTo(0.07, 2);
     expect(titleX(documentary, 3)).toBeCloseTo(0.04, 2);
+    expect(titleX(paper, 3)).toBeCloseTo(0.17, 2);
+    expect(titleX(instrument, 3)).toBeCloseTo(0.22, 2);
     // The editorial direction draws an accent rule under the title; documentary
     // does not, so the same content produces a different element count.
     expect(editorial.slides[3]!.elements.length).toBe(documentary.slides[3]!.elements.length + 1);
+    // The instrument rail is one more element on top of the editorial chrome.
+    expect(instrument.slides[3]!.elements.length).toBe(editorial.slides[3]!.elements.length + 1);
   });
 
   it("passes the deterministic taste lint without a finding", () => {

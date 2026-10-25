@@ -102,7 +102,7 @@ describe("design direction record", () => {
   it("rejects a preset the renderer cannot draw", () => {
     const document = createDocument();
     const record = directionRecord();
-    record.proposals[0]!.preset = "instrument" as never;
+    record.proposals[0]!.preset = "collage" as never;
     expect(() => applyCommand(document, commandFor(record))).toThrow("DESIGN_DIRECTION_INVALID");
     expect(document.designDirections).toBeUndefined();
   });

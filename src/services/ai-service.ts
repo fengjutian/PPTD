@@ -302,7 +302,7 @@ export type SlideBrief = z.infer<typeof slideBriefSchema>;
  * silently downgraded after the fact.
  */
 export const aiDeckConceptSchema = z.object({
-  preset: z.enum(["editorial", "documentary"]),
+  preset: z.enum(["editorial", "documentary", "paper", "instrument"]),
   name: z.string().trim().min(1).max(20),
   idea: z.string().trim().min(1).max(80),
   typeContrast: z.enum(["calm", "strong", "dramatic"]),
@@ -311,12 +311,13 @@ export const aiDeckConceptSchema = z.object({
 });
 export const aiDeckConceptsSchema = z.object({ concepts: z.array(aiDeckConceptSchema).min(1).max(3) });
 /**
- * The two directions the gate shows. The preset must be unique: two versions of
- * the same skeleton are a colour swap, not a choice. The upper bound is three so
- * a future preset does not need a contract change.
+ * The four directions the gate shows. Every renderable preset appears once: the
+ * set is a choice among skeletons, not four colourways of the same page. A
+ * missing or duplicated preset is a contract violation, so the whole gate falls
+ * back to the single-direction path instead of showing a short list.
  */
 export const aiDeckDirectionsSchema = z
-  .object({ directions: z.array(aiDeckConceptSchema).min(2).max(3) })
+  .object({ directions: z.array(aiDeckConceptSchema).length(4) })
   .superRefine((value, context) => {
     const presets = value.directions.map((direction) => direction.preset);
     if (new Set(presets).size !== presets.length) {
@@ -335,7 +336,7 @@ export const aiDeckDirectionsSchema = z
  * version bump fails the regression suite instead of silently invalidating
  * recorded model outputs.
  */
-export const DESIGN_DIRECTIONS_PROMPT_VERSION = "design-directions-v1";
+export const DESIGN_DIRECTIONS_PROMPT_VERSION = "design-directions-v2";
 export type AiDeckConceptOutput = z.infer<typeof aiDeckConceptSchema>;
 
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {
@@ -1394,9 +1395,10 @@ export interface AiDeckDirectionOptions {
 /**
  * Proposes the renderable directions for the same reviewed content, in one call.
  *
- * The order is stable (catalog order, not model order) so the two previews do
+ * The order is stable (catalog order, not model order) so the four previews do
  * not swap places between runs and the recorded decision refers to the same
- * proposal id. A duplicate preset is a contract violation, not a 3rd direction.
+ * proposal id. Four unique presets are required: a duplicate is a colour swap,
+ * not a fifth choice.
  */
 export async function generateDeckDirections(
   draft: AiDraft,

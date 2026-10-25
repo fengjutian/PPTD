@@ -30,6 +30,8 @@ describe("theme specimens", () => {
   it("reflects the concept surface, not just the palette", () => {
     const editorial = buildSpecimenDocument({ conceptPresetId: "editorial" });
     const documentary = buildSpecimenDocument({ conceptPresetId: "documentary" });
+    const paper = buildSpecimenDocument({ conceptPresetId: "paper" });
+    const instrument = buildSpecimenDocument({ conceptPresetId: "instrument" });
     const titleX = (document: ReturnType<typeof buildSpecimenDocument>) => {
       const title = document.slides[3]!.elements.find(
         (element): element is TextElement => element.type === "text" && element.contentRef === "title",
@@ -38,5 +40,7 @@ describe("theme specimens", () => {
     };
     expect(titleX(editorial)).toBeCloseTo(0.07, 2);
     expect(titleX(documentary)).toBeCloseTo(0.04, 2);
+    expect(titleX(paper)).toBeCloseTo(0.17, 2);
+    expect(titleX(instrument)).toBeCloseTo(0.22, 2);
   });
 });

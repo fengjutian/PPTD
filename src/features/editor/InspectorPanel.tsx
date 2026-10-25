@@ -276,6 +276,8 @@ function TastePanel() {
 const DIRECTION_PRESET_LABELS: Readonly<Record<string, string>> = {
   editorial: "编辑式",
   documentary: "纪实全幅",
+  paper: "纸本专栏",
+  instrument: "数据仪表",
 };
 
 function DirectionPanel() {
@@ -290,7 +292,7 @@ function DirectionPanel() {
       tools={record ? <span className="taste-badge">{selected?.name ?? "已记录"}</span> : undefined}
     >
       {!record ? (
-        <p className="field-help">尚未记录设计方向。无模板生成时会先给出两个方向供选择。</p>
+        <p className="field-help">尚未记录设计方向。无模板生成时会先给出四个方向供选择。</p>
       ) : (
         <div className="direction-record">
           <p className="direction-record-line">

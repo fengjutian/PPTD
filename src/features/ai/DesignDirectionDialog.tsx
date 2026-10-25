@@ -4,10 +4,10 @@ import { Check, RefreshCw, SkipForward, Wand2 } from "lucide-react";
 /**
  * The gate between content review and deck design.
  *
- * Two real previews, not two descriptions: the user is choosing a skeleton, and
- * a description cannot show whether the picture owns the page or sits beside
- * the copy. The dialog never decides for the user; skipping is a first-class
- * action that keeps the recommended direction.
+ * Four real previews, not four descriptions: the user is choosing a skeleton,
+ * and a description cannot show whether the picture owns the page or sits
+ * beside the copy. The dialog never decides for the user; skipping is a
+ * first-class action that keeps the recommended direction.
  */
 
 export interface DirectionOptionView {
@@ -54,7 +54,7 @@ export function DesignDirectionDialog({
             <Wand2 />
             <div>
               <h2 id="design-direction-title">选择设计方向</h2>
-              <p>同一份已审核内容，两种版面骨架。选定后生成整册，内容不会改变。</p>
+              <p>同一份已审核内容，四种版面骨架。选定后生成整册，内容不会改变。</p>
             </div>
           </div>
         </div>

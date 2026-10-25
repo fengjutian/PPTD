@@ -12,6 +12,7 @@
 
 import type { PresentationDocument } from "../core/document-model";
 import type { DesignDirectionRecord } from "../core/document-model";
+import { CONCEPT_PRESET_IDS, type ConceptPresetId } from "../core/design/deck-concept";
 import {
   clearStoredDesignMemory,
   loadStoredDesignMemory,
@@ -159,12 +160,13 @@ export async function designMemorySummary(): Promise<DesignMemorySummary> {
  * Two picks are the minimum: a single deck is an anecdote, not a habit. Ties
  * return undefined so the gate does not pretend to know.
  */
-export async function recommendedConceptPreset(): Promise<"editorial" | "documentary" | undefined> {
+export async function recommendedConceptPreset(): Promise<ConceptPresetId | undefined> {
   const looks = await loadRecentLooks(5);
-  const counts = new Map<"editorial" | "documentary", number>();
+  const counts = new Map<ConceptPresetId, number>();
   for (const look of looks) {
-    if (look.concept !== "editorial" && look.concept !== "documentary") continue;
-    counts.set(look.concept, (counts.get(look.concept) ?? 0) + 1);
+    if (!(CONCEPT_PRESET_IDS as readonly string[]).includes(look.concept)) continue;
+    const concept = look.concept as ConceptPresetId;
+    counts.set(concept, (counts.get(concept) ?? 0) + 1);
   }
   const ranked = [...counts.entries()].filter(([, count]) => count >= 2).sort((left, right) => right[1] - left[1]);
   if (ranked.length === 0) return undefined;

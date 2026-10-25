@@ -12,8 +12,7 @@
 import { applyCommand } from "../core/commands";
 import { createDocument, type PresentationDocument } from "../core/document-model";
 import {
-  defaultDocumentaryConcept,
-  defaultEditorialConcept,
+  defaultConceptForPreset,
   resolveDeckConcept,
   type ConceptPresetId,
 } from "../core/design/deck-concept";
@@ -130,7 +129,7 @@ export interface SpecimenOptions {
 
 export function buildSpecimenDocument(options: SpecimenOptions = {}): PresentationDocument {
   const concept = resolveDeckConcept({
-    concept: options.conceptPresetId === "documentary" ? defaultDocumentaryConcept() : defaultEditorialConcept(),
+    concept: defaultConceptForPreset(options.conceptPresetId ?? "editorial"),
     pageFacts: facts,
     pageCount: slides.length,
     id: "theme-specimen",

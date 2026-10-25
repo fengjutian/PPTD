@@ -5,8 +5,8 @@ import {
   previewFacts,
   previewSlides,
 } from "../../../tools/design-preview/fixture";
-import { defaultDocumentaryConcept, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
-import type { TextElement } from "../document-model";
+import { defaultInstrumentConcept, defaultPaperConcept, defaultDocumentaryConcept, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
+import type { ShapeElement, TextElement } from "../document-model";
 import { buildDirectionPreviewPages } from "./direction-preview";
 
 function concept(source: ReturnType<typeof defaultEditorialConcept>) {
@@ -20,6 +20,8 @@ function concept(source: ReturnType<typeof defaultEditorialConcept>) {
 
 const editorial = concept(defaultEditorialConcept());
 const documentary = concept(defaultDocumentaryConcept());
+const paper = concept(defaultPaperConcept());
+const instrument = concept(defaultInstrumentConcept());
 
 function titleFrame(document: ReturnType<typeof buildDesignPreviewDocument>, slideIndex: number) {
   const title = document.slides[slideIndex]!.elements.find(
@@ -64,22 +66,30 @@ describe("direction preview", () => {
 
   it("shows the surface difference between directions", () => {
     const document = buildDesignPreviewDocument();
-    const [editorialPreview] = buildDirectionPreviewPages({
-      document,
-      concept: editorial,
-      pageIndexes: [3],
-      designs: [previewDesigns[3]!],
-      commandBase: { themePresetId: "editorial-teal" },
-    });
-    const [documentaryPreview] = buildDirectionPreviewPages({
-      document,
-      concept: documentary,
-      pageIndexes: [3],
-      designs: [previewDesigns[3]!],
-      commandBase: { themePresetId: "editorial-teal" },
-    });
-    expect(titleFrame(editorialPreview!.document, 0).x).toBeCloseTo(0.07, 2);
-    expect(titleFrame(documentaryPreview!.document, 0).x).toBeCloseTo(0.04, 2);
+    const previewFor = (deckConcept: ReturnType<typeof concept>) =>
+      buildDirectionPreviewPages({
+        document,
+        concept: deckConcept,
+        pageIndexes: [3],
+        designs: [previewDesigns[3]!],
+        commandBase: { themePresetId: "editorial-teal" },
+      })[0]!;
+    expect(titleFrame(previewFor(editorial).document, 0).x).toBeCloseTo(0.07, 2);
+    expect(titleFrame(previewFor(documentary).document, 0).x).toBeCloseTo(0.04, 2);
+    // The paper direction centres a narrower column; the instrument direction
+    // keeps the copy off the left edge and draws its rail there.
+    expect(titleFrame(previewFor(paper).document, 0).x).toBeCloseTo(0.17, 2);
+    const instrumentPreview = previewFor(instrument).document;
+    expect(titleFrame(instrumentPreview, 0).x).toBeCloseTo(0.22, 2);
+    const rail = instrumentPreview.slides[0]!.elements.find(
+      (element): element is ShapeElement =>
+        element.type === "shape" &&
+        element.frame.width / instrumentPreview.pageSize.width < 0.006 &&
+        element.frame.height / instrumentPreview.pageSize.height > 0.3 &&
+        element.frame.x / instrumentPreview.pageSize.width < 0.2,
+    );
+    expect(rail).toBeDefined();
+    expect(rail!.frame.x / instrumentPreview.pageSize.width).toBeCloseTo(0.185, 2);
   });
 
   it("rejects mismatched page and design counts", () => {

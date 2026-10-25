@@ -525,6 +525,8 @@ export interface ContentVersionDesign {
   pageSize: { width: Emu; height: Emu };
   theme?: DocumentTheme;
   layouts?: SlideLayoutSpec[];
+  /** Template target of the same moment; absent in versions created before v22. */
+  templateStyle?: TemplateReviewTarget;
   slides: ContentVersionDesignSlide[];
 }
 
@@ -559,7 +561,7 @@ export interface ReviewTrace {
  * cannot draw, and `designDirections` is design state: it never enters the
  * content hash or the content revision.
  */
-export type DesignDirectionPreset = "editorial" | "documentary";
+export type DesignDirectionPreset = "editorial" | "documentary" | "paper" | "instrument";
 export type DesignDirectionImagery = "none" | "hero" | "band" | "side" | "texture";
 export type DesignDirectionContrast = "calm" | "strong" | "dramatic";
 

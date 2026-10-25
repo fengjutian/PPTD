@@ -1,9 +1,4 @@
-import type {
-  ContentVersion,
-  ContentVersionDesign,
-  ContentVersionSlide,
-  PresentationDocument,
-} from "./types";
+import type { ContentVersion, ContentVersionDesign, ContentVersionSlide, PresentationDocument } from "./types";
 
 /** The cap keeps a long editing session from turning the project file into a log. */
 export const MAX_CONTENT_VERSIONS = 30;
@@ -84,20 +79,23 @@ export function contentVersionDesign(document: PresentationDocument): ContentVer
   // The command runs inside an Immer draft. `structuredClone` rejects draft
   // proxies with DataCloneError, so the snapshot is taken through JSON, which
   // also drops `undefined` optional fields the schema does not need.
-  return JSON.parse(JSON.stringify({
-    pageSize: document.pageSize,
-    ...(document.theme ? { theme: document.theme } : {}),
-    ...(document.layouts ? { layouts: document.layouts } : {}),
-    slides: document.slides.map((slide) => ({
-      slideId: slide.id,
-      background: slide.background,
-      elements: slide.elements,
-      ...(slide.animations ? { animations: slide.animations } : {}),
-      ...(slide.transition ? { transition: slide.transition } : {}),
-      ...(slide.groups ? { groups: slide.groups } : {}),
-      ...(slide.layoutId ? { layoutId: slide.layoutId } : {}),
-    })),
-  })) as ContentVersionDesign;
+  return JSON.parse(
+    JSON.stringify({
+      pageSize: document.pageSize,
+      ...(document.theme ? { theme: document.theme } : {}),
+      ...(document.layouts ? { layouts: document.layouts } : {}),
+      ...(document.templateStyle ? { templateStyle: document.templateStyle } : {}),
+      slides: document.slides.map((slide) => ({
+        slideId: slide.id,
+        background: slide.background,
+        elements: slide.elements,
+        ...(slide.animations ? { animations: slide.animations } : {}),
+        ...(slide.transition ? { transition: slide.transition } : {}),
+        ...(slide.groups ? { groups: slide.groups } : {}),
+        ...(slide.layoutId ? { layoutId: slide.layoutId } : {}),
+      })),
+    }),
+  ) as ContentVersionDesign;
 }
 
 export function captureContentVersion(

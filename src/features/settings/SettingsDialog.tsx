@@ -1,6 +1,7 @@
 import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
+import { CONCEPT_PRESET_LABELS, type ConceptPresetId } from "../../core/design/deck-concept";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
 import {
   clearDesignMemory,
@@ -58,6 +59,76 @@ export interface SettingsWorkspaceProps {
   language: UiLanguage;
   onLanguageChange: (language: UiLanguage) => void;
   onMessage: (message: string) => void;
+}
+
+export interface DesignMemoryDetailsProps {
+  language: UiLanguage;
+  looks: DesignLook[];
+  preferences: DesignPreference[];
+  onRemove: (id: string) => void;
+}
+
+/**
+ * The readable, deletable view of what design memory actually stores.
+ *
+ * Kept as a pure component so a static render can assert the fonts, palette,
+ * scope badge and delete affordance without a desktop database.
+ */
+export function DesignMemoryDetails({ language, looks, preferences, onRemove }: DesignMemoryDetailsProps) {
+  const t = useMemo(() => createTranslator(language), [language]);
+  if (looks.length === 0 && preferences.length === 0) return null;
+  return (
+    <details className="settings-memory-details">
+      <summary>{t("settings.memory.details")}</summary>
+      {looks.length > 0 && (
+        <>
+          <h4>{t("settings.memory.looks")}</h4>
+          <ul>
+            {looks.map((look) => (
+              <li key={look.id}>
+                <div className="settings-memory-look">
+                  <span>
+                    {CONCEPT_PRESET_LABELS[look.concept as ConceptPresetId] ?? look.concept} · {look.pageCount} 页 ·{" "}
+                    {new Date(look.createdAt).toLocaleDateString("zh-CN")}
+                  </span>
+                  <small>
+                    {look.fonts.major || "未记录字体"} / {look.fonts.minor || "未记录字体"}
+                  </small>
+                  {look.palette.length > 0 && (
+                    <span className="settings-memory-swatches">
+                      {look.palette.slice(0, 6).map((color) => (
+                        <i key={color} style={{ background: color }} title={color} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+                <button type="button" aria-label={t("settings.memory.remove")} onClick={() => onRemove(look.id)}>
+                  <Trash2 size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {preferences.length > 0 && (
+        <>
+          <h4>{t("settings.memory.preferences")}</h4>
+          <ul>
+            {preferences.map((preference) => (
+              <li key={preference.id}>
+                <span>
+                  “{preference.text}” <small className="settings-memory-scope">{preference.scope}</small>
+                </span>
+                <button type="button" aria-label={t("settings.memory.remove")} onClick={() => onRemove(preference.id)}>
+                  <Trash2 size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </details>
+  );
 }
 
 export function SettingsWorkspace({ language, onLanguageChange, onMessage }: SettingsWorkspaceProps) {
@@ -334,70 +405,14 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
               {t("settings.memory.clear")}
             </button>
           </div>
-          {(memoryDetails.looks.length > 0 || memoryDetails.preferences.length > 0) && (
-            <details className="settings-memory-details">
-              <summary>{t("settings.memory.details")}</summary>
-              {memoryDetails.looks.length > 0 && (
-                <>
-                  <h4>{t("settings.memory.looks")}</h4>
-                  <ul>
-                    {memoryDetails.looks.map((look) => (
-                      <li key={look.id}>
-                        <div className="settings-memory-look">
-                          <span>
-                            {look.concept === "documentary" ? "纪实全幅" : "编辑式"} · {look.pageCount} 页 ·{" "}
-                            {new Date(look.createdAt).toLocaleDateString("zh-CN")}
-                          </span>
-                          <small>
-                            {look.fonts.major || "未记录字体"} / {look.fonts.minor || "未记录字体"}
-                          </small>
-                          {look.palette.length > 0 && (
-                            <span className="settings-memory-swatches">
-                              {look.palette.slice(0, 6).map((color) => (
-                                <i key={color} style={{ background: color }} title={color} />
-                              ))}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={t("settings.memory.remove")}
-                          onClick={() => {
-                            void removeDesignMemory(look.id).then(refreshMemory);
-                          }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-              {memoryDetails.preferences.length > 0 && (
-                <>
-                  <h4>{t("settings.memory.preferences")}</h4>
-                  <ul>
-                    {memoryDetails.preferences.map((preference) => (
-                      <li key={preference.id}>
-                        <span>
-                          “{preference.text}” <small className="settings-memory-scope">{preference.scope}</small>
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={t("settings.memory.remove")}
-                          onClick={() => {
-                            void removeDesignMemory(preference.id).then(refreshMemory);
-                          }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </details>
-          )}
+          <DesignMemoryDetails
+            language={language}
+            looks={memoryDetails.looks}
+            preferences={memoryDetails.preferences}
+            onRemove={(id) => {
+              void removeDesignMemory(id).then(refreshMemory);
+            }}
+          />
           <label>
             {t("settings.model.apiBaseUrl")}
             <input value={provider.baseUrl} readOnly />

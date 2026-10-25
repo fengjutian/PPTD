@@ -324,10 +324,60 @@ const transitionSchema = z.object({
   direction: z.enum(["left", "right", "up", "down"]).optional(),
 });
 
+const templateGridSchema = z.object({
+  left: z.number(),
+  right: z.number(),
+  top: z.number(),
+  bottom: z.number(),
+  titleX: z.number(),
+  titleY: z.number(),
+  titleWidth: z.number(),
+  titleHeight: z.number(),
+  bodyTop: z.number(),
+  bodyBottom: z.number(),
+});
+
+const templateLayoutTargetSchema = z.object({
+  name: z.string().min(1).max(200),
+  grid: templateGridSchema,
+  titleSizePt: z.number().positive().max(400).optional(),
+  bodySizePt: z.number().positive().max(400).optional(),
+  titleInk: z.string().max(32).optional(),
+  bodyInk: z.string().max(32).optional(),
+  freeComposition: z.boolean(),
+});
+
+const templateTolerancesSchema = z.object({
+  axis: z.number().min(0).max(1),
+  axisY: z.number().min(0).max(1),
+  margin: z.number().min(0).max(1),
+  fontSizePt: z.number().min(0).max(100),
+  colorChannel: z.number().min(0).max(255),
+});
+
+const templateReviewTargetSchema = z.object({
+  name: z.string().min(1).max(200),
+  page: z.object({ widthEmu: positiveEmu, heightEmu: positiveEmu }),
+  grid: templateGridSchema,
+  layouts: z.array(templateLayoutTargetSchema).min(1).max(200),
+  palette: z.array(z.string().max(32)).max(100),
+  majorFont: z.string().min(1).max(200).optional(),
+  minorFont: z.string().min(1).max(200).optional(),
+  titleInk: z.string().max(32).optional(),
+  bodyInk: z.string().max(32).optional(),
+  titleSizePt: z.number().positive().max(400).optional(),
+  bodySizePt: z.number().positive().max(400).optional(),
+  alignment: z.enum(["left-grid", "centered-grid"]),
+  confidence: z.enum(["high", "low"]),
+  minimumFit: z.number().min(0).max(100),
+  tolerances: templateTolerancesSchema,
+});
+
 const contentVersionDesignSchema = z.object({
   pageSize: z.object({ width: positiveEmu, height: positiveEmu }),
   theme: themeSchema.optional(),
   layouts: z.array(slideLayoutSchema).max(200).optional(),
+  templateStyle: templateReviewTargetSchema.optional(),
   slides: z
     .array(
       z.object({
@@ -406,7 +456,7 @@ const slideSchema = z.object({
 
 const designDirectionProposalSchema = z.object({
   id: z.string().uuid(),
-  preset: z.enum(["editorial", "documentary"]),
+  preset: z.enum(["editorial", "documentary", "paper", "instrument"]),
   name: z.string().min(1).max(20),
   idea: z.string().min(1).max(80),
   rationale: z.string().min(1).max(120),
@@ -422,62 +472,13 @@ const designDirectionRecordSchema = z.object({
   createdAt: z.string().min(1).max(64),
   contentRevision: z.number().int().nonnegative(),
   contentFingerprint: z.string().min(1).max(20_000),
-  proposals: z.array(designDirectionProposalSchema).min(1).max(3),
+  proposals: z.array(designDirectionProposalSchema).min(1).max(4),
   selectedProposalId: z.string().uuid(),
   selectedBy: z.enum(["user", "fallback"]),
   userWords: z.string().max(200).optional(),
   regenerations: z.number().int().min(0).max(2),
   promptVersion: z.string().min(1).max(64),
   model: z.string().min(1).max(120).optional(),
-});
-
-const templateGridSchema = z.object({
-  left: z.number(),
-  right: z.number(),
-  top: z.number(),
-  bottom: z.number(),
-  titleX: z.number(),
-  titleY: z.number(),
-  titleWidth: z.number(),
-  titleHeight: z.number(),
-  bodyTop: z.number(),
-  bodyBottom: z.number(),
-});
-
-const templateLayoutTargetSchema = z.object({
-  name: z.string().min(1).max(200),
-  grid: templateGridSchema,
-  titleSizePt: z.number().positive().max(400).optional(),
-  bodySizePt: z.number().positive().max(400).optional(),
-  titleInk: z.string().max(32).optional(),
-  bodyInk: z.string().max(32).optional(),
-  freeComposition: z.boolean(),
-});
-
-const templateTolerancesSchema = z.object({
-  axis: z.number().min(0).max(1),
-  axisY: z.number().min(0).max(1),
-  margin: z.number().min(0).max(1),
-  fontSizePt: z.number().min(0).max(100),
-  colorChannel: z.number().min(0).max(255),
-});
-
-const templateReviewTargetSchema = z.object({
-  name: z.string().min(1).max(200),
-  page: z.object({ widthEmu: positiveEmu, heightEmu: positiveEmu }),
-  grid: templateGridSchema,
-  layouts: z.array(templateLayoutTargetSchema).min(1).max(200),
-  palette: z.array(z.string().max(32)).max(100),
-  majorFont: z.string().min(1).max(200).optional(),
-  minorFont: z.string().min(1).max(200).optional(),
-  titleInk: z.string().max(32).optional(),
-  bodyInk: z.string().max(32).optional(),
-  titleSizePt: z.number().positive().max(400).optional(),
-  bodySizePt: z.number().positive().max(400).optional(),
-  alignment: z.enum(["left-grid", "centered-grid"]),
-  confidence: z.enum(["high", "low"]),
-  minimumFit: z.number().min(0).max(100),
-  tolerances: templateTolerancesSchema,
 });
 
 const baseDocumentSchema = z.object({

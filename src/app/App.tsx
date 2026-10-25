@@ -75,6 +75,7 @@ import {
   type ImportReport,
 } from "../core/commands";
 import {
+  CONCEPT_PRESET_LABELS,
   defaultEditorialConcept,
   resolveDeckConcept,
   type AiDeckConcept,
@@ -3054,12 +3055,12 @@ export function App() {
       let designDirection: DesignDirectionRecord | undefined;
 
       /**
-       * Two directions, two real pages each, then the user decides.
+       * Four directions, two real pages each, then the user decides.
        *
        * Only preset generations get the gate: a template already owns the
-       * layout, so two directions would preview the same template twice. A
-       * failure reports "unavailable" so the single-direction path can say why;
-       * "undefined" means the gate did not apply at all.
+       * layout, so four directions would preview the same template four times.
+       * A failure reports "unavailable" so the single-direction path can say
+       * why; "undefined" means the gate did not apply at all.
        */
       const directionGate = async (): Promise<
         { concept: DeckConcept; record: DesignDirectionRecord } | { unavailable: true } | undefined
@@ -3085,8 +3086,8 @@ export function App() {
         const recommendedPreset = gateSettings.designMemoryEnabled ? await recommendedConceptPreset() : undefined;
         let regenerations = 0;
         while (regenerations <= 2) {
-          setDesignProgress({ percent: 16, label: "正在生成两个设计方向" });
-          setDesignDetail("为同一份内容准备两种版面骨架");
+          setDesignProgress({ percent: 16, label: "正在生成四个设计方向" });
+          setDesignDetail("为同一份内容准备四种版面骨架");
           let proposals: AiDeckConcept[];
           try {
             proposals = await generateDeckDirections(sourceDraft, briefs, analysis, {
@@ -3145,7 +3146,7 @@ export function App() {
               // A direction whose preview cannot be drawn is not offered.
             }
           }
-          if (candidates.length < 2) return { unavailable: true };
+          if (candidates.length < 4) return { unavailable: true };
           setDirectionRegenerations(regenerations);
           setDirectionOptions(
             candidates.map((candidate) => ({
@@ -3153,7 +3154,7 @@ export function App() {
               name: candidate.proposal.name,
               idea: candidate.proposal.idea,
               rationale: candidate.proposal.rationale,
-              presetLabel: candidate.proposal.preset === "documentary" ? "纪实全幅" : "编辑式",
+              presetLabel: CONCEPT_PRESET_LABELS[candidate.proposal.preset],
               ...(recommendedPreset === candidate.proposal.preset ? { recommended: true } : {}),
               images: candidate.images,
             })),
@@ -3938,6 +3939,13 @@ export function App() {
   };
 
   const selectedThemePreset = findThemePreset(themePresetId);
+  const templateTargetPreview = useMemo(
+    () =>
+      selectedTemplate && templateAnalysis
+        ? buildTemplateReviewTarget(templateAnalysis, selectedTemplate.name)
+        : undefined,
+    [selectedTemplate, templateAnalysis],
+  );
   const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
   // 抽屉里展示的主题：生成中查看的是被点击的主题（预览），其余时候就是已选主题。
@@ -5846,6 +5854,64 @@ export function App() {
                       )}
                       {templateAnalysis.warnings.length > 0 && (
                         <div className="template-analysis-warning">{templateAnalysis.warnings.join("；")}</div>
+                      )}
+                    </div>
+                  )}
+                  {selectedTemplate && (
+                    <div className="template-analysis drawer-analysis">
+                      <h3>模板验收目标</h3>
+                      {templateTargetPreview ? (
+                        <dl>
+                          <div>
+                            <dt>标题轴</dt>
+                            <dd>
+                              x {templateTargetPreview.grid.titleX.toFixed(3)} · y{" "}
+                              {templateTargetPreview.grid.titleY.toFixed(3)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>内容区</dt>
+                            <dd>
+                              x {templateTargetPreview.grid.left.toFixed(3)}–
+                              {templateTargetPreview.grid.right.toFixed(3)} · y{" "}
+                              {templateTargetPreview.grid.bodyTop.toFixed(3)}–
+                              {templateTargetPreview.grid.bodyBottom.toFixed(3)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>字号</dt>
+                            <dd>
+                              标题 {templateTargetPreview.titleSizePt ?? "未定义"}pt / 正文{" "}
+                              {templateTargetPreview.bodySizePt ?? "未定义"}pt
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>字体</dt>
+                            <dd>
+                              {templateTargetPreview.majorFont ?? "未定义"} /{" "}
+                              {templateTargetPreview.minorFont ?? "未定义"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>版式</dt>
+                            <dd>
+                              {templateTargetPreview.layouts.length} 个可用 ·
+                              {templateTargetPreview.layouts.filter((layout) => layout.freeComposition).length}{" "}
+                              个自由构图
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>置信度</dt>
+                            <dd>
+                              {templateTargetPreview.confidence === "high" ? "高" : "低"} · 阈值{" "}
+                              {templateTargetPreview.minimumFit}
+                            </dd>
+                          </div>
+                        </dl>
+                      ) : (
+                        <div className="template-analysis-warning">
+                          模板缺少可用的标题或内容占位符，无法建立可测量的验收目标。
+                        </div>
                       )}
                     </div>
                   )}

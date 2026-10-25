@@ -1,8 +1,8 @@
 {
-  "promptVersion": "design-directions-v1",
+  "promptVersion": "design-directions-v2",
   "cases": [
     {
-      "name": "editorial-and-documentary",
+      "name": "four-distinct-skeletons",
       "expect": "accepted",
       "output": {
         "directions": [
@@ -21,6 +21,22 @@
             "typeContrast": "calm",
             "imagery": "side",
             "rationale": "内容有现场照片，图片比文字更能说明问题。"
+          },
+          {
+            "preset": "paper",
+            "name": "纸本专栏",
+            "idea": "把论述收进居中的窄栏，用留白控制阅读速度。",
+            "typeContrast": "calm",
+            "imagery": "none",
+            "rationale": "内容有较长判断，窄栏比满版更适合连续阅读。"
+          },
+          {
+            "preset": "instrument",
+            "name": "数据仪表",
+            "idea": "让指标和对比先说话，解释文字收进右栏。",
+            "typeContrast": "dramatic",
+            "imagery": "none",
+            "rationale": "内容有多组指标，读者先看数字再看解释。"
           }
         ]
       }
@@ -45,6 +61,22 @@
             "typeContrast": "strong",
             "imagery": "side",
             "rationale": "只换配色不算两个方向。"
+          },
+          {
+            "preset": "paper",
+            "name": "纸本专栏",
+            "idea": "把论述收进窄栏。",
+            "typeContrast": "calm",
+            "imagery": "none",
+            "rationale": "长段判断适合窄栏。"
+          },
+          {
+            "preset": "instrument",
+            "name": "数据仪表",
+            "idea": "让数字先说话。",
+            "typeContrast": "dramatic",
+            "imagery": "none",
+            "rationale": "内容有指标。"
           }
         ]
       }
@@ -69,6 +101,54 @@
             "typeContrast": "calm",
             "imagery": "side",
             "rationale": "有现场照片。"
+          },
+          {
+            "preset": "paper",
+            "name": "纸本专栏",
+            "idea": "把论述收进窄栏。",
+            "typeContrast": "calm",
+            "imagery": "none",
+            "rationale": "长段判断适合窄栏。"
+          },
+          {
+            "preset": "instrument",
+            "name": "数据仪表",
+            "idea": "让数字先说话。",
+            "typeContrast": "dramatic",
+            "imagery": "none",
+            "rationale": "内容有指标。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "short-list",
+      "expect": "rejected",
+      "output": {
+        "directions": [
+          {
+            "preset": "editorial",
+            "name": "编辑式",
+            "idea": "细线、编号栏与留白。",
+            "typeContrast": "strong",
+            "imagery": "none",
+            "rationale": "文字为主。"
+          },
+          {
+            "preset": "documentary",
+            "name": "纪实全幅",
+            "idea": "图片占住页面。",
+            "typeContrast": "calm",
+            "imagery": "side",
+            "rationale": "有现场照片。"
+          },
+          {
+            "preset": "paper",
+            "name": "纸本专栏",
+            "idea": "把论述收进窄栏。",
+            "typeContrast": "calm",
+            "imagery": "none",
+            "rationale": "长段判断适合窄栏。"
           }
         ]
       }

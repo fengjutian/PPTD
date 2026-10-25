@@ -52,6 +52,39 @@ describe("restoring a content version", () => {
     expect(first.background).toBe("#ffffff");
   });
 
+  it("restores the persisted template target with the design", () => {
+    const document = createDocument();
+    const grid = {
+      left: 0.05,
+      right: 0.95,
+      top: 0.08,
+      bottom: 0.9,
+      titleX: 0.05,
+      titleY: 0.08,
+      titleWidth: 0.9,
+      titleHeight: 0.1,
+      bodyTop: 0.24,
+      bodyBottom: 0.9,
+    };
+    document.templateStyle = {
+      name: "示例模板",
+      page: { widthEmu: document.pageSize.width, heightEmu: document.pageSize.height },
+      grid,
+      layouts: [{ name: "内页", grid, freeComposition: false }],
+      palette: [],
+      alignment: "left-grid",
+      confidence: "high",
+      minimumFit: 90,
+      tolerances: { axis: 0.01, axisY: 0.005, margin: 0.01, fontSizePt: 1.5, colorChannel: 12 },
+    };
+    captureContentVersion(document);
+    const versionId = document.contentVersions![0]!.id;
+    document.templateStyle = { ...document.templateStyle, name: "另一个模板" };
+    expect(commandDomain({ type: "restore-content-version", versionId, includeDesign: true }, document)).toBe("design");
+    applyCommand(document, { type: "restore-content-version", versionId, includeDesign: true });
+    expect(document.templateStyle?.name).toBe("示例模板");
+  });
+
   it("restores text, blocks, notes and page order without touching design", () => {
     const { document, first, second, versionId } = twoPageDocument();
     const shapeCount = first.elements.length;
