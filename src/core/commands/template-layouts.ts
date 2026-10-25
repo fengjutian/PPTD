@@ -54,6 +54,8 @@ export type AiElementRepair =
       fontFamily?: string;
       /** Paragraph alignment a repair may restore. */
       textAlign?: "left" | "center" | "right";
+      /** Line height multiple a repair may restore. */
+      lineHeight?: number;
     }
   /** Aligns the target to an edge of the given frame. */
   | { action: "align"; target: AiElementRepairTarget; frame: AiNormalizedRect; axis?: "left" | "top" }

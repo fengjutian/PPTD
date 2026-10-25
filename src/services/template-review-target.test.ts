@@ -211,6 +211,24 @@ describe("template review target", () => {
     expect(report.issues.some((issue) => issue.code === "template-align" && issue.role === "title")).toBe(true);
   });
 
+  it("warns when line spacing differs from the template placeholder", () => {
+    const base = analysis();
+    const target = buildTemplateReviewTarget({
+      ...base,
+      layouts: base.layouts.map((layout) => ({
+        ...layout,
+        regions: layout.regions.map((region) =>
+          region.role === "title" ? { ...region, lineSpacing: 1.2 as const } : region,
+        ),
+      })),
+    })!;
+    const document = withBody();
+    const title = titleOf(document);
+    title.style = { ...title.style, lineHeight: 1.0 };
+    const report = checkTemplateFit(document, target);
+    expect(report.issues.some((issue) => issue.code === "template-line-spacing" && issue.role === "title")).toBe(true);
+  });
+
   it("accepts a CJK alias of the template font", () => {
     const target = buildTemplateReviewTarget(analysis({ majorFont: "Microsoft YaHei", minorFont: "Microsoft YaHei" }))!;
     const document = withBody();

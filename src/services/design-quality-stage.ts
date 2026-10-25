@@ -760,6 +760,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               const resolved = templateTargetForSlide(document, activeTemplate, issue.slideIndex);
               const textAlign = issue.role === "title" ? resolved.titleAlign : resolved.bodyAlign;
               if (textAlign) action = { action: "restyle", target: issue.role, textAlign };
+            } else if (issue.code === "template-line-spacing" && issue.role !== undefined) {
+              const resolved = templateTargetForSlide(document, activeTemplate, issue.slideIndex);
+              const lineHeight = issue.role === "title" ? resolved.titleLineHeight : resolved.bodyLineHeight;
+              if (lineHeight) action = { action: "restyle", target: issue.role, lineHeight };
             }
             if (!action) continue;
             const existing = bySlide.get(issue.slideIndex);
@@ -771,7 +775,8 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               return (
                 candidate.fontFamily === action!.fontFamily &&
                 candidate.color === action!.color &&
-                candidate.textAlign === action!.textAlign
+                candidate.textAlign === action!.textAlign &&
+                candidate.lineHeight === action!.lineHeight
               );
             });
             if (duplicate) continue;

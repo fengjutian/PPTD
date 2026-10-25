@@ -52,6 +52,8 @@ export interface TemplateRegion {
   fontSizePt: number | null;
   /** Paragraph alignment the template assigned, when it declares one. */
   textAlign?: "left" | "center" | "right" | null;
+  /** Line spacing multiple from the placeholder, when it declares one. */
+  lineSpacing?: number | null;
 }
 export interface TemplateDecoration {
   shape: "rectangle" | "ellipse";

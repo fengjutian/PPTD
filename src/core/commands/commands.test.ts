@@ -1020,6 +1020,7 @@ describe("document commands", () => {
           target: "title" as const,
           fontFamily: "Source Han Sans",
           textAlign: "center" as const,
+          lineHeight: 1.3,
         },
       ],
     };
@@ -1031,6 +1032,7 @@ describe("document commands", () => {
     );
     expect(title?.type === "text" && title.style.fontFamily).toBe("Source Han Sans");
     expect(title?.type === "text" && title.style.align).toBe("center");
+    expect(title?.type === "text" && title.style.lineHeight).toBe(1.3);
     expect(title?.type === "text" && title.frame.x).toBe(Math.round(0.1 * result.pageSize.width));
   });
 

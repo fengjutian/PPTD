@@ -45,6 +45,7 @@
 | `template-palette`        | warning | 标题/正文墨色不在模板色板内    |
 | `template-font`           | warning | 标题/正文字体不属于模板字体    |
 | `template-align`          | warning | 标题/正文段落对齐偏离模板      |
+| `template-line-spacing`   | warning | 标题/正文行距偏离模板          |
 
 带结构化内容块（指标、表格、图表等）的页面跳过字号检查：这些元素的字号由组件决定，不是普通正文。
 
@@ -78,9 +79,10 @@ passed = checked && errors === 0 && score >= minimumFit
 
 - 标题和正文墨色是否属于模板色板，中性色始终允许，逐通道容差 12；
 - 标题/正文字体族是否属于模板主字体或次字体，名称做去引号、去空白、小写归一化，并识别常见中英文别名（微软雅黑/Microsoft YaHei、宋体/SimSun、思源黑体/Source Han Sans 等）；
-- 标题/正文段落对齐是否与模板占位符的 `pPr@algn` 一致（模板未声明时跳过）。
+- 标题/正文段落对齐是否与模板占位符的 `pPr@algn` 一致（模板未声明时跳过）；
+- 标题/正文行距是否与模板 `lnSpc / spcPct` 一致（模板未声明或页面未显式设置行距时跳过）。
 
-这些检查只产生 `warning`（`template-palette` / `template-font` / `template-align`），不是硬错误：模板色板经常被设计系统扩展，字体别名和对齐继承也很常见。它们会降低 `templateFitScore`，但不会单独把页面判为不可交付。模板目标同时保存占位符墨色和对齐；确定性修复会用 `restyle` 把标题/正文的颜色、主/次字体和段落对齐恢复到模板值。
+这些检查只产生 `warning`（`template-palette` / `template-font` / `template-align` / `template-line-spacing`），不是硬错误：模板色板经常被设计系统扩展，字体别名、对齐和行距继承也很常见。它们会降低 `templateFitScore`，但不会单独把页面判为不可交付。模板目标同时保存占位符墨色、对齐和行距；确定性修复会用 `restyle` 把标题/正文的颜色、主/次字体、段落对齐和行距恢复到模板值。
 
 ### 7. 评审输入、达标判断与报告共用同一份目标
 
@@ -114,11 +116,11 @@ passed = checked && errors === 0 && score >= minimumFit
 
 ## 验证
 
-- `template-review-target.test.ts` 14 项：网格/字号/轴语言、无占位返回 undefined、通过页、标题偏移、正文越界、标题/正文色板/字体/对齐 warning、字体别名、自由构图名称与几何、目标继承阈值、过期目标识别。
+- `template-review-target.test.ts` 15 项：网格/字号/轴语言、无占位返回 undefined、通过页、标题偏移、正文越界、标题/正文色板/字体/对齐/行距 warning、字体别名、自由构图名称与几何、目标继承阈值、过期目标识别。
 - `design-quality-stage.test.ts` 25 项：模板目标参与评审输入、修复计划、达标判断与报告；视觉评审关闭时仍生成模板符合度报告。
 - `visual-alignment.test.ts` 23 项：`templateFitScore` 低于阈值时循环不算达标。
 - `export-pptx.test.ts` 40 项（含导出报告的模板符合度摘要）、`content-version-restore.test.ts` 9 项（含模板目标随设计快照恢复）通过。
-- Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 1241 项通过（含导出视觉回归）。
+- Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 1242 项通过（含导出视觉回归）。
 
 ## 备选方案
 

@@ -37,7 +37,8 @@ export type TemplateFitCode =
   | "template-body-size"
   | "template-palette"
   | "template-font"
-  | "template-align";
+  | "template-align"
+  | "template-line-spacing";
 
 export interface TemplateFitIssue {
   slideIndex: number;
@@ -147,6 +148,8 @@ function layoutGrid(
       bodyInk?: string;
       titleAlign?: "left" | "center" | "right";
       bodyAlign?: "left" | "center" | "right";
+      titleLineHeight?: number;
+      bodyLineHeight?: number;
     }
   | undefined {
   const title = layout.regions.find((region) => region.role === "title");
@@ -175,6 +178,8 @@ function layoutGrid(
   const bodyInk = normalizeHex(content?.textColor);
   const titleAlign = title?.textAlign ?? undefined;
   const bodyAlign = content?.textAlign ?? undefined;
+  const titleLineHeight = title?.lineSpacing ?? undefined;
+  const bodyLineHeight = content?.lineSpacing ?? undefined;
   return {
     grid,
     ...(title?.fontSizePt == null ? {} : { titleSizePt: title.fontSizePt }),
@@ -183,6 +188,8 @@ function layoutGrid(
     ...(bodyInk === undefined ? {} : { bodyInk }),
     ...(titleAlign === undefined ? {} : { titleAlign }),
     ...(bodyAlign === undefined ? {} : { bodyAlign }),
+    ...(titleLineHeight === undefined ? {} : { titleLineHeight }),
+    ...(bodyLineHeight === undefined ? {} : { bodyLineHeight }),
   };
 }
 
@@ -212,6 +219,8 @@ export function buildTemplateReviewTarget(
       ...(compiled.bodyInk === undefined ? {} : { bodyInk: compiled.bodyInk }),
       ...(compiled.titleAlign === undefined ? {} : { titleAlign: compiled.titleAlign }),
       ...(compiled.bodyAlign === undefined ? {} : { bodyAlign: compiled.bodyAlign }),
+      ...(compiled.titleLineHeight === undefined ? {} : { titleLineHeight: compiled.titleLineHeight }),
+      ...(compiled.bodyLineHeight === undefined ? {} : { bodyLineHeight: compiled.bodyLineHeight }),
       freeComposition: isFreeLayout(layout, label, widthEmu, heightEmu),
     });
   }
@@ -240,6 +249,8 @@ export function buildTemplateReviewTarget(
         ...(compiled.bodyInk === undefined ? {} : { bodyInk: compiled.bodyInk }),
         ...(compiled.titleAlign === undefined ? {} : { titleAlign: compiled.titleAlign }),
         ...(compiled.bodyAlign === undefined ? {} : { bodyAlign: compiled.bodyAlign }),
+        ...(compiled.titleLineHeight === undefined ? {} : { titleLineHeight: compiled.titleLineHeight }),
+        ...(compiled.bodyLineHeight === undefined ? {} : { bodyLineHeight: compiled.bodyLineHeight }),
         freeComposition: sample.index === 0 || isFreeLayout(sampleLayout, label, widthEmu, heightEmu),
       });
     }
@@ -269,6 +280,8 @@ export function buildTemplateReviewTarget(
   const bodyInk = reference.find((layout) => layout.bodyInk !== undefined)?.bodyInk;
   const titleAlign = reference.find((layout) => layout.titleAlign !== undefined)?.titleAlign;
   const bodyAlign = reference.find((layout) => layout.bodyAlign !== undefined)?.bodyAlign;
+  const titleLineHeight = reference.find((layout) => layout.titleLineHeight !== undefined)?.titleLineHeight;
+  const bodyLineHeight = reference.find((layout) => layout.bodyLineHeight !== undefined)?.bodyLineHeight;
   const titleCenter = grid.titleX + grid.titleWidth / 2;
   const centered = Math.abs(titleCenter - 0.5) < 0.05 && grid.titleWidth < 0.8;
   const completeLayouts = reference.filter(
@@ -303,6 +316,8 @@ export function buildTemplateReviewTarget(
     ...(bodyInk === undefined ? {} : { bodyInk }),
     ...(titleAlign === undefined ? {} : { titleAlign }),
     ...(bodyAlign === undefined ? {} : { bodyAlign }),
+    ...(titleLineHeight === undefined ? {} : { titleLineHeight }),
+    ...(bodyLineHeight === undefined ? {} : { bodyLineHeight }),
     ...(titleSizePt === undefined ? {} : { titleSizePt }),
     ...(bodySizePt === undefined ? {} : { bodySizePt }),
     alignment: centered ? "centered-grid" : "left-grid",
@@ -362,6 +377,8 @@ export function templateTargetForSlide(
   bodyInk?: string;
   titleAlign?: "left" | "center" | "right";
   bodyAlign?: "left" | "center" | "right";
+  titleLineHeight?: number;
+  bodyLineHeight?: number;
   freeComposition: boolean;
   layoutName?: string;
 } {
@@ -378,6 +395,8 @@ export function templateTargetForSlide(
   const bodyInk = layout?.bodyInk ?? target.bodyInk;
   const titleAlign = layout?.titleAlign ?? target.titleAlign;
   const bodyAlign = layout?.bodyAlign ?? target.bodyAlign;
+  const titleLineHeight = layout?.titleLineHeight ?? target.titleLineHeight;
+  const bodyLineHeight = layout?.bodyLineHeight ?? target.bodyLineHeight;
   return {
     grid: layout?.grid ?? target.grid,
     ...(titleSizePt === undefined ? {} : { titleSizePt }),
@@ -386,6 +405,8 @@ export function templateTargetForSlide(
     ...(bodyInk === undefined ? {} : { bodyInk }),
     ...(titleAlign === undefined ? {} : { titleAlign }),
     ...(bodyAlign === undefined ? {} : { bodyAlign }),
+    ...(titleLineHeight === undefined ? {} : { titleLineHeight }),
+    ...(bodyLineHeight === undefined ? {} : { bodyLineHeight }),
     freeComposition: layout?.freeComposition ?? false,
     ...(layout?.name === undefined ? {} : { layoutName: layout.name }),
   };
@@ -567,6 +588,21 @@ export function checkTemplateFit(
           role: "title",
         });
       }
+      if (
+        resolved.titleLineHeight !== undefined &&
+        title.style.lineHeight !== undefined &&
+        Math.abs(title.style.lineHeight - resolved.titleLineHeight) > 0.1
+      ) {
+        issues.push({
+          slideIndex,
+          code: "template-line-spacing",
+          severity: "warning",
+          message: `标题行距 ${title.style.lineHeight} 与模板 ${resolved.titleLineHeight} 不一致`,
+          suggestion: `把标题行距恢复到模板的 ${resolved.titleLineHeight}`,
+          elementIds: [title.id],
+          role: "title",
+        });
+      }
     }
     if (bodies.length > 0) {
       const bounds = unionRect(bodies.map((body) => rectOf(body.frame, pageWidth, pageHeight)));
@@ -647,6 +683,22 @@ export function checkTemplateFit(
           role: "body",
         });
       }
+      if (
+        resolved.bodyLineHeight !== undefined &&
+        bodies[0]?.type === "text" &&
+        bodies[0].style.lineHeight !== undefined &&
+        Math.abs(bodies[0].style.lineHeight - resolved.bodyLineHeight) > 0.1
+      ) {
+        issues.push({
+          slideIndex,
+          code: "template-line-spacing",
+          severity: "warning",
+          message: `正文行距 ${bodies[0].style.lineHeight} 与模板 ${resolved.bodyLineHeight} 不一致`,
+          suggestion: `把正文行距恢复到模板的 ${resolved.bodyLineHeight}`,
+          elementIds: [bodies[0].id],
+          role: "body",
+        });
+      }
     }
   }
   const checked = checkedSlides > 0;
@@ -674,7 +726,8 @@ export function templateFitVisualIssues(report: TemplateFitReport): VisualReview
       issue.code === "template-title-size" ||
       issue.code === "template-body-size" ||
       issue.code === "template-palette" ||
-      issue.code === "template-font"
+      issue.code === "template-font" ||
+      issue.code === "template-line-spacing"
         ? "theme-mismatch"
         : "misalignment",
     elementIds: issue.elementIds,

@@ -94,6 +94,8 @@ pub struct TemplateRegion {
     font_size_pt: Option<u16>,
     /// Paragraph alignment from the placeholder's `pPr` / `algn`.
     text_align: Option<String>,
+    /// Line spacing multiple from `lnSpc / spcPct`, e.g. 1.2.
+    line_spacing: Option<f64>,
 }
 
 #[derive(serde::Serialize)]
@@ -1834,27 +1836,40 @@ fn resolve_scheme_color(
 fn extract_text_style(
     shape: roxmltree::Node<'_, '_>,
     theme: &std::collections::HashMap<String, String>,
-) -> (Option<String>, Option<u16>, Option<String>) {
+) -> (Option<String>, Option<u16>, Option<String>, Option<f64>) {
     let Some(body) = shape
         .descendants()
         .find(|node| node.tag_name().name() == "txBody")
     else {
-        return (None, None, None);
+        return (None, None, None, None);
     };
     let mut color = None;
     let mut size = None;
     let mut align = None;
-    if let Some(alignment) = body
+    let mut line_spacing = None;
+    if let Some(paragraph) = body
         .descendants()
         .find(|node| matches!(node.tag_name().name(), "pPr" | "lvl1pPr" | "defPPr"))
-        .and_then(|node| node.attribute("algn"))
     {
-        align = match alignment {
-            "l" => Some("left".to_owned()),
-            "ctr" => Some("center".to_owned()),
-            "r" => Some("right".to_owned()),
-            _ => None,
-        };
+        align = paragraph
+            .attribute("algn")
+            .and_then(|alignment| match alignment {
+                "l" => Some("left".to_owned()),
+                "ctr" => Some("center".to_owned()),
+                "r" => Some("right".to_owned()),
+                _ => None,
+            });
+        line_spacing = paragraph
+            .children()
+            .find(|node| node.tag_name().name() == "lnSpc")
+            .and_then(|node| {
+                node.children()
+                    .find(|child| child.tag_name().name() == "spcPct")
+            })
+            .and_then(|node| node.attribute("val"))
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| *value > 0.0)
+            .map(|value| value / 100_000.0);
     }
     for node in body.descendants() {
         let name = node.tag_name().name();
@@ -1890,7 +1905,7 @@ fn extract_text_style(
             };
         }
     }
-    (color, size, align)
+    (color, size, align, line_spacing)
 }
 
 fn extract_template_regions(
@@ -1936,7 +1951,8 @@ fn extract_template_regions(
             } else {
                 return None;
             };
-            let (text_color, font_size_pt, text_align) = extract_text_style(shape, theme);
+            let (text_color, font_size_pt, text_align, line_spacing) =
+                extract_text_style(shape, theme);
             Some(TemplateRegion {
                 role: role.into(),
                 x,
@@ -1946,6 +1962,7 @@ fn extract_template_regions(
                 text_color,
                 font_size_pt,
                 text_align,
+                line_spacing,
             })
         })
         .take(32)
@@ -2534,10 +2551,10 @@ mod tests {
     fn reads_the_ink_and_size_a_layout_assigned_to_its_placeholders() {
         let xml = r#"<p:sldLayout xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
           <p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></p:spPr>
-            <p:txBody><a:lstStyle><a:lvl1pPr algn="ctr"><a:defRPr sz="2600"><a:solidFill><a:srgbClr val="273D79"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
+            <p:txBody><a:lstStyle><a:lvl1pPr algn="ctr"><a:lnSpc><a:spcPct val="120000"/></a:lnSpc><a:defRPr sz="2600"><a:solidFill><a:srgbClr val="273D79"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
           </p:sp>
           <p:sp><p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="500" y="600"/><a:ext cx="700" cy="800"/></a:xfrm></p:spPr>
-            <p:txBody><a:lstStyle><a:lvl1pPr algn="l"><a:defRPr sz="1800"><a:solidFill><a:schemeClr val="bg1"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
+            <p:txBody><a:lstStyle><a:lvl1pPr algn="l"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc><a:defRPr sz="1800"><a:solidFill><a:schemeClr val="bg1"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
           </p:sp>
         </p:spTree></p:cSld></p:sldLayout>"#;
         let document = roxmltree::Document::parse(xml).unwrap();
@@ -2546,9 +2563,11 @@ mod tests {
         assert_eq!(regions[0].text_color.as_deref(), Some("#273D79"));
         assert_eq!(regions[0].font_size_pt, Some(26));
         assert_eq!(regions[0].text_align.as_deref(), Some("center"));
+        assert_eq!(regions[0].line_spacing, Some(1.2));
         assert_eq!(regions[1].text_color.as_deref(), Some("#FFFFFF"));
         assert_eq!(regions[1].font_size_pt, Some(18));
         assert_eq!(regions[1].text_align.as_deref(), Some("left"));
+        assert_eq!(regions[1].line_spacing, Some(1.0));
     }
 
     #[test]

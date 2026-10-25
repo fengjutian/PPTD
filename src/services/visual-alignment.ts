@@ -448,6 +448,7 @@ export const visualRepairPlanSchema = z.object({
                 .optional(),
               fontFamily: z.string().min(1).max(200).optional(),
               textAlign: z.enum(["left", "center", "right"]).optional(),
+              lineHeight: z.number().min(0.5).max(4).optional(),
             }),
             z.object({
               action: z.literal("align"),
@@ -568,7 +569,17 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
               action.textAlign === "left" || action.textAlign === "center" || action.textAlign === "right"
                 ? action.textAlign
                 : undefined;
-            if (fontScale === undefined && color === undefined && fontFamily === undefined && textAlign === undefined)
+            const lineHeight =
+              typeof action.lineHeight === "number" && Number.isFinite(action.lineHeight)
+                ? clamp(action.lineHeight, 0.5, 4)
+                : undefined;
+            if (
+              fontScale === undefined &&
+              color === undefined &&
+              fontFamily === undefined &&
+              textAlign === undefined &&
+              lineHeight === undefined
+            )
               return [];
             return [
               {
@@ -578,6 +589,7 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
                 ...(color === undefined ? {} : { color }),
                 ...(fontFamily === undefined ? {} : { fontFamily }),
                 ...(textAlign === undefined ? {} : { textAlign }),
+                ...(lineHeight === undefined ? {} : { lineHeight }),
               },
             ];
           }
