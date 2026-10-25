@@ -15,8 +15,8 @@ export interface ThemePresetPickerProps {
  * A row of visual design systems to start from when no template is imported.
  *
  * The card shows the palette; the specimen shows what the preset does to eight
- * real page roles. The specimen is rendered on demand — building all eleven
- * decks up front would spend a second of the user's time before they asked.
+ * real page roles. The specimen is rendered on demand — building every preset
+ * deck up front would spend a second of the user's time before they asked.
  */
 export function ThemePresetPicker({ value, onChange, disabled = false }: ThemePresetPickerProps) {
   const [specimen, setSpecimen] = useState<{ presetId: string; images?: string[]; failed?: boolean }>();

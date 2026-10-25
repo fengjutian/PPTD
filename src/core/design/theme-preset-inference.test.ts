@@ -14,6 +14,12 @@ describe("theme preset inference", () => {
     expect(inferThemePresetId("AI 产品发布会")).toBe("tech-blue");
     expect(inferThemePresetId("品牌创意提案")).toBe("creative-orange");
     expect(inferThemePresetId("新员工培训课程")).toBe("education-green");
+    expect(inferThemePresetId("研究生论文答辩")).toBe("academic-indigo");
+    expect(inferThemePresetId("合规与内部审计")).toBe("legal-burgundy");
+    expect(inferThemePresetId("美妆品牌新品发布")).toBe("fashion-rose");
+    expect(inferThemePresetId("汽车制造与供应链")).toBe("industrial-steel");
+    expect(inferThemePresetId("城市更新与建筑设计")).toBe("architecture-stone");
+    expect(inferThemePresetId("摄影集与画册设计")).toBe("minimal-gray");
   });
 
   it("falls back to the default preset for an unknown subject", () => {

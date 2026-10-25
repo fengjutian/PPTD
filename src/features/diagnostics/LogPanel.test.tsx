@@ -23,6 +23,43 @@ describe("formatLogTime", () => {
   });
 });
 
+describe("formatLogRecords", () => {
+  it("keeps the panel order and carries time, level, code, message and context", () => {
+    const text = formatLogRecords(
+      [
+        record({
+          at: "2026-10-25T07:00:00.000Z",
+          code: "EXPORT_PACKAGE_INVALID",
+          message: "缺少 presentation.xml",
+        }),
+        record({
+          at: "2026-10-25T06:00:00.000Z",
+          level: "warn",
+          code: "AI_DIRECTIONS_INCOMPLETE",
+          message: "只有 3 个方向",
+          context: { received: 4, rendered: 3 },
+        }),
+      ],
+      "C:\\Users\\demo\\AppData\\Local\\com.pptd.desktop\\logs\\app.log",
+    );
+    expect(text).toContain("PPTD diagnostics");
+    expect(text).toContain("C:\\Users\\demo\\AppData\\Local\\com.pptd.desktop\\logs\\app.log");
+    expect(text).toContain("WARN AI_DIRECTIONS_INCOMPLETE");
+    expect(text).toContain("只有 3 个方向");
+    expect(text).toContain('{"received":4,"rendered":3}');
+    expect(text).toContain("ERROR EXPORT_PACKAGE_INVALID");
+    // 复制文本与面板展示同序：最新的失败在前，方便直接贴给开发者。
+    expect(text.indexOf("EXPORT_PACKAGE_INVALID")).toBeLessThan(text.indexOf("AI_DIRECTIONS_INCOMPLETE"));
+  });
+
+  it("omits the path and empty context instead of writing placeholders", () => {
+    const text = formatLogRecords([record({ context: undefined })]);
+    expect(text.startsWith("PPTD diagnostics")).toBe(true);
+    expect(text).not.toContain("undefined");
+    expect(text).not.toContain("{}");
+  });
+});
+
 describe("LogPanel", () => {
   it("lists the newest record first with its code, stage and counts", () => {
     const markup = renderToStaticMarkup(

@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { THEME_PRESETS } from "./theme-presets";
-import { themePresetMetadata } from "./theme-preset-metadata";
+import { THEME_PRESET_METADATA, themePresetMetadata } from "./theme-preset-metadata";
 
 describe("theme preset metadata", () => {
+  it("ships an explicit art-direction entry for every preset", () => {
+    for (const preset of THEME_PRESETS) expect(THEME_PRESET_METADATA[preset.id], preset.id).toBeDefined();
+  });
+
   it("provides complete design-agent metadata for every preset", () => {
     for (const preset of THEME_PRESETS) {
       const metadata = themePresetMetadata(preset.id);

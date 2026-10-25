@@ -14,7 +14,7 @@
 | 整册视觉语言只有一个可渲染的概念预设 `editorial`  | `src/core/design/deck-concept.ts:15`、`:129`                                         |
 | 方向提案接口名义上是复数，实际强制恰好返回一个    | `src/services/ai-service.ts:1356`                                                    |
 | 设计一次成型：选定主题预设后直接生成整册逐页设计  | `src/app/App.tsx:2971`–`3002`                                                        |
-| 11 套主题预设只有文字元数据，没有产品自渲染的样张 | `src/core/design/theme-presets.ts:52`、`src/core/design/theme-preset-metadata.ts:26` |
+| 17 套主题预设只有文字元数据，没有产品自渲染的样张 | `src/core/design/theme-presets.ts:52`、`src/core/design/theme-preset-metadata.ts:26` |
 | 确定性 gate 只覆盖几何与对比度 7 类问题           | `src/services/presentation-quality-gate.ts:6`                                        |
 | 已有可参数化的十页设计夹具，但硬编码单一主题      | `tools/design-preview/fixture.ts`（`themePresetId: "editorial-teal"`）               |
 | 没有跨项目的设计记忆                              | `src-tauri/src/storage/mod.rs`（仅 settings、草稿历史与最近项目路径）                |
@@ -255,7 +255,7 @@
 - **AC-D3（选择生效）**：选择方向 B 后整册设计使用 B 的概念预设；方向记录可在重新打开项目后查看，并包含所选 ID 与内容 revision。
 - **AC-D4（跳过与过期）**：跳过后再生成不重复询问；记录后修改内容，旧记录仍可查看但不能作为当前依据，应用时返回 `DESIGN_DIRECTION_STALE`。
 - **AC-D5（预设合法）**：每个可渲染预设都能生成 20 页；因素材缺失产生的降级必须记录 conflict，不得静默；未知预设被拒绝并记录 conflict，不静默回退。
-- **AC-D6（样张可用）**：11 套预设各有 8 页样张；重建命令输出与入库清单一致；选择器无样张时显示文字降级。
+- **AC-D6（样张可用）**：17 套预设各有 8 页样张；重建命令输出与入库清单一致；选择器无样张时显示文字降级。
 - **AC-D7（硬底线）**：构造 11pt 正文、8pt 标签、标题/正文 2.0 倍的文档，体检分别报出对应 code；同一文档重复执行结果一致。
 - **AC-D8（软提示与不阻断）**：构造标题上方小标签、非序列 `01/02/03`、三页同骨架，体检报软提示；生成与导出仍成功，导出报告记录数量。
 - **AC-D9（本地记忆）**：清空设计记忆后，方向提案不再引用历史；导出与项目文件不包含记忆内容。

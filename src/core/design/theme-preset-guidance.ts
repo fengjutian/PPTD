@@ -72,6 +72,42 @@ const GUIDANCE: Readonly<Record<string, ThemePresetGuidance>> = {
     pageRhythm: "浅草白内容页为主，绿色章节页、蓝色知识页与金色提示页交替。",
     imageStyle: "课堂、校园、自然观察和扁平知识插图，避免严肃商务图库。",
   },
+  "academic-indigo": {
+    character: "严谨、克制、有研究感，以深靛与砖红区分论证结构与结论。",
+    scenarios: ["论文答辩", "课题汇报", "学术会议", "研究报告"],
+    pageRhythm: "暖白正文页为主，深靛章节页与砖红结论页形成论证节奏。",
+    imageStyle: "实验场景、档案文献、研究设备与建筑摄影，避免装饰性插画。",
+  },
+  "minimal-gray": {
+    character: "安静、克制、以留白和字重建立秩序，几乎不依赖颜色。",
+    scenarios: ["作品集", "品牌手册", "极简提案", "摄影集"],
+    pageRhythm: "纯白内容页与灰阶图文页交替，黄铜只做低频标记。",
+    imageStyle: "黑白或低饱和摄影、材质特写和大面积留白，避免多彩装饰图形。",
+  },
+  "legal-burgundy": {
+    character: "庄重、审慎、条款感强，酒红只用于结论与风险提示。",
+    scenarios: ["法律意见", "合规培训", "审计报告", "风控汇报"],
+    pageRhythm: "象牙白正文页配酒红章节页，深灰证据页与铜色结论页穿插。",
+    imageStyle: "建筑、档案、签约与办公场景，避免法槌等直白法律图库。",
+  },
+  "fashion-rose": {
+    character: "明快、精致、有编辑大片感，用大字与玫红制造记忆点。",
+    scenarios: ["时尚发布", "美妆新品", "消费品牌", "生活方式"],
+    pageRhythm: "暖白内容页配玫红主张页，浅粉图文页与金色细节页制造跳跃。",
+    imageStyle: "时尚大片、产品特写与柔和布光的人像，避免促销贴纸和高饱和渐变。",
+  },
+  "industrial-steel": {
+    character: "硬朗、精确、工程感强，以冷灰和钢蓝突出结构与参数。",
+    scenarios: ["制造工艺", "汽车项目", "工程方案", "供应链"],
+    pageRhythm: "冷灰内容页配钢蓝章节页，安全橙只用于参数与风险提示。",
+    imageStyle: "工厂产线、机械细节、工程图纸与冷调摄影，避免卡通汽车和廉价霓虹。",
+  },
+  "architecture-stone": {
+    character: "沉静、有结构感、材质导向，用暖石色与铜棕承载空间叙事。",
+    scenarios: ["建筑方案", "地产定位", "室内设计", "城市更新"],
+    pageRhythm: "暖石色内容页配墨色章节页，铜棕用于图纸与关键指标。",
+    imageStyle: "建筑摄影、混凝土与木石材质、轴测图，避免亮面金色和卡通渲染。",
+  },
 };
 
 export function themePresetGuidance(id: string): ThemePresetGuidance {
