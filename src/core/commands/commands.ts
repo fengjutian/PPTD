@@ -1,29 +1,18 @@
 ﻿import type {
-  AssetProvenance,
-  BuiltinIconName,
   ChartElementStyle,
-  ChartKind,
   ContentBlock,
-  DocumentTextStyles,
-  DesignDirectionRecord,
   ElementId,
   Emu,
   ImageCrop,
-  LineDirection,
   LineElementStyle,
   PresentationDocument,
   RectEmu,
   ShapeElementStyle,
-  ShapeKind,
-  SlideAnimation,
   Slide,
   SlideElement,
   SlideId,
-  SupportedImageMimeType,
   IconElementStyle,
   TableElementStyle,
-  SlideTransition,
-  TemplateReviewTarget,
   TextElement,
   TextElementStyle,
 } from "../document-model";
@@ -49,26 +38,17 @@ import {
   type TextRunStyle,
 } from "../document-model";
 
-import { alignFrames, distributeFrames, unionFrame, type ArrangeHorizontal, type ArrangeVertical } from "./arrange";
+import { alignFrames, distributeFrames, unionFrame } from "./arrange";
 import { estimateTextLines } from "../rendering/text-fit";
 
-import {
-  type AiSlideDesign,
-  type AiTemplateDecoration,
-  type AiTemplateLayout,
-  type BackgroundRhythm,
-} from "./template-layouts";
 import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
-import type { TextReplaceEdit } from "./text-search";
+
 import type {
   ChangeDomain,
   AiContentBlock,
   AiSlideDraft,
-  AiVisualAssetData,
-  AiTemplateTheme,
   HorizontalAlign,
   VerticalAlign,
-  AlignTarget,
   DocumentCommand,
 } from "./command-types";
 export type {
@@ -83,14 +63,7 @@ export type {
   DocumentCommand,
 } from "./command-types";
 
-import { type DeckConcept } from "../design/deck-concept";
-
-import {
-  isVisualAssetRole,
-  planManualVisualAssetLayout,
-  type AiVisualAssetRole,
-  type NormalizedRect,
-} from "./visual-asset";
+import { isVisualAssetRole, planManualVisualAssetLayout, type NormalizedRect } from "./visual-asset";
 import { HEX_COLOR_PATTERN, imageFrame, toContentBlocks, type MetricBlock } from "./ai-draft-helpers";
 import { applyAiDesignedDraft } from "./ai-designed-draft";
 export { directionContentFingerprint } from "./ai-draft-helpers";

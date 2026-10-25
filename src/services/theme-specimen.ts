@@ -142,6 +142,7 @@ export function buildSpecimenDocument(options: SpecimenOptions = {}): Presentati
     id: "theme-specimen",
   }).concept;
   const preset = findThemePreset(options.themePresetId ?? "editorial-teal") ?? defaultThemePreset();
+  const artwork = specimenImage(preset);
   const document = createDocument();
   applyCommand(document, {
     type: "apply-ai-designed-draft",
@@ -153,7 +154,7 @@ export function buildSpecimenDocument(options: SpecimenOptions = {}): Presentati
     visualAssets: [
       {
         slideIndex: 6,
-        dataUrl: specimenImage(preset),
+        dataUrl: artwork,
         mimeType: "image/png",
         naturalWidth: 240,
         naturalHeight: 135,

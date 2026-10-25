@@ -4,6 +4,7 @@ import {
   planThemePresetVariants,
   rankThemePresets,
   themePresetAccentHue,
+  themePresetGenre,
   type ThemeContentSignals,
 } from "./theme-preset-ranking";
 import { DEFAULT_THEME_PRESET_ID, THEME_PRESETS, findThemePreset } from "./theme-presets";
@@ -36,6 +37,24 @@ describe("theme preset ranking", () => {
     const ranked = rankThemePresets({ title: "秋天的颜色" });
     expect(ranked[0]?.presetId).toBe(DEFAULT_THEME_PRESET_ID);
     expect(ranked[0]?.reason).toContain("通用节奏");
+  });
+
+  it("prefers presets drawn for the same kind of occasion", () => {
+    const ranked = rankThemePresets(annualReport);
+    const position = (presetId: string) => ranked.findIndex((choice) => choice.presetId === presetId);
+    expect(position("consulting-navy")).toBeLessThan(position("medical-teal"));
+    expect(position("legal-burgundy")).toBeLessThan(position("education-green"));
+    expect(position("finance-gold")).toBeLessThan(position("gov-red"));
+  });
+
+  it("reads the occasion from the preset's own scenarios", () => {
+    expect(themePresetGenre("finance-gold")).toBe("business");
+    expect(themePresetGenre("consulting-navy")).toBe("business");
+    expect(themePresetGenre("legal-burgundy")).toBe("business");
+    expect(themePresetGenre("medical-teal")).toBe("public");
+    expect(themePresetGenre("paper-ink")).toBe("culture");
+    expect(themePresetGenre("industrial-steel")).toBe("industry");
+    expect(themePresetGenre("tech-blue")).toBeUndefined();
   });
 
   it("is deterministic", () => {

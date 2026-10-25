@@ -13,11 +13,20 @@ import {
 } from "./presentation-renderer";
 import {
   affectedSlideIndexes,
-  CONCEPT_SCORE_THRESHOLD,
   runVisualAlignmentLoop,
   type PresentationVisualGoal,
   type VisualReview,
 } from "./visual-alignment";
+import {
+  batchReviewFromSlides,
+  mergeReviews,
+  slideReviewFromBatch,
+  splitBatchReview,
+  type ReviewBatchPlan,
+  type ReviewRound,
+  type SlideReviewCache,
+} from "./visual-review-merge";
+
 import {
   checkTemplateFit,
   templateFitVisualIssues,
@@ -130,173 +139,6 @@ export interface ReviewEvidence {
 export function isGenerationCancelled(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("AI_GENERATION_CANCELLED") || message.includes("AI_REQUEST_CANCELLED");
-}
-
-function mergeReviews(reviews: VisualReview[], overview?: VisualReview): VisualReview {
-  // 逐页评分按页合并；同一页出现多次时保留最后一个，不重复累加。
-  const slideScores = [
-    ...new Map(reviews.flatMap((item) => item.slideScores ?? []).map((item) => [item.slideIndex, item])).values(),
-  ].sort((left, right) => left.slideIndex - right.slideIndex);
-  // 批次分是模型对一批页的整体判断，不能盖过它自己给出的低分页。把逐页
-  // 分数也放进最小值，弱页才不会因为同批其他页好看而被静默放行。逐页分数
-  // 仍然不单独授权修复：修复只由具体问题（issues）触发。
-  const minimumScore = (key: "overallScore" | "hierarchyScore" | "alignmentScore" | "readabilityScore") =>
-    Math.min(...reviews.map((item) => item[key]), ...slideScores.map((item) => item[key]));
-  return {
-    overallScore: minimumScore("overallScore"),
-    hierarchyScore: minimumScore("hierarchyScore"),
-    alignmentScore: minimumScore("alignmentScore"),
-    readabilityScore: minimumScore("readabilityScore"),
-    // Cross-page consistency is only observable from the deck overview. Take it
-    // from the batch that actually saw the contact sheet; other batches only
-    // compared themselves.
-    consistencyScore: overview?.consistencyScore ?? Math.min(...reviews.map((item) => item.consistencyScore)),
-    ...(overview?.repetitionScore !== undefined || reviews.some((item) => item.repetitionScore !== undefined)
-      ? {
-          repetitionScore:
-            overview?.repetitionScore ??
-            Math.min(...reviews.map((item) => item.repetitionScore ?? item.consistencyScore)),
-        }
-      : {}),
-    ...(overview?.themeFitScore !== undefined || reviews.some((item) => item.themeFitScore !== undefined)
-      ? {
-          themeFitScore:
-            overview?.themeFitScore ?? Math.min(...reviews.map((item) => item.themeFitScore ?? item.consistencyScore)),
-        }
-      : {}),
-    ...(reviews.some((item) => item.visualFocusScore !== undefined)
-      ? { visualFocusScore: Math.min(...reviews.map((item) => item.visualFocusScore ?? item.hierarchyScore)) }
-      : {}),
-    ...(reviews.some((item) => item.distinctivenessScore !== undefined) ||
-    slideScores.some((item) => item.distinctivenessScore !== undefined)
-      ? {
-          distinctivenessScore: Math.min(
-            ...reviews.map((item) => item.distinctivenessScore ?? item.overallScore),
-            ...slideScores.map((item) => item.distinctivenessScore ?? item.overallScore),
-          ),
-        }
-      : {}),
-    ...(overview?.conceptScore !== undefined ||
-    reviews.some((item) => item.conceptScore !== undefined) ||
-    slideScores.some((item) => item.conceptScore !== undefined)
-      ? {
-          conceptScore:
-            overview?.conceptScore ??
-            Math.min(
-              ...reviews.map((item) => item.conceptScore ?? 100),
-              ...slideScores.map((item) => item.conceptScore ?? 100),
-            ),
-        }
-      : {}),
-    ...(overview?.conceptCapApplied ||
-    reviews.some((item) => item.conceptCapApplied) ||
-    slideScores.some((item) => item.conceptScore !== undefined && item.conceptScore < CONCEPT_SCORE_THRESHOLD)
-      ? { conceptCapApplied: true }
-      : {}),
-    issues: reviews.flatMap((item) => item.issues),
-    slideGuidance: reviews.flatMap((item) => item.slideGuidance),
-    ...(slideScores.length > 0 ? { slideScores } : {}),
-  };
-}
-
-type SlideScore = NonNullable<VisualReview["slideScores"]>[number];
-
-/** 逐页评审缓存：只有模型为每一页都返回了分数，才能安全地按页复用。 */
-type SlideReviewCache = {
-  source: "真实 PPTX" | "画布预览";
-  slideCount: number;
-  entries: Map<number, { signature: string; review: VisualReview }>;
-};
-
-type ReviewBatchPlan =
-  | { kind: "reuse"; review: VisualReview }
-  | { kind: "assemble"; review: VisualReview }
-  | { kind: "full"; indexes: number[]; batchIndexes: number[] }
-  | { kind: "subset"; indexes: number[]; batchIndexes: number[] };
-
-/** 每轮评审的覆盖与降级信息；最终结论可能来自较早的一轮。 */
-type ReviewRound = {
-  coverage: { reviewed: number; total: number };
-  partialReason?: string;
-  deckUnavailable?: string;
-  source?: "真实 PPTX" | "画布预览";
-  realRenderFailure?: string;
-  contactSheet?: string;
-  deckReview?: VisualReview;
-  reviewReuse?: { reviewed: number; reused: number };
-  /** Deterministic template fit measured on the same document snapshot. */
-  templateFit?: TemplateFitReport;
-};
-
-/**
- * 把一次批次响应拆成单页结论。
- *
- * 只有请求的每一页都有 `slideScores` 时才拆：少一页就无法判断缺失页的
- * 分数，宁可回退到整批口径，也不能把批次分当成单页分。
- */
-function splitBatchReview(review: VisualReview, indexes: number[]): Map<number, VisualReview> | undefined {
-  const scores = new Map((review.slideScores ?? []).map((score) => [score.slideIndex, score]));
-  const split = new Map<number, VisualReview>();
-  for (const slideIndex of indexes) {
-    const score = scores.get(slideIndex);
-    if (!score) return undefined;
-    split.set(slideIndex, slideReviewFromBatch(review, slideIndex, score));
-  }
-  return split;
-}
-
-/**
- * 从一次批次响应里取单页结论。
- *
- * 有该页分数时用该页分数；没有时只能用批次分近似，因此这种结论不会写进
- * 逐页缓存，下一轮仍会重新检查该页。
- */
-function slideReviewFromBatch(review: VisualReview, slideIndex: number, score?: SlideScore): VisualReview {
-  const ownScore = score ?? review.slideScores?.find((item) => item.slideIndex === slideIndex);
-  return {
-    overallScore: ownScore?.overallScore ?? review.overallScore,
-    hierarchyScore: ownScore?.hierarchyScore ?? review.hierarchyScore,
-    alignmentScore: ownScore?.alignmentScore ?? review.alignmentScore,
-    readabilityScore: ownScore?.readabilityScore ?? review.readabilityScore,
-    consistencyScore: review.consistencyScore,
-    ...(ownScore?.distinctivenessScore === undefined ? {} : { distinctivenessScore: ownScore.distinctivenessScore }),
-    ...(ownScore?.conceptScore === undefined ? {} : { conceptScore: ownScore.conceptScore }),
-    issues: review.issues.filter((issue) => issue.slideIndex === slideIndex),
-    slideGuidance: review.slideGuidance.filter((item) => item.slideIndex === slideIndex),
-    ...(ownScore ? { slideScores: [ownScore] } : {}),
-  };
-}
-
-/** 用逐页结论拼回一批的结论；分数取页分数的最小值，保持保守口径。 */
-function batchReviewFromSlides(
-  indexes: number[],
-  reviews: Map<number, VisualReview>,
-  consistencyScore: number,
-): VisualReview | undefined {
-  const ordered = indexes.map((slideIndex) => reviews.get(slideIndex));
-  if (ordered.some((item) => item === undefined)) return undefined;
-  const present = ordered as VisualReview[];
-  const slideScores = present
-    .flatMap((item) => item.slideScores ?? [])
-    .sort((left, right) => left.slideIndex - right.slideIndex);
-  return {
-    overallScore: Math.min(...present.map((item) => item.overallScore)),
-    hierarchyScore: Math.min(...present.map((item) => item.hierarchyScore)),
-    alignmentScore: Math.min(...present.map((item) => item.alignmentScore)),
-    readabilityScore: Math.min(...present.map((item) => item.readabilityScore)),
-    consistencyScore,
-    ...(present.some((item) => item.distinctivenessScore !== undefined)
-      ? {
-          distinctivenessScore: Math.min(...present.map((item) => item.distinctivenessScore ?? item.overallScore)),
-        }
-      : {}),
-    ...(present.some((item) => item.conceptScore !== undefined)
-      ? { conceptScore: Math.min(...present.map((item) => item.conceptScore ?? 100)) }
-      : {}),
-    issues: present.flatMap((item) => item.issues),
-    slideGuidance: present.flatMap((item) => item.slideGuidance),
-    ...(slideScores.length > 0 ? { slideScores } : {}),
-  };
 }
 
 /** 把视觉评审失败的错误码翻译成用户能读懂的一句话。 */

@@ -1,9 +1,8 @@
-﻿import type {
+import type {
   AssetProvenance,
   BuiltinIconName,
   ChartElementStyle,
   ChartKind,
-  ContentBlock,
   DocumentTextStyles,
   DesignDirectionRecord,
   ElementId,
@@ -11,12 +10,10 @@
   ImageCrop,
   LineDirection,
   LineElementStyle,
-  PresentationDocument,
   RectEmu,
   ShapeElementStyle,
   ShapeKind,
   SlideAnimation,
-  Slide,
   SlideElement,
   SlideId,
   SupportedImageMimeType,
@@ -24,33 +21,13 @@
   TableElementStyle,
   SlideTransition,
   TemplateReviewTarget,
-  TextElement,
   TextElementStyle,
 } from "../document-model";
-import {
-  BUILTIN_ICONS,
-  captureContentVersion,
-  createDocument,
-  createSlide,
-  diffContentVersion,
-  emu,
-  hashString,
-  inches,
-  MAX_PAGE_SIZE_IN,
-  MIN_PAGE_SIZE_IN,
-  phaseForEffect,
-  SHAPE_KINDS,
-  stableStringify,
-  TABLE_MAX_COLUMNS,
-  TABLE_MAX_ROWS,
-  applyTextRun,
-  subtractTextRange,
-  clearedTextStyle,
-  type TextRunStyle,
-} from "../document-model";
+import type { DeckConcept } from "../design/deck-concept";
+import type { AiVisualAssetRole } from "./visual-asset";
+import { type TextRunStyle } from "../document-model";
 
-import { alignFrames, distributeFrames, unionFrame, type ArrangeHorizontal, type ArrangeVertical } from "./arrange";
-import { estimateTextLines } from "../rendering/text-fit";
+import { type ArrangeHorizontal, type ArrangeVertical } from "./arrange";
 
 import {
   type AiSlideDesign,
@@ -58,7 +35,7 @@ import {
   type AiTemplateLayout,
   type BackgroundRhythm,
 } from "./template-layouts";
-import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
+
 import type { TextReplaceEdit } from "./text-search";
 
 export type ChangeDomain = "content" | "design" | "both";

@@ -3,6 +3,7 @@ import {
   resolveChartData,
   resolveFragmentStyle,
   resolveTableData,
+  tableColumnAlignsRight,
   textFragments,
   type ChartElement,
   type LineElement,
@@ -612,11 +613,19 @@ function drawTable(
   const rowCount = resolved.rows.length + 1;
   const columnWidth = width / columnCount;
   const rowHeight = height / rowCount;
-  const fontSize = Math.max(9, Math.min(rowHeight * 0.6, (element.style.fontSizePt * height) / 400));
+  const fontSize = Math.max(9, Math.min(rowHeight * 0.45, (element.style.fontSizePt * width) / 960));
+  const alignsRight = (column: number) => tableColumnAlignsRight(resolved.rows, column);
   context.font = `${fontSize}px "${element.style.fontFamily}"`;
   context.textBaseline = "middle";
-  context.textAlign = "left";
-  const cell = (text: string, x: number, y: number, fill: string, ink: string, bold: boolean) => {
+  const cell = (
+    text: string,
+    x: number,
+    y: number,
+    fill: string,
+    ink: string,
+    bold: boolean,
+    column: number,
+  ) => {
     context.fillStyle = fill;
     context.fillRect(x, y, columnWidth, rowHeight);
     context.strokeStyle = element.style.borderColor;
@@ -624,10 +633,14 @@ function drawTable(
     context.strokeRect(x, y, columnWidth, rowHeight);
     context.fillStyle = ink;
     context.font = `${bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
-    context.fillText(text.slice(0, 12), x + columnWidth * 0.05, y + rowHeight / 2);
+    // A number column lines up on the right, the way the exporter writes it.
+    const right = alignsRight(column);
+    context.textAlign = right ? "right" : "left";
+    const padding = columnWidth * 0.06;
+    context.fillText(text.slice(0, 12), right ? x + columnWidth - padding : x + padding, y + rowHeight / 2);
   };
   resolved.header.forEach((text, index) =>
-    cell(text, index * columnWidth, 0, element.style.headerFill, element.style.headerTextColor, true),
+    cell(text, index * columnWidth, 0, element.style.headerFill, element.style.headerTextColor, true, index),
   );
   resolved.rows.forEach((row, rowIndex) => {
     row
@@ -637,9 +650,10 @@ function drawTable(
           text,
           cellIndex * columnWidth,
           (rowIndex + 1) * rowHeight,
-          "#FFFFFF",
+          rowIndex % 2 === 1 && element.style.bandingFill ? element.style.bandingFill : "#FFFFFF",
           element.style.bodyTextColor,
           element.style.firstColumnBold && cellIndex === 0,
+          cellIndex,
         ),
       );
   });

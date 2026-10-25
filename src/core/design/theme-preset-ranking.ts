@@ -54,18 +54,85 @@ const MAX_PER_HUE = 2;
 const MAX_NEUTRAL_PRESETS = 1;
 
 /**
+ * The kind of occasion a preset was drawn for.
+ *
+ * Keywords answer "what is it about"; they cannot answer "what kind of room is
+ * this shown in". A hospital's annual report and a hospital's science talk
+ * share words but not a look. The genre is read from the preset's own scenario
+ * list, so the catalogue stays the single source of truth.
+ */
+export type ThemeGenre = "academic" | "public" | "culture" | "industry" | "consumer" | "business" | "education";
+
+/**
+ * Order matters: the earlier a genre sits, the more specific it is. "合规培训"
+ * is a business deck, not a course, so business is checked before education.
+ */
+const GENRE_PATTERNS: readonly { genre: ThemeGenre; pattern: RegExp }[] = [
+  { genre: "academic", pattern: /学术|论文|答辩|课题|科研|文献|研究/ },
+  { genre: "public", pattern: /政务|党建|政府|政策|公共|医疗|健康|医院|科普|药械/ },
+  { genre: "culture", pattern: /文化|文学|诗词|古典|人文|艺术|展览|博物馆|器物|摄影|画册|古籍|阅读|讲座/ },
+  { genre: "industry", pattern: /制造|工业|汽车|工程|供应链|物流|产线|机械|建筑|地产|室内|景观|城市更新/ },
+  { genre: "consumer", pattern: /时尚|美妆|消费|品牌|营销|创意|新品|生活方式/ },
+  { genre: "business", pattern: /汇报|经营|战略|咨询|提案|金融|投资|年报|财务|融资|路演|报告|合规|审计|风控/ },
+  { genre: "education", pattern: /课程|教学|课件|课堂|培训|学习|校园|教育/ },
+];
+
+export const THEME_GENRE_LABELS: Readonly<Record<ThemeGenre, string>> = {
+  academic: "学术研究",
+  public: "公共与健康",
+  culture: "人文叙事",
+  industry: "工程与制造",
+  consumer: "消费与品牌",
+  business: "经营与汇报",
+  education: "课程教学",
+};
+
+/** The genre a preset was drawn for, read from its own scenarios. */
+export function themePresetGenre(presetId: string): ThemeGenre | undefined {
+  // Scenarios only: the prose `character` describes a mood and produces false
+  // hits ("制造记忆点" is not a manufacturing deck).
+  return genreOfText(themePresetMetadata(presetId).scenarios.join(" "));
+}
+
+function genreOfText(text: string): ThemeGenre | undefined {
+  return GENRE_PATTERNS.find((entry) => entry.pattern.test(text))?.genre;
+}
+
+/** A deck of the same genre is a stronger hint than any page-type bonus. */
+const SAME_GENRE_BONUS = 18;
+/** A deck of a different, specific genre is the look of another profession. */
+const OTHER_GENRE_PENALTY = -14;
+
+/**
+ * Genres that share a room. A manufacturer's annual report is both a business
+ * deck and an industrial one, so neither look is wrong for it.
+ */
+const GENRE_NEIGHBORS: Readonly<Partial<Record<ThemeGenre, readonly ThemeGenre[]>>> = {
+  business: ["industry"],
+  industry: ["business"],
+};
+
+function genresAgree(deck: ThemeGenre | undefined, preset: ThemeGenre | undefined): boolean {
+  if (deck === undefined || preset === undefined) return false;
+  if (deck === preset) return true;
+  return GENRE_NEIGHBORS[deck]?.includes(preset) ?? false;
+}
+
+/**
  * Ranks every built-in preset for one reviewed draft.
  *
  * The first entry is the same preset `inferThemePresetId` would pick when a
  * subject family matches; the rest are scored on content fit, so a data-heavy
  * report prefers the presets that own chart/table pages even when no keyword
- * matched at all.
+ * matched at all. Genre fit separates "a data-friendly template" from "a
+ * template for this kind of occasion".
  */
 export function rankThemePresets(signals: ThemeContentSignals): ThemePresetChoice[] {
   const title = signals.title.toLowerCase();
   const body = (signals.bodyText ?? "").toLowerCase().slice(0, 2000);
   const titleMatches = THEME_PRESET_RULES.filter((rule) => rule.pattern.test(title));
   const bodyMatches = THEME_PRESET_RULES.filter((rule) => !titleMatches.includes(rule) && rule.pattern.test(body));
+  const deckGenre = genreOfText(title);
   const structured = (signals.chartCount ?? 0) + (signals.tableCount ?? 0);
   const charts = signals.chartCount ?? 0;
   const tables = signals.tableCount ?? 0;
@@ -80,9 +147,13 @@ export function rankThemePresets(signals: ThemeContentSignals): ThemePresetChoic
     const pageTypes = metadata.recommendedPageTypes;
     const titleRule = titleMatches.find((rule) => rule.presetId === preset.id);
     const bodyRule = bodyMatches.find((rule) => rule.presetId === preset.id);
+    const presetGenre = themePresetGenre(preset.id);
+    const genreMatches = genresAgree(deckGenre, presetGenre);
     let score = 0;
     if (titleRule) score += titleRule === titleMatches[0] ? 100 : 30;
     if (bodyRule) score += 8;
+    if (genreMatches) score += SAME_GENRE_BONUS;
+    else if (deckGenre !== undefined && presetGenre !== undefined) score += OTHER_GENRE_PENALTY;
     // A structured page only holds together when the preset was drawn for it.
     // A table is the stronger evidence: `dataPages` presets own a real table
     // page, while the general presets only list a chart.
@@ -101,18 +172,30 @@ export function rankThemePresets(signals: ThemeContentSignals): ThemePresetChoic
     // With no subject and no structural evidence, the general-purpose preset
     // is the honest answer rather than whichever palette happens to be first.
     if (!hasAnySignal && structured === 0 && preset.id === DEFAULT_THEME_PRESET_ID) score += 20;
-    return { preset, metadata, score, catalogIndex, titleRule, bodyRule };
+    return { preset, metadata, score, catalogIndex, titleRule, bodyRule, genreMatches, presetGenre };
   });
 
   return scored
     .sort((left, right) => right.score - left.score || left.catalogIndex - right.catalogIndex)
-    .map(({ preset, metadata, score, titleRule, bodyRule }): ThemePresetChoice => ({
-      presetId: preset.id,
-      name: preset.name,
-      description: preset.description,
-      score,
-      reason: reasonFor({ metadata, structured, metrics, images, titleRule, bodyRule, hasAnySignal }),
-    }));
+    .map(
+      ({ preset, metadata, score, titleRule, bodyRule, genreMatches, presetGenre }): ThemePresetChoice => ({
+        presetId: preset.id,
+        name: preset.name,
+        description: preset.description,
+        score,
+        reason: reasonFor({
+          metadata,
+          structured,
+          metrics,
+          images,
+          titleRule,
+          bodyRule,
+          hasAnySignal,
+          genreMatches,
+          presetGenre,
+        }),
+      }),
+    );
 }
 
 interface ReasonInput {
@@ -123,13 +206,17 @@ interface ReasonInput {
   titleRule?: (typeof THEME_PRESET_RULES)[number];
   bodyRule?: (typeof THEME_PRESET_RULES)[number];
   hasAnySignal: boolean;
+  genreMatches: boolean;
+  presetGenre?: ThemeGenre;
 }
 
 function reasonFor(input: ReasonInput): string {
   const parts: string[] = [];
   const label = input.titleRule?.label ?? input.bodyRule?.label;
   if (label) parts.push(`题材匹配「${label}」`);
-  else if (!input.hasAnySignal) parts.push("题材没有明显指向，用通用节奏最稳");
+  else if (input.genreMatches && input.presetGenre) {
+    parts.push(`同类场合「${THEME_GENRE_LABELS[input.presetGenre]}」`);
+  } else if (!input.hasAnySignal) parts.push("题材没有明显指向，用通用节奏最稳");
   else parts.push("题材没有直接命中，按页面类型和正文量匹配");
   if (
     input.structured > 0 &&
