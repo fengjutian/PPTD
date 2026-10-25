@@ -65,9 +65,7 @@ export function rankThemePresets(signals: ThemeContentSignals): ThemePresetChoic
   const title = signals.title.toLowerCase();
   const body = (signals.bodyText ?? "").toLowerCase().slice(0, 2000);
   const titleMatches = THEME_PRESET_RULES.filter((rule) => rule.pattern.test(title));
-  const bodyMatches = THEME_PRESET_RULES.filter(
-    (rule) => !titleMatches.includes(rule) && rule.pattern.test(body),
-  );
+  const bodyMatches = THEME_PRESET_RULES.filter((rule) => !titleMatches.includes(rule) && rule.pattern.test(body));
   const structured = (signals.chartCount ?? 0) + (signals.tableCount ?? 0);
   const charts = signals.chartCount ?? 0;
   const tables = signals.tableCount ?? 0;
@@ -133,7 +131,10 @@ function reasonFor(input: ReasonInput): string {
   if (label) parts.push(`题材匹配「${label}」`);
   else if (!input.hasAnySignal) parts.push("题材没有明显指向，用通用节奏最稳");
   else parts.push("题材没有直接命中，按页面类型和正文量匹配");
-  if (input.structured > 0 && input.metadata.recommendedPageTypes.some((type) => type === "chart" || type === "table")) {
+  if (
+    input.structured > 0 &&
+    input.metadata.recommendedPageTypes.some((type) => type === "chart" || type === "table")
+  ) {
     parts.push(`本稿有 ${input.structured} 个图表或表格页，正好用它推荐的证据页`);
   } else if (input.metrics > 0 && input.metadata.recommendedPageTypes.some((type) => type === "metrics")) {
     parts.push(`本稿有 ${input.metrics} 处关键数字，适合它的指标页`);

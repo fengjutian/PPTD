@@ -32,9 +32,7 @@ export function VariantGalleryDialog({ options, onSelect, onDiscard }: VariantGa
             <Sparkles />
             <div>
               <h2 id="variant-gallery-title">AI 生成了 {options.length} 个版本</h2>
-              <p>
-                同一份已审核内容，{options.length} 套模板。选定后只保留这一版，其余丢弃；内容一个字都不会变。
-              </p>
+              <p>同一份已审核内容，{options.length} 套模板。选定后只保留这一版，其余丢弃；内容一个字都不会变。</p>
             </div>
           </div>
         </div>

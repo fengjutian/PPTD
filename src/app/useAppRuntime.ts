@@ -174,7 +174,10 @@ import {
   summarizeQualityIssues,
   type ReviewEvidence,
 } from "../services/design-quality-stage";
-import { validatePresentationVisualQuality, type PresentationQualityIssue } from "../services/presentation-quality-gate";
+import {
+  validatePresentationVisualQuality,
+  type PresentationQualityIssue,
+} from "../services/presentation-quality-gate";
 import { DisabledVisionReviewPort, TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
@@ -3257,7 +3260,7 @@ export function useAppRuntime() {
       // is choosing between, and eight different skeletons would make the
       // comparison about composition instead of the look they asked for.
       setDesignProgress({ percent: 6, label: "正在确定整册设计方向" });
-      setDesignDetail(`基准方向按「${topPreset.name}」的气质生成，八个版本共用它`);
+      setDesignDetail(`基准方向按「${topPreset.name}」的气质生成，${plan.length} 个版本共用它`);
       let baseConcept: AiDeckConcept;
       try {
         baseConcept = await generateDeckConcepts(sourceDraft, briefs, presetTemplateAnalysis(topPreset), {
@@ -3311,6 +3314,9 @@ export function useAppRuntime() {
             designs: design.slides,
             designConcept: concept,
             themePresetId: preset.id,
+            // Same background rhythm the kept version will get, so the card's
+            // issue count is measured on the composition the user sees.
+            backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
           });
           const issues = validatePresentationVisualQuality(candidate, design.slides).issues;
           const pages = buildDirectionPreviewPages({
@@ -3349,7 +3355,7 @@ export function useAppRuntime() {
       if (variants.length === 0) {
         setDesignProgress({ percent: 0, label: "批量生成失败" });
         setDesignDetail("所有版本都没能排出来，原因已写入诊断日志");
-        setTaskStatus("批量生成失败：八个版本都没有产出，请改用单版本生成或稍后重试");
+        setTaskStatus(`批量生成失败：${plan.length} 个版本都没有产出，请改用单版本生成或稍后重试`);
         return;
       }
       setVariantOptions(variants);

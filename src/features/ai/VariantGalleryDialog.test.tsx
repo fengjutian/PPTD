@@ -29,9 +29,7 @@ const noop = () => undefined;
 
 describe("VariantGalleryDialog", () => {
   it("shows one card per generated version with its previews", () => {
-    const markup = renderToStaticMarkup(
-      <VariantGalleryDialog options={OPTIONS} onSelect={noop} onDiscard={noop} />,
-    );
+    const markup = renderToStaticMarkup(<VariantGalleryDialog options={OPTIONS} onSelect={noop} onDiscard={noop} />);
     expect((markup.match(/class="variant-gallery-card"/g) ?? []).length).toBe(2);
     expect((markup.match(/aria-label="使用版本：/g) ?? []).length).toBe(2);
     expect(markup).toContain("AI 生成了 2 个版本");
@@ -40,9 +38,7 @@ describe("VariantGalleryDialog", () => {
   });
 
   it("marks only the first card as the recommendation and reports the measured issues", () => {
-    const markup = renderToStaticMarkup(
-      <VariantGalleryDialog options={OPTIONS} onSelect={noop} onDiscard={noop} />,
-    );
+    const markup = renderToStaticMarkup(<VariantGalleryDialog options={OPTIONS} onSelect={noop} onDiscard={noop} />);
     expect((markup.match(/AI 推荐/g) ?? []).length).toBe(1);
     expect(markup).toContain("排版检查通过");
     expect(markup).toContain("2 处排版待调整");

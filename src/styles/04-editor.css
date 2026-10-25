@@ -1109,13 +1109,42 @@
   background: #fff;
   border-color: #e3c3ba;
 }
-.template-picker-batch-progress {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #4a5c6e;
-  font-size: 10px;
-  white-space: nowrap;
+/*
+ * The default theme keeps `.upload-dialog` dark. The older picker panels assume
+ * the light surface, but this row sits at the top of the dialog, so it has to
+ * match the surface it is drawn on rather than the panels below it.
+ */
+:root:not([data-theme="light"]):not([data-theme="blue"]):not([data-theme="green"]):not([data-theme="amber"])
+  .template-picker-batch {
+  border-color: #33455c;
+  background: linear-gradient(180deg, #1f2937 0%, #1b232e 100%);
+}
+:root:not([data-theme="light"]):not([data-theme="blue"]):not([data-theme="green"]):not([data-theme="amber"])
+  .template-picker-batch-copy
+  strong {
+  color: #e7edf5;
+}
+:root:not([data-theme="light"]):not([data-theme="blue"]):not([data-theme="green"]):not([data-theme="amber"])
+  .template-picker-batch-copy
+  small,
+:root:not([data-theme="light"]):not([data-theme="blue"]):not([data-theme="green"]):not([data-theme="amber"])
+  .template-picker-batch-controls
+  label {
+  color: #9fb0c3;
+}
+:root:not([data-theme="light"]):not([data-theme="blue"]):not([data-theme="green"]):not([data-theme="amber"])
+  .template-picker-batch-controls
+  select {
+  border-color: #3a4a5e;
+  color: #e7edf5;
+  background: #202a36;
+}
+:root:not([data-theme="light"]):not([data-theme="blue"]):not([data-theme="green"]):not([data-theme="amber"])
+  .template-picker-batch-controls
+  button.batch-cancel {
+  border-color: #5a3a35;
+  color: #f0a58f;
+  background: #241d1b;
 }
 .background-task-card {
   position: fixed;

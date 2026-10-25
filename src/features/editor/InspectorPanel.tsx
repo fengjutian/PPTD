@@ -1,5 +1,5 @@
-﻿import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { loadSettings } from "../../services/settings";
+﻿import { memo, useEffect, useRef, useState } from "react";
+
 import { ICON_LABELS, ICON_NAMES } from "./icon-options";
 import { IconGlyph } from "./IconView";
 import {
@@ -13,11 +13,9 @@ import {
   ArrowUp,
   Bold,
   BringToFront,
-  ChevronDown,
   CircleAlert,
   Copy,
   Eraser,
-  ImagePlus,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -31,7 +29,6 @@ import {
   RotateCcw,
   SendToBack,
   Square,
-  Stethoscope,
   Strikethrough,
   Trash2,
   Type,
@@ -42,7 +39,6 @@ import {
   type AssetProvenance,
   type ChartKind,
   type ContentBlock,
-  type ElementId,
   type Emu,
   type ImageCrop,
   type LineDirection,
@@ -53,13 +49,12 @@ import {
   type SlideElement,
   type SlideId,
   type SlideTransition,
-  type SupportedImageMimeType,
   type TextElementStyle,
   resolveFragmentStyle,
   textFragments,
 } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
-import { lintTaste, type TasteIssue } from "../../core/design/taste-lint";
+
 import {
   colorLuminance,
   contrastRatio,
@@ -72,8 +67,8 @@ import { textLikelyOverflows } from "../../core/rendering/text-fit";
 import { useEditorStore } from "../../store/editor-store";
 import { PageProperties } from "./PagePropertiesPanel";
 import { DirectionPanel, InspectorSection, TastePanel } from "./InspectorPanels";
-import { ColorField, NumberField, SelectField, TextAreaField, TextField } from "./inspector-fields";
-import { emuToUnit, resizeWithAspectLock, unitLabel, unitToEmu, type LengthUnit } from "./inspector-geometry";
+import { ColorField, NumberField, SelectField, TextField } from "./inspector-fields";
+import { emuToUnit, resizeWithAspectLock, unitToEmu, type LengthUnit } from "./inspector-geometry";
 import { AlignGrid, type AlignCell } from "./AlignGrid";
 import { MetricFields, TableDataFields, type MetricFieldValue } from "./StructuredContentFields";
 import { MultiSelectionPanel } from "./MultiSelectionPanel";
@@ -81,7 +76,6 @@ import { unionFrame } from "../../core/commands/arrange";
 import { ElementPreview } from "./ElementPreview";
 import { paletteSwatches } from "./inspector-palette";
 import { FONT_OPTIONS } from "./font-options";
-import { TransitionControls } from "./TransitionControls";
 
 const ROTATION_PRESETS = [0, 90, 180, 270] as const;
 
