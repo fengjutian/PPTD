@@ -4212,7 +4212,8 @@ button {
 .theme-drawer-actions .theme-sample-action svg {
   width: 14px;
 }
-.theme-specimen-backdrop {
+/* The drawer is 80; the shared dialog base is 20 and is declared later. */
+.upload-dialog-backdrop.theme-specimen-backdrop {
   z-index: 120;
 }
 .theme-ai-prompt-heading {

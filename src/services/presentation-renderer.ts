@@ -7,11 +7,13 @@ import {
   type ChartElement,
   type LineElement,
   type PresentationDocument,
+  type ResolvedChartData,
   type Slide,
   type TableElement,
   type TextElement,
 } from "../core/document-model";
 import { breakAtoms } from "../core/rendering/cjk-linebreak";
+import { chartPlotArea, chartValueY, niceChartDomain } from "../core/rendering/chart-geometry";
 import { isLargeText } from "../core/rendering/contrast";
 import { cropGeometry } from "../core/rendering/image-crop";
 import { resolveImageUrl } from "./image-url-service";
@@ -245,11 +247,12 @@ function drawLine(
 }
 
 /**
- * Draws a native chart as bars for the visual review.
+ * Draws a native chart for the visual review.
  *
- * The review sees a picture of the page, so a chart has to be drawn here as
- * well. The numbers come from the same reviewed metric blocks the export
- * reads, so the reviewer judges the numbers that will be in the file.
+ * The review sees a picture of the page, so every chart kind the editor can
+ * show has to be drawn here as well. The numbers come from the same reviewed
+ * metric blocks the export reads, so the reviewer judges the numbers that will
+ * be in the file.
  */
 function drawChart(
   context: CanvasRenderingContext2D,
@@ -259,30 +262,283 @@ function drawChart(
   height: number,
 ): void {
   const resolved = resolveChartData(slide, element);
-  if (!resolved) return;
-  const allValues = resolved.series.flatMap((series) => series.values);
-  const max = Math.max(...allValues.map((value) => Math.abs(value)), 1);
-  const slot = width / resolved.categories.length;
-  const plotHeight = height * 0.72;
-  const labelSize = Math.max(9, height * 0.06);
-  context.font = `${labelSize}px "${element.style.fontFamily}"`;
-  context.textBaseline = "bottom";
+  if (!resolved || resolved.categories.length === 0 || resolved.series.length === 0) return;
+  const fontSize = Math.max(9, Math.min(18, height * 0.055));
+  const color = (index: number) => chartSeriesColor(element, index);
+
+  context.save();
+  context.lineJoin = "round";
+  context.lineCap = "round";
+  if (element.kind === "pie") {
+    drawPieChart(context, element, resolved, width, height, fontSize);
+  } else if (element.kind === "bar") {
+    drawBarChart(context, element, resolved, width, height, fontSize);
+  } else {
+    drawCartesianChart(context, element, resolved, width, height, fontSize, color, slide.background);
+  }
+  context.restore();
+}
+
+function chartSeriesColor(element: ChartElement, index: number): string {
+  const colors = element.style.seriesColors;
+  return colors[index % colors.length] ?? "#3366CC";
+}
+
+/** Canvas has no alpha-aware hex parser; charts only ever carry #RRGGBB. */
+function withAlpha(color: string, alpha: number): string {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) return color;
+  const value = Number.parseInt(match[1]!, 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
+function fitLabel(context: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (context.measureText(text).width <= maxWidth) return text;
+  let value = text;
+  while (value.length > 1 && context.measureText(`${value}…`).width > maxWidth) value = value.slice(0, -1);
+  return `${value}…`;
+}
+
+function drawCartesianChart(
+  context: CanvasRenderingContext2D,
+  element: ChartElement,
+  resolved: ResolvedChartData,
+  width: number,
+  height: number,
+  fontSize: number,
+  color: (index: number) => string,
+  background: string,
+): void {
+  const family = element.style.fontFamily;
+  const ink = element.style.textColor;
+  const plot = chartPlotArea(width, height, fontSize);
+  const values = resolved.series.flatMap((series) => series.values);
+  const domain = niceChartDomain(Math.min(...values, 0), Math.max(...values, 1));
+  const valueLabel = (value: number) => formatChartValue(value, resolved.unit);
+  const axisLabel = (value: number) => formatChartValue(value, "");
+  const slot = plot.width / resolved.categories.length;
+  // A line uses the full plot width; columns sit at the centre of their slot so
+  // every bar has equal air on both sides.
+  const xAt = (index: number) =>
+    element.kind === "line"
+      ? plot.left +
+        (resolved.categories.length === 1 ? plot.width / 2 : (index / (resolved.categories.length - 1)) * plot.width)
+      : plot.left + slot * (index + 0.5);
+
+  // Value grid and its labels. The baseline is the only line strong enough to
+  // read as an axis; the rest stay faint so the data marks remain the focus.
+  for (let tick = 0; tick <= 3; tick += 1) {
+    const value = domain.max - ((domain.max - domain.min) * tick) / 3;
+    const y = chartValueY(value, domain, plot);
+    context.strokeStyle = withAlpha(ink, tick === 3 ? 0.3 : 0.11);
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(plot.left, y);
+    context.lineTo(plot.right, y);
+    context.stroke();
+    context.fillStyle = withAlpha(ink, 0.62);
+    context.font = `${fontSize * 0.9}px "${family}"`;
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+    context.fillText(fitLabel(context, axisLabel(value), plot.left - fontSize * 0.6), plot.left - fontSize * 0.55, y);
+  }
+
+  // Category labels live in the bottom gutter, not on the plot baseline.
+  context.strokeStyle = withAlpha(ink, 0.06);
+  context.lineWidth = 1;
+  resolved.categories.forEach((_category, index) => {
+    context.beginPath();
+    context.moveTo(xAt(index), plot.top);
+    context.lineTo(xAt(index), plot.bottom);
+    context.stroke();
+  });
+  context.fillStyle = withAlpha(ink, 0.78);
+  context.font = `${fontSize}px "${family}"`;
   context.textAlign = "center";
-  const groupWidth = slot * 0.56;
-  const barWidth = groupWidth / Math.max(1, resolved.series.length);
-  resolved.categories.forEach((category, categoryIndex) => {
+  context.textBaseline = "top";
+  resolved.categories.forEach((category, index) => {
+    context.fillText(fitLabel(context, category, slot - fontSize * 0.5), xAt(index), plot.bottom + fontSize * 0.6);
+  });
+
+  if (element.kind === "line") {
+    resolved.series.forEach((series, seriesIndex) => {
+      const points = series.values.map((value, index) => ({ x: xAt(index), y: chartValueY(value, domain, plot) }));
+      const seriesColor = color(seriesIndex);
+      // A single series gets a soft area below the line so three points do not
+      // float in an empty rectangle. Multi-series stays line-only.
+      if (resolved.series.length === 1 && points.length > 1) {
+        const area = context.createLinearGradient(0, plot.top, 0, plot.bottom);
+        area.addColorStop(0, withAlpha(seriesColor, 0.2));
+        area.addColorStop(1, withAlpha(seriesColor, 0));
+        context.beginPath();
+        context.moveTo(points[0]!.x, plot.bottom);
+        for (const point of points) context.lineTo(point.x, point.y);
+        context.lineTo(points[points.length - 1]!.x, plot.bottom);
+        context.closePath();
+        context.fillStyle = area;
+        context.fill();
+      }
+      context.beginPath();
+      points.forEach((point, index) =>
+        index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y),
+      );
+      context.strokeStyle = seriesColor;
+      context.lineWidth = Math.max(2, fontSize * 0.18);
+      context.stroke();
+      for (const point of points) {
+        context.beginPath();
+        context.arc(point.x, point.y, Math.max(3, fontSize * 0.3), 0, Math.PI * 2);
+        context.fillStyle = background;
+        context.fill();
+        context.strokeStyle = seriesColor;
+        context.lineWidth = Math.max(2, fontSize * 0.16);
+        context.stroke();
+      }
+      if (element.style.showValueLabels && resolved.series.length === 1) {
+        context.fillStyle = ink;
+        context.font = `600 ${fontSize * 0.95}px "${family}"`;
+        context.textAlign = "center";
+        context.textBaseline = "bottom";
+        points.forEach((point, index) => {
+          const text = valueLabel(series.values[index] ?? 0);
+          context.fillText(text, point.x, Math.max(plot.top + fontSize, point.y - fontSize * 0.55));
+        });
+      }
+    });
+    return;
+  }
+
+  // Column chart: bars grow from the baseline and are capped so three months do
+  // not become three full-width blocks.
+  const groupWidth = Math.min(slot * 0.62, fontSize * 7);
+  const barWidth = groupWidth / resolved.series.length;
+  const gap = resolved.series.length > 1 ? Math.min(3, barWidth * 0.12) : 0;
+  resolved.categories.forEach((_category, categoryIndex) => {
     resolved.series.forEach((series, seriesIndex) => {
       const value = series.values[categoryIndex] ?? 0;
-      const barHeight = (Math.abs(value) / max) * plotHeight;
-      const x = categoryIndex * slot + (slot - groupWidth) / 2 + seriesIndex * barWidth;
-      context.fillStyle = element.style.seriesColors[seriesIndex % element.style.seriesColors.length] ?? "#3366CC";
-      context.fillRect(x, height - plotHeight - barHeight, barWidth, barHeight);
-      context.fillStyle = element.style.textColor;
-      if (element.style.showValueLabels && resolved.series.length === 1)
-        context.fillText(formatChartValue(value, resolved.unit), x + barWidth / 2, height - plotHeight - barHeight - 2);
+      const y = chartValueY(value, domain, plot);
+      const x = xAt(categoryIndex) - groupWidth / 2 + seriesIndex * barWidth;
+      context.fillStyle = color(seriesIndex);
+      context.fillRect(x, y, Math.max(1, barWidth - gap), plot.bottom - y);
     });
-    context.fillStyle = element.style.textColor;
-    context.fillText(category.slice(0, 6), categoryIndex * slot + slot / 2, height);
+  });
+  if (element.style.showValueLabels && resolved.series.length === 1) {
+    context.fillStyle = ink;
+    context.font = `600 ${fontSize * 0.95}px "${family}"`;
+    context.textAlign = "center";
+    context.textBaseline = "bottom";
+    resolved.categories.forEach((_category, index) => {
+      const value = resolved.series[0]!.values[index] ?? 0;
+      const y = chartValueY(value, domain, plot);
+      context.fillText(valueLabel(value), xAt(index), Math.max(plot.top + fontSize, y - fontSize * 0.35));
+    });
+  }
+}
+
+function drawBarChart(
+  context: CanvasRenderingContext2D,
+  element: ChartElement,
+  resolved: ResolvedChartData,
+  width: number,
+  height: number,
+  fontSize: number,
+): void {
+  const family = element.style.fontFamily;
+  const ink = element.style.textColor;
+  const base = chartPlotArea(width, height, fontSize);
+  context.font = `${fontSize}px "${family}"`;
+  const widest = Math.max(...resolved.categories.map((category) => context.measureText(category).width));
+  const labelWidth = Math.min(width * 0.36, Math.max(fontSize * 3, widest + fontSize * 0.8));
+  const plot = { ...base, left: labelWidth, width: Math.max(1, base.right - labelWidth) };
+  const values = resolved.series.flatMap((series) => series.values);
+  const domain = niceChartDomain(Math.min(...values, 0), Math.max(...values, 1));
+  const span = domain.max - domain.min || 1;
+  const zeroX = plot.left + (-domain.min / span) * plot.width;
+  const valueLabel = (value: number) => formatChartValue(value, resolved.unit);
+  const slot = plot.height / resolved.categories.length;
+  const groupHeight = Math.min(slot * 0.62, fontSize * 3.2);
+  const barHeight = groupHeight / resolved.series.length;
+  const gap = resolved.series.length > 1 ? Math.min(3, barHeight * 0.12) : 0;
+
+  context.font = `${fontSize}px "${family}"`;
+  context.strokeStyle = withAlpha(ink, 0.22);
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(zeroX, plot.top);
+  context.lineTo(zeroX, plot.bottom);
+  context.stroke();
+
+  resolved.categories.forEach((category, categoryIndex) => {
+    const center = plot.top + slot * (categoryIndex + 0.5);
+    context.fillStyle = withAlpha(ink, 0.78);
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+    context.fillText(fitLabel(context, category, labelWidth - fontSize * 0.8), plot.left - fontSize * 0.55, center);
+    const groupTop = center - groupHeight / 2;
+    resolved.series.forEach((series, seriesIndex) => {
+      const value = series.values[categoryIndex] ?? 0;
+      const barWidth = (value / span) * plot.width;
+      const x = barWidth >= 0 ? zeroX : zeroX + barWidth;
+      const y = groupTop + seriesIndex * barHeight;
+      context.fillStyle = chartSeriesColor(element, seriesIndex);
+      context.fillRect(x, y, Math.max(1, Math.abs(barWidth)), Math.max(1, barHeight - gap));
+      if (element.style.showValueLabels && resolved.series.length === 1) {
+        const text = valueLabel(value);
+        const textX = x + Math.abs(barWidth) + fontSize * 0.4;
+        const fits = textX + context.measureText(text).width <= width - fontSize * 0.4;
+        context.fillStyle = fits ? ink : "#FFFFFF";
+        context.textAlign = fits ? "left" : "right";
+        context.textBaseline = "middle";
+        context.fillText(text, fits ? textX : x + Math.abs(barWidth) - fontSize * 0.3, y + barHeight / 2);
+        context.font = `${fontSize}px "${family}"`;
+      }
+    });
+  });
+}
+
+function drawPieChart(
+  context: CanvasRenderingContext2D,
+  element: ChartElement,
+  resolved: ResolvedChartData,
+  width: number,
+  height: number,
+  fontSize: number,
+): void {
+  const values = (resolved.series[0]?.values ?? []).map((value) => Math.abs(value));
+  const total = values.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return;
+  const family = element.style.fontFamily;
+  const ink = element.style.textColor;
+  const radius = Math.min(height * 0.36, width * 0.24);
+  const inner = radius * 0.58;
+  const centerX = width * 0.3;
+  const centerY = height * 0.5;
+  let angle = -Math.PI / 2;
+  values.forEach((value, index) => {
+    const sweep = (value / total) * Math.PI * 2;
+    const gap = values.length > 1 ? Math.min(0.012, sweep * 0.08) : 0;
+    context.beginPath();
+    context.arc(centerX, centerY, radius, angle + gap / 2, angle + sweep - gap / 2);
+    context.arc(centerX, centerY, inner, angle + sweep - gap / 2, angle + gap / 2, true);
+    context.closePath();
+    context.fillStyle = chartSeriesColor(element, index);
+    context.fill();
+    angle += sweep;
+  });
+
+  const legendX = Math.min(width * 0.56, centerX + radius + fontSize * 1.8);
+  const itemHeight = fontSize * 1.8;
+  const startY = centerY - (resolved.categories.length * itemHeight) / 2;
+  context.font = `${fontSize}px "${family}"`;
+  context.textAlign = "left";
+  context.textBaseline = "middle";
+  resolved.categories.forEach((category, index) => {
+    const y = startY + itemHeight * index + itemHeight / 2;
+    context.fillStyle = chartSeriesColor(element, index);
+    context.fillRect(legendX, y - fontSize * 0.35, fontSize * 0.7, fontSize * 0.7);
+    context.fillStyle = ink;
+    const label = `${category}  ${formatChartValue(values[index] ?? 0, resolved.unit)}`;
+    context.fillText(fitLabel(context, label, width - legendX - fontSize * 1.6), legendX + fontSize * 1.1, y);
   });
 }
 

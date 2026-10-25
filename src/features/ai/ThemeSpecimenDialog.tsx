@@ -28,7 +28,7 @@ export function ThemeSpecimenDialog({ presetId, onClose, aboveDrawer = false }: 
     void (async () => {
       try {
         const document = buildSpecimenDocument({ themePresetId: presetId });
-        const rendered = await renderPresentationForVisualReview(document, 480);
+        const rendered = await renderPresentationForVisualReview(document, 960);
         if (!cancelled) setState({ images: rendered.slides });
       } catch {
         // The palette card is still a usable fallback; never leave a blank modal.

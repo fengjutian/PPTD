@@ -12,8 +12,10 @@
 import { applyCommand } from "../core/commands";
 import { createDocument, type PresentationDocument } from "../core/document-model";
 import { defaultConceptForPreset, resolveDeckConcept, type ConceptPresetId } from "../core/design/deck-concept";
+import { defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import type { AiSlideDesign, AiSlideDraft } from "../core/commands";
 import type { CompositionFacts } from "../core/commands/design-intent";
+import { parseHexColor } from "../core/rendering/contrast";
 import { encodePng, type PixelImage } from "../core/rendering/png";
 
 const slides: AiSlideDraft[] = [
@@ -130,6 +132,7 @@ export function buildSpecimenDocument(options: SpecimenOptions = {}): Presentati
     pageCount: slides.length,
     id: "theme-specimen",
   }).concept;
+  const preset = findThemePreset(options.themePresetId ?? "editorial-teal") ?? defaultThemePreset();
   const document = createDocument();
   applyCommand(document, {
     type: "apply-ai-designed-draft",
@@ -137,11 +140,11 @@ export function buildSpecimenDocument(options: SpecimenOptions = {}): Presentati
     slides,
     designs,
     designConcept: concept,
-    themePresetId: options.themePresetId ?? "editorial-teal",
+    themePresetId: preset.id,
     visualAssets: [
       {
         slideIndex: 6,
-        dataUrl: specimenImage(),
+        dataUrl: specimenImage(preset),
         mimeType: "image/png",
         naturalWidth: 320,
         naturalHeight: 180,
@@ -154,17 +157,50 @@ export function buildSpecimenDocument(options: SpecimenOptions = {}): Presentati
 
 export const SPECIMEN_PAGE_COUNT = slides.length;
 
-/** A deterministic gradient stands in for a photograph in the sample deck. */
-function specimenImage(): string {
+type Rgb = [number, number, number];
+
+function mix(from: Rgb, to: Rgb, amount: number): Rgb {
+  const t = Math.max(0, Math.min(1, amount));
+  return [
+    Math.round(from[0] + (to[0] - from[0]) * t),
+    Math.round(from[1] + (to[1] - from[1]) * t),
+    Math.round(from[2] + (to[2] - from[2]) * t),
+  ];
+}
+
+function presetColor(preset: ThemePreset, slot: string, fallback: Rgb): Rgb {
+  const value = preset.theme.colors.find((color) => color.name === slot)?.value;
+  return value ? (parseHexColor(value) ?? fallback) : fallback;
+}
+
+/**
+ * A deterministic abstract image stands in for a photograph in the sample deck.
+ *
+ * The image is built from the preset's own palette instead of a fixed teal: a
+ * specimen for a burgundy theme must not show a green picture. Two soft glows
+ * keep it from reading as a flat colour swatch.
+ */
+function specimenImage(preset: ThemePreset): string {
   const width = 320;
   const height = 180;
+  const primary = presetColor(preset, "primary", [30, 53, 80]);
+  const accent = presetColor(preset, "accent", [15, 120, 105]);
+  const accent3 = presetColor(preset, "accent3", [214, 168, 75]);
+  const surface = presetColor(preset, "surface", [255, 255, 255]);
   const data = new Uint8ClampedArray(width * height * 4);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
+      const nx = x / (width - 1);
+      const ny = y / (height - 1);
+      const diagonal = nx * 0.62 + (1 - ny) * 0.38;
+      const base = mix(primary, accent, diagonal);
+      const highlight = Math.max(0, 1 - Math.hypot(nx - 0.76, ny - 0.22) / 0.5);
+      const warm = Math.max(0, 1 - Math.hypot(nx - 0.18, ny - 0.82) / 0.45);
+      const [red, green, blue] = mix(mix(base, surface, highlight * highlight * 0.35), accent3, warm * warm * 0.18);
       const offset = (y * width + x) * 4;
-      data[offset] = 18 + Math.round((x / width) * 24);
-      data[offset + 1] = 92 + Math.round((y / height) * 58);
-      data[offset + 2] = 84 + Math.round((x / width) * 40);
+      data[offset] = red;
+      data[offset + 1] = green;
+      data[offset + 2] = blue;
       data[offset + 3] = 255;
     }
   }
