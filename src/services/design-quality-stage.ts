@@ -747,6 +747,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
                   ? (template.majorFont ?? template.minorFont)
                   : (template.minorFont ?? template.majorFont);
               if (fontFamily) action = { action: "restyle", target: issue.role, fontFamily };
+            } else if (issue.code === "template-palette" && issue.role !== undefined) {
+              const resolved = templateTargetForSlide(document, options.template, issue.slideIndex);
+              const color = issue.role === "title" ? resolved.titleInk : resolved.bodyInk;
+              if (color) action = { action: "restyle", target: issue.role, color };
             }
             if (!action) continue;
             const existing = bySlide.get(issue.slideIndex);
@@ -755,7 +759,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               if (candidate.action !== action!.action || candidate.target !== action!.target) return false;
               if (action!.action === "move") return true;
               if (candidate.action !== "restyle" || action!.action !== "restyle") return false;
-              return candidate.fontFamily === action!.fontFamily;
+              return candidate.fontFamily === action!.fontFamily && candidate.color === action!.color;
             });
             if (duplicate) continue;
             const repair = existing ?? {

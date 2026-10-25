@@ -343,10 +343,22 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
                   <ul>
                     {memoryDetails.looks.map((look) => (
                       <li key={look.id}>
-                        <span>
-                          {look.concept === "documentary" ? "纪实全幅" : "编辑式"} · {look.pageCount} 页 ·{" "}
-                          {new Date(look.createdAt).toLocaleDateString("zh-CN")}
-                        </span>
+                        <div className="settings-memory-look">
+                          <span>
+                            {look.concept === "documentary" ? "纪实全幅" : "编辑式"} · {look.pageCount} 页 ·{" "}
+                            {new Date(look.createdAt).toLocaleDateString("zh-CN")}
+                          </span>
+                          <small>
+                            {look.fonts.major || "未记录字体"} / {look.fonts.minor || "未记录字体"}
+                          </small>
+                          {look.palette.length > 0 && (
+                            <span className="settings-memory-swatches">
+                              {look.palette.slice(0, 6).map((color) => (
+                                <i key={color} style={{ background: color }} title={color} />
+                              ))}
+                            </span>
+                          )}
+                        </div>
                         <button
                           type="button"
                           aria-label={t("settings.memory.remove")}
@@ -367,7 +379,9 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
                   <ul>
                     {memoryDetails.preferences.map((preference) => (
                       <li key={preference.id}>
-                        <span>“{preference.text}”</span>
+                        <span>
+                          “{preference.text}” <small className="settings-memory-scope">{preference.scope}</small>
+                        </span>
                         <button
                           type="button"
                           aria-label={t("settings.memory.remove")}

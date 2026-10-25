@@ -10714,3 +10714,32 @@ button {
 .settings-memory-details button:hover {
   color: #f0a58f;
 }
+
+.settings-memory-look {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.settings-memory-look small {
+  color: #777b82;
+  font-size: 10px;
+}
+.settings-memory-swatches {
+  display: flex;
+  gap: 3px;
+}
+.settings-memory-swatches i {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #3a3d44;
+  border-radius: 3px;
+}
+.settings-memory-scope {
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid #3a3d44;
+  border-radius: 999px;
+  color: #777b82;
+  font-size: 9px;
+}

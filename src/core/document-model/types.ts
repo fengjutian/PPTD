@@ -618,6 +618,9 @@ export interface TemplateLayoutTarget {
   grid: TemplateGrid;
   titleSizePt?: number;
   bodySizePt?: number;
+  /** Ink the template assigned to its title/body placeholder. */
+  titleInk?: string;
+  bodyInk?: string;
   /** Cover, section, quote and image-led pages may break the content grid. */
   freeComposition: boolean;
 }
@@ -639,6 +642,8 @@ export interface TemplateReviewTarget {
   palette: string[];
   majorFont?: string;
   minorFont?: string;
+  titleInk?: string;
+  bodyInk?: string;
   titleSizePt?: number;
   bodySizePt?: number;
   alignment: "left-grid" | "centered-grid";

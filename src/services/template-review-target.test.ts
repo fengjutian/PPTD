@@ -125,6 +125,8 @@ describe("template review target", () => {
     expect(target!.grid.titleY).toBeCloseTo(0.086667, 3);
     expect(target!.titleSizePt).toBe(28);
     expect(target!.bodySizePt).toBe(16);
+    expect(target!.titleInk).toBe("#111827");
+    expect(target!.bodyInk).toBe("#293241");
     expect(target!.alignment).toBe("left-grid");
     expect(target!.confidence).toBe("high");
     expect(target!.palette).toContain("#0EA58C");

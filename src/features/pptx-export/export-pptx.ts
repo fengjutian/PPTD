@@ -28,6 +28,7 @@ import { patchImageCrops } from "./image-crop-xml";
 import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
 import { lintTaste } from "../../core/design/taste-lint";
+import { checkTemplateFit, templateTargetMatchesDocument } from "../../services/template-review-target";
 import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
 const inch = (value: number) => value / EMU_PER_INCH;
@@ -76,6 +77,18 @@ export interface ExportReport {
    * run; an empty `codes` with zero counts means it ran and found nothing.
    */
   tasteLint?: ExportTasteSummary;
+  /**
+   * Template adherence measured at export time. Absent when the document has
+   * no persisted template target.
+   */
+  templateFit?: {
+    checked: boolean;
+    score: number;
+    threshold: number;
+    passed: boolean;
+    issueCount: number;
+    hardFailures: number;
+  };
   /**
    * Independent read-back of the written package. Absent only if the check
    * itself failed before producing a report.
@@ -587,6 +600,28 @@ export async function buildPptx(
           }
         })();
 
+  const templateFit = (() => {
+    if (!document.templateStyle) return undefined;
+    // An old target must not describe a deck whose page size, theme or
+    // layouts were changed after generation.
+    if (!templateTargetMatchesDocument(document.templateStyle, document)) return undefined;
+    try {
+      const fit = checkTemplateFit(document, document.templateStyle);
+      return {
+        checked: fit.checked,
+        score: fit.score,
+        threshold: fit.threshold,
+        passed: fit.passed,
+        issueCount: fit.issues.length,
+        hardFailures: fit.hardFailures,
+      };
+    } catch {
+      // The export report must not claim template adherence it could not
+      // measure. A missing result is different from a passing one.
+      return undefined;
+    }
+  })();
+
   return {
     bytes,
     report: {
@@ -604,6 +639,7 @@ export async function buildPptx(
       nativeAnimationSkipped: animationResult.skipped,
       assetProvenance,
       ...(tasteLint ? { tasteLint } : {}),
+      ...(templateFit ? { templateFit } : {}),
       parity,
       warnings: [...issues.map((issue) => issue.message), ...animationWarnings],
       issues,

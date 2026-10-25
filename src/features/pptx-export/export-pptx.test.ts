@@ -36,6 +36,48 @@ function templateDocument(): PresentationDocument {
 }
 
 describe("PPTX export", () => {
+  it("reports template adherence at export when a target is persisted", async () => {
+    const document = templateDocument();
+    const title = document.slides[0]!.elements.find(
+      (element) => element.type === "text" && element.contentRef === "title",
+    )!;
+    const width = document.pageSize.width;
+    const height = document.pageSize.height;
+    const grid = {
+      left: title.frame.x / width,
+      right: (title.frame.x + title.frame.width) / width,
+      top: title.frame.y / height,
+      bottom: (title.frame.y + title.frame.height) / height,
+      titleX: title.frame.x / width,
+      titleY: title.frame.y / height,
+      titleWidth: title.frame.width / width,
+      titleHeight: title.frame.height / height,
+      bodyTop: title.frame.y / height,
+      bodyBottom: (title.frame.y + title.frame.height) / height,
+    };
+    document.templateStyle = {
+      name: document.theme!.name,
+      page: { widthEmu: width, heightEmu: height },
+      grid,
+      layouts: [
+        {
+          name: document.layouts![0]!.name,
+          grid,
+          titleSizePt: title.type === "text" ? title.style.fontSizePt : undefined,
+          freeComposition: false,
+        },
+      ],
+      palette: [],
+      alignment: "left-grid",
+      confidence: "high",
+      minimumFit: 90,
+      tolerances: { axis: 0.01, axisY: 0.005, margin: 0.01, fontSizePt: 1.5, colorChannel: 12 },
+    };
+    const result = await buildPptx(document);
+    expect(result.report.templateFit).toMatchObject({ checked: true, passed: true });
+    expect(result.report.templateFit?.score).toBeGreaterThanOrEqual(90);
+  });
+
   it("reports editor groups as flattened native objects", async () => {
     const document = createDocument();
     const slide = document.slides[0]!;

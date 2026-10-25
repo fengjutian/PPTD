@@ -6704,6 +6704,11 @@ export function App() {
                     {exportReport.tasteLint
                       ? ` · 体检 ${exportReport.tasteLint.hard} 硬底线 / ${exportReport.tasteLint.soft} 提示`
                       : " · 体检未执行"}
+                    {exportReport.templateFit
+                      ? exportReport.templateFit.checked
+                        ? ` · 模板符合度 ${exportReport.templateFit.score}/100${exportReport.templateFit.passed ? "" : "（未达标）"}`
+                        : " · 模板符合度未执行"
+                      : ""}
                     {exportReport.parity
                       ? exportReport.parity.passed
                         ? ` · 回读 ${exportReport.parity.checked.slides} 页通过`

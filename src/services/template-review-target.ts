@@ -135,7 +135,15 @@ function layoutGrid(
   layout: TemplateLayoutSummary,
   widthEmu: number,
   heightEmu: number,
-): { grid: TemplateGrid; titleSizePt?: number; bodySizePt?: number } | undefined {
+):
+  | {
+      grid: TemplateGrid;
+      titleSizePt?: number;
+      bodySizePt?: number;
+      titleInk?: string;
+      bodyInk?: string;
+    }
+  | undefined {
   const title = layout.regions.find((region) => region.role === "title");
   const bodies = layout.regions
     .filter((region) => region.role === "body")
@@ -158,10 +166,14 @@ function layoutGrid(
     bodyTop: contentFrame?.y ?? titleFrame?.bottom ?? reference.y,
     bodyBottom: contentFrame?.bottom ?? reference.bottom,
   };
+  const titleInk = normalizeHex(title?.textColor);
+  const bodyInk = normalizeHex(content?.textColor);
   return {
     grid,
     ...(title?.fontSizePt == null ? {} : { titleSizePt: title.fontSizePt }),
     ...(content?.fontSizePt == null ? {} : { bodySizePt: content.fontSizePt }),
+    ...(titleInk === undefined ? {} : { titleInk }),
+    ...(bodyInk === undefined ? {} : { bodyInk }),
   };
 }
 
@@ -187,6 +199,8 @@ export function buildTemplateReviewTarget(
       grid: compiled.grid,
       ...(compiled.titleSizePt === undefined ? {} : { titleSizePt: compiled.titleSizePt }),
       ...(compiled.bodySizePt === undefined ? {} : { bodySizePt: compiled.bodySizePt }),
+      ...(compiled.titleInk === undefined ? {} : { titleInk: compiled.titleInk }),
+      ...(compiled.bodyInk === undefined ? {} : { bodyInk: compiled.bodyInk }),
       freeComposition: isFreeLayout(layout, label, widthEmu, heightEmu),
     });
   }
@@ -211,6 +225,8 @@ export function buildTemplateReviewTarget(
         grid: compiled.grid,
         ...(compiled.titleSizePt === undefined ? {} : { titleSizePt: compiled.titleSizePt }),
         ...(compiled.bodySizePt === undefined ? {} : { bodySizePt: compiled.bodySizePt }),
+        ...(compiled.titleInk === undefined ? {} : { titleInk: compiled.titleInk }),
+        ...(compiled.bodyInk === undefined ? {} : { bodyInk: compiled.bodyInk }),
         freeComposition: sample.index === 0 || isFreeLayout(sampleLayout, label, widthEmu, heightEmu),
       });
     }
@@ -236,6 +252,8 @@ export function buildTemplateReviewTarget(
   const bodySizePt = median(
     reference.flatMap((layout) => (layout.bodySizePt === undefined ? [] : [layout.bodySizePt])),
   );
+  const titleInk = reference.find((layout) => layout.titleInk !== undefined)?.titleInk;
+  const bodyInk = reference.find((layout) => layout.bodyInk !== undefined)?.bodyInk;
   const titleCenter = grid.titleX + grid.titleWidth / 2;
   const centered = Math.abs(titleCenter - 0.5) < 0.05 && grid.titleWidth < 0.8;
   const completeLayouts = reference.filter(
@@ -265,6 +283,8 @@ export function buildTemplateReviewTarget(
     palette,
     ...(analysis.majorFont?.trim() ? { majorFont: analysis.majorFont.trim() } : {}),
     ...(analysis.minorFont?.trim() ? { minorFont: analysis.minorFont.trim() } : {}),
+    ...(titleInk === undefined ? {} : { titleInk }),
+    ...(bodyInk === undefined ? {} : { bodyInk }),
     ...(titleSizePt === undefined ? {} : { titleSizePt }),
     ...(bodySizePt === undefined ? {} : { bodySizePt }),
     alignment: centered ? "centered-grid" : "left-grid",
@@ -316,7 +336,15 @@ export function templateTargetForSlide(
   document: PresentationDocument,
   target: TemplateReviewTarget,
   slideIndex: number,
-): { grid: TemplateGrid; titleSizePt?: number; bodySizePt?: number; freeComposition: boolean; layoutName?: string } {
+): {
+  grid: TemplateGrid;
+  titleSizePt?: number;
+  bodySizePt?: number;
+  titleInk?: string;
+  bodyInk?: string;
+  freeComposition: boolean;
+  layoutName?: string;
+} {
   const slide = document.slides[slideIndex];
   const layoutName = slide?.layoutId
     ? document.layouts?.find((layout) => layout.id === slide.layoutId)?.name
@@ -326,10 +354,14 @@ export function templateTargetForSlide(
     (target.layouts.length === 1 ? target.layouts[0] : undefined);
   const titleSizePt = layout?.titleSizePt ?? target.titleSizePt;
   const bodySizePt = layout?.bodySizePt ?? target.bodySizePt;
+  const titleInk = layout?.titleInk ?? target.titleInk;
+  const bodyInk = layout?.bodyInk ?? target.bodyInk;
   return {
     grid: layout?.grid ?? target.grid,
     ...(titleSizePt === undefined ? {} : { titleSizePt }),
     ...(bodySizePt === undefined ? {} : { bodySizePt }),
+    ...(titleInk === undefined ? {} : { titleInk }),
+    ...(bodyInk === undefined ? {} : { bodyInk }),
     freeComposition: layout?.freeComposition ?? false,
     ...(layout?.name === undefined ? {} : { layoutName: layout.name }),
   };

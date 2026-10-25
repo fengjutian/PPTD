@@ -449,6 +449,8 @@ const templateLayoutTargetSchema = z.object({
   grid: templateGridSchema,
   titleSizePt: z.number().positive().max(400).optional(),
   bodySizePt: z.number().positive().max(400).optional(),
+  titleInk: z.string().max(32).optional(),
+  bodyInk: z.string().max(32).optional(),
   freeComposition: z.boolean(),
 });
 
@@ -468,6 +470,8 @@ const templateReviewTargetSchema = z.object({
   palette: z.array(z.string().max(32)).max(100),
   majorFont: z.string().min(1).max(200).optional(),
   minorFont: z.string().min(1).max(200).optional(),
+  titleInk: z.string().max(32).optional(),
+  bodyInk: z.string().max(32).optional(),
   titleSizePt: z.number().positive().max(400).optional(),
   bodySizePt: z.number().positive().max(400).optional(),
   alignment: z.enum(["left-grid", "centered-grid"]),
