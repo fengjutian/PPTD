@@ -48,8 +48,7 @@ export function errorCodeOf(error: unknown): string {
 
 /** 一条记录的实际载荷。抽出来便于测试，不需要真的走 IPC。 */
 export function createLogPayload(entry: AppLogEntry, now: Date = new Date()): Record<string, unknown> {
-  const serializedContext =
-    entry.context === undefined ? undefined : JSON.stringify(entry.context);
+  const serializedContext = entry.context === undefined ? undefined : JSON.stringify(entry.context);
   // 上下文超长说明调用方塞了不该塞的东西：保留"被截断"这个事实，不保留内容。
   const context =
     serializedContext === undefined
@@ -80,11 +79,7 @@ export async function recordAppLog(entry: AppLogEntry): Promise<void> {
  * 记录一次失败。`scope` 是用户能看懂的阶段名（如「导出 PPTX」），
  * 与错误码一起构成可 grep 的一行。
  */
-export function recordAppError(
-  scope: string,
-  error: unknown,
-  context?: Record<string, unknown>,
-): Promise<void> {
+export function recordAppError(scope: string, error: unknown, context?: Record<string, unknown>): Promise<void> {
   const detail = error instanceof Error ? error.message : String(error ?? "");
   return recordAppLog({
     level: "error",

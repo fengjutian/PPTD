@@ -50,6 +50,8 @@ export interface TemplateRegion {
   height: number;
   textColor: string | null;
   fontSizePt: number | null;
+  /** Paragraph alignment the template assigned, when it declares one. */
+  textAlign?: "left" | "center" | "right" | null;
 }
 export interface TemplateDecoration {
   shape: "rectangle" | "ellipse";

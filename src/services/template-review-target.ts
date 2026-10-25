@@ -36,7 +36,8 @@ export type TemplateFitCode =
   | "template-title-size"
   | "template-body-size"
   | "template-palette"
-  | "template-font";
+  | "template-font"
+  | "template-align";
 
 export interface TemplateFitIssue {
   slideIndex: number;
@@ -144,6 +145,8 @@ function layoutGrid(
       bodySizePt?: number;
       titleInk?: string;
       bodyInk?: string;
+      titleAlign?: "left" | "center" | "right";
+      bodyAlign?: "left" | "center" | "right";
     }
   | undefined {
   const title = layout.regions.find((region) => region.role === "title");
@@ -170,12 +173,16 @@ function layoutGrid(
   };
   const titleInk = normalizeHex(title?.textColor);
   const bodyInk = normalizeHex(content?.textColor);
+  const titleAlign = title?.textAlign ?? undefined;
+  const bodyAlign = content?.textAlign ?? undefined;
   return {
     grid,
     ...(title?.fontSizePt == null ? {} : { titleSizePt: title.fontSizePt }),
     ...(content?.fontSizePt == null ? {} : { bodySizePt: content.fontSizePt }),
     ...(titleInk === undefined ? {} : { titleInk }),
     ...(bodyInk === undefined ? {} : { bodyInk }),
+    ...(titleAlign === undefined ? {} : { titleAlign }),
+    ...(bodyAlign === undefined ? {} : { bodyAlign }),
   };
 }
 
@@ -203,6 +210,8 @@ export function buildTemplateReviewTarget(
       ...(compiled.bodySizePt === undefined ? {} : { bodySizePt: compiled.bodySizePt }),
       ...(compiled.titleInk === undefined ? {} : { titleInk: compiled.titleInk }),
       ...(compiled.bodyInk === undefined ? {} : { bodyInk: compiled.bodyInk }),
+      ...(compiled.titleAlign === undefined ? {} : { titleAlign: compiled.titleAlign }),
+      ...(compiled.bodyAlign === undefined ? {} : { bodyAlign: compiled.bodyAlign }),
       freeComposition: isFreeLayout(layout, label, widthEmu, heightEmu),
     });
   }
@@ -229,6 +238,8 @@ export function buildTemplateReviewTarget(
         ...(compiled.bodySizePt === undefined ? {} : { bodySizePt: compiled.bodySizePt }),
         ...(compiled.titleInk === undefined ? {} : { titleInk: compiled.titleInk }),
         ...(compiled.bodyInk === undefined ? {} : { bodyInk: compiled.bodyInk }),
+        ...(compiled.titleAlign === undefined ? {} : { titleAlign: compiled.titleAlign }),
+        ...(compiled.bodyAlign === undefined ? {} : { bodyAlign: compiled.bodyAlign }),
         freeComposition: sample.index === 0 || isFreeLayout(sampleLayout, label, widthEmu, heightEmu),
       });
     }
@@ -256,6 +267,8 @@ export function buildTemplateReviewTarget(
   );
   const titleInk = reference.find((layout) => layout.titleInk !== undefined)?.titleInk;
   const bodyInk = reference.find((layout) => layout.bodyInk !== undefined)?.bodyInk;
+  const titleAlign = reference.find((layout) => layout.titleAlign !== undefined)?.titleAlign;
+  const bodyAlign = reference.find((layout) => layout.bodyAlign !== undefined)?.bodyAlign;
   const titleCenter = grid.titleX + grid.titleWidth / 2;
   const centered = Math.abs(titleCenter - 0.5) < 0.05 && grid.titleWidth < 0.8;
   const completeLayouts = reference.filter(
@@ -288,6 +301,8 @@ export function buildTemplateReviewTarget(
     ...(analysis.minorFont?.trim() ? { minorFont: analysis.minorFont.trim() } : {}),
     ...(titleInk === undefined ? {} : { titleInk }),
     ...(bodyInk === undefined ? {} : { bodyInk }),
+    ...(titleAlign === undefined ? {} : { titleAlign }),
+    ...(bodyAlign === undefined ? {} : { bodyAlign }),
     ...(titleSizePt === undefined ? {} : { titleSizePt }),
     ...(bodySizePt === undefined ? {} : { bodySizePt }),
     alignment: centered ? "centered-grid" : "left-grid",
@@ -345,6 +360,8 @@ export function templateTargetForSlide(
   bodySizePt?: number;
   titleInk?: string;
   bodyInk?: string;
+  titleAlign?: "left" | "center" | "right";
+  bodyAlign?: "left" | "center" | "right";
   freeComposition: boolean;
   layoutName?: string;
 } {
@@ -359,12 +376,16 @@ export function templateTargetForSlide(
   const bodySizePt = layout?.bodySizePt ?? target.bodySizePt;
   const titleInk = layout?.titleInk ?? target.titleInk;
   const bodyInk = layout?.bodyInk ?? target.bodyInk;
+  const titleAlign = layout?.titleAlign ?? target.titleAlign;
+  const bodyAlign = layout?.bodyAlign ?? target.bodyAlign;
   return {
     grid: layout?.grid ?? target.grid,
     ...(titleSizePt === undefined ? {} : { titleSizePt }),
     ...(bodySizePt === undefined ? {} : { bodySizePt }),
     ...(titleInk === undefined ? {} : { titleInk }),
     ...(bodyInk === undefined ? {} : { bodyInk }),
+    ...(titleAlign === undefined ? {} : { titleAlign }),
+    ...(bodyAlign === undefined ? {} : { bodyAlign }),
     freeComposition: layout?.freeComposition ?? false,
     ...(layout?.name === undefined ? {} : { layoutName: layout.name }),
   };
@@ -535,6 +556,17 @@ export function checkTemplateFit(
           role: "title",
         });
       }
+      if (resolved.titleAlign !== undefined && title.style.align !== resolved.titleAlign) {
+        issues.push({
+          slideIndex,
+          code: "template-align",
+          severity: "warning",
+          message: `标题对齐 ${title.style.align} 与模板 ${resolved.titleAlign} 不一致`,
+          suggestion: `把标题段落对齐恢复到模板的 ${resolved.titleAlign}`,
+          elementIds: [title.id],
+          role: "title",
+        });
+      }
     }
     if (bodies.length > 0) {
       const bounds = unionRect(bodies.map((body) => rectOf(body.frame, pageWidth, pageHeight)));
@@ -596,6 +628,21 @@ export function checkTemplateFit(
           severity: "warning",
           message: `正文字体 ${bodies[0].style.fontFamily} 不属于模板字体`,
           suggestion: "把正文字体换回模板主题字体",
+          elementIds: [bodies[0].id],
+          role: "body",
+        });
+      }
+      if (
+        resolved.bodyAlign !== undefined &&
+        bodies[0]?.type === "text" &&
+        bodies[0].style.align !== resolved.bodyAlign
+      ) {
+        issues.push({
+          slideIndex,
+          code: "template-align",
+          severity: "warning",
+          message: `正文对齐 ${bodies[0].style.align} 与模板 ${resolved.bodyAlign} 不一致`,
+          suggestion: `把正文段落对齐恢复到模板的 ${resolved.bodyAlign}`,
           elementIds: [bodies[0].id],
           role: "body",
         });

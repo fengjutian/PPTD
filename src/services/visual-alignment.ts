@@ -447,6 +447,7 @@ export const visualRepairPlanSchema = z.object({
                 .regex(/^#[0-9A-Fa-f]{6}$/)
                 .optional(),
               fontFamily: z.string().min(1).max(200).optional(),
+              textAlign: z.enum(["left", "center", "right"]).optional(),
             }),
             z.object({
               action: z.literal("align"),
@@ -563,7 +564,17 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
               typeof action.fontFamily === "string" && action.fontFamily.trim().length > 0
                 ? action.fontFamily.trim().slice(0, 200)
                 : undefined;
-            if (fontScale === undefined && color === undefined && fontFamily === undefined) return [];
+            const textAlign =
+              action.textAlign === "left" || action.textAlign === "center" || action.textAlign === "right"
+                ? action.textAlign
+                : undefined;
+            if (
+              fontScale === undefined &&
+              color === undefined &&
+              fontFamily === undefined &&
+              textAlign === undefined
+            )
+              return [];
             return [
               {
                 action: "restyle",
@@ -571,6 +582,7 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
                 ...(fontScale === undefined ? {} : { fontScale }),
                 ...(color === undefined ? {} : { color }),
                 ...(fontFamily === undefined ? {} : { fontFamily }),
+                ...(textAlign === undefined ? {} : { textAlign }),
               },
             ];
           }

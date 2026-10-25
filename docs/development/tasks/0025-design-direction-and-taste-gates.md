@@ -827,3 +827,18 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 ### 验证
 
 - `SettingsDialog.test.tsx` 3 项通过；全量 1211 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 32. 失败可诊断与方向预览并行（2026-10-25）
+
+- 新增 [ADR 0088](../../architecture/decisions/0088-diagnostic-log.md)：失败诊断日志落盘。
+  - Rust 新增 `append_app_log` / `app_log_location`，写 `%LOCALAPPDATA%\com.pptd.desktop\logs\app.log`（Tauri `app_log_dir`），一行一条 JSON：`at / level / code / message / context`。
+  - 单条消息 2 000 字符、代码 80、上下文 4 000；上下文超长只写 `{truncated:true}`；单文件 2 MB 后轮转 `app.log.1`。
+  - 前端 `app-log.ts` 提供 `errorCodeOf` / `recordAppLog` / `recordAppError` / `appLogLocation`，fire-and-forget，任何异常都被吞掉。
+  - 接入导出、AI 内容生成、AI 重新生成、AI 设计生成、方向提案、方向预览、自动保存、打开与保存；方向候选不足 4 个记一条 `AI_DIRECTIONS_INCOMPLETE` warn。
+  - 设置 → 模型服务新增“诊断日志”区块，显示文件路径与“不含正文、备注或图片”的边界；浏览器预览显示无本地日志。
+- 方向门四路设计请求与 8 页本地渲染改为并行：墙钟等待从约 4 倍单方向降到约 1 倍；单个方向失败仍只丢弃该方向，候选不足 4 个时仍回退单方向。
+
+### 验证
+
+- `app-log.test.ts` 9 项、`SettingsDialog.test.tsx` 5 项通过；Rust `cargo test --lib app_log` 4 项通过。
+- 全量 1232 通过、1 跳过；类型检查、ESLint、生产构建通过。

@@ -623,6 +623,9 @@ export interface TemplateLayoutTarget {
   /** Ink the template assigned to its title/body placeholder. */
   titleInk?: string;
   bodyInk?: string;
+  /** Paragraph alignment the template assigned to the placeholder. */
+  titleAlign?: "left" | "center" | "right";
+  bodyAlign?: "left" | "center" | "right";
   /** Cover, section, quote and image-led pages may break the content grid. */
   freeComposition: boolean;
 }
@@ -648,6 +651,8 @@ export interface TemplateReviewTarget {
   minorFont?: string;
   titleInk?: string;
   bodyInk?: string;
+  titleAlign?: "left" | "center" | "right";
+  bodyAlign?: "left" | "center" | "right";
   titleSizePt?: number;
   bodySizePt?: number;
   alignment: "left-grid" | "centered-grid";

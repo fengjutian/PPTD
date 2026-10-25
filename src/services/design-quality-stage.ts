@@ -756,6 +756,10 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               const resolved = templateTargetForSlide(document, activeTemplate, issue.slideIndex);
               const color = issue.role === "title" ? resolved.titleInk : resolved.bodyInk;
               if (color) action = { action: "restyle", target: issue.role, color };
+            } else if (issue.code === "template-align" && issue.role !== undefined) {
+              const resolved = templateTargetForSlide(document, activeTemplate, issue.slideIndex);
+              const textAlign = issue.role === "title" ? resolved.titleAlign : resolved.bodyAlign;
+              if (textAlign) action = { action: "restyle", target: issue.role, textAlign };
             }
             if (!action) continue;
             const existing = bySlide.get(issue.slideIndex);
@@ -764,7 +768,11 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               if (candidate.action !== action!.action || candidate.target !== action!.target) return false;
               if (action!.action === "move") return true;
               if (candidate.action !== "restyle" || action!.action !== "restyle") return false;
-              return candidate.fontFamily === action!.fontFamily && candidate.color === action!.color;
+              return (
+                candidate.fontFamily === action!.fontFamily &&
+                candidate.color === action!.color &&
+                candidate.textAlign === action!.textAlign
+              );
             });
             if (duplicate) continue;
             const repair = existing ?? {

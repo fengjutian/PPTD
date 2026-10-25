@@ -4061,6 +4061,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               fontSizePt: Math.max(12, element.style.fontSizePt * (repair.fontScale ?? 1)),
               color: repair.color ?? element.style.color,
               fontFamily: repair.fontFamily ?? element.style.fontFamily,
+              align: repair.textAlign ?? element.style.align,
             };
         }
         // A region repair applies to everything that lies inside the region.
@@ -4098,6 +4099,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               fontSizePt: Math.max(12, element.style.fontSizePt * (regionRepair.fontScale ?? 1)),
               color: regionRepair.color ?? element.style.color,
               fontFamily: regionRepair.fontFamily ?? element.style.fontFamily,
+              align: regionRepair.textAlign ?? element.style.align,
             };
           if (regionRepair.action === "align") {
             const box = elementBox(element);

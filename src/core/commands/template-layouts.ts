@@ -52,6 +52,8 @@ export type AiElementRepair =
       color?: string;
       /** Template theme font a repair may restore. */
       fontFamily?: string;
+      /** Paragraph alignment a repair may restore. */
+      textAlign?: "left" | "center" | "right";
     }
   /** Aligns the target to an edge of the given frame. */
   | { action: "align"; target: AiElementRepairTarget; frame: AiNormalizedRect; axis?: "left" | "top" }

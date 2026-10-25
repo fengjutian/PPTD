@@ -344,6 +344,8 @@ const templateLayoutTargetSchema = z.object({
   bodySizePt: z.number().positive().max(400).optional(),
   titleInk: z.string().max(32).optional(),
   bodyInk: z.string().max(32).optional(),
+  titleAlign: z.enum(["left", "center", "right"]).optional(),
+  bodyAlign: z.enum(["left", "center", "right"]).optional(),
   freeComposition: z.boolean(),
 });
 
@@ -366,6 +368,8 @@ const templateReviewTargetSchema = z.object({
   minorFont: z.string().min(1).max(200).optional(),
   titleInk: z.string().max(32).optional(),
   bodyInk: z.string().max(32).optional(),
+  titleAlign: z.enum(["left", "center", "right"]).optional(),
+  bodyAlign: z.enum(["left", "center", "right"]).optional(),
   titleSizePt: z.number().positive().max(400).optional(),
   bodySizePt: z.number().positive().max(400).optional(),
   alignment: z.enum(["left-grid", "centered-grid"]),

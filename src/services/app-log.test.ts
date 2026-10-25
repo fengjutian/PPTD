@@ -5,12 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
 import { isDesktopRuntime } from "./project-files";
-import {
-  createLogPayload,
-  errorCodeOf,
-  recordAppError,
-  recordAppLog,
-} from "./app-log";
+import { createLogPayload, errorCodeOf, recordAppError, recordAppLog } from "./app-log";
 
 describe("errorCodeOf", () => {
   it("takes the stable prefix from a coded error", () => {
@@ -46,10 +41,7 @@ describe("createLogPayload", () => {
   });
 
   it("truncates a message that would turn the log into a copy of the draft", () => {
-    const payload = createLogPayload(
-      { level: "error", code: "AI_JSON_INVALID", message: "字".repeat(2_500) },
-      now,
-    );
+    const payload = createLogPayload({ level: "error", code: "AI_JSON_INVALID", message: "字".repeat(2_500) }, now);
     const message = payload.message as string;
     expect(message).toHaveLength(2_001);
     expect(message.endsWith("…")).toBe(true);
@@ -92,9 +84,7 @@ describe("recordAppLog", () => {
 
   it("never throws when the log command itself fails", async () => {
     vi.mocked(invoke).mockRejectedValue(new Error("APP_LOG_WRITE_FAILED"));
-    await expect(
-      recordAppLog({ level: "error", code: "X", message: "m" }),
-    ).resolves.toBeUndefined();
+    await expect(recordAppLog({ level: "error", code: "X", message: "m" })).resolves.toBeUndefined();
   });
 });
 

@@ -289,6 +289,7 @@ const templateFitLabels: Record<TemplateFitCode, string> = {
   "template-body-size": "正文字号偏离模板",
   "template-palette": "颜色偏离模板色板",
   "template-font": "字体偏离模板",
+  "template-align": "段落对齐偏离模板",
 };
 /** The narrowest and the widest the property panel may be dragged to. */
 const INSPECTOR_MIN_WIDTH = 220;

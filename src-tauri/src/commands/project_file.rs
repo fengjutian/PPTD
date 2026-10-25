@@ -92,6 +92,8 @@ pub struct TemplateRegion {
     text_color: Option<String>,
     /// Font size in points the template designer assigned to this placeholder.
     font_size_pt: Option<u16>,
+    /// Paragraph alignment from the placeholder's `pPr` / `algn`.
+    text_align: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -1827,20 +1829,33 @@ fn resolve_scheme_color(
     theme.get(key).cloned()
 }
 
-/// Reads the ink and the size the template assigned to a placeholder so that
-/// generated pages keep the template's own typography instead of a guess.
+/// Reads the ink, the size and the paragraph alignment the template assigned
+/// to a placeholder so generated pages keep the template's own typography.
 fn extract_text_style(
     shape: roxmltree::Node<'_, '_>,
     theme: &std::collections::HashMap<String, String>,
-) -> (Option<String>, Option<u16>) {
+) -> (Option<String>, Option<u16>, Option<String>) {
     let Some(body) = shape
         .descendants()
         .find(|node| node.tag_name().name() == "txBody")
     else {
-        return (None, None);
+        return (None, None, None);
     };
     let mut color = None;
     let mut size = None;
+    let mut align = None;
+    if let Some(alignment) = body
+        .descendants()
+        .find(|node| node.tag_name().name() == "pPr")
+        .and_then(|node| node.attribute("algn"))
+    {
+        align = match alignment {
+            "l" => Some("left".to_owned()),
+            "ctr" => Some("center".to_owned()),
+            "r" => Some("right".to_owned()),
+            _ => None,
+        };
+    }
     for node in body.descendants() {
         let name = node.tag_name().name();
         if name != "rPr" && name != "defRPr" && name != "endParaRPr" {
@@ -1875,7 +1890,7 @@ fn extract_text_style(
             };
         }
     }
-    (color, size)
+    (color, size, align)
 }
 
 fn extract_template_regions(
@@ -1921,7 +1936,7 @@ fn extract_template_regions(
             } else {
                 return None;
             };
-            let (text_color, font_size_pt) = extract_text_style(shape, theme);
+            let (text_color, font_size_pt, text_align) = extract_text_style(shape, theme);
             Some(TemplateRegion {
                 role: role.into(),
                 x,
@@ -1930,6 +1945,7 @@ fn extract_template_regions(
                 height,
                 text_color,
                 font_size_pt,
+                text_align,
             })
         })
         .take(32)
