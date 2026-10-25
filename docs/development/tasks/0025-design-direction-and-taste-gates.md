@@ -794,3 +794,14 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 - `manual-visual-review.test.ts` 2 项、`template-review-target.test.ts` 10 项通过。
 - 全量：1203 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 29. 设计记忆明细与单条删除（2026-10-25）
+
+- `DesignLook` 增加 `id`；`loadRecentLooks` 回传存储行 id，单条删除不再只能靠清空全部。
+- 设置页新增“查看记忆明细”：最近 5 个外观（方向、页数、日期）与 5 条偏好原话，每条可删除；删除后计数与明细一起刷新。
+- `design-memory.test.ts` 增加单条删除用例：删最新一条后，旧记录仍在。
+- README 与 ADR 0077 同步为“可查看、可单删、可全清”。
+
+### 验证
+
+- `design-memory.test.ts` 6 项通过；全量 1207 通过、1 跳过；类型检查、ESLint、生产构建通过。

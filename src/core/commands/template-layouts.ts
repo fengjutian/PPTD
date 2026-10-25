@@ -50,6 +50,8 @@ export type AiElementRepair =
       frame?: AiNormalizedRect;
       fontScale?: number;
       color?: string;
+      /** Template theme font a repair may restore. */
+      fontFamily?: string;
     }
   /** Aligns the target to an edge of the given frame. */
   | { action: "align"; target: AiElementRepairTarget; frame: AiNormalizedRect; axis?: "left" | "top" }

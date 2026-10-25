@@ -10669,3 +10669,48 @@ button {
   color: #9da1a8;
   font-size: 10px;
 }
+
+.settings-memory-details {
+  margin: -4px 0 10px;
+  color: #8f939b;
+  font-size: 11px;
+}
+.settings-memory-details summary {
+  cursor: pointer;
+  color: #cfd2d7;
+}
+.settings-memory-details h4 {
+  margin: 8px 0 4px;
+  color: #9da1a8;
+  font-size: 10px;
+  font-weight: 500;
+}
+.settings-memory-details ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.settings-memory-details li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid #2c2e33;
+  border-radius: 6px;
+}
+.settings-memory-details button {
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #8f939b;
+  cursor: pointer;
+}
+.settings-memory-details button:hover {
+  color: #f0a58f;
+}

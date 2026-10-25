@@ -102,6 +102,8 @@ export const visualReviewSchema = z.object({
         suggestion: z.string().min(1).max(500),
         /** Stable code when the finding was measured by the deterministic checker. */
         code: z.string().min(1).max(80).optional(),
+        /** Role the finding belongs to, for template font/palette repairs. */
+        role: z.enum(["title", "body"]).optional(),
       }),
     )
     .max(100),
@@ -276,6 +278,7 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
           ...(typeof candidate.code === "string" && candidate.code.trim().length > 0
             ? { code: candidate.code.trim().slice(0, 80) }
             : {}),
+          ...(candidate.role === "title" || candidate.role === "body" ? { role: candidate.role } : {}),
         },
       ];
     })
@@ -443,6 +446,7 @@ export const visualRepairPlanSchema = z.object({
                 .string()
                 .regex(/^#[0-9A-Fa-f]{6}$/)
                 .optional(),
+              fontFamily: z.string().min(1).max(200).optional(),
             }),
             z.object({
               action: z.literal("align"),
@@ -555,13 +559,18 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
                 : undefined;
             const color =
               typeof action.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(action.color) ? action.color : undefined;
-            if (fontScale === undefined && color === undefined) return [];
+            const fontFamily =
+              typeof action.fontFamily === "string" && action.fontFamily.trim().length > 0
+                ? action.fontFamily.trim().slice(0, 200)
+                : undefined;
+            if (fontScale === undefined && color === undefined && fontFamily === undefined) return [];
             return [
               {
                 action: "restyle",
                 target,
                 ...(fontScale === undefined ? {} : { fontScale }),
                 ...(color === undefined ? {} : { color }),
+                ...(fontFamily === undefined ? {} : { fontFamily }),
               },
             ];
           }

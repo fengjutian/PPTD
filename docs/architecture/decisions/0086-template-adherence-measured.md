@@ -68,7 +68,8 @@ passed = checked && errors === 0 && score >= minimumFit
 - 评审提示词携带同一份模板目标，要求偏离轴线的页面 alignmentScore 不高于 79，并报告 `misalignment`；
 - 确定性检查的 issues 以 `template-mismatch` 进入同一份 `VisualReview`，并带原始 `code`；
 - 确定性 `templateFitScore` 覆盖模型可能给出的值：模型不能用一个宽松的模板分绕过实测偏差；
-- 修复计划可以把标题移回模板标题区，移动是设计命令，不改内容。
+- 修复计划可以把标题移回模板标题区，移动是设计命令，不改内容；
+- `restyle` 增加 `fontFamily`：模板字体 warning 可以由确定性修复恢复模板主/次字体，命令层会按角色依次应用同一元素的多个修复动作。
 
 ### 6. 色板与字体是提示级检查
 
@@ -90,7 +91,7 @@ passed = checked && errors === 0 && score >= minimumFit
 
 ### 8. 模板目标随项目保存
 
-`TemplateReviewTarget` 进入文档设计态（`PresentationDocument.templateStyle`，Schema 22），不进入内容哈希，也不改变内容 revision。生成时写入，重新打开项目后手动复检直接复用；预设模式会清掉旧目标。`ReviewTrace` 同时记录 `templateFitScore`，历史记录里能看到当次模板符合度。
+`TemplateReviewTarget` 进入文档设计态（`PresentationDocument.templateStyle`，Schema 22），不进入内容哈希，也不改变内容 revision。生成时写入，重新打开项目后手动复检直接复用；预设模式会清掉旧目标。`ReviewTrace` 同时记录 `templateFitScore`，历史记录里能看到当次模板符合度。手动复检会核对页面尺寸、主题名和版式名：目标与当前文档不一致时视为过期，不用旧轴评审新稿。
 
 ## 后果
 
@@ -110,7 +111,7 @@ passed = checked && errors === 0 && score >= minimumFit
 
 ## 验证
 
-- `template-review-target.test.ts` 10 项：网格/字号/轴语言、无占位返回 undefined、通过页、标题偏移、正文越界、色板/字体 warning、自由构图名称与几何、目标继承阈值。
+- `template-review-target.test.ts` 11 项：网格/字号/轴语言、无占位返回 undefined、通过页、标题偏移、正文越界、色板/字体 warning、自由构图名称与几何、目标继承阈值、过期目标识别。
 - `design-quality-stage.test.ts` 25 项：模板目标参与评审输入、修复计划、达标判断与报告；视觉评审关闭时仍生成模板符合度报告。
 - `visual-alignment.test.ts` 23 项：`templateFitScore` 低于阈值时循环不算达标。
 - Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 除一条既有导出视觉回归基线差异外通过。

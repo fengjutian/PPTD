@@ -21,6 +21,7 @@ import {
 } from "./app-database";
 
 export interface DesignLook {
+  id: string;
   themePresetId?: string;
   palette: string[];
   fonts: { major: string; minor: string };
@@ -46,7 +47,7 @@ export function designLookFromDocument(
   document: PresentationDocument,
   direction?: DesignDirectionRecord,
   themePresetId?: string,
-): Omit<DesignLook, "createdAt"> {
+): Omit<DesignLook, "id" | "createdAt"> {
   const selected = direction?.proposals.find((proposal) => proposal.id === direction.selectedProposalId);
   const colors = (document.theme?.colors ?? [])
     .map((color) => color.value)
@@ -102,6 +103,7 @@ export async function loadRecentLooks(limit = 3): Promise<DesignLook[]> {
     .filter((entry) => entry.kind === "deck")
     .slice(0, limit)
     .map((entry) => ({
+      id: entry.id,
       ...(typeof entry.payload.themePresetId === "string" ? { themePresetId: entry.payload.themePresetId } : {}),
       palette: stringArray(entry.payload.palette).slice(0, 8),
       fonts: {

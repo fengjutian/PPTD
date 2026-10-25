@@ -768,7 +768,7 @@ pub async fn plan_presentation_repairs(
 每一页的 repairs 里，elementActions 只能用下面这些动作：
 - move：移动。target 为 title/body 时 frame 就是目标的新位置；target 为 region 时 frame 圈出要动的那一块，to 给出它要去的位置和大小，块内元素按比例整体搬过去。
 - resize：缩放。target 为 title/body 时 frame 就是新的位置和大小；target 为 region 时 frame 圈出要缩放的那一块，to 给出新的尺寸，块在原地缩放。
-- restyle：改字号和颜色。fontScale 在 0.75–1.5 之间，color 是六位十六进制。target 为 region 时只作用于落在 frame 里的文字。
+- restyle：改字号、颜色和字体。fontScale 在 0.75–1.5 之间，color 是六位十六进制，fontFamily 必须是模板主字体或次字体。target 为 region 时只作用于落在 frame 里的文字。
 - align：对齐。frame 圈出要对齐的那一块，axis 为 left 表示把它们的左轴对齐到 frame.x，为 top 表示顶边对齐到 frame.y。
 - changeLayout：换这一页的版式。
 - recipe：换这一页的页面配方。可用值：cover-statement、data-story、chart-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，图表换 chart-story，流程换 process-rail，对比换 comparison 或 weighted-split，时间线换 timeline-rail，引文换 quote-field，章节换 section-statement；换配方时不要再叠加 elementActions 的几何修复。

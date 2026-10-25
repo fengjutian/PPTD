@@ -1,5 +1,5 @@
 import { colorLuminance, contrastRatioAgainstLuminance } from "../core/rendering/contrast";
-import type { AiSlideDesign } from "../core/commands/commands";
+import type { AiElementRepair, AiSlideDesign } from "../core/commands/commands";
 import {
   documentContentFingerprint as coreDocumentContentFingerprint,
   type PresentationDocument,
@@ -722,47 +722,51 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         // to change; the rest keep the design the user already saw.
         const affected = new Set(affectedSlideIndexes(review, goal.minimumScores));
         const plannedRepairs = [...plan.repairs];
-        // The model can miss a template axis even after seeing the target. The
-        // measured violation is authoritative, so put the title back on the
-        // template axis with a deterministic move instead of leaving the deck
-        // off-template until the next round.
+        // The model can miss a measured template violation. The deterministic
+        // findings are authoritative, so add the repair action ourselves.
         if (options.template) {
           const bySlide = new Map(plannedRepairs.map((repair) => [repair.slideIndex, repair]));
           for (const issue of review.issues) {
-            if (issue.code !== "template-title-axis") continue;
-            const resolved = templateTargetForSlide(document, options.template, issue.slideIndex);
+            let action: Exclude<AiElementRepair, { action: "changeLayout" }> | undefined;
+            if (issue.code === "template-title-axis") {
+              const resolved = templateTargetForSlide(document, options.template, issue.slideIndex);
+              action = {
+                action: "move",
+                target: "title",
+                frame: {
+                  x: resolved.grid.titleX,
+                  y: resolved.grid.titleY,
+                  width: resolved.grid.titleWidth,
+                  height: resolved.grid.titleHeight,
+                },
+              };
+            } else if (issue.code === "template-font" && issue.role !== undefined) {
+              const template = options.template;
+              const fontFamily =
+                issue.role === "title"
+                  ? (template.majorFont ?? template.minorFont)
+                  : (template.minorFont ?? template.majorFont);
+              if (fontFamily) action = { action: "restyle", target: issue.role, fontFamily };
+            }
+            if (!action) continue;
             const existing = bySlide.get(issue.slideIndex);
             const actions = existing?.elementActions ?? [];
-            const hasTitleMove = actions.some((action) => action.action === "move" && action.target === "title");
-            if (hasTitleMove) continue;
+            const duplicate = actions.some((candidate) => {
+              if (candidate.action !== action!.action || candidate.target !== action!.target) return false;
+              if (action!.action === "move") return true;
+              if (candidate.action !== "restyle" || action!.action !== "restyle") return false;
+              return candidate.fontFamily === action!.fontFamily;
+            });
+            if (duplicate) continue;
             const repair = existing ?? {
               slideIndex: issue.slideIndex,
               backgroundAction: "keep" as const,
               hierarchyAction: "keep" as const,
+              obstacleRegions: [],
               elementActions: [],
-              reason: "把标题移回模板轴线",
+              reason: "修复模板偏差",
             };
-            const updated = {
-              ...repair,
-              obstacleRegions:
-                "obstacleRegions" in repair && Array.isArray(repair.obstacleRegions) ? repair.obstacleRegions : [],
-              // The command layer selects the first title action. Prepend the
-              // measured move so an earlier model resize cannot hide it.
-              elementActions: [
-                {
-                  action: "move" as const,
-                  target: "title" as const,
-                  frame: {
-                    x: resolved.grid.titleX,
-                    y: resolved.grid.titleY,
-                    width: resolved.grid.titleWidth,
-                    height: resolved.grid.titleHeight,
-                  },
-                },
-                ...actions,
-              ],
-            };
-            bySlide.set(issue.slideIndex, updated);
+            bySlide.set(issue.slideIndex, { ...repair, elementActions: [...actions, action] });
           }
           plannedRepairs.splice(0, plannedRepairs.length, ...bySlide.values());
         }

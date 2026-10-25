@@ -3943,11 +3943,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // a pair of slashes.
       const quoteMark = slide.elements.find((element) => element.type === "text" && element.text === "“");
       if (quoteMark?.type === "text") quoteMark.style.fontFamily = "Georgia";
-      const titleRepair = design.elementRepairs?.find(
-        (repair) => repair.action !== "changeLayout" && repair.target === "title",
+      const titleRepairs = (design.elementRepairs ?? []).filter(
+        (repair): repair is Exclude<AiElementRepair, { action: "changeLayout" }> =>
+          repair.action !== "changeLayout" && repair.target === "title",
       );
-      const bodyRepair = design.elementRepairs?.find(
-        (repair) => repair.action !== "changeLayout" && repair.target === "body",
+      const bodyRepairs = (design.elementRepairs ?? []).filter(
+        (repair): repair is Exclude<AiElementRepair, { action: "changeLayout" }> =>
+          repair.action !== "changeLayout" && repair.target === "body",
       );
       // A region repair points at a place on the page instead of at a role.
       // The review model looked at a picture, so a rectangle is the only thing
@@ -4002,9 +4004,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
                   overlapArea(candidate.frame, element.frame) / elementArea >= 0.8,
               )
             : undefined;
-        const repair =
-          element.text === content.title ? titleRepair : element.text === content.body ? bodyRepair : undefined;
-        if (repair) {
+        const repairs =
+          element.text === content.title ? titleRepairs : element.text === content.body ? bodyRepairs : [];
+        for (const repair of repairs) {
           if ((repair.action === "move" || repair.action === "resize") && !container) {
             const collisionFreeFrame = obstacles.some((obstacle) => intersects(repair.frame, obstacle))
               ? repair.target === "title"
@@ -4033,6 +4035,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               ...element.style,
               fontSizePt: Math.max(12, element.style.fontSizePt * (repair.fontScale ?? 1)),
               color: repair.color ?? element.style.color,
+              fontFamily: repair.fontFamily ?? element.style.fontFamily,
             };
         }
         // A region repair applies to everything that lies inside the region.
@@ -4069,6 +4072,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
               ...element.style,
               fontSizePt: Math.max(12, element.style.fontSizePt * (regionRepair.fontScale ?? 1)),
               color: regionRepair.color ?? element.style.color,
+              fontFamily: regionRepair.fontFamily ?? element.style.fontFamily,
             };
           if (regionRepair.action === "align") {
             const box = elementBox(element);

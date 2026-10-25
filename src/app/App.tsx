@@ -246,6 +246,7 @@ import { runManualVisualReview } from "../services/manual-visual-review";
 import {
   applyTemplateToGoal,
   buildTemplateReviewTarget,
+  templateTargetMatchesDocument,
   type TemplateFitCode,
   type TemplateFitReport,
 } from "../services/template-review-target";
@@ -4004,10 +4005,14 @@ export function App() {
     );
     setTaskStatus(`正在复检 ${indexes.length} 页，并重新检查整册节奏…`);
     try {
+      const persistedTarget =
+        document.templateStyle && templateTargetMatchesDocument(document.templateStyle, document)
+          ? document.templateStyle
+          : undefined;
       const manualTarget =
         selectedTemplate && templateAnalysis
           ? buildTemplateReviewTarget(templateAnalysis, selectedTemplate.name)
-          : document.templateStyle;
+          : persistedTarget;
       const manualGoal = manualTarget
         ? applyTemplateToGoal(defaultPresentationVisualGoal(), manualTarget)
         : defaultPresentationVisualGoal();
@@ -4033,6 +4038,7 @@ export function App() {
               visualReview: result.review,
               visualReviewCoverage: { reviewed: result.reviewedIndexes.length, total: document.slides.length },
               templateFit: result.templateFit,
+              ...(manualTarget === undefined ? {} : { templateTargetName: manualTarget.name }),
               contactSheet: result.render.contactSheet,
               deckReview: result.deckReview,
               reviewReuse: {

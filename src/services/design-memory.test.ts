@@ -35,6 +35,7 @@ import {
   recordDesignLook,
   recordDesignPreference,
   recommendedConceptPreset,
+  removeDesignMemory,
 } from "./design-memory";
 
 function memoryDocument() {
@@ -92,6 +93,18 @@ describe("design memory", () => {
     expect(await designMemorySummary()).toEqual({ decks: 1, preferences: 1 });
     await clearDesignMemory();
     expect(await designMemorySummary()).toEqual({ decks: 0, preferences: 0 });
+  });
+
+  it("removes one remembered look without clearing the rest", async () => {
+    store.entries = [];
+    await recordDesignLook({ document: memoryDocument(), themePresetId: "first" });
+    await recordDesignLook({ document: memoryDocument(), themePresetId: "second" });
+    const [newest] = await loadRecentLooks(5);
+    expect(newest?.themePresetId).toBe("second");
+    await removeDesignMemory(newest!.id);
+    const remaining = await loadRecentLooks(5);
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]?.themePresetId).toBe("first");
   });
 
   it("recommends a preset only after two picks and leaves ties open", async () => {

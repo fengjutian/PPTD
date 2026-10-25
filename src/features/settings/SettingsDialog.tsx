@@ -2,7 +2,16 @@ import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "luci
 import { useEffect, useMemo, useState } from "react";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
-import { clearDesignMemory, designMemorySummary, type DesignMemorySummary } from "../../services/design-memory";
+import {
+  clearDesignMemory,
+  designMemorySummary,
+  loadDesignPreferences,
+  loadRecentLooks,
+  removeDesignMemory,
+  type DesignLook,
+  type DesignMemorySummary,
+  type DesignPreference,
+} from "../../services/design-memory";
 import { clearVisionCapabilityCache } from "../../services/ai-vision";
 import {
   createTranslator,
@@ -60,6 +69,10 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
   const [testState, setTestState] = useState<{ kind: "success" | "error"; message: string }>();
   const [installedFonts, setInstalledFonts] = useState<Record<string, boolean>>({});
   const [memory, setMemory] = useState<DesignMemorySummary>();
+  const [memoryDetails, setMemoryDetails] = useState<{ looks: DesignLook[]; preferences: DesignPreference[] }>({
+    looks: [],
+    preferences: [],
+  });
   const provider = findAiProvider(settings.aiProviderId);
   const t = useMemo(() => createTranslator(language), [language]);
   const providerLabel = language === "en" ? (provider.labelEn ?? provider.label) : provider.label;
@@ -78,9 +91,13 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
   }, []);
   useEffect(() => {
     let active = true;
-    void designMemorySummary().then((summary) => {
-      if (active) setMemory(summary);
-    });
+    void Promise.all([designMemorySummary(), loadRecentLooks(5), loadDesignPreferences(5)]).then(
+      ([summary, looks, preferences]) => {
+        if (!active) return;
+        setMemory(summary);
+        setMemoryDetails({ looks, preferences });
+      },
+    );
     return () => {
       active = false;
     };
@@ -90,6 +107,15 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
     for (const option of UI_FONT_OPTIONS) detected[option.id] = probeUiFont(option);
     setInstalledFonts(detected);
   }, []);
+  const refreshMemory = async () => {
+    const [summary, looks, preferences] = await Promise.all([
+      designMemorySummary(),
+      loadRecentLooks(5),
+      loadDesignPreferences(5),
+    ]);
+    setMemory(summary);
+    setMemoryDetails({ looks, preferences });
+  };
   useEffect(() => {
     void aiKeyConfigured(settings.aiProviderId)
       .then(setConfigured)
@@ -300,7 +326,7 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
             <button
               type="button"
               onClick={() => {
-                void clearDesignMemory().then(() => setMemory({ decks: 0, preferences: 0 }));
+                void clearDesignMemory().then(refreshMemory);
               }}
               disabled={!memory || (memory.decks === 0 && memory.preferences === 0)}
             >
@@ -308,6 +334,56 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
               {t("settings.memory.clear")}
             </button>
           </div>
+          {(memoryDetails.looks.length > 0 || memoryDetails.preferences.length > 0) && (
+            <details className="settings-memory-details">
+              <summary>{t("settings.memory.details")}</summary>
+              {memoryDetails.looks.length > 0 && (
+                <>
+                  <h4>{t("settings.memory.looks")}</h4>
+                  <ul>
+                    {memoryDetails.looks.map((look) => (
+                      <li key={look.id}>
+                        <span>
+                          {look.concept === "documentary" ? "纪实全幅" : "编辑式"} · {look.pageCount} 页 ·{" "}
+                          {new Date(look.createdAt).toLocaleDateString("zh-CN")}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={t("settings.memory.remove")}
+                          onClick={() => {
+                            void removeDesignMemory(look.id).then(refreshMemory);
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {memoryDetails.preferences.length > 0 && (
+                <>
+                  <h4>{t("settings.memory.preferences")}</h4>
+                  <ul>
+                    {memoryDetails.preferences.map((preference) => (
+                      <li key={preference.id}>
+                        <span>“{preference.text}”</span>
+                        <button
+                          type="button"
+                          aria-label={t("settings.memory.remove")}
+                          onClick={() => {
+                            void removeDesignMemory(preference.id).then(refreshMemory);
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </details>
+          )}
           <label>
             {t("settings.model.apiBaseUrl")}
             <input value={provider.baseUrl} readOnly />

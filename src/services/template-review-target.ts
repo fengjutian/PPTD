@@ -45,6 +45,8 @@ export interface TemplateFitIssue {
   message: string;
   suggestion: string;
   elementIds: string[];
+  /** Which text role the finding belongs to, when it is role-specific. */
+  role?: "title" | "body";
   /** Normalized distance that caused the finding, when there is one. */
   deviation?: number;
 }
@@ -291,6 +293,24 @@ export function templateTargetForPrompt(
   return { ...target, layouts };
 }
 
+/**
+ * Whether a persisted target still describes the current document.
+ *
+ * A project may be reopened after its page size, theme or layouts changed.
+ * Applying the old axes then would judge the new design against a template it
+ * no longer uses. The check is deliberately conservative: when the evidence
+ * disagrees, the target is treated as stale and the review runs without it.
+ */
+export function templateTargetMatchesDocument(target: TemplateReviewTarget, document: PresentationDocument): boolean {
+  const widthRatio = document.pageSize.width / target.page.widthEmu;
+  const heightRatio = document.pageSize.height / target.page.heightEmu;
+  if (Math.abs(widthRatio - 1) > 0.01 || Math.abs(heightRatio - 1) > 0.01) return false;
+  if (document.theme?.name && document.theme.name !== target.name) return false;
+  const layoutNames = new Set(document.layouts?.map((layout) => layout.name) ?? []);
+  if (layoutNames.size === 0) return true;
+  return target.layouts.some((layout) => layoutNames.has(layout.name));
+}
+
 /** The layout a slide was designed against, falling back to the deck grid. */
 export function templateTargetForSlide(
   document: PresentationDocument,
@@ -429,6 +449,7 @@ export function checkTemplateFit(
             message: `标题字号 ${title.style.fontSizePt}pt 与模板 ${resolved.titleSizePt}pt 不一致`,
             suggestion: `把标题字号恢复到模板的 ${resolved.titleSizePt}pt，或说明为什么必须偏离`,
             elementIds: [title.id],
+            role: "title",
             deviation: difference,
           });
         }
@@ -444,6 +465,7 @@ export function checkTemplateFit(
           message: `标题颜色 ${title.style.color} 不在模板色板中`,
           suggestion: "把标题颜色换回模板主题色或中性墨色",
           elementIds: [title.id],
+          role: "title",
         });
       }
       if (!fontBelongsToTemplate(title.style.fontFamily, target)) {
@@ -454,6 +476,7 @@ export function checkTemplateFit(
           message: `标题字体 ${title.style.fontFamily} 不属于模板字体（${[target.majorFont, target.minorFont].filter(Boolean).join(" / ")}）`,
           suggestion: "把标题字体换回模板主题字体",
           elementIds: [title.id],
+          role: "title",
         });
       }
     }
@@ -490,6 +513,7 @@ export function checkTemplateFit(
             message: `正文字号 ${bodies[0].style.fontSizePt}pt 与模板 ${resolved.bodySizePt}pt 不一致`,
             suggestion: `把正文字号恢复到模板的 ${resolved.bodySizePt}pt，或说明为什么必须偏离`,
             elementIds: [bodies[0].id],
+            role: "body",
             deviation: difference,
           });
         }
@@ -502,6 +526,7 @@ export function checkTemplateFit(
           message: `正文字体 ${bodies[0].style.fontFamily} 不属于模板字体`,
           suggestion: "把正文字体换回模板主题字体",
           elementIds: [bodies[0].id],
+          role: "body",
         });
       }
     }
@@ -536,6 +561,7 @@ export function templateFitVisualIssues(report: TemplateFitReport): VisualReview
     elementIds: issue.elementIds,
     suggestion: issue.suggestion,
     code: issue.code,
+    ...(issue.role === undefined ? {} : { role: issue.role }),
   }));
 }
 

@@ -6,6 +6,7 @@ import {
   buildTemplateReviewTarget,
   checkTemplateFit,
   templateTargetForSlide,
+  templateTargetMatchesDocument,
 } from "./template-review-target";
 import { defaultPresentationVisualGoal } from "./visual-alignment";
 
@@ -217,6 +218,22 @@ describe("template review target", () => {
       }),
     )!;
     expect(target.layouts[0]?.freeComposition).toBe(true);
+  });
+
+  it("rejects a persisted target after the page size or theme changed", () => {
+    const target = buildTemplateReviewTarget(analysis())!;
+    const document = withBody();
+    expect(templateTargetMatchesDocument(target, document)).toBe(true);
+    document.pageSize = { ...document.pageSize, width: emu(document.pageSize.width + 300000) };
+    expect(templateTargetMatchesDocument(target, document)).toBe(false);
+    const themed = withBody();
+    themed.theme = {
+      name: "另一个模板",
+      majorFont: "Source Han Sans",
+      minorFont: "Source Han Sans",
+      colors: [],
+    };
+    expect(templateTargetMatchesDocument(target, themed)).toBe(false);
   });
 
   it("skips free-composition cover pages", () => {

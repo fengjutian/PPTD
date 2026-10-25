@@ -7,7 +7,12 @@ import { ContentHistory } from "./ContentHistory";
 describe("content history", () => {
   it("explains how the first version is created when there is no history", () => {
     const markup = renderToStaticMarkup(
-      <ContentHistory document={createDocument()} onClose={() => undefined} onRestore={() => undefined} onRestoreDesign={() => undefined} />,
+      <ContentHistory
+        document={createDocument()}
+        onClose={() => undefined}
+        onRestore={() => undefined}
+        onRestoreDesign={() => undefined}
+      />,
     );
     expect(markup).toContain("内容版本");
     expect(markup).toContain("还没有已确认的内容版本");
@@ -21,7 +26,12 @@ describe("content history", () => {
     document.slides[0]!.content.title = "新标题";
 
     const markup = renderToStaticMarkup(
-      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} onRestoreDesign={() => undefined} />,
+      <ContentHistory
+        document={document}
+        onClose={() => undefined}
+        onRestore={() => undefined}
+        onRestoreDesign={() => undefined}
+      />,
     );
 
     expect(markup).toContain("内容 r1");
@@ -42,7 +52,12 @@ describe("content history", () => {
     captureContentVersion(document);
 
     const markup = renderToStaticMarkup(
-      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} onRestoreDesign={() => undefined} />,
+      <ContentHistory
+        document={document}
+        onClose={() => undefined}
+        onRestore={() => undefined}
+        onRestoreDesign={() => undefined}
+      />,
     );
 
     expect(markup).toContain("没有差异");
@@ -58,7 +73,12 @@ describe("content history", () => {
     document.slides[2]!.content.title = "第三页新标题";
 
     const markup = renderToStaticMarkup(
-      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} onRestoreDesign={() => undefined} />,
+      <ContentHistory
+        document={document}
+        onClose={() => undefined}
+        onRestore={() => undefined}
+        onRestoreDesign={() => undefined}
+      />,
     );
 
     expect(markup).toContain("第 3 页");
@@ -72,15 +92,22 @@ describe("content history", () => {
         id: crypto.randomUUID(),
         createdAt: "2026-10-23T10:00:00.000Z",
         overallScore: 86,
+        templateFitScore: 92,
         issueCount: 3,
         slides: [{ slideIndex: 0, overallScore: 90 }],
       },
     ];
     const markup = renderToStaticMarkup(
-      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} onRestoreDesign={() => undefined} />,
+      <ContentHistory
+        document={document}
+        onClose={() => undefined}
+        onRestore={() => undefined}
+        onRestoreDesign={() => undefined}
+      />,
     );
     expect(markup).toContain("AI 视觉评审记录");
     expect(markup).toContain("86 分");
+    expect(markup).toContain("模板符合度 92");
   });
 
   it("offers a design restore when the layout changed after the version", () => {
@@ -90,7 +117,12 @@ describe("content history", () => {
     frame.x = (frame.x + 1000) as never;
 
     const markup = renderToStaticMarkup(
-      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} onRestoreDesign={() => undefined} />,
+      <ContentHistory
+        document={document}
+        onClose={() => undefined}
+        onRestore={() => undefined}
+        onRestoreDesign={() => undefined}
+      />,
     );
     expect(markup).toContain("同时恢复版式");
   });
@@ -104,7 +136,12 @@ describe("content history", () => {
     document.slides[1]!.content.title = "后来新增的页";
 
     const markup = renderToStaticMarkup(
-      <ContentHistory document={document} onClose={() => undefined} onRestore={() => undefined} onRestoreDesign={() => undefined} />,
+      <ContentHistory
+        document={document}
+        onClose={() => undefined}
+        onRestore={() => undefined}
+        onRestoreDesign={() => undefined}
+      />,
     );
 
     expect(markup).toContain("新增页");

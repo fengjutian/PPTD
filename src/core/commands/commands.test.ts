@@ -1000,6 +1000,38 @@ describe("document commands", () => {
     expect(title?.type === "text" && title.frame.x).toBe(Math.round(0.3 * result.pageSize.width));
   });
 
+  it("角色修复可以同时移动标题并恢复模板字体", () => {
+    const source = createDocument();
+    const content = { title: "标题", body: "正文", speakerNotes: "" };
+    const design = {
+      layout: "title-body" as const,
+      background: "#FFFFFF",
+      accent: "#3366CC",
+      titleColor: "#111111",
+      bodyColor: "#333333",
+      elementRepairs: [
+        {
+          action: "move" as const,
+          target: "title" as const,
+          frame: { x: 0.1, y: 0.1, width: 0.8, height: 0.1 },
+        },
+        {
+          action: "restyle" as const,
+          target: "title" as const,
+          fontFamily: "Source Han Sans",
+        },
+      ],
+    };
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "apply-ai-designed-draft", title: "字体", slides: [content], designs: [design] }),
+    );
+    const title = result.slides[0]!.elements.find(
+      (element) => element.type === "text" && element.text === content.title,
+    );
+    expect(title?.type === "text" && title.style.fontFamily).toBe("Source Han Sans");
+    expect(title?.type === "text" && title.frame.x).toBe(Math.round(0.1 * result.pageSize.width));
+  });
+
   it("区域移动把整块内容按比例搬到目标位置", () => {
     const source = createDocument();
     const content = { title: "标题", body: "正文", speakerNotes: "" };
