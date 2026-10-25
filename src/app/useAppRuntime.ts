@@ -26,7 +26,9 @@ import {
   defaultConceptForPreset,
   defaultEditorialConcept,
   resolveDeckConcept,
+  variantConceptPresetId,
   type AiDeckConcept,
+  type ConceptPresetId,
   type DeckConcept,
 } from "../core/design/deck-concept";
 import {
@@ -3168,11 +3170,12 @@ export function useAppRuntime() {
       const briefs = briefsFromDraft(sourceDraft);
       const pageFacts = compositionFactsFromDraft(sourceDraft);
       const topPreset = findThemePreset(firstChoice.presetId) ?? defaultThemePreset();
-      // One skeleton for the whole batch: the template is the variable the user
-      // is choosing between, and eight different skeletons would make the
-      // comparison about composition instead of the look they asked for.
+      // One recommended direction for the batch, then a different skeleton per
+      // card. Sharing one skeleton made every card the same layout in another
+      // colour; the batch is a look comparison, and a look is palette *and*
+      // composition. The model still picks the direction of the first card.
       setDesignProgress({ percent: 6, label: "正在确定整册设计方向" });
-      setDesignDetail(`基准方向按「${topPreset.name}」的气质生成，${plan.length} 个版本共用它`);
+      setDesignDetail(`推荐方向按「${topPreset.name}」的气质生成，其余版本换版面骨架`);
       let baseConcept: AiDeckConcept;
       try {
         baseConcept = await generateDeckConcepts(sourceDraft, briefs, presetTemplateAnalysis(topPreset), {
@@ -3190,6 +3193,20 @@ export function useAppRuntime() {
         pageFacts,
         pageCount: sourceDraft.slides.length,
       }).concept;
+      // Resolved once per skeleton: expanding a concept is pure, but the batch
+      // asks for the same three alternates several times.
+      const skeletonConcepts = new Map<ConceptPresetId, DeckConcept>([[concept.preset, concept]]);
+      const conceptForSkeleton = (presetId: ConceptPresetId): DeckConcept => {
+        const cached = skeletonConcepts.get(presetId);
+        if (cached) return cached;
+        const resolved = resolveDeckConcept({
+          concept: defaultConceptForPreset(presetId),
+          pageFacts,
+          pageCount: sourceDraft.slides.length,
+        }).concept;
+        skeletonConcepts.set(presetId, resolved);
+        return resolved;
+      };
       // The previews need a document for page numbers and section labels, but
       // not a designed one: a neutral draft document carries the reviewed copy.
       const baseline = createDocument();
@@ -3203,16 +3220,18 @@ export function useAppRuntime() {
           failed += 1;
           continue;
         }
+        const variantConcept = conceptForSkeleton(variantConceptPresetId(concept.preset, index));
+        const skeletonLabel = CONCEPT_PRESET_LABELS[variantConcept.preset];
         setDesignProgress({
           percent: 8 + Math.round((86 * index) / plan.length),
           label: `正在排第 ${index + 1}/${plan.length} 个版本`,
         });
-        setDesignDetail(`「${preset.name}」· ${choice.reason}`);
+        setDesignDetail(`「${preset.name}」· ${skeletonLabel} · ${choice.reason}`);
         try {
           const analysis = presetTemplateAnalysis(preset);
           const design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
             taskId,
-            concept,
+            concept: variantConcept,
             themeDirection: themeDirectionForPreset(preset),
           });
           if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
@@ -3224,7 +3243,7 @@ export function useAppRuntime() {
             title: sourceDraft.title,
             slides: sourceDraft.slides,
             designs: design.slides,
-            designConcept: concept,
+            designConcept: variantConcept,
             themePresetId: preset.id,
             // Same background rhythm the kept version will get, so the card's
             // issue count is measured on the composition the user sees.
@@ -3233,7 +3252,7 @@ export function useAppRuntime() {
           const issues = validatePresentationVisualQuality(candidate, design.slides).issues;
           const pages = buildDirectionPreviewPages({
             document: baseline,
-            concept,
+            concept: variantConcept,
             pageIndexes: previewIndexes,
             designs: previewIndexes.map((pageIndex) => design.slides[pageIndex]!),
             commandBase: { themePresetId: preset.id },
@@ -3243,11 +3262,11 @@ export function useAppRuntime() {
             pages.map(async (page) => (await renderPresentationForVisualReview(page.document, 640)).slides[0]),
           );
           const id = crypto.randomUUID();
-          variantDesignsRef.current.set(id, { presetId: preset.id, concept, design });
+          variantDesignsRef.current.set(id, { presetId: preset.id, concept: variantConcept, design });
           variants.push({
             id,
             presetId: preset.id,
-            name: preset.name,
+            name: `${preset.name} · ${skeletonLabel}`,
             description: preset.description,
             reason: choice.reason,
             images: rendered.filter((image): image is string => image !== undefined),

@@ -142,6 +142,24 @@ export const CONCEPT_PRESET_LABELS: Readonly<Record<ConceptPresetId, string>> = 
 
 export const CONCEPT_PRESET_IDS = Object.keys(CONCEPT_PRESETS) as ConceptPresetId[];
 
+/**
+ * The skeleton a batch card pairs with its palette.
+ *
+ * Card 0 is the direction the model recommended; the rest rotate through the
+ * other renderable skeletons. A batch that only swaps colours is a palette
+ * picker wearing a deck preview: the cards cannot be told apart, and the user
+ * is choosing a hue while believing they are choosing a look.
+ *
+ * The rotation is deterministic so the same deck keeps the same cards between
+ * runs, and so two neighbouring cards never share both palette and composition.
+ */
+export function variantConceptPresetId(base: ConceptPresetId, index: number): ConceptPresetId {
+  const order = CONCEPT_PRESET_IDS;
+  const start = Math.max(0, order.indexOf(base));
+  const step = Math.max(0, Math.trunc(index));
+  return order[(start + step) % order.length]!;
+}
+
 export function defaultEditorialConcept(): AiDeckConcept {
   return {
     preset: "editorial",

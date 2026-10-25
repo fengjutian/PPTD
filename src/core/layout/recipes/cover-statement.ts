@@ -34,9 +34,11 @@ export const coverStatement: LayoutRecipe = {
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
 
-    // The cover is a full-bleed field of the theme accent. Every stop is dark
+    // The cover is a full-bleed field of the brand panel. The panel tone is
+    // never an ink resolved for this page: on a dark page that ink is nearly
+    // white, which painted the cover as a grey gradient. Every stop is dark
     // enough for white copy, so the same ink works on all presets.
-    const gradient = accentPanelGradient(ctx.colors.accent);
+    const gradient = accentPanelGradient(ctx.colors.panel);
     const ink = "#FFFFFF";
     const coverTitle = {
       x: chrome.title.x,
@@ -66,7 +68,7 @@ export const coverStatement: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(frameFromNormalized({ x: 0, y: 0, width: 1, height: 1 }, page), ctx.colors.accent, gradient),
+      rectElement(frameFromNormalized({ x: 0, y: 0, width: 1, height: 1 }, page), ctx.colors.panel, gradient),
       textElement(title, titleFrame, titleSize, ink, true, "left", headingFamily, {
         contentRef: "title",
         lineHeight,

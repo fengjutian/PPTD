@@ -4,7 +4,7 @@ import { z } from "zod";
 import { LAYOUT_CAPACITY, stripListPrefix } from "../core/commands/layout-capacity";
 import type { AiPaletteRole, CompositionFacts } from "../core/commands/design-intent";
 
-import { contrastRatio as colorContrastRatio } from "../core/rendering/contrast";
+import { contrastRatio as colorContrastRatio, fillForInk, MINIMUM_CONTRAST } from "../core/rendering/contrast";
 import { loadSettings } from "./settings";
 
 export const narrativeStrategySchema = z.enum([
@@ -744,6 +744,21 @@ function deriveInk(palette: TemplatePalette, background: string): DerivedInk {
 }
 
 /**
+ * Deepens a filled page until the ink it carries reads on it.
+ *
+ * The palette's accent tones are chosen to be marks on paper, not whole pages.
+ * A light accent painted full-bleed under the inverse ink is a 2.5:1 page, so
+ * the field is deepened rather than the beat being turned into dark text on a
+ * bright field: the deck keeps its own rhythm. Light fields are left alone;
+ * their ink is chosen against them.
+ */
+function readableField(fill: string, ink: string): string {
+  if ((colorContrastRatio(ink, fill) ?? 21) >= MINIMUM_CONTRAST) return fill;
+  if (colorLuminance(fill) > 0.45) return fill;
+  return fillForInk(ink, fill);
+}
+
+/**
  * The colour of a palette slot.
  *
  * The model picks a slot of the template palette instead of a colour value, so
@@ -793,8 +808,11 @@ export function constrainDesignToTemplate(
   if (!palette.hasColors) return design;
   return {
     slides: design.slides.map((slide) => {
-      const background =
+      const requestedBackground =
         roleColor(slide.palette?.background, palette, deriveInk(palette, palette.background)) ?? palette.background;
+      // The field has to carry the copy that is set on it, so a light accent
+      // used as a page surface is deepened until its inverse ink reads.
+      const background = readableField(requestedBackground, deriveInk(palette, requestedBackground).ink);
       // The inks are derived from the background the page actually uses, not
       // from the background the template defaults to.
       const derived = deriveInk(palette, background);

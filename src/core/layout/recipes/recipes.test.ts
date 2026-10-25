@@ -4,6 +4,7 @@ import { inches, type ContentBlock, type SlideContent, type TextElement } from "
 import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../../design/deck-concept";
 import { deriveDesignTokens } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
+import { contrastRatio } from "../../rendering/contrast";
 import { planPageChrome } from "../page-chrome";
 import { asymmetricSplit } from "./asymmetric-split";
 import { chartStory } from "./chart-story";
@@ -85,6 +86,7 @@ function context(
       accent: "#1F4E79",
       background: "#FFFFFF",
       rule: "#E2E7EC",
+      panel: "#1F4E79",
     },
     frame: {
       title,
@@ -393,6 +395,28 @@ describe("cover-statement recipe", () => {
 
   it("refuses a content page", () => {
     expect(coverStatement.supports(facts(), concept(), { hasArtwork: false, hasAsset: false })).toBe(false);
+  });
+
+  it("paints the brand panel on a dark page instead of the light accent ink", () => {
+    const pageContent = {
+      title: "年度销售汇报",
+      body: "2026 财年 · 董事会",
+      speakerNotes: "",
+      status: "approved" as const,
+    };
+    const ctx = context(pageContent, { facts: facts({ layout: "cover", itemCount: 1 }) });
+    // A dark cover resolves its accents to the light ink that reads on it. The
+    // field used to be filled with that ink, which painted a grey gradient and
+    // left the white subtitle at 2:1.
+    ctx.colors = { ...ctx.colors, accent: "#F7F9FC", title: "#F7F9FC", body: "#F7F9FC", panel: "#2563EB" };
+    const result = plan(coverStatement, ctx);
+    const field = result.elements.find((element) => element.type === "shape" && element.style.fillGradient);
+    expect(field?.type === "shape" ? field.style.fill : "").toBe("#2563EB");
+    for (const stop of field?.type === "shape" ? (field.style.fillGradient?.stops ?? []) : []) {
+      expect(contrastRatio("#FFFFFF", stop.color), stop.color).toBeGreaterThanOrEqual(4.5);
+    }
+    const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(title?.type === "text" ? title.style.color : "").toBe("#FFFFFF");
   });
 });
 

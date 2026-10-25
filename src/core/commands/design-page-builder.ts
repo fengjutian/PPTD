@@ -909,6 +909,14 @@ export function buildDesignedSlide(
       background: slide.background,
       rule: ruleInk,
       card: cardFill,
+      // The accent as a surface, not as an ink: a full-bleed panel keeps the
+      // brand tone and is deepened only until white copy reads on it. Reusing
+      // `accentInk` here turned dark pages into white gradients.
+      //
+      // A coloured page is its own field, so its panel is a deeper tone of that
+      // field rather than a second accent hue: a teal chapter page with a blue
+      // block reads as two unrelated brands.
+      panel: fillForInk("#FFFFFF", pageLuminance < 0.45 ? slide.background : design.accent),
     };
     const recipeFrame = {
       title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),

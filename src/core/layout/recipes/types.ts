@@ -27,6 +27,15 @@ export interface RecipeContext {
     rule: string;
     /** The surface a recipe may use for a card or panel. */
     card?: string;
+    /**
+     * The brand surface a full-bleed recipe paints itself with.
+     *
+     * Different from `accent`, which is the ink for accent marks *on this
+     * page*: on a dark page that ink is light, and a recipe that filled a
+     * panel with it produced a white-to-grey field with white copy on it. This
+     * slot is always a saturated tone that can carry white text.
+     */
+    panel: string;
   };
   frame: {
     title: RectEmu;

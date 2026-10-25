@@ -8,6 +8,7 @@ import {
   defaultPaperConcept,
   planConceptRhythm,
   resolveDeckConcept,
+  variantConceptPresetId,
   type ConceptPresetId,
 } from "./deck-concept";
 
@@ -148,5 +149,19 @@ describe("deck concept", () => {
 
   it("keeps the preset list in step with the renderer", () => {
     expect(CONCEPT_PRESET_IDS).toEqual(["editorial", "documentary", "paper", "instrument"]);
+  });
+
+  it("gives every batch card its own skeleton, starting from the recommendation", () => {
+    // A batch that swaps only colours makes six cards look alike; each card has
+    // to pair its palette with a different composition.
+    expect(variantConceptPresetId("editorial", 0)).toBe("editorial");
+    expect(["documentary", "paper", "instrument"]).toContain(variantConceptPresetId("editorial", 1));
+    const cards = Array.from({ length: 6 }, (_, index) => variantConceptPresetId("paper", index));
+    expect(cards.slice(0, 4)).toEqual(["paper", "instrument", "editorial", "documentary"]);
+    // Neighbouring cards never share the skeleton, and the rotation repeats
+    // only after every renderable preset has been used.
+    for (let index = 1; index < cards.length; index += 1) expect(cards[index]).not.toBe(cards[index - 1]);
+    expect(cards[4]).toBe("paper");
+    expect(cards[5]).toBe("instrument");
   });
 });

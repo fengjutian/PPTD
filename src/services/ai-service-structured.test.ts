@@ -641,6 +641,44 @@ describe("AI structured outputs", () => {
     );
   });
 
+  it("deepens an accent surface until the copy it carries reads", () => {
+    const template = {
+      slideWidthEmu: null,
+      slideHeightEmu: null,
+      majorFont: null,
+      minorFont: null,
+      defaultBackgroundColor: "bg1",
+      themeColors: [
+        { name: "bg1", value: "#F7F9FC" },
+        { name: "dk1", value: "#0B1F3A" },
+        { name: "lt1", value: "#F7F9FC" },
+        { name: "accent1", value: "#06A6C8" },
+      ],
+      slides: [],
+      layouts: [],
+    };
+    const design = aiPresentationDesignSchema.parse({
+      slides: [
+        {
+          layout: "section",
+          background: "#FFFFFF",
+          accent: "#2563EB",
+          titleColor: "#111111",
+          bodyColor: "#333333",
+          palette: { background: "accent-1", title: "inverse", body: "inverse" },
+        },
+      ],
+    });
+    const constrained = constrainDesignToTemplate(design, template);
+    const page = constrained.slides[0]!;
+    // The accent tones are chosen for marks on paper. Painted full-bleed under
+    // the inverse ink, a light one is a 2.6:1 page, so the field is deepened
+    // rather than the beat being lost to dark text on a bright field.
+    expect(page.background).not.toBe("#06A6C8");
+    expect(contrastRatio(page.titleColor, page.background)!).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(page.bodyColor, page.background)!).toBeGreaterThanOrEqual(4.5);
+  });
+
   it("refuses a palette slot that the template does not have without losing the template palette", () => {
     const template = {
       slideWidthEmu: null,

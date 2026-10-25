@@ -1,5 +1,5 @@
 import type { ShapeFillGradient } from "../document-model";
-import { parseHexColor } from "../rendering/contrast";
+import { fillForInk, parseHexColor } from "../rendering/contrast";
 
 type Rgb = [number, number, number];
 
@@ -22,14 +22,19 @@ export function mixHex(from: string, to: string, amount: number): string {
  * copy keeps a readable contrast on every theme — including the lighter gold
  * and orange accents. The middle stop keeps the brand color dominant while the
  * ends give the field a soft light direction.
+ *
+ * The base is deepened first when the accent itself is too light to carry
+ * white: a pale accent under a white headline is a 2:1 page, and a page whose
+ * only copy is unreadable is worse than a deeper field.
  */
 export function accentPanelGradient(accent: string): ShapeFillGradient {
+  const base = fillForInk("#FFFFFF", accent);
   return {
     angleDeg: 45,
     stops: [
-      { offset: 0, color: mixHex(accent, "#000000", 0.15) },
-      { offset: 0.52, color: mixHex(accent, "#000000", 0.38) },
-      { offset: 1, color: mixHex(accent, "#000000", 0.58) },
+      { offset: 0, color: mixHex(base, "#000000", 0.15) },
+      { offset: 0.52, color: mixHex(base, "#000000", 0.38) },
+      { offset: 1, color: mixHex(base, "#000000", 0.58) },
     ],
   };
 }

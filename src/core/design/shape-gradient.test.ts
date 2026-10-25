@@ -30,6 +30,15 @@ describe("shape gradients", () => {
     }
   });
 
+  it("deepens a pale accent instead of painting a field its copy cannot survive", () => {
+    // A near-white accent reached the field once the cover was treated as a
+    // dark page: the gradient came out neutral grey and the white subtitle on
+    // it was unreadable. The field owns that contrast, not the caller.
+    for (const stop of accentPanelGradient("#F7F9FC").stops) {
+      expect(contrastRatio("#FFFFFF", stop.color), stop.color).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("turns a DrawingML angle into CSS and canvas endpoints", () => {
     expect(gradientCss(accentPanelGradient("#A62B1F"))).toContain("linear-gradient(135deg");
     const points = gradientLinePoints(45, 100, 50);

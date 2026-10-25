@@ -46,7 +46,9 @@ export const sectionStatement: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(frameFromNormalized(PANEL, page), colors.accent, accentPanelGradient(colors.accent)),
+      // The panel is a brand surface, not this page's accent ink: on a dark
+      // chapter page the accent ink is near-white and the panel vanished.
+      rectElement(frameFromNormalized(PANEL, page), colors.panel, accentPanelGradient(colors.panel)),
       textElement(
         String(ctx.page.index + 1).padStart(2, "0"),
         frameFromNormalized(NUMBER, page),
