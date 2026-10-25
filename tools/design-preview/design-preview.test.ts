@@ -105,8 +105,30 @@ describe("ten-page design preview", () => {
     // The editorial direction draws an accent rule under the title; documentary
     // does not, so the same content produces a different element count.
     expect(editorial.slides[3]!.elements.length).toBe(documentary.slides[3]!.elements.length + 1);
-    // The instrument rail is one more element on top of the editorial chrome.
-    expect(instrument.slides[3]!.elements.length).toBe(editorial.slides[3]!.elements.length + 1);
+    // The two newer directions own a composition, not just a margin: the
+    // instrument page puts one point per column, the editorial page keeps one
+    // text column of numbered rows, and the paper column drops the index.
+    const itemTexts = (document: ReturnType<typeof buildDesignPreviewDocument>) =>
+      document.slides[3]!.elements.filter(
+        (element): element is TextElement =>
+          element.type === "text" &&
+          element.contentRef === "decorative" &&
+          !/^0\d$/.test(element.text.trim()) &&
+          // The footer is decorative too; it sits below the content region.
+          element.frame.y / document.pageSize.height < 0.85,
+      );
+    const itemColumns = (document: ReturnType<typeof buildDesignPreviewDocument>) =>
+      new Set(itemTexts(document).map((element) => element.frame.x)).size;
+    expect(itemColumns(editorial)).toBe(1);
+    expect(itemColumns(paper)).toBe(1);
+    expect(itemColumns(instrument)).toBe(4);
+    expect(itemTexts(paper)).toHaveLength(4);
+    const numerals = (document: ReturnType<typeof buildDesignPreviewDocument>) =>
+      document.slides[3]!.elements.filter((element) => element.type === "text" && /^0\d$/.test(element.text.trim()))
+        .length;
+    expect(numerals(editorial)).toBe(4);
+    expect(numerals(instrument)).toBe(4);
+    expect(numerals(paper)).toBe(0);
   });
 
   it("passes the deterministic taste lint without a finding", () => {

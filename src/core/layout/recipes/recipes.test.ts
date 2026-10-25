@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { CompositionFacts } from "../../commands/design-intent";
 import { inches, type ContentBlock, type SlideContent, type TextElement } from "../../document-model";
-import { defaultEditorialConcept, resolveDeckConcept, type DeckConcept } from "../../design/deck-concept";
+import {
+  defaultEditorialConcept,
+  defaultInstrumentConcept,
+  defaultPaperConcept,
+  resolveDeckConcept,
+  type DeckConcept,
+} from "../../design/deck-concept";
 import { deriveDesignTokens } from "../../design/design-tokens";
 import { findThemePreset } from "../../design/theme-presets";
 import { contrastRatio } from "../../rendering/contrast";
@@ -13,6 +19,8 @@ import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
 import { imageLed } from "./image-led";
+import { instrumentColumns } from "./instrument-columns";
+import { paperColumn } from "./paper-column";
 import { processRail } from "./process-rail";
 import { quoteField } from "./quote-field";
 import { sectionStatement } from "./section-statement";
@@ -815,5 +823,89 @@ describe("section-statement recipe", () => {
     expect(
       sectionStatement.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false, hasTemplate: true }),
     ).toBe(false);
+  });
+});
+
+function directionConcept(preset: "paper" | "instrument"): DeckConcept {
+  const seed = preset === "paper" ? defaultPaperConcept() : defaultInstrumentConcept();
+  return resolveDeckConcept({ concept: seed, pageFacts: [facts()], pageCount: 1, id: preset }).concept;
+}
+
+function prosePage(title: string, items: string[]): SlideContent {
+  return {
+    title,
+    body: items.join("\n"),
+    blocks: [{ id: "bullets-1", type: "bullet-list", items }],
+    speakerNotes: "",
+    status: "approved",
+  };
+}
+
+describe("paper-column recipe", () => {
+  it("sets the points as one measured column, without an index or row rules", () => {
+    const pageContent = prosePage("门店调整的判断", [
+      "关闭低效门店释放租金",
+      "把陈列面积让给高频品类",
+      "用预约制降低高峰拥堵",
+    ]);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    ctx.concept = directionConcept("paper");
+    expect(paperColumn.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(paperColumn, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, pageContent)).toBeUndefined();
+    const texts = result.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(
+      expect.arrayContaining(["关闭低效门店释放租金", "把陈列面积让给高频品类", "用预约制降低高峰拥堵"]),
+    );
+    // No index and no separator per row: the page is read, not scanned.
+    expect(texts.some((element) => /^0\d$/.test(element.text))).toBe(false);
+    expect(result.elements.filter((element) => element.type === "shape")).toHaveLength(1);
+    // One measure: every paragraph starts on the same axis.
+    const paragraphX = new Set(
+      texts.filter((element) => element.contentRef !== "title").map((element) => element.frame.x),
+    );
+    expect(paragraphX.size).toBe(1);
+  });
+
+  it("refuses a list that has no column shape", () => {
+    const seven = prosePage("七个判断", ["一", "二", "三", "四", "五", "六", "七"]);
+    const ctx = context(seven, { facts: facts({ itemCount: 7 }) });
+    ctx.concept = directionConcept("paper");
+    expect(paperColumn.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(false);
+  });
+});
+
+describe("instrument-columns recipe", () => {
+  it("puts every point in its own panel with an oversized index", () => {
+    const pageContent = prosePage("三项核心指标", ["销售收入 38 万", "客户数 260 家", "平均交付 5 天"]);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3, longestItemLength: 12 }) });
+    ctx.concept = directionConcept("instrument");
+    expect(instrumentColumns.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(instrumentColumns, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, pageContent)).toBeUndefined();
+    const texts = result.elements.filter((element): element is TextElement => element.type === "text");
+    expect(texts.map((element) => element.text)).toEqual(expect.arrayContaining(["01", "02", "03"]));
+    // One text column per point, not rows in a shared column.
+    const copyColumns = new Set(
+      texts
+        .filter((element) => element.contentRef !== "title" && !/^0\d$/.test(element.text))
+        .map((element) => element.frame.x),
+    );
+    expect(copyColumns.size).toBe(3);
+    // A tier of hairlines above the indexes, and one separator between panels.
+    const bars = result.elements.filter((element) => element.type === "shape");
+    expect(bars.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("refuses a point that is a paragraph, not a panel", () => {
+    const long = prosePage("两项对比", [
+      "搜索广告仍然贡献了绝大部分的营收与现金流，是本季度最稳定的业务",
+      "云业务增速更快但利润率仍低于广告",
+    ]);
+    const ctx = context(long, { facts: facts({ itemCount: 2, longestItemLength: 34 }) });
+    ctx.concept = directionConcept("instrument");
+    expect(instrumentColumns.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(false);
   });
 });

@@ -36,7 +36,18 @@ export type RecipeId =
   | "weighted-split"
   | "timeline-rail"
   | "quote-field"
-  | "section-statement";
+  | "section-statement"
+  /**
+   * Compositions only one direction draws.
+   *
+   * The four directions used to share all twelve recipes, so they differed in
+   * margins and type scale but never in how a page was built. These two are the
+   * direction's own page: a measured prose column for `paper`, an instrument
+   * grid of indexes for `instrument`. They are selected by the command layer
+   * from the concept, never requested by the model.
+   */
+  | "paper-column"
+  | "instrument-columns";
 
 export interface AiDeckConcept {
   preset: ConceptPresetId;
@@ -91,6 +102,11 @@ const EDITORIAL_RECIPES: readonly RecipeId[] = [
   "section-statement",
 ];
 
+/** The editorial set plus the prose column the paper direction draws itself. */
+const PAPER_RECIPES: readonly RecipeId[] = [...EDITORIAL_RECIPES, "paper-column"];
+/** The editorial set plus the index grid the instrument direction draws itself. */
+const INSTRUMENT_RECIPES: readonly RecipeId[] = [...EDITORIAL_RECIPES, "instrument-columns"];
+
 const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
   editorial: {
     motif: "rules",
@@ -114,7 +130,7 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
   paper: {
     motif: "paper",
     surface: "column",
-    recipes: EDITORIAL_RECIPES,
+    recipes: PAPER_RECIPES,
     // Covers in every preset may promote a side/band request to a hero. Hero is
     // listed so the clamp table matches what the cover path can actually draw;
     // the prompt still keeps image-led pages on documentary.
@@ -127,7 +143,7 @@ const CONCEPT_PRESETS: Record<ConceptPresetId, ConceptPreset> = {
   instrument: {
     motif: "instrument",
     surface: "rail",
-    recipes: EDITORIAL_RECIPES,
+    recipes: INSTRUMENT_RECIPES,
     imagery: ["none", "band", "hero"],
     typeContrast: "dramatic",
   },

@@ -7,6 +7,7 @@ import { colorLuminance } from "../rendering/contrast";
 import { frameFromNormalized } from "./recipes/measure";
 import { rectElement } from "./recipes/elements";
 import { findRecipe } from "./recipes/registry";
+import { directionOwnsRequest, supportedDirectionRecipe } from "./recipes/plan";
 import type { NormalizedFrame, RecipeContext, RecipePlan, RecipeSupportOptions } from "./recipes/types";
 import type { PageChrome } from "./page-chrome";
 
@@ -40,10 +41,6 @@ function conflict(intent: string, reason: string): { conflict: IntentConflict } 
  * Logo and footer in place.
  */
 export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { conflict: IntentConflict } {
-  const recipeId = planRecipe(input.plan, input.facts);
-  if (!recipeId) return conflict("designPlan.role", "设计计划没有可用的页面配方");
-  const recipe = findRecipe(recipeId);
-  if (!recipe) return conflict("designPlan.recipe", `未知配方 ${recipeId}`);
   const supports: RecipeSupportOptions = {
     hasArtwork: input.hasArtwork,
     hasAsset: input.hasAsset,
@@ -51,6 +48,10 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
     ...(input.templateImage ? { hasTemplateImage: true } : {}),
     ...(input.assetRole ? { assetRole: input.assetRole } : {}),
   };
+  const recipeId = planRecipe(input.plan, input.facts, { concept: input.concept, options: supports });
+  if (!recipeId) return conflict("designPlan.role", "设计计划没有可用的页面配方");
+  const recipe = findRecipe(recipeId);
+  if (!recipe) return conflict("designPlan.recipe", `未知配方 ${recipeId}`);
   if (!recipe.supports(input.facts, input.concept, supports)) {
     return conflict("designPlan.recipe", `内容装不下配方 ${recipeId}`);
   }
@@ -116,8 +117,22 @@ function takeoverSurface(chrome: PageChrome, safe: NormalizedFrame): NormalizedF
   return { x: left, y: top, width: Math.max(0.2, right - left), height: Math.max(0.2, bottom - top) };
 }
 
-function planRecipe(plan: PageDesignPlan, facts: CompositionFacts): RecipeId | undefined {
-  if (plan.recipe) return plan.recipe;
+interface PlanDirection {
+  concept: DeckConcept;
+  options: RecipeSupportOptions;
+}
+
+function planRecipe(plan: PageDesignPlan, facts: CompositionFacts, direction?: PlanDirection): RecipeId | undefined {
+  // A direction owns a composition of its own. It is checked before the role
+  // table and before a shared-list request, otherwise `paper` and `instrument`
+  // would keep drawing the editorial list on every content page.
+  const own = direction ? supportedDirectionRecipe(facts, direction.concept, direction.options) : undefined;
+  if (plan.recipe) {
+    // A request for a shared list on a page the direction draws itself is a
+    // request about the content shape, not about the editorial index.
+    return own && directionOwnsRequest(plan.recipe) ? own : plan.recipe;
+  }
+  if (own) return own;
   switch (plan.role) {
     case "cover":
       return "cover-statement";
@@ -172,8 +187,12 @@ function recipeFocal(plan: PageDesignPlan): "title" | "index" | "body" | undefin
 }
 
 /** Exposed for the command layer's debug report and tests. */
-export function planRecipeId(plan: PageDesignPlan, facts: CompositionFacts): RecipeId | undefined {
-  return planRecipe(plan, facts);
+export function planRecipeId(
+  plan: PageDesignPlan,
+  facts: CompositionFacts,
+  direction?: PlanDirection,
+): RecipeId | undefined {
+  return planRecipe(plan, facts, direction);
 }
 
 /** The content frame that a takeover page actually uses. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CompositionFacts } from "../../commands/design-intent";
-import { defaultEditorialConcept, resolveDeckConcept } from "../../design/deck-concept";
+import { defaultConceptForPreset, defaultEditorialConcept, resolveDeckConcept } from "../../design/deck-concept";
 import { chooseRecipeId, planDeckRecipes, selectRecipe } from "./plan";
 
 function facts(overrides: Partial<CompositionFacts> = {}): CompositionFacts {
@@ -38,6 +38,34 @@ describe("recipe planning", () => {
 
   it("chooses the cover recipe for a cover", () => {
     expect(chooseRecipeId(facts({ layout: "cover", itemCount: 1 }), concept(), options)).toBe("cover-statement");
+  });
+
+  it("draws the direction's own composition on the same content", () => {
+    const direction = (preset: "editorial" | "paper" | "instrument") =>
+      resolveDeckConcept({
+        concept: defaultConceptForPreset(preset),
+        pageFacts: [facts()],
+        pageCount: 1,
+        id: preset,
+      }).concept;
+    const page = facts({ itemCount: 4, longestItemLength: 18 });
+    expect(chooseRecipeId(page, direction("editorial"), options)).toBe("editorial-index");
+    expect(chooseRecipeId(page, direction("paper"), options)).toBe("paper-column");
+    expect(chooseRecipeId(page, direction("instrument"), options)).toBe("instrument-columns");
+    // The instrument grid only takes four points; five falls back to the shared
+    // list instead of forcing a fifth panel.
+    expect(chooseRecipeId(facts({ itemCount: 5, longestItemLength: 18 }), direction("instrument"), options)).toBe(
+      "editorial-index",
+    );
+    // A model asking for the editorial list on a direction page gets the
+    // direction's page: the request describes "a list", not the index.
+    expect(
+      selectRecipe({ facts: page, concept: direction("paper"), requested: "editorial-index", options }).recipe?.id,
+    ).toBe("paper-column");
+    // The same request keeps the index on the editorial direction.
+    expect(
+      selectRecipe({ facts: page, concept: direction("editorial"), requested: "editorial-index", options }).recipe?.id,
+    ).toBe("editorial-index");
   });
 
   it("chooses the data story for a metric page", () => {
@@ -85,6 +113,20 @@ describe("recipe planning", () => {
     });
     expect(result.recipe).toBeUndefined();
     expect(result.conflict?.intent).toBe("recipe=editorial-index");
+  });
+
+  it("falls back to the content's own recipe when the request no longer fits", () => {
+    // The model asked for a plain cover, then attached a hero picture: the
+    // request is refused, and the page becomes the picture-led cover instead of
+    // dropping to the legacy branch.
+    const result = selectRecipe({
+      facts: facts({ layout: "cover", itemCount: 0 }),
+      concept: concept(),
+      requested: "cover-statement",
+      options: { hasArtwork: false, hasAsset: true, assetRole: "hero" },
+    });
+    expect(result.recipe?.id).toBe("image-led");
+    expect(result.conflict?.intent).toBe("recipe=cover-statement");
   });
 
   it("accepts a requested recipe that is legal", () => {

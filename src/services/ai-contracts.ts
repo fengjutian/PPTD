@@ -396,6 +396,13 @@ const aiDesignRecipeIds = [
   "timeline-rail",
   "quote-field",
   "section-statement",
+  // Two recipes a direction draws itself. The design prompt does not offer
+  // them: the command layer selects them from the concept (ADR 0094), and a
+  // request for one outside its direction is refused by the concept's recipe
+  // set. They appear here so the design type and the renderer agree on what an
+  // implemented recipe is.
+  "paper-column",
+  "instrument-columns",
 ] as const;
 
 const DESIGN_PLAN_FOCAL_KINDS = ["title", "number", "image", "chart", "none"] as const;

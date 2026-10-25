@@ -191,6 +191,7 @@ import {
   type TemplateFitReport,
 } from "../services/template-review-target";
 import { renderPresentationForVisualReview, renderPresentationPages } from "../services/presentation-renderer";
+import { buildPreviewAssets } from "../services/preview-placeholder";
 import {
   initialAgentWorkflow,
   startAgentWorkflow,
@@ -3255,7 +3256,9 @@ export function useAppRuntime() {
             concept: variantConcept,
             pageIndexes: previewIndexes,
             designs: previewIndexes.map((pageIndex) => design.slides[pageIndex]!),
-            commandBase: { themePresetId: preset.id },
+            // The card keeps the picture slots the design asked for: without
+            // them the page shows the white half the photo was going to fill.
+            commandBase: { themePresetId: preset.id, visualAssets: buildPreviewAssets(design.slides) },
             title: sourceDraft.title,
           });
           const rendered = await Promise.all(
@@ -3366,6 +3369,8 @@ export function useAppRuntime() {
       themePresetId: variant.presetId,
       // 与批量生成、与最终保留的那一版使用同一套背景节奏。
       backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+      // 配图位用占位块，而不是留白：这一版真正的构图里，那块地方是要放图的。
+      visualAssets: buildPreviewAssets(variant.design.slides),
     });
     if (preview.slides.length === 0) throw new Error("VARIANT_PREVIEW_MISSING");
     return renderPresentationPages(preview, 960);

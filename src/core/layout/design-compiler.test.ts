@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDocument, inches, type SlideContent } from "../document-model";
-import { defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
+import { defaultConceptForPreset, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
 import { deriveDesignTokens } from "../design/design-tokens";
 import type { CompositionFacts } from "../commands/design-intent";
 import { compileDesignPlan, planRecipeId } from "./design-compiler";
@@ -43,6 +43,7 @@ function input(plan: Parameters<typeof compileDesignPlan>[0]["plan"]) {
     accent: "#B08A2E",
     background: "#486A67",
     rule: "#DCE3EA",
+    panel: "#B08A2E",
   };
   const frame: RecipeContext["frame"] = { title, content, safe, page };
   const concept = resolveDeckConcept({
@@ -141,6 +142,32 @@ describe("design plan compiler", () => {
         { ...facts, hasComparison: true },
       ),
     ).toBe("weighted-split");
+  });
+
+  it("gives a direction its own composition before the role table", () => {
+    const paper = resolveDeckConcept({
+      concept: defaultConceptForPreset("paper"),
+      pageFacts: [facts],
+      pageCount: 1,
+      id: "compiler-paper",
+    }).concept;
+    const claim = {
+      role: "claim" as const,
+      density: "normal" as const,
+      templatePolicy: "ignore" as const,
+      composition: { primitive: "stack" as const },
+    };
+    const options = { hasArtwork: false, hasAsset: false, hasTemplate: false };
+    // The role table alone would keep drawing the editorial list on a paper
+    // deck; the direction's own page has to win.
+    expect(planRecipeId(claim, facts)).toBe("asymmetric-split");
+    expect(planRecipeId(claim, facts, { concept: paper, options })).toBe("paper-column");
+    // The model's request for the shared list is about the content shape, so it
+    // is taken over as well; a structured request is not.
+    expect(planRecipeId({ ...claim, recipe: "editorial-index" }, facts, { concept: paper, options })).toBe(
+      "paper-column",
+    );
+    expect(planRecipeId({ ...claim, recipe: "comparison" }, facts, { concept: paper, options })).toBe("comparison");
   });
 
   it("uses the planned density to choose a denser claim or summary", () => {

@@ -17,6 +17,49 @@ export interface RecipeSelectionResult {
 }
 
 /**
+ * The recipe a direction draws itself, when it has one.
+ *
+ * `paper` and `instrument` are compositions, not colour schemes: their content
+ * page is a prose column / an index grid. Without this the two directions fell
+ * through to the editorial list and only their margins differed.
+ */
+const DIRECTION_RECIPES: Partial<Record<DeckConcept["motif"], RecipeId>> = {
+  paper: "paper-column",
+  instrument: "instrument-columns",
+};
+
+/** The direction's own page recipe, if the concept allows it. */
+export function directionRecipeId(concept: DeckConcept): RecipeId | undefined {
+  const id = DIRECTION_RECIPES[concept.motif];
+  return id && concept.recipes.includes(id) ? id : undefined;
+}
+
+/** The direction's recipe, only when it can actually carry this page. */
+export function supportedDirectionRecipe(
+  facts: CompositionFacts,
+  concept: DeckConcept,
+  options: RecipeSelectionOptions,
+): RecipeId | undefined {
+  const id = directionRecipeId(concept);
+  const recipe = id ? findRecipe(id) : undefined;
+  return recipe?.supports(facts, concept, options) ? recipe.id : undefined;
+}
+
+/**
+ * The generic list shapes a direction with its own composition takes over.
+ *
+ * The design prompt only knows the shared recipes, so a model asking for a page
+ * of short points asks for `editorial-index` — which, on a paper or instrument
+ * deck, is exactly the page the direction draws itself. Requests for the
+ * structured recipes are left alone: those describe the content, not a list.
+ */
+const SHARED_LIST_RECIPES: readonly RecipeId[] = ["editorial-index", "asymmetric-split"];
+
+export function directionOwnsRequest(requested: RecipeId): boolean {
+  return SHARED_LIST_RECIPES.includes(requested);
+}
+
+/**
  * The deterministic recipe a page would use if the model did not choose one.
  *
  * Structured blocks have a recipe of their own before the generic list shapes:
@@ -48,6 +91,10 @@ export function chooseRecipeId(
     return "data-story";
   }
   if (facts.hasQuote || facts.hasComparison || facts.hasRowBlock) return undefined;
+  // A direction's own composition wins over the shared list shapes: the page
+  // has to look like the direction the user picked.
+  const direction = supportedDirectionRecipe(facts, concept, options);
+  if (direction) return direction;
   if (concept.recipes.includes("editorial-index") && facts.itemCount >= 3 && facts.itemCount <= 6 && facts.shortItems) {
     return "editorial-index";
   }
@@ -70,23 +117,34 @@ export function chooseRecipeId(
  * decides whether to fall back to the other recipe or to the legacy branch.
  */
 export function selectRecipe(request: RecipeRequest): RecipeSelectionResult {
+  // A direction owns its plain-text page even when the model asked for the
+  // shared list: the request describes "this is a list", not "draw the editorial
+  // index". A page the direction cannot carry keeps the request.
+  if (request.requested && directionOwnsRequest(request.requested)) {
+    const own = supportedDirectionRecipe(request.facts, request.concept, request.options);
+    if (own) {
+      const recipe = findRecipe(own);
+      if (recipe) return { recipe };
+    }
+  }
   if (request.requested) {
-    if (!request.concept.recipes.includes(request.requested)) {
+    if (!request.concept.recipes.includes(request.requested) || !findRecipe(request.requested)) {
       return {
+        ...recipeFallback(request),
         conflict: {
           intent: `recipe=${request.requested}`,
           reason: "该页面配方不在当前设计方向允许的集合内",
         },
       };
     }
-    const recipe = findRecipe(request.requested);
-    if (!recipe) {
-      return {
-        conflict: { intent: `recipe=${request.requested}`, reason: "该页面配方还没有渲染实现" },
-      };
-    }
+    const recipe = findRecipe(request.requested)!;
     if (!recipe.supports(request.facts, request.concept, request.options)) {
+      // The request was legal when the model wrote it, but the page changed
+      // under it: a picture was attached, the copy grew. The page then belongs
+      // to the recipe the content decides — dropping to the legacy branch would
+      // draw a cover the model never asked for.
       return {
+        ...recipeFallback(request),
         conflict: {
           intent: `recipe=${request.requested}`,
           reason: "该页内容装不下所选配方，已回退到内容决定的版式",
@@ -95,6 +153,13 @@ export function selectRecipe(request: RecipeRequest): RecipeSelectionResult {
     }
     return { recipe };
   }
+  const id = chooseRecipeId(request.facts, request.concept, request.options);
+  const recipe = id ? findRecipe(id) : undefined;
+  return recipe && recipe.supports(request.facts, request.concept, request.options) ? { recipe } : {};
+}
+
+/** The recipe the content would choose, when the requested one is refused. */
+function recipeFallback(request: RecipeRequest): RecipeSelectionResult {
   const id = chooseRecipeId(request.facts, request.concept, request.options);
   const recipe = id ? findRecipe(id) : undefined;
   return recipe && recipe.supports(request.facts, request.concept, request.options) ? { recipe } : {};
