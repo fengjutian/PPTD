@@ -185,8 +185,8 @@ describe("设计质检阶段", () => {
 
     expect(result.templateFit?.checked).toBe(true);
     expect(result.notes.join("；")).toContain("模板符合度");
-    // 用户主动关闭视觉评审仍然是选择，不把未评审当成通过。
-    expect(result.visualPassed).toBeUndefined();
+    // 模板目标是确定性验收：即使视觉评审关闭，模板不符合也不能算通过。
+    expect(result.visualPassed).toBe(false);
   });
 
   it("设置关闭视觉评审时说清楚这是主动选择，不把未评审当成通过", async () => {

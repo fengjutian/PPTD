@@ -980,15 +980,22 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   const templateFitReport = options.template ? checkTemplateFit(document, options.template) : undefined;
   if (options.template) {
     if (templateFitReport?.checked) {
-      if (visualPassed === true && !templateFitReport.passed) visualPassed = false;
+      // A measured template violation is a failed acceptance even when the
+      // visual model happened to give every dimension a passing score.
+      if (!templateFitReport.passed) visualPassed = false;
       if (!notes.some((note) => note.startsWith("模板符合度"))) {
         notes.push(
           `模板符合度 ${templateFitReport.score}/100（阈值 ${templateFitReport.threshold}，${templateFitReport.issues.length} 处偏差，其中硬性问题 ${templateFitReport.hardFailures} 处）`,
         );
       }
-    } else if (!notes.some((note) => note.startsWith("模板符合度未执行"))) {
-      degraded = true;
-      notes.push("模板符合度未执行：上传模板没有可用的标题或内容占位符，视觉结论不能视为已按模板验收");
+    } else {
+      // "Not executed" is not "passed": the user chose a template and the deck
+      // could not be measured against it.
+      visualPassed = false;
+      if (!notes.some((note) => note.startsWith("模板符合度未执行"))) {
+        degraded = true;
+        notes.push("模板符合度未执行：上传模板没有可用的标题或内容占位符，视觉结论不能视为已按模板验收");
+      }
     }
   }
   // Evidence follows the round whose conclusions were adopted, not the last

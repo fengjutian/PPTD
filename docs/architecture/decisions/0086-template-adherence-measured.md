@@ -72,6 +72,15 @@ passed = checked && errors === 0 && score >= minimumFit
 
 模板色板只进入评审提示词，帮助模型判断 theme fit；没有实现“元素颜色必须属于模板色板”的规则，因此 `template-palette` 代码已从类型中删除，避免一个永远不会出现的错误码。
 
+### 7. 评审输入、达标判断与报告共用同一份目标
+
+1. 逐页评审、整册评审和修复计划都携带同一份 `TemplateReviewTarget`；模型只给评分、问题和修复意图，不写最终坐标。
+2. 发给模型的目标只保留当前文档实际引用的版式（最多 12 个），确定性检查仍使用完整目标，提示词体积不会随模板版式数量失控。
+3. `runDesignQualityStage` 在渲染评审的同一份文档快照上运行 `checkTemplateFit`，把确定性 issues 并入 `VisualReview`，并用实测 `templateFitScore` 覆盖模型可能给出的分。
+4. `visualPassed` 要求模板检查已执行且通过；模板不可检查时记为 `false`，不能把“没检查”当成通过。
+5. 确定性检查不依赖模型，因此视觉评审关闭或失败时仍然运行并进入报告；没有模型结论时报告只展示模板符合度。
+6. 报告单独列出模板名、得分/阈值、偏差数量、版式覆盖和逐条偏差，不与“视觉评审建议”合并成一个成功状态。
+
 ## 后果
 
 正面：
@@ -92,8 +101,9 @@ passed = checked && errors === 0 && score >= minimumFit
 ## 验证
 
 - `template-review-target.test.ts` 7 项：网格/字号/轴语言、无占位返回 undefined、通过页、标题偏移、正文越界、自由构图跳过、目标继承阈值。
-- `design-quality-stage.test.ts` 23 项：模板目标参与评审、报告与修复路径不破坏原有降级行为。
-- 全量测试、类型检查、ESLint、生产构建通过。
+- `design-quality-stage.test.ts` 25 项：模板目标参与评审输入、修复计划、达标判断与报告；视觉评审关闭时仍生成模板符合度报告。
+- `visual-alignment.test.ts` 23 项：`templateFitScore` 低于阈值时循环不算达标。
+- Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 除一条既有导出视觉回归基线差异外通过。
 
 ## 备选方案
 

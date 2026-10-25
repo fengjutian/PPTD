@@ -774,3 +774,12 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 - `prompt-regression.test.ts` 15 项、`template-review-target.test.ts` 7 项通过。
 - 全量：1199 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 27. 逐页样式字段合同（2026-10-25）
+
+- `design-contract.test.ts` 从只检查 plan 扩展到逐页顶层：15 个样式字段逐一标注 `wired` 或 `conditional`（仅 legacy 路径消费）。
+- 新增字段若只改 Schema/提示词、不更新清单，测试直接失败；`recipe`/`variant`/`focal` 的“有 plan 时让位”被明确标注为 conditional。
+
+### 验证
+
+- `design-contract.test.ts` 2 项通过；全量 1199 通过、1 跳过；类型检查、ESLint、生产构建通过。
