@@ -841,4 +841,4 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 ### 验证
 
 - `app-log.test.ts` 9 项、`SettingsDialog.test.tsx` 5 项通过；Rust `cargo test --lib app_log` 4 项通过。
-- 全量 1232 通过、1 跳过；类型检查、ESLint、生产构建通过。
+- 全量 1233 通过、1 跳过；类型检查、ESLint、生产构建通过。

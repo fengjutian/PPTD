@@ -98,3 +98,28 @@ export async function appLogLocation(): Promise<string | undefined> {
     return undefined;
   }
 }
+
+/** 界面里读到的一条记录，与 Rust 端 `AppLogRecord` 对应。 */
+export interface AppLogRecord {
+  at: string;
+  level: string;
+  code: string;
+  message: string;
+  context?: Record<string, unknown>;
+}
+
+/**
+ * 读最近的诊断记录。
+ *
+ * 读取失败返回空列表而不是抛出：面板是只读的诊断视图，不能因为日志文件坏
+ * 掉就打不开，也不能把错误盖在主界面上。
+ */
+export async function readAppLog(limit = 200): Promise<AppLogRecord[]> {
+  if (!isDesktopRuntime()) return [];
+  try {
+    const records = await invoke<AppLogRecord[]>("read_app_log", { limit });
+    return Array.isArray(records) ? records : [];
+  } catch {
+    return [];
+  }
+}

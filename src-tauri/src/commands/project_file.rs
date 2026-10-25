@@ -1846,7 +1846,7 @@ fn extract_text_style(
     let mut align = None;
     if let Some(alignment) = body
         .descendants()
-        .find(|node| node.tag_name().name() == "pPr")
+        .find(|node| matches!(node.tag_name().name(), "pPr" | "lvl1pPr" | "defPPr"))
         .and_then(|node| node.attribute("algn"))
     {
         align = match alignment {
@@ -2534,10 +2534,10 @@ mod tests {
     fn reads_the_ink_and_size_a_layout_assigned_to_its_placeholders() {
         let xml = r#"<p:sldLayout xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree>
           <p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></p:spPr>
-            <p:txBody><a:lstStyle><a:lvl1pPr><a:defRPr sz="2600"><a:solidFill><a:srgbClr val="273D79"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
+            <p:txBody><a:lstStyle><a:lvl1pPr algn="ctr"><a:defRPr sz="2600"><a:solidFill><a:srgbClr val="273D79"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
           </p:sp>
           <p:sp><p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="500" y="600"/><a:ext cx="700" cy="800"/></a:xfrm></p:spPr>
-            <p:txBody><a:lstStyle><a:lvl1pPr><a:defRPr sz="1800"><a:solidFill><a:schemeClr val="bg1"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
+            <p:txBody><a:lstStyle><a:lvl1pPr algn="l"><a:defRPr sz="1800"><a:solidFill><a:schemeClr val="bg1"/></a:solidFill></a:defRPr></a:lvl1pPr></a:lstStyle></p:txBody>
           </p:sp>
         </p:spTree></p:cSld></p:sldLayout>"#;
         let document = roxmltree::Document::parse(xml).unwrap();
@@ -2545,8 +2545,10 @@ mod tests {
         let regions = extract_template_regions(&document, &theme);
         assert_eq!(regions[0].text_color.as_deref(), Some("#273D79"));
         assert_eq!(regions[0].font_size_pt, Some(26));
+        assert_eq!(regions[0].text_align.as_deref(), Some("center"));
         assert_eq!(regions[1].text_color.as_deref(), Some("#FFFFFF"));
         assert_eq!(regions[1].font_size_pt, Some(18));
+        assert_eq!(regions[1].text_align.as_deref(), Some("left"));
     }
 
     #[test]

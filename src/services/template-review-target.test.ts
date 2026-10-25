@@ -195,6 +195,22 @@ describe("template review target", () => {
     expect(report.issues.some((issue) => issue.code === "template-palette" && issue.role === "body")).toBe(true);
   });
 
+  it("warns when paragraph alignment differs from the template placeholder", () => {
+    const base = analysis();
+    const target = buildTemplateReviewTarget({
+      ...base,
+      layouts: base.layouts.map((layout) => ({
+        ...layout,
+        regions: layout.regions.map((region) =>
+          region.role === "title" ? { ...region, textAlign: "center" as const } : region,
+        ),
+      })),
+    })!;
+    const document = withBody();
+    const report = checkTemplateFit(document, target);
+    expect(report.issues.some((issue) => issue.code === "template-align" && issue.role === "title")).toBe(true);
+  });
+
   it("accepts a CJK alias of the template font", () => {
     const target = buildTemplateReviewTarget(analysis({ majorFont: "Microsoft YaHei", minorFont: "Microsoft YaHei" }))!;
     const document = withBody();

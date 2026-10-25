@@ -152,6 +152,59 @@ pub fn app_log_location(app: tauri::AppHandle) -> Result<String, String> {
     Ok(app_log_file(&app)?.to_string_lossy().into_owned())
 }
 
+/// 界面里读到的一条记录。字段与写入时一致，`context` 缺省时不序列化。
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLogRecord {
+    at: String,
+    level: String,
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context: Option<serde_json::Value>,
+}
+
+const DEFAULT_READ_LIMIT: usize = 200;
+const MAX_READ_LIMIT: usize = 1_000;
+
+/// 读最后 `limit` 条记录。
+///
+/// 日志不是数据库：一行解析失败只丢那一行，不能让整个面板打不开。文件不存在
+/// 时返回空列表，而不是错误——"还没有失败记录"是正常状态。
+fn read_at(path: &Path, limit: usize) -> Result<Vec<AppLogRecord>, String> {
+    let limit = limit.clamp(1, MAX_READ_LIMIT);
+    let Ok(content) = fs::read_to_string(path) else {
+        return Ok(Vec::new());
+    };
+    let mut records: Vec<AppLogRecord> = content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| serde_json::from_str::<AppLogRecord>(line).ok())
+        .collect();
+    if records.len() > limit {
+        records.drain(..records.len() - limit);
+    }
+    Ok(records)
+}
+
+/// 供界面展示的最近记录。写盘与读取用同一把锁，避免读到写了一半的行。
+#[tauri::command]
+pub async fn read_app_log(
+    app: tauri::AppHandle,
+    limit: Option<usize>,
+) -> Result<Vec<AppLogRecord>, String> {
+    let path = app_log_file(&app)?;
+    let limit = limit.unwrap_or(DEFAULT_READ_LIMIT);
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = LOG_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        read_at(&path, limit)
+    })
+    .await
+    .map_err(|error| format!("APP_LOG_READ_TASK_FAILED: {error}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +280,30 @@ mod tests {
 
         let at = lines(&path)[0]["at"].as_str().unwrap().to_string();
         assert!(at.chars().all(|character| character.is_ascii_digit()));
+    }
+
+    #[test]
+    fn reads_only_the_latest_records_and_skips_broken_lines() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("app.log");
+        for index in 0..5 {
+            append_at(&path, entry(&format!("第 {index} 条"))).unwrap();
+        }
+        // 一次写坏的行只丢这一条，面板仍然能打开。
+        let mut content = fs::read_to_string(&path).unwrap();
+        content.push_str("{ 这不是 JSON\n");
+        fs::write(&path, content).unwrap();
+
+        let records = read_at(&path, 2).unwrap();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].message, "第 3 条");
+        assert_eq!(records[1].message, "第 4 条");
+    }
+
+    #[test]
+    fn reading_a_missing_log_returns_an_empty_list() {
+        let directory = tempdir().unwrap();
+        let missing = directory.path().join("missing.log");
+        assert!(read_at(&missing, 10).unwrap().is_empty());
     }
 }

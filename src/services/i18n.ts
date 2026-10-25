@@ -15,6 +15,8 @@ const zh = {
   "shell.theme": "主题",
   "shell.themeTitle": "主题模板",
   "shell.settings": "设置",
+  "shell.log": "日志",
+  "shell.logTitle": "诊断日志：查看最近的失败记录",
 
   "settings.title": "设置",
   "settings.description": "管理模型连接、安全凭据、界面语言和应用外观",
@@ -61,6 +63,14 @@ const zh = {
   "settings.diagnostics.help":
     "生成、设计、导出或保存失败时会追加一条记录：时间、错误码、失败阶段和计数，不含正文、备注或图片。把该文件发给开发者即可定位上次失败。",
   "settings.diagnostics.unavailable": "浏览器预览模式没有本地日志；桌面端写入系统日志目录。",
+  "diagnostics.panel.title": "诊断日志",
+  "diagnostics.panel.description":
+    "生成、设计、导出或保存失败时的最近记录：时间、错误码、失败阶段和计数。不含正文、备注或图片。",
+  "diagnostics.panel.close": "关闭诊断日志",
+  "diagnostics.panel.refresh": "刷新",
+  "diagnostics.panel.loading": "正在读取…",
+  "diagnostics.panel.empty": "还没有失败记录。",
+  "diagnostics.panel.unavailable": "浏览器预览模式没有本地日志",
 
   "settings.appearance.title": "应用主题",
   "settings.appearance.description": "只调整 PPTD 界面外观，不影响 PPT 模板和演示文稿设计。",
@@ -119,6 +129,8 @@ const en: Record<UiMessageKey, string> = {
   "shell.theme": "Theme",
   "shell.themeTitle": "Theme templates",
   "shell.settings": "Settings",
+  "shell.log": "Log",
+  "shell.logTitle": "Diagnostic log: recent failures",
 
   "settings.title": "Settings",
   "settings.description": "Manage model connections, credentials, interface language, and appearance",
@@ -166,6 +178,14 @@ const en: Record<UiMessageKey, string> = {
     "Every failed generation, design, export or save appends one record: time, error code, stage and counts, never body copy, notes or images. Send that file to the developer to diagnose the last failure.",
   "settings.diagnostics.unavailable":
     "The browser preview has no local log; the desktop app writes one into the system log directory.",
+  "diagnostics.panel.title": "Diagnostic log",
+  "diagnostics.panel.description":
+    "Recent failures of generation, design, export or save: time, error code, stage and counts. Never body copy, notes or images.",
+  "diagnostics.panel.close": "Close diagnostic log",
+  "diagnostics.panel.refresh": "Refresh",
+  "diagnostics.panel.loading": "Reading…",
+  "diagnostics.panel.empty": "No failures recorded yet.",
+  "diagnostics.panel.unavailable": "The browser preview has no local log",
 
   "settings.appearance.title": "Appearance",
   "settings.appearance.description":

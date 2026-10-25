@@ -103,4 +103,4 @@ AGENTS.md 第 6 节要求长任务“必须支持取消、进度报告和可诊�
 - `src/services/app-log.test.ts`：错误码提取、非桌面不调用、命令失败不抛、消息截断、上下文超长丢弃、阶段与计数组装。
 - `src-tauri/src/commands/app_log.rs` 单测：每行一条 JSON、截断与上下文丢弃、超过 2 MB 轮转、缺省时间戳。
 - `src/features/settings/SettingsDialog.test.tsx`：路径与“不含正文”说明、浏览器预览的降级文案。
-- 全量 Vitest 151 文件 / 1 232 项、TypeScript 类型检查、ESLint、生产构建通过；Rust `cargo test --lib app_log` 4 项通过。
+- 全量 Vitest 151 文件 / 1 233 项、TypeScript 类型检查、ESLint、生产构建通过；Rust `cargo test --lib app_log` 4 项通过。

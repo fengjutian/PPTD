@@ -33,6 +33,7 @@ import {
   Save,
   SaveAll,
   Scissors,
+  ScrollText,
   Search,
   Settings,
   Sparkles,
@@ -90,6 +91,7 @@ import {
 import { setTextMeasurer } from "../core/rendering/text-metrics";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
+import { LogPanel } from "../features/diagnostics/LogPanel";
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 import { FindReplaceBar } from "../features/editor/FindReplaceBar";
@@ -193,7 +195,7 @@ import {
 import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
-import { recordAppError, recordAppLog } from "../services/app-log";
+import { recordAppError, recordAppLog, appLogLocation, readAppLog, type AppLogRecord } from "../services/app-log";
 import {
   analyzePptxTemplate,
   choosePresentationFile,
@@ -883,6 +885,25 @@ export function App() {
    */
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("zh");
   const t = useMemo(() => createTranslator(uiLanguage), [uiLanguage]);
+  // 诊断面板：只读本机日志，入口在左侧导航。打开时才读，不轮询、不常驻。
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [logRecords, setLogRecords] = useState<AppLogRecord[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [logLocation, setLogLocation] = useState<string>();
+  const loadDiagnostics = useCallback(async () => {
+    setLogLoading(true);
+    try {
+      const [records, location] = await Promise.all([readAppLog(200), appLogLocation()]);
+      setLogRecords(records);
+      setLogLocation(location);
+    } finally {
+      setLogLoading(false);
+    }
+  }, []);
+  const openDiagnostics = () => {
+    setDiagnosticsOpen(true);
+    void loadDiagnostics();
+  };
   const [aiTopic, setAiTopic] = useState("");
   /**
    * 用户粘贴的参考素材（年报、报告、会议纪要）。
@@ -4917,6 +4938,16 @@ export function App() {
           <Palette />
           <span>{t("shell.theme")}</span>
         </button>
+        <button
+          className={diagnosticsOpen ? "active" : ""}
+          aria-expanded={diagnosticsOpen}
+          aria-haspopup="dialog"
+          title={t("shell.logTitle")}
+          onClick={openDiagnostics}
+        >
+          <ScrollText />
+          <span>{t("shell.log")}</span>
+        </button>
         <div className="nav-spacer" />
         <button
           className={activeView === "settings" ? "active" : ""}
@@ -4928,6 +4959,17 @@ export function App() {
           <span>{t("shell.settings")}</span>
         </button>
       </nav>
+
+      {diagnosticsOpen && (
+        <LogPanel
+          language={uiLanguage}
+          records={logRecords}
+          loading={logLoading}
+          location={logLocation}
+          onRefresh={() => void loadDiagnostics()}
+          onClose={() => setDiagnosticsOpen(false)}
+        />
+      )}
 
       {activeView === "editor" && editorSurface === "projects" && (
         <main className="feature-workspace project-home">

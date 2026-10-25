@@ -27,6 +27,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             application_version,
             commands::app_log::append_app_log,
+            commands::app_log::read_app_log,
             commands::app_log::app_log_location,
             commands::storage::load_app_settings,
             commands::storage::save_app_settings,

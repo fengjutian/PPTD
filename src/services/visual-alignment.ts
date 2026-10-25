@@ -568,12 +568,7 @@ export function normalizeVisualRepairPlan(input: unknown, expectedSlideIndexes: 
               action.textAlign === "left" || action.textAlign === "center" || action.textAlign === "right"
                 ? action.textAlign
                 : undefined;
-            if (
-              fontScale === undefined &&
-              color === undefined &&
-              fontFamily === undefined &&
-              textAlign === undefined
-            )
+            if (fontScale === undefined && color === undefined && fontFamily === undefined && textAlign === undefined)
               return [];
             return [
               {
