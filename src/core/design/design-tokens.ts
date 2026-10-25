@@ -23,6 +23,8 @@ export interface DesignTokens {
     bodyPt: number;
     captionPt: number;
     lineHeight: number;
+    /** Leading for headlines; tighter than `lineHeight`. */
+    titleLineHeight: number;
   };
   space: { xs: number; sm: number; md: number; lg: number; xl: number };
   rule: { hairlinePt: number; accentPt: number };
@@ -85,6 +87,16 @@ export function deriveDesignTokens(
       bodyPt: clamp(Math.round(scale.body * intentFactors.body), 12, 28),
       captionPt: clamp(scale.caption, 8, 16),
       lineHeight: theme?.textStyles?.body?.lineHeight ?? 1.25,
+      /**
+       * Headline leading, tighter than body copy.
+       *
+       * A 28–48pt headline set at the body's 1.3 turns a two-line title into a
+       * gap with words in it: the lines drift apart and the block eats the space
+       * the copy below needs. Display type is read as one shape, so it gets a
+       * tighter band — never tighter than 1.08, which would collide ascenders
+       * with descenders on the line above.
+       */
+      titleLineHeight: clamp((theme?.textStyles?.body?.lineHeight ?? 1.25) * 0.88, 1.08, 1.2),
     },
     space: {
       xs: 0.012 * spaceScale,

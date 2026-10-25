@@ -65,6 +65,19 @@
   background: rgb(127 127 127 / 12%);
   font-size: 9px;
 }
+/*
+ * A headline longer than one line is the most common reason a generated page
+ * reads as a document instead of a slide. The badge sits next to the length the
+ * review already counts, where the title can be edited.
+ */
+.draft-long-title-badge {
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #b2543c;
+  background: rgb(178 84 60 / 12%);
+  font-size: 9px;
+  white-space: nowrap;
+}
 .draft-facts-summary {
   margin-left: 8px;
   opacity: 0.7;

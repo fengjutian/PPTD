@@ -33,6 +33,7 @@ export const coverStatement: LayoutRecipe = {
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
+    const titleLineHeight = ctx.tokens.type.titleLineHeight;
 
     // The cover is a full-bleed field of the brand panel. The panel tone is
     // never an ink resolved for this page: on a dark page that ink is nearly
@@ -55,6 +56,9 @@ export const coverStatement: LayoutRecipe = {
     const ruleNormalized = { x: coverTitle.x, y: RULE.y, width: RULE.width, height: RULE.height };
 
     const titleFrame = frameFromNormalized(coverTitle, page);
+    // The size is fitted against the body leading, which is the conservative
+    // measure: the headline renders tighter than that, so the block ends up
+    // shorter than the box and never grows a line it did not have before.
     const titleSize = fittedFontSize(
       title,
       titleFrame,
@@ -71,7 +75,7 @@ export const coverStatement: LayoutRecipe = {
       rectElement(frameFromNormalized({ x: 0, y: 0, width: 1, height: 1 }, page), ctx.colors.panel, gradient),
       textElement(title, titleFrame, titleSize, ink, true, "left", headingFamily, {
         contentRef: "title",
-        lineHeight,
+        lineHeight: titleLineHeight,
       }),
     ];
 

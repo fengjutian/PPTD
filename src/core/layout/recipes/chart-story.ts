@@ -37,6 +37,7 @@ export const chartStory: LayoutRecipe = {
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
+    const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const titleFrame = frameFromNormalized(chrome.title, page);
     const titleSize = fittedFontSize(title, titleFrame, ctx.tokens.type.titlePt, 18, headingFamily, lineHeight);
     if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
@@ -45,7 +46,7 @@ export const chartStory: LayoutRecipe = {
     const elements: RecipePlan["elements"] = [
       textElement(title, titleFrame, titleSize, ctx.colors.title, true, "left", headingFamily, {
         contentRef: "title",
-        lineHeight,
+        lineHeight: titleLineHeight,
       }),
     ];
     if (chrome.showRule) elements.push(rectElement(frameFromNormalized(chrome.rule, page), ctx.colors.accent));

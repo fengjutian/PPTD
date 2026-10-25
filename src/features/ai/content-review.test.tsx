@@ -25,6 +25,7 @@ import {
   tableBlockOversized,
   tableBlockRagged,
   tableCellKeyAction,
+  titleOverBudget,
   visualIntentLabels,
   withSlideIds,
 } from "./content-review";
@@ -442,6 +443,21 @@ function renderReview(
 }
 
 describe("content review layout", () => {
+  it("flags a headline that will have to be squeezed to fit", () => {
+    const short = withSlideIds(createDraft());
+    expect(renderReview(short)).not.toContain("标题偏长");
+
+    const long = withSlideIds(createDraft());
+    long.slides[0]!.title = "反垄断裁决与 AI 资本开支将主导 Alphabet 下一财年的估值走向与投资节奏";
+    const markup = renderReview(long);
+    expect(markup).toContain("标题偏长");
+  });
+
+  it("treats a headline past the writing budget as over-long", () => {
+    expect(titleOverBudget("云业务首次实现年度盈利")).toBe(false);
+    expect(titleOverBudget("反垄断裁决与 AI 资本开支将主导下一财年的估值走向与投资节奏")).toBe(true);
+  });
+
   it("renders the chart block as editable categories and series", () => {
     const draft = withSlideIds(createDraft());
     draft.slides[0]!.blocks = [

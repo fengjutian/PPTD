@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { AiVisualAssetIntent } from "../../services/ai-service";
 import {
+  countCharacters,
   densityLabels,
   draftMetrics,
   isSlideEdited,
@@ -28,6 +29,8 @@ import {
   slideCapacityNotes,
   slideHasContent,
   slideMetrics,
+  TITLE_LENGTH_BUDGET,
+  titleOverBudget,
   unverifiedCheckCount,
   visualIntentLabels,
   visualAssetRoleLabels,
@@ -493,6 +496,14 @@ export function ContentReview({
                   <div className="draft-slide-tools">
                     <span className="draft-slide-status-line">
                       {slideStat.characters} 字 · {slideStat.points} 条要点
+                      {titleOverBudget(slide.title) && (
+                        <b
+                          className="draft-long-title-badge"
+                          title={`标题 ${countCharacters(slide.title)} 字。超过 ${TITLE_LENGTH_BUDGET} 字的标题会被压小字号或折成三行，精简到一行更像成品。`}
+                        >
+                          标题偏长
+                        </b>
+                      )}
                       {(slide.factRefs ?? []).length > 0 && (
                         <b className="draft-citation-badge" title={citationTitle}>
                           引用 {(slide.factRefs ?? []).join("、")}

@@ -49,6 +49,7 @@ export const editorialIndex: LayoutRecipe = {
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
+    const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const colors = ctx.colors;
     const titleFrame = frameFromNormalized(chrome.title, page);
     const titleSize = fittedFontSize(title, titleFrame, ctx.tokens.type.titlePt, 18, headingFamily, lineHeight);
@@ -59,7 +60,7 @@ export const editorialIndex: LayoutRecipe = {
     const elements: RecipePlan["elements"] = [
       textElement(title, titleFrame, titleSize, colors.title, true, "left", headingFamily, {
         contentRef: "title",
-        lineHeight,
+        lineHeight: titleLineHeight,
       }),
     ];
     if (chrome.showRule) elements.push(rectElement(frameFromNormalized(chrome.rule, page), colors.accent));

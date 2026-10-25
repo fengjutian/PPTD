@@ -902,7 +902,7 @@ pub fn draft_prompt(count: usize, topic: &str, facts: &[SourceFact]) -> String {
 {argument_rules}
 {facts_rules}
 3. body 必须回答标题，使用陈述句和事实，禁止用疑问句充当正文；不得虚构数字、来源、引语或案例。
-4. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须拆页或改为结构化内容块。封面只保留标题和一句不超过 30 字的副标题，不得放编号列表或五点概述；内容概述从第二页开始。
+4. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条不超过 30 个汉字（一条只说一个判断）；超过 300 字必须拆页或改为结构化内容块。封面只保留标题和一句不超过 30 字的副标题，不得放编号列表或五点概述；内容概述从第二页开始。
 5. body 必须与 blocks 表达相同事实，方便用户直接编辑；不得虚构数字、来源、引语或案例。中文引文使用“”，篇名使用《》，不要用英文直引号。
 6. narrativeStrategy 只能为 management-report、proposal、retrospective、training、product-launch、fundraising、general。
 7. visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text。
@@ -1221,7 +1221,7 @@ pub fn slides_batch_prompt(
 {argument_rules}
 {facts_rules}
 2. body 必须回答该页标题，使用陈述句和事实，禁止用疑问句充当正文；不得虚构数字、来源、引语或案例。
-3. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须改用结构化内容块。封面只保留标题和一句不超过 30 字的副标题，不得放编号列表或五点概述。
+3. 内容页正文控制在 80–220 字，使用 2–5 条短要点，每条不超过 30 个汉字（一条只说一个判断）；超过 300 字必须改用结构化内容块。封面只保留标题和一句不超过 30 字的副标题，不得放编号列表或五点概述。
 4. body 必须与 blocks 表达相同事实，方便用户直接编辑。中文引文使用“”，篇名使用《》，不要用英文直引号。
 5. speakerNotes 是该页的演讲备注，可为空字符串。
 6. plan.purpose 说明该页目的，plan.conclusion 是该页的单一结论；visualIntent 只能为 hero、quote、timeline、comparison、process、data-chart、image-story、summary、structured-text；density 只能为 low、medium、high。plan.visualBrief 可选，用于说明这页的视觉形式：form 只能是 image、chart、diagram、quote、metric、table、none；brief 只描述画面/图式，不得新增数字或结论；没有证据时 form=none。
@@ -1919,7 +1919,7 @@ pub fn rewrite_slide_prompt(context: RewriteSlidePrompt<'_>) -> String {
 1. 不输出 title：页面标题由大纲决定，正文必须回答这个标题。
 2. body 使用陈述句和事实，禁止用疑问句充当正文；不得虚构数字、来源、引语或案例，也不得引入当前标题、页面计划和现有内容之外的新事实。
 3. 如果排版预检指出本页超过容量，必须压到容量内：减少要点条数或改成更紧凑的结构，不能靠删掉关键结论腾空间。
-4. 正文控制在 80–220 字，使用 2–5 条短要点，每条尽量不超过 45 个汉字；超过 300 字必须改用结构化内容块。
+4. 正文控制在 80–220 字，使用 2–5 条短要点，每条不超过 30 个汉字（一条只说一个判断）；超过 300 字必须改用结构化内容块。
 5. body 必须与 blocks 表达相同事实，方便用户直接编辑；每页只使用一种 blocks 类型。
 6. 页面计划里的 purpose 和 conclusion 保持不变：重写后的内容仍要服务这个目的、支撑这个结论；做不到时在 speakerNotes 里说明，不要改结论，也不要输出 plan。
 7. speakerNotes 是该页的演讲备注，可为空字符串，不超过 200 字。

@@ -78,15 +78,26 @@ export const paperColumn: LayoutRecipe = {
     const colors = ctx.colors;
     const titleFrame = frameFromNormalized(chrome.title, page);
     const titleCap = Math.max(20, Math.round(ctx.tokens.type.titlePt * TITLE_FACTOR));
-    const titleSize = fittedFontSizeInRange(title, titleFrame, titleCap, 18, titleCap, headingFamily, 1.3);
-    if (!textFits(title, titleFrame, titleSize, headingFamily, 1.3)) {
+    const titleLineHeight = ctx.tokens.type.titleLineHeight;
+    // Fitted against the body leading (conservative), rendered with the tighter
+    // headline leading, so the column page keeps the same type size it had.
+    const titleSize = fittedFontSizeInRange(
+      title,
+      titleFrame,
+      titleCap,
+      18,
+      titleCap,
+      headingFamily,
+      ctx.tokens.type.lineHeight,
+    );
+    if (!textFits(title, titleFrame, titleSize, headingFamily, ctx.tokens.type.lineHeight)) {
       return conflict("title", "标题在专栏宽度内放不下");
     }
 
     const elements: RecipePlan["elements"] = [
       textElement(title, titleFrame, titleSize, colors.title, true, "left", headingFamily, {
         contentRef: "title",
-        lineHeight: 1.3,
+        lineHeight: titleLineHeight,
       }),
     ];
     if (chrome.showRule) {

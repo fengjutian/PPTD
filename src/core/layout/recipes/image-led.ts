@@ -54,6 +54,7 @@ export const imageLed: LayoutRecipe = {
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
+    const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const isCover = ctx.facts.layout === "cover";
     const templateImage = ctx.templateImage;
     const textX = chrome.title.x;
@@ -75,6 +76,9 @@ export const imageLed: LayoutRecipe = {
       height: templateImage ? Math.max(0.1, chrome.title.height) : Math.max(0.2, chrome.title.height),
     };
     const titleFrame = frameFromNormalized(titleFrameNormalized, page);
+    // Fitted against the body leading (conservative), rendered with the tighter
+    // headline leading: the copy block gets shorter without the size growing
+    // into an extra line the frame cannot hold.
     const titleSize = fittedFontSize(
       title,
       titleFrame,
@@ -98,7 +102,7 @@ export const imageLed: LayoutRecipe = {
         : []),
       textElement(title, titleFrame, titleSize, ctx.colors.title, true, "left", headingFamily, {
         contentRef: "title",
-        lineHeight,
+        lineHeight: titleLineHeight,
       }),
     ];
 

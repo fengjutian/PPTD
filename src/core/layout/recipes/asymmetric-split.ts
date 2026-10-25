@@ -52,6 +52,7 @@ export const asymmetricSplit: LayoutRecipe = {
     const headingFamily = ctx.tokens.fonts.heading;
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
+    const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const mirrored = ctx.variant === "right";
     const place = (rect: NormalizedFrame): NormalizedFrame =>
       mirrored ? { ...rect, x: 1 - rect.x - rect.width } : rect;
@@ -73,7 +74,7 @@ export const asymmetricSplit: LayoutRecipe = {
     const elements: RecipePlan["elements"] = [
       textElement(title, titleFrame, titleSize, colors.title, true, "left", headingFamily, {
         contentRef: "title",
-        lineHeight,
+        lineHeight: titleLineHeight,
       }),
     ];
     if (chrome.showRule)

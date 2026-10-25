@@ -112,6 +112,20 @@ export function countCharacters(text: string): number {
   return [...text.replace(/\s/g, "")].length;
 }
 
+/**
+ * How long a slide headline may be before the layout has to compromise.
+ *
+ * The content prompt asks for 22 characters; this is the same budget applied
+ * where the title can still be edited. Past it the renderer either shrinks the
+ * title or breaks it into three lines, and a deck of those reads as a document
+ * rather than as slides.
+ */
+export const TITLE_LENGTH_BUDGET = 22;
+
+export function titleOverBudget(title: string): boolean {
+  return countCharacters(title) > TITLE_LENGTH_BUDGET;
+}
+
 function blockPointCount(block: ContentBlock): number {
   switch (block.type) {
     case "bullet-list":

@@ -32,6 +32,11 @@ describe("design tokens", () => {
     expect(tokens.type.titlePt).toBe(28);
     expect(tokens.type.bodyPt).toBe(16);
     expect(tokens.type.lineHeight).toBe(1.3);
+    // Headlines are set tighter than body copy, inside a band that keeps two
+    // lines from colliding.
+    expect(tokens.type.titleLineHeight).toBeCloseTo(1.144, 3);
+    expect(tokens.type.titleLineHeight).toBeLessThan(tokens.type.lineHeight);
+    expect(tokens.type.titleLineHeight).toBeGreaterThanOrEqual(1.08);
     expect(tokens.fonts.heading).toBe("微软雅黑");
     expect(tokens.grid.margin).toBe(0.07);
   });

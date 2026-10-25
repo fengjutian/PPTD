@@ -163,7 +163,10 @@ impl TitleLexicon {
              4. 标题不得以 {} 收尾：这种结尾没有告诉读者任何事。\n\
              5. 整套演示的标题不能共用同一个句法骨架。不要每页都写成 \"A与B\" 或 \"A、B与C\"，\
              段落数量和连接词要在整册里变化开。\n\
-             6. 标题要能独立说明这一页的结论，不能靠读者看正文才知道它在讲什么。",
+             6. 标题要能独立说明这一页的结论，不能靠读者看正文才知道它在讲什么。\n\
+             7. 标题是一行读得完的一句话：中文不超过 22 个字（英文名、数字按视觉宽度折算）。\
+             要写全称、并列多个主体或补充条件时，把这些放进正文，标题只留结论；\
+             标题超过这个长度，版式只能把它压成小字或挤成三行，整册立刻像文档而不是演示。",
             join_or(&self.column_names),
             self.column_composition_examples(),
             self.column_suffix_examples(),
@@ -279,6 +282,8 @@ mod tests {
         assert!(prompt.contains("如何"));
         assert!(prompt.contains("的意义"));
         assert!(prompt.contains("句法骨架"));
+        // 标题长度是版式的第一约束：一行放不下的标题会被压成小字或挤成三行。
+        assert!(prompt.contains("22 个字"));
     }
 
     #[test]
