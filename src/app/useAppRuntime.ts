@@ -4164,6 +4164,7 @@ export function useAppRuntime() {
     selectSlide,
     selectElement,
     toggleElement,
+    selectElements,
     workspaceRef,
     formatPainterStyle,
     zoom,

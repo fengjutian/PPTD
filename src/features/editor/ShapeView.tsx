@@ -1,4 +1,5 @@
 import type { ShapeElement, ShapeKind } from "../../core/document-model";
+import { shadowSpec } from "../../core/design/effects";
 import { gradientCss, gradientLinePoints } from "../../core/design/shape-gradient";
 import { ptToPx, type SceneScale } from "./scene-metrics";
 
@@ -14,6 +15,13 @@ export function ShapeView({ element, scale }: { element: ShapeElement; scale: Sc
   const width = element.frame.width * scale;
   const height = element.frame.height * scale;
   const fillGradient = element.style.fillGradient;
+  // The canvas shows the same three levels the exporter writes, converted with
+  // the scene scale so a zoomed canvas does not get a shadow that belongs to a
+  // larger page.
+  const shadow = shadowSpec(element.style.shadow);
+  const shadowCss = shadow
+    ? `0 ${ptToPx(shadow.distancePt, scale)}px ${ptToPx(shadow.blurPt, scale)}px rgba(0, 0, 0, ${shadow.opacity})`
+    : undefined;
   if (element.shape === "rectangle" || element.shape === "ellipse") {
     return (
       <div
@@ -23,6 +31,7 @@ export function ShapeView({ element, scale }: { element: ShapeElement; scale: Sc
           borderColor: element.style.stroke,
           borderWidth: ptToPx(element.style.strokeWidthPt, scale),
           borderRadius: element.shape === "ellipse" ? "50%" : ptToPx(element.style.radiusPt, scale),
+          ...(shadowCss ? { boxShadow: shadowCss } : {}),
         }}
       />
     );
@@ -38,6 +47,14 @@ export function ShapeView({ element, scale }: { element: ShapeElement; scale: Sc
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
       aria-hidden
+      // A vector outline cannot take a box-shadow; drop-shadow follows the path.
+      style={
+        shadow
+          ? {
+              filter: `drop-shadow(0 ${ptToPx(shadow.distancePt, scale)}px ${ptToPx(shadow.blurPt, scale)}px rgba(0, 0, 0, ${shadow.opacity}))`,
+            }
+          : undefined
+      }
     >
       {fillGradient && gradientId && gradientPoints && (
         <defs>

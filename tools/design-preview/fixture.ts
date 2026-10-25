@@ -296,3 +296,111 @@ export function buildDesignPreviewDocument(options: DesignPreviewOptions = {}) {
 }
 
 export const previewPage = { width: PAGE_WIDTH, height: PAGE_HEIGHT };
+
+/**
+ * A three-page deck on a dark field, for the vocabulary baseline.
+ *
+ * The ten-page fixture above is entirely white, so nothing in the review ever
+ * exercised the semantic roles on a dark page — which is exactly where a light
+ * preset's stored `surfaceRaised` used to leak onto the page and leave light
+ * copy on a near-white card. These pages make the dark case reproducible
+ * without changing the ten-page deck every other assertion is pinned to.
+ */
+export function buildVocabularyPreviewDocument() {
+  const document = createDocument();
+  const slides: AiSlideDraft[] = [
+    {
+      title: "两种交付模式的取舍",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        {
+          type: "comparison",
+          leftLabel: "自建团队",
+          rightLabel: "外部合作",
+          leftItems: ["长期成本更低", "数据完全自主", "需要六个月建设期"],
+          rightItems: ["两周内启动", "无需设备投入", "依赖外部排期"],
+        },
+      ],
+    },
+    {
+      title: "三个阶段把成本降下来",
+      body: "集中采购\n自动化巡检\n供应商分级",
+      speakerNotes: "",
+    },
+    {
+      title: "一条河改变了一座城",
+      body: "二十年治理的现场记录",
+      speakerNotes: "",
+    },
+  ];
+  const dark: Partial<AiSlideDesign> = {
+    background: "#12233D",
+    titleColor: "#F2F6FA",
+    bodyColor: "#D7DEE8",
+    // A palette-aware design keeps its own inks; without the roles the builder
+    // falls back to the preset's light palette, which is not what a dark page
+    // declares.
+    palette: { background: "surface", accent: "accent-1", title: "inverse", body: "inverse" },
+  };
+  const designs: AiSlideDesign[] = [
+    designed("split", dark),
+    designed("split", { ...dark, visualAsset: { enabled: true, role: "side" } }),
+    designed("cover", { ...dark, visualAsset: { enabled: true, role: "hero" } }),
+  ];
+  const facts: CompositionFacts[] = [
+    {
+      itemCount: 6,
+      shortItems: true,
+      longestItemLength: 9,
+      bodyLength: 0,
+      hasQuote: false,
+      hasComparison: true,
+      hasRowBlock: false,
+      layout: "split",
+    },
+    {
+      itemCount: 3,
+      shortItems: true,
+      longestItemLength: 8,
+      bodyLength: 30,
+      hasQuote: false,
+      hasComparison: false,
+      hasRowBlock: false,
+      layout: "split",
+    },
+    {
+      itemCount: 0,
+      shortItems: false,
+      longestItemLength: 0,
+      bodyLength: 12,
+      hasQuote: false,
+      hasComparison: false,
+      hasRowBlock: false,
+      layout: "cover",
+    },
+  ];
+  const concept = resolveDeckConcept({
+    concept: defaultConceptForPreset("documentary"),
+    pageFacts: facts,
+    pageCount: slides.length,
+    id: "vocabulary-preview",
+  }).concept;
+  applyCommand(document, {
+    type: "apply-ai-designed-draft",
+    title: "视觉词汇基线",
+    slides,
+    designs,
+    designConcept: concept,
+    themePresetId: "editorial-teal",
+    visualAssets: [1, 2].map((slideIndex) => ({
+      slideIndex,
+      dataUrl: gradientImage(),
+      mimeType: "image/png" as const,
+      naturalWidth: 320,
+      naturalHeight: 180,
+      altText: "深色页配图",
+    })),
+  });
+  return document;
+}

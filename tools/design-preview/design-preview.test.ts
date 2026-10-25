@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { buildPptx } from "../../src/features/pptx-export/export-pptx";
 import type { ImageElement, TextElement } from "../../src/core/document-model";
 import { lintTaste } from "../../src/core/design/taste-lint";
+import { deriveSemanticColors } from "../../src/core/design/design-tokens";
+import { findThemePreset } from "../../src/core/design/theme-presets";
+import { colorLuminance, contrastRatio } from "../../src/core/rendering/contrast";
 import { rectsOverlap } from "../../src/core/layout/recipes/measure";
-import { buildDesignPreviewDocument, previewPage, previewSlides } from "./fixture";
+import { buildDesignPreviewDocument, buildVocabularyPreviewDocument, previewPage, previewSlides } from "./fixture";
 
 /**
  * The repeatable half of the ten-page design review.
@@ -161,4 +164,61 @@ describe("ten-page design preview", () => {
     expect(result.bytes.byteLength).toBeGreaterThan(10_000);
     expect(result.report.tasteLint).toEqual({ hard: 0, soft: 0, codes: {} });
   }, 60_000);
+});
+
+describe("dark vocabulary baseline", () => {
+  it("derives the roles from the dark page instead of the light preset", () => {
+    const document = buildVocabularyPreviewDocument();
+    const preset = findThemePreset("editorial-teal")!;
+    const stored = (name: string) => preset.theme.colors.find((color) => color.name === name)?.value;
+    const derived = deriveSemanticColors({ surface: "#12233D", ink: "#D7DEE8", accent: "#0F7869" });
+
+    const comparison = document.slides[0]!;
+    const fills = comparison.elements.flatMap((element) => (element.type === "shape" ? [element.style.fill] : []));
+    // The leak this baseline exists for: a light preset on a dark page used to
+    // hand out its own near-white raised surface while the page kept light copy.
+    expect(fills).not.toContain(stored("surfaceRaised"));
+    expect(fills).not.toContain(stored("surfaceSunken"));
+    // The page's own recessed field and solid header are the dark-derived ones.
+    expect(fills).toContain(derived.surfaceSunken);
+    expect(fills).toContain(derived.accentStrong);
+    // A raised surface on a dark page is lighter than the page, not near-white.
+    expect(colorLuminance(derived.surfaceRaised)!).toBeGreaterThan(colorLuminance("#12233D")!);
+    expect(colorLuminance(derived.surfaceRaised)!).toBeLessThan(colorLuminance(stored("surfaceRaised")!));
+  });
+
+  it("keeps the column labels readable on the solid accent field", () => {
+    const document = buildVocabularyPreviewDocument();
+    const comparison = document.slides[0]!;
+    for (const label of ["自建团队", "外部合作"]) {
+      const text = comparison.elements.find((element) => element.type === "text" && element.text === label);
+      expect(text?.type).toBe("text");
+      if (text?.type !== "text") return;
+      const chip = comparison.elements.find(
+        (element) =>
+          element.type === "shape" &&
+          element.frame.width > document.pageSize.width * 0.2 &&
+          element.frame.height > document.pageSize.height * 0.04 &&
+          Math.abs(element.frame.y - text.frame.y) < document.pageSize.height * 0.05,
+      );
+      expect(chip?.type).toBe("shape");
+      if (chip?.type !== "shape") return;
+      expect(contrastRatio(text.style.color, chip.style.fill)!).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("gives the dark picture pages a plate that is not the light preset's", () => {
+    const document = buildVocabularyPreviewDocument();
+    const preset = findThemePreset("editorial-teal")!;
+    const storedRaised = preset.theme.colors.find((color) => color.name === "surfaceRaised")?.value;
+    const cover = document.slides[2]!;
+    const plate = cover.elements.find(
+      (element) =>
+        element.type === "shape" &&
+        element.frame.width >= document.pageSize.width - 1 &&
+        element.frame.height > document.pageSize.height * 0.15,
+    );
+    expect(plate?.type).toBe("shape");
+    expect(plate?.type === "shape" ? plate.style.fill : undefined).not.toBe(storedRaised);
+  });
 });

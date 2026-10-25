@@ -1329,6 +1329,9 @@
   margin-top: 4px;
 }
 .left-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-right: 1px solid #303136;
 }
 .right-panel {

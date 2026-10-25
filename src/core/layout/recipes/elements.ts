@@ -3,6 +3,7 @@ import type {
   Emu,
   RectEmu,
   ShapeFillGradient,
+  ShapeShadowToken,
   SlideElement,
   TextAlign,
   TextContentRole,
@@ -50,7 +51,12 @@ export function textElement(
 }
 
 /** A generated filled rectangle. Rules and bars are rectangles, not pictures. */
-export function rectElement(frame: RectEmu, fill: string, fillGradient?: ShapeFillGradient): SlideElement {
+export function rectElement(
+  frame: RectEmu,
+  fill: string,
+  fillGradient?: ShapeFillGradient,
+  options: { shadow?: ShapeShadowToken } = {},
+): SlideElement {
   return {
     id: crypto.randomUUID() as ElementId,
     type: "shape",
@@ -59,7 +65,14 @@ export function rectElement(frame: RectEmu, fill: string, fillGradient?: ShapeFi
     locked: false,
     origin: "generated",
     shape: "rectangle",
-    style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: 0, ...(fillGradient ? { fillGradient } : {}) },
+    style: {
+      fill,
+      stroke: fill,
+      strokeWidthPt: 0,
+      radiusPt: 0,
+      ...(fillGradient ? { fillGradient } : {}),
+      ...(options.shadow ? { shadow: options.shadow } : {}),
+    },
   };
 }
 

@@ -264,6 +264,31 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("writes a shadow token as a native outer shadow", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-shape", slideId: slide.id, shape: "rectangle" });
+    const shape = slide.elements.find((element) => element.type === "shape");
+    expect(shape?.type).toBe("shape");
+    if (shape?.type !== "shape") return;
+    shape.style = { ...shape.style, shadow: "raised", radiusPt: 8 };
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    // The effect is an OOXML effect list on the shape, not a picture of a shadow.
+    expect(slideXml).toContain("<a:effectLst>");
+    expect(slideXml).toContain("<a:outerShdw");
+    expect(slideXml).toContain('prst="roundRect"');
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("leaves a shape without a token flat", async () => {
+    const document = createDocument();
+    applyCommand(document, { type: "add-shape", slideId: document.slides[0]!.id, shape: "rectangle" });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).not.toContain("<a:outerShdw");
+  });
+
   it("writes a page transition as a native PowerPoint transition", async () => {
     const document = createDocument();
     const slide = document.slides[0]!;

@@ -189,6 +189,22 @@ export type DocumentCommand =
   | { type: "ungroup-elements"; slideId: SlideId; groupId: string }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }
   | {
+      type: "reorder-elements";
+      slideId: SlideId;
+      /**
+       * The objects that move as one block, for example a multi-selection or a
+       * layer row dragged together with its group. Their relative z-order is
+       * kept; the order of this array itself is not meaningful.
+       */
+      elementIds: ElementId[];
+      /**
+       * Insertion index in the array that remains after the block is removed,
+       * so `0` is the bottom of the page and `remaining.length` the top. The
+       * panel converts its top-down drop position into this index.
+       */
+      toIndex: number;
+    }
+  | {
       type: "add-animation";
       slideId: SlideId;
       elementId: ElementId;

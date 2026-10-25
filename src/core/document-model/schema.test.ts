@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ElementId, Emu } from "./types";
 import versionOneFixture from "./__fixtures__/v1-document.json";
 import versionTwoFixture from "./__fixtures__/v2-document.json";
 import versionThreeFixture from "./__fixtures__/v3-document.json";
@@ -19,6 +20,7 @@ import versionEighteenFixture from "./__fixtures__/v18-document.json";
 import versionNineteenFixture from "./__fixtures__/v19-document.json";
 import versionTwentyFixture from "./__fixtures__/v20-document.json";
 import versionTwentyOneFixture from "./__fixtures__/v21-document.json";
+import versionTwentyTwoFixture from "./__fixtures__/v22-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
@@ -290,6 +292,36 @@ describe("presentation document schema", () => {
     const parsed = parsePresentationDocument(versionTwentyOneFixture);
     expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(parsed.templateStyle).toBeUndefined();
+  });
+
+  it("migrates a version 22 fixture without inventing a shadow", () => {
+    const parsed = parsePresentationDocument(versionTwentyTwoFixture);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    // A shape from before the token existed stays flat: the migration may add
+    // the field to the schema, never a look to a page the user approved.
+    const shape = parsed.slides[0]!.elements.find((element) => element.type === "shape");
+    expect(shape?.type).toBe("shape");
+    expect(shape?.type === "shape" ? shape.style.shadow : undefined).toBeUndefined();
+  });
+
+  it("keeps a shadow token through a save and a re-read", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.elements.push({
+      id: "11111111-1111-4111-8111-111111111111" as ElementId,
+      type: "shape",
+      shape: "rectangle",
+      frame: { x: 0 as Emu, y: 0 as Emu, width: 914_400 as Emu, height: 914_400 as Emu },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "generated",
+      style: { fill: "#FFFFFF", stroke: "#E2E7EC", strokeWidthPt: 1, radiusPt: 8, shadow: "raised" },
+    });
+    const parsed = parsePresentationDocument(JSON.parse(JSON.stringify(document)));
+    const shape = parsed.slides[0]!.elements.find(
+      (element) => element.id === ("11111111-1111-4111-8111-111111111111" as ElementId),
+    );
+    expect(shape?.type === "shape" ? shape.style.shadow : undefined).toBe("raised");
   });
 
   it("persists and re-reads the template review target", () => {

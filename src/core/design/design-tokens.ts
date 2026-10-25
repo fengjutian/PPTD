@@ -1,5 +1,5 @@
 import { EMU_PER_INCH, type DocumentTheme, type Emu } from "../document-model";
-import { colorLuminance, contrastRatio, MINIMUM_CONTRAST } from "../rendering/contrast";
+import { colorLuminance, contrastRatio, fillForInk, MINIMUM_CONTRAST, readableTextColor } from "../rendering/contrast";
 import { mixHex } from "./shape-gradient";
 import { resolveTypeScale } from "./type-scale";
 import type { DeckConcept } from "./deck-concept";
@@ -21,24 +21,31 @@ import type { DeckConcept } from "./deck-concept";
 export interface SemanticColors {
   /** A surface that sits above the page: a card, a plate, a caption bar. */
   surfaceRaised: string;
+  /** A surface that sits below the page field: a recessed column, a table band. */
+  surfaceSunken: string;
   /** A hairline, a card stroke, a column separator. */
   border: string;
+  /** A boundary that has to read as a line, not a texture: a rule, a selected edge. */
+  borderStrong: string;
   /** Secondary copy: captions, source lines, figure credits. */
   textMuted: string;
   /** The accent as a low-intensity fill that body ink still reads on. */
   accentSubtle: string;
+  /** The accent as a solid field that can carry `onAccent` at body size. */
+  accentStrong: string;
+  /** The ink that reads on `accentStrong`. */
+  onAccent: string;
 }
 
 /**
- * Derives the four semantic roles from a page's own surface, ink and accent.
+ * Derives the eight semantic roles from a page's own surface, ink and accent.
  *
  * Deriving beats hard-coding here because the same function serves two callers:
  * a built-in preset (whose values are written into the theme once) and a page
  * painted on an imported template (whose surface and ink are resolved per
- * page). On a dark page the raised surface goes *towards* white and the text
- * mute goes towards the surface, which is the opposite direction from a light
- * page; a single fixed mix would make a card on a navy page darker than the
- * navy and therefore invisible.
+ * page). On a dark page the raised surface goes *towards* white and the sunken
+ * one goes towards black, which is the opposite direction from a light page; a
+ * single fixed mix would make one of the two disappear into the field.
  */
 /**
  * Secondary ink: lighter than body copy, still readable on the page.
@@ -62,12 +69,37 @@ function muteInk(ink: string, surface: string): string {
 export function deriveSemanticColors(input: { surface: string; ink: string; accent: string }): SemanticColors {
   const dark = (colorLuminance(input.surface) ?? 1) < 0.45;
   const towards = dark ? "#FFFFFF" : input.ink;
+  // A solid accent field is deepened only as far as it must be to carry white
+  // copy; a pale brand tone therefore keeps its hue instead of turning into a
+  // second, darker colour that no longer looks like the brand.
+  const accentStrong = fillForInk("#FFFFFF", input.accent);
   return {
     surfaceRaised: mixHex(input.surface, towards, dark ? 0.1 : 0.05),
+    // Inset moves away from the raised side: on a light page it darkens a
+    // little more than the raised surface, on a dark page it goes under the
+    // page field instead of above it. One direction for both would make the
+    // two surfaces indistinguishable on one of them.
+    surfaceSunken: dark ? mixHex(input.surface, "#000000", 0.22) : mixHex(input.surface, input.ink, 0.1),
     border: mixHex(input.surface, towards, dark ? 0.2 : 0.14),
+    borderStrong: mixHex(input.surface, towards, dark ? 0.36 : 0.3),
     textMuted: muteInk(input.ink, input.surface),
     accentSubtle: mixHex(input.surface, input.accent, dark ? 0.22 : 0.12),
+    accentStrong,
+    onAccent: readableTextColor("#FFFFFF", colorLuminance(accentStrong) ?? 0.2),
   };
+}
+
+/**
+ * Whether two surfaces need the same set of semantic roles.
+ *
+ * The stored roles of a preset are only valid for the surface they were derived
+ * from. A light preset applied to a dark page used to reuse its white raised
+ * surface, and the page drew light ink on it — a card nobody can read. The
+ * appearance (light or dark) is enough to tell when the stored set must be
+ * replaced by one derived from the page itself.
+ */
+export function sameAppearance(first: string, second: string): boolean {
+  return (colorLuminance(first) ?? 1) < 0.45 === (colorLuminance(second) ?? 1) < 0.45;
 }
 
 /**

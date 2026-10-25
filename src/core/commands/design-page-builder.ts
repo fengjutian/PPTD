@@ -37,7 +37,7 @@ import {
 } from "./layout-capacity";
 import { resolveTypeScale } from "../design/type-scale";
 import { findThemePreset } from "../design/theme-presets";
-import { deriveDesignTokens, deriveSemanticColors } from "../design/design-tokens";
+import { deriveDesignTokens, deriveSemanticColors, sameAppearance } from "../design/design-tokens";
 
 import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { resolveChartKind } from "../design/data-relation";
@@ -902,17 +902,25 @@ export function buildDesignedSlide(
       : pageLuminance < 0.45;
     const accentInk = artworkDark ? titleInk : design.accent;
     const ruleInk = artworkDark ? "#DCE3EA" : "#E2E7EC";
-    // The four semantic roles come from the design system when the deck has
-    // one, and from the page's own inks otherwise. A template page has no
-    // preset to ask, and its background may be a photograph: deriving from the
-    // ink that this page actually uses is the only way a card on it is not the
-    // color of the page.
+    // The semantic roles come from the design system when the deck has one, and
+    // from the page's own inks otherwise. A template page has no preset to ask,
+    // and its background may be a photograph: deriving from the ink that this
+    // page actually uses is the only way a card on it is not the color of the
+    // page.
     const semantic = deriveSemanticColors({
       surface: slide.background,
       ink: bodyInk,
       accent: design.accent,
     });
-    const semanticOf = <K extends keyof typeof semantic>(slot: K): string => paletteOf(slot) ?? semantic[slot];
+    // The stored roles of a preset belong to the surface they were derived
+    // from. A light preset used on a dark page would hand out its white raised
+    // surface while the page still draws light ink — a card nobody can read.
+    // Whenever the page's appearance differs from the preset's, the page derives
+    // its own set.
+    const presetSurface = paletteOf("surface");
+    const rolesFitThisPage = presetSurface !== undefined && sameAppearance(presetSurface, slide.background);
+    const semanticOf = <K extends keyof typeof semantic>(slot: K): string =>
+      (rolesFitThisPage ? paletteOf(slot) : undefined) ?? semantic[slot];
     const recipeColors: RecipeContext["colors"] = {
       title: titleInk,
       body: bodyInk,
@@ -929,9 +937,13 @@ export function buildDesignedSlide(
       // block reads as two unrelated brands.
       panel: fillForInk("#FFFFFF", pageLuminance < 0.45 ? slide.background : design.accent),
       surfaceRaised: semanticOf("surfaceRaised"),
+      surfaceSunken: semanticOf("surfaceSunken"),
       border: semanticOf("border"),
+      borderStrong: semanticOf("borderStrong"),
       textMuted: semanticOf("textMuted"),
       accentSubtle: semanticOf("accentSubtle"),
+      accentStrong: semanticOf("accentStrong"),
+      onAccent: semanticOf("onAccent"),
     };
     const recipeFrame = {
       title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),
@@ -991,6 +1003,7 @@ export function buildDesignedSlide(
       frame: recipeFrame,
       page: { index: pageIndex, total: pageTotal },
       chrome,
+      hasArtwork: keepsArtwork,
       ...(templateImage ? { templateImage } : {}),
       ...(design.variant ? { variant: design.variant } : {}),
       ...(design.focal ? { focal: design.focal } : {}),

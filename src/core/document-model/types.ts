@@ -147,7 +147,26 @@ export interface ShapeElementStyle {
   strokeWidthPt: number;
   radiusPt: number;
   fillGradient?: ShapeFillGradient;
+  /**
+   * How far the shape sits above the page.
+   *
+   * A token, not a blur value: the recipe says "this is a raised card", the
+   * design system decides how far that is, and the exporter writes the same
+   * numbers the canvas preview uses. Absent means flat — an older document
+   * renders exactly as before.
+   */
+  shadow?: ShapeShadowToken;
 }
+
+/**
+ * The shadow levels a shape may use.
+ *
+ * Three, because a deck needs three: a card that barely leaves the page, a
+ * plate that floats over a picture, and one emphasised card. More levels would
+ * be values a recipe could pick arbitrarily, which is what the token exists to
+ * prevent.
+ */
+export type ShapeShadowToken = "card" | "raised" | "emphasis";
 
 /**
  * 线条的方向。

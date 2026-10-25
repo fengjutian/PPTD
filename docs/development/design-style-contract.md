@@ -44,21 +44,23 @@ PPTD 采用**受约束的样式委托**：
 - 页面 chrome（标题轴、页码、页脚、安全区）；
 - 内容消费守卫（`consumptionProblem`）、内容哈希与 revision；
 - 图片裁剪、占位、导出原生对象；
-- 语义色阶（`surfaceRaised` / `border` / `textMuted` / `accentSubtle`）的派生值：AI 只能选调色板角色，这四个值由 `deriveSemanticColors` 按页面真实底色与墨色算出（ADR 0098）；
+- 语义色阶（`surfaceRaised` / `surfaceSunken` / `border` / `borderStrong` / `textMuted` / `accentSubtle` / `accentStrong` / `onAccent`）的派生值：AI 只能选调色板角色，这八个值由 `deriveSemanticColors` 按页面真实底色与墨色算出（ADR 0098、ADR 0101）；
 - 体检、概念分封顶、评审证据等级、导出回读。
 
 ## 视觉词汇的边界
 
 代码保证的视觉手段是封闭集合，AI 只能在集合内选择：
 
-| 手段     | 可用取值                                             | 说明                                      |
-| -------- | ---------------------------------------------------- | ----------------------------------------- |
-| 图片构图 | `image-led` / `side-image-text` / `full-bleed-image` | 后两者按内容形状自动选择，ADRP 0099       |
-| 浮起面   | `surfaceRaised`                                      | 卡片、题板、色带；不使用透明度            |
-| 分隔     | `border` 细线、`chrome.rule` 强调线                  | 深色页面自动改用浅墨                      |
-| 次要文字 | `textMuted`                                          | 图注、来源、副标题                        |
-| 强调填充 | `accentSubtle`                                       | 标题色带；强度受对比度约束                |
-| 标题字族 | `majorFont` 或 `theme.displayFont`                   | 只影响 display 尺寸，体检允许一种额外字族 |
+| 手段     | 可用取值                                             | 说明                                                     |
+| -------- | ---------------------------------------------------- | -------------------------------------------------------- |
+| 图片构图 | `image-led` / `side-image-text` / `full-bleed-image` | 后两者按内容形状自动选择，ADR 0099                       |
+| 浮起面   | `surfaceRaised`                                      | 卡片、题板、色带；不使用透明度                           |
+| 下沉面   | `surfaceSunken`                                      | 分区底、对比栏；模板带装饰的页面不铺                     |
+| 分隔     | `border` 细线、`borderStrong` 界线、`chrome.rule`    | 分栏线与选区边用强边界；深色页面自动改用浅墨             |
+| 次要文字 | `textMuted`                                          | 图注、来源、副标题                                       |
+| 强调填充 | `accentSubtle`                                       | 标题色带；强度受对比度约束                               |
+| 强调实心 | `accentStrong` + `onAccent`                          | 栏目头、徽标；实心自动加深到 `onAccent` 可读（ADR 0101） |
+| 标题字族 | `majorFont` 或 `theme.displayFont`                   | 只影响 display 尺寸，体检允许一种额外字族                |
 
 不在此表内的视觉效果（半透明蒙版、多图拼贴、渐变文字、任意 SVG）没有渲染实现，不得在提示词里承诺。
 

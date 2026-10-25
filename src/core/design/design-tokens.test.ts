@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { inches } from "../document-model";
 import { findThemePreset } from "./theme-presets";
 import { defaultEditorialConcept, resolveDeckConcept } from "./deck-concept";
-import { deriveDesignTokens, deriveSemanticColors } from "./design-tokens";
+import { deriveDesignTokens, deriveSemanticColors, sameAppearance } from "./design-tokens";
 import { colorLuminance, contrastRatio } from "../rendering/contrast";
 import type { CompositionFacts } from "../commands/design-intent";
 
@@ -114,5 +114,37 @@ describe("semantic color roles", () => {
     // The tint stays close to the page so body ink on it stays the body ink.
     expect(contrastRatio(colors.accentSubtle, "#FFFFFF")!).toBeLessThan(1.3);
     expect(colors.accentSubtle).not.toBe("#FFFFFF");
+  });
+
+  it("sinks below the page on both appearances", () => {
+    const light = deriveSemanticColors({ surface: "#FFFFFF", ink: "#1E3550", accent: "#0F7869" });
+    const dark = deriveSemanticColors({ surface: "#12233D", ink: "#E8EEF6", accent: "#2E75B6" });
+    // The recessed surface is on the other side of the page from the raised one:
+    // darker than the page on a light page, darker than the page on a dark page
+    // too — a panel that went up on one and down on the other would not be the
+    // same device.
+    expect(colorLuminance(light.surfaceSunken)!).toBeLessThan(colorLuminance("#FFFFFF")!);
+    expect(colorLuminance(dark.surfaceSunken)!).toBeLessThan(colorLuminance("#12233D")!);
+    expect(colorLuminance(light.surfaceSunken)!).toBeLessThan(colorLuminance(light.surfaceRaised)!);
+    // The strong border is stronger than the hairline on both.
+    expect(colorLuminance(light.borderStrong)!).toBeLessThan(colorLuminance(light.border)!);
+    expect(colorLuminance(dark.borderStrong)!).toBeGreaterThan(colorLuminance(dark.border)!);
+  });
+
+  it("deepens a pale accent until its own ink reads on it", () => {
+    // Gold is the case that made this role necessary: white on #D59B43 is 2:1,
+    // so the solid field has to be deepened or the label turns into a smudge.
+    const colors = deriveSemanticColors({ surface: "#FFFFFF", ink: "#1C1C1C", accent: "#D59B43" });
+    expect(contrastRatio(colors.onAccent, colors.accentStrong)!).toBeGreaterThanOrEqual(4.5);
+    // A deep accent keeps its hue: the field is the brand colour itself.
+    const deep = deriveSemanticColors({ surface: "#FFFFFF", ink: "#1C1C1C", accent: "#0F7869" });
+    expect(deep.accentStrong).toBe("#0F7869");
+    expect(deep.onAccent).toBe("#FFFFFF");
+  });
+
+  it("tells when stored preset roles still fit the page", () => {
+    expect(sameAppearance("#FFFFFF", "#F7F3EC")).toBe(true);
+    expect(sameAppearance("#FFFFFF", "#12233D")).toBe(false);
+    expect(sameAppearance("#12233D", "#0B1F3A")).toBe(true);
   });
 });

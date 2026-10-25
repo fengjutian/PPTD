@@ -351,6 +351,10 @@ describe("full-bleed-image recipe", () => {
     expect(plate?.type === "shape" ? plate.style.fill : undefined).toBe(
       deriveSemanticColors({ surface: "#FFFFFF", ink: "#465368", accent: "#1F4E79" }).surfaceRaised,
     );
+    // The plate lies over a photograph, so it carries the raised shadow token.
+    // The token is what the exporter turns into `a:outerShdw`; a recipe that
+    // wrote a blur value here would bypass the design system.
+    expect(plate?.type === "shape" ? plate.style.shadow : undefined).toBe("raised");
     // The headline sits inside the plate, not on the picture above it.
     const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
     expect(title?.type).toBe("text");
@@ -783,6 +787,60 @@ describe("comparison recipe", () => {
     expect(texts).not.toContain("VS");
     const ellipses = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
     expect(ellipses).toHaveLength(0);
+  });
+
+  it("sets each column on a recessed field under a solid accent header", () => {
+    const ctx = context(comparisonContent, {
+      facts: facts({ itemCount: 6, hasComparison: true, hasRowBlock: false, layout: "split" }),
+    });
+    const result = plan(comparison, ctx);
+    const filled = (fill: string) =>
+      result.elements.filter(
+        (element) =>
+          element.type === "shape" &&
+          element.style.fill === fill &&
+          element.frame.width > page.width * 0.2 &&
+          element.frame.height > page.height * 0.04,
+      );
+    // One recessed field and one solid header field per column. The row markers
+    // share the accent colour but are a few thousandths of the page wide.
+    expect(filled(ctx.colors.surfaceSunken)).toHaveLength(2);
+    expect(filled(ctx.colors.accentStrong)).toHaveLength(2);
+    // The labels sit on the accent field, so they take its ink rather than the
+    // accent ink, which may be a pale tone on a light page.
+    for (const label of ["自建实验室", "委托检测"]) {
+      const text = result.elements.find((element) => element.type === "text" && element.text === label);
+      expect(text?.type === "text" ? text.style.color : undefined).toBe(ctx.colors.onAccent);
+    }
+    // The centre rule is a line, not a hairline: it is the only element that is
+    // tall and a few thousandths of the page wide.
+    const centre = result.elements.find(
+      (element) =>
+        element.type === "shape" &&
+        element.frame.height > page.height * 0.5 &&
+        element.frame.width < page.width * 0.005,
+    );
+    expect(centre?.type === "shape" ? centre.style.fill : undefined).toBe(ctx.colors.borderStrong);
+  });
+
+  it("keeps template artwork clear of the recessed field", () => {
+    const ctx = context(comparisonContent, {
+      facts: facts({ itemCount: 6, hasComparison: true, hasRowBlock: false, layout: "split" }),
+    });
+    ctx.hasArtwork = true;
+    const result = plan(comparison, ctx);
+    const fills = result.elements.flatMap((element) => (element.type === "shape" ? [element.style.fill] : []));
+    // A filled panel would cover the artwork the template was chosen for; the
+    // header field is a small mark and still goes on.
+    expect(fills).not.toContain(ctx.colors.surfaceSunken);
+    expect(
+      result.elements.filter(
+        (element) =>
+          element.type === "shape" &&
+          element.style.fill === ctx.colors.accentStrong &&
+          element.frame.width > page.width * 0.2,
+      ),
+    ).toHaveLength(2);
   });
 
   it("refuses six points in one column", () => {

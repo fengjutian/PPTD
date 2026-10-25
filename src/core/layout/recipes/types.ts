@@ -39,17 +39,25 @@ export interface RecipeContext {
     /**
      * A surface that sits above the page: a plate under a picture, a card.
      *
-     * The four roles below are the reason a page can separate things without a
+     * The roles below are the reason a page can separate things without a
      * 0.75pt line. They are resolved per page, so a dark page gets them from
      * the dark surface and a template page from the template's own inks.
      */
     surfaceRaised: string;
+    /** A surface below the page field: a recessed column, a table band. */
+    surfaceSunken: string;
     /** A hairline or a card stroke, in the page's own ink rather than a fixed grey. */
     border: string;
+    /** A line that has to read as a line: a column rule, a selected edge. */
+    borderStrong: string;
     /** Secondary copy: captions, source lines, figure credits. */
     textMuted: string;
     /** The accent at low intensity, safe behind body ink. */
     accentSubtle: string;
+    /** The accent as a solid field that can carry `onAccent`. */
+    accentStrong: string;
+    /** The ink that reads on `accentStrong`. */
+    onAccent: string;
   };
   frame: {
     title: RectEmu;
@@ -62,6 +70,14 @@ export interface RecipeContext {
   chrome?: PageChrome;
   /** The picture placeholder of the template layout, when it has one. */
   templateImage?: NormalizedFrame;
+  /**
+   * True when the page keeps the template's own artwork behind the content.
+   *
+   * A recipe that paints a filled panel has to know: a recessed column drawn on
+   * top of a decorative template page covers the artwork the user chose, which
+   * no text element does.
+   */
+  hasArtwork?: boolean;
   /** Page-level choices from the design; recipes may ignore them. */
   variant?: "left" | "right";
   /** Main-column share for a weighted split, 0–1. */

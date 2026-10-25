@@ -541,6 +541,17 @@
   background: #fff;
   color: #22252a;
 }
+:root[data-theme="light"] .layer-toolbar {
+  border-color: #e2e5e9;
+  color: #6b7079;
+}
+:root[data-theme="light"] .layer-toolbar button {
+  color: #555b64;
+}
+:root[data-theme="light"] .layer-toolbar button:hover:not(:disabled) {
+  color: #22252a;
+  background: #e9ebee;
+}
 :root[data-theme="light"] .layer-row {
   color: #454a52;
 }
@@ -550,6 +561,48 @@
 :root[data-theme="light"] .layer-row.active {
   background: rgba(211, 82, 48, 0.12);
   color: #22252a;
+}
+:root[data-theme="light"] .layer-row.group-mate {
+  border-color: rgba(211, 82, 48, 0.3);
+  background: rgba(211, 82, 48, 0.05);
+}
+:root[data-theme="light"] .layer-type {
+  background: #fff;
+  color: #555b64;
+}
+:root[data-theme="light"] .layer-meta {
+  color: #7a8089;
+}
+:root[data-theme="light"] .layer-lock {
+  color: #a9662c;
+}
+:root[data-theme="light"] .layer-row.active .layer-meta {
+  color: #a85a43;
+}
+:root[data-theme="light"] .layer-action {
+  color: #5b616a;
+}
+:root[data-theme="light"] .layer-action:hover:not(:disabled) {
+  color: #22252a;
+  background: #dfe2e6;
+}
+:root[data-theme="light"] .layer-action.danger:hover:not(:disabled) {
+  color: #fff;
+  background: #b23b2e;
+}
+:root[data-theme="light"] .layer-hint {
+  border-color: #e2e5e9;
+  color: #6f747d;
+}
+:root[data-theme="light"] .layer-empty-actions button {
+  border-color: #cfd3d9;
+  background: #fff;
+  color: #454a52;
+}
+:root[data-theme="light"] .layer-empty-actions button:hover {
+  border-color: var(--ppt-accent);
+  background: var(--ppt-accent);
+  color: #fff;
 }
 :root[data-theme="light"] .inspector-warning {
   border-color: #d8b98a;

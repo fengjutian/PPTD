@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 22 as const;
+export const CURRENT_SCHEMA_VERSION = 23 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -86,6 +86,7 @@ const shapeElement = base.extend({
     stroke: z.string(),
     strokeWidthPt: z.number().nonnegative(),
     radiusPt: z.number().nonnegative(),
+    shadow: z.enum(["card", "raised", "emphasis"]).optional(),
     fillGradient: z
       .object({
         angleDeg: z.number().min(0).max(360),
@@ -697,6 +698,11 @@ const versionEighteenDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentyTwoDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(22) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTwentyOneDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(21) })
   .superRefine(validateUniqueIds)
@@ -863,6 +869,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 22 adds the persisted template review target. The field is
   // optional: an older project simply has no template target to reuse.
   21: (document) => ({ ...versionTwentyOneDocumentSchema.parse(document), schemaVersion: 22 }),
+  // Version 23 adds the shadow token of a shape. It is optional and defaults to
+  // flat, so a version 22 document keeps every object and renders exactly as it
+  // did; the set of cards that float is a design decision, not a migration.
+  22: (document) => ({ ...versionTwentyTwoDocumentSchema.parse(document), schemaVersion: 23 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

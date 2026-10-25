@@ -100,6 +100,7 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
     ...(input.plan.chart === undefined ? {} : { chartKind: input.plan.chart.kind }),
     ...(recipeFocal(input.plan) ? { focal: recipeFocal(input.plan) } : {}),
     ...(input.templateImage ? { templateImage: input.templateImage } : {}),
+    hasArtwork: input.hasArtwork,
   });
   if (!("elements" in planned)) return planned;
   return {

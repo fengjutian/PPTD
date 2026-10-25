@@ -161,7 +161,9 @@ export const sideImageText: LayoutRecipe = {
                 { x: separatorX, y: area.y, width: 0.75 / 72 / pageWidthIn, height: area.height },
                 page,
               ),
-              ctx.colors.border,
+              // A separator that has to read as a line uses the stronger border:
+              // the hairline tone is for a card edge, not for a column rule.
+              ctx.colors.borderStrong,
             ),
           ]),
       textElement(

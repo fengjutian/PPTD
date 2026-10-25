@@ -806,6 +806,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     pruneGroups(slide);
     return;
   }
+  if (command.type === "reorder-elements") {
+    // Dragging a multi-selection or a group in the layer panel is one intent:
+    // the block moves in one command and therefore leaves one undo entry.
+    const unique = [...new Set(command.elementIds)];
+    if (unique.length === 0) throw new Error("ELEMENT_NOT_FOUND");
+    const targets = unique.map((id) => slide.elements.find((item) => item.id === id));
+    if (targets.some((target) => !target)) throw new Error("ELEMENT_NOT_FOUND");
+    if (targets.some((target) => target!.locked)) throw new Error("ELEMENT_LOCKED");
+    const remaining = slide.elements.filter((item) => !unique.includes(item.id));
+    if (!Number.isInteger(command.toIndex) || command.toIndex < 0 || command.toIndex > remaining.length)
+      throw new Error("ELEMENT_INDEX_OUT_OF_RANGE");
+    // Keep the block in its current relative order: the panel never decides
+    // how the members of a group stack against each other.
+    const block = slide.elements.filter((item) => unique.includes(item.id));
+    slide.elements = [...remaining.slice(0, command.toIndex), ...block, ...remaining.slice(command.toIndex)];
+    return;
+  }
+
   if (command.type === "move-elements") {
     // 整组一起移动是一个意图，所以是一个命令、一个撤销项。
     if (!Number.isSafeInteger(command.dx) || !Number.isSafeInteger(command.dy))

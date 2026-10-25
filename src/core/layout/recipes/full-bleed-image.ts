@@ -150,6 +150,10 @@ export const fullBleedImage: LayoutRecipe = {
       rectElement(
         frameFromNormalized({ x: 0, y: plateTop, width: 1, height: plateHeight }, page),
         ctx.colors.surfaceRaised,
+        undefined,
+        // The plate lies over a photograph; a soft shadow is what makes it read
+        // as a separate plane rather than a crop line.
+        { shadow: "raised" },
       ),
       // A hairline along the top edge is what makes the plate read as a plane
       // laid over the picture rather than a crop of it.

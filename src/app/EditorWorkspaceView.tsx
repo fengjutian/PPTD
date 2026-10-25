@@ -26,6 +26,7 @@ export function EditorWorkspaceView({ app }: { app: AppRuntime }) {
     selectedElementIds,
     selectElement,
     toggleElement,
+    selectElements,
     workspaceRef,
     formatPainterStyle,
     zoom,
@@ -131,6 +132,8 @@ export function EditorWorkspaceView({ app }: { app: AppRuntime }) {
                 selectedElementIds={selectedElementIds}
                 onSelect={selectElement}
                 onToggle={toggleElement}
+                onSelectMany={selectElements}
+                onCommand={execute}
               />
             )}
           </aside>

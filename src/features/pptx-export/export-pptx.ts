@@ -29,6 +29,7 @@ import { patchShapeGradients } from "./shape-gradient-xml";
 import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
 import { lintTaste } from "../../core/design/taste-lint";
+import { shadowSpec } from "../../core/design/effects";
 import { checkTemplateFit, templateTargetMatchesDocument } from "../../services/template-review-target";
 import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
@@ -350,6 +351,7 @@ export async function buildPptx(
         }
       } else if (element.type === "shape") {
         const type = shapeType(pptx, element);
+        const shadow = shadowSpec(element.style.shadow);
         slide.addShape(type, {
           ...position,
           objectName: element.id,
@@ -357,6 +359,22 @@ export async function buildPptx(
           line: { color: color(element.style.stroke), width: element.style.strokeWidthPt },
           ...(type === pptx.ShapeType.roundRect
             ? { rectRadius: Math.min(element.style.radiusPt / 72, position.w / 2, position.h / 2) }
+            : {}),
+          // A native outer shadow, from the same table the canvas draws with.
+          // PowerPoint keeps it editable in the effect pane (ADR 0102).
+          ...(shadow
+            ? {
+                shadow: {
+                  type: "outer" as const,
+                  color: "000000",
+                  blur: shadow.blurPt,
+                  angle: shadow.angleDeg,
+                  // PptxGenJS calls the offset `offset`; the token calls it a
+                  // distance because that is what the OOXML attribute means.
+                  offset: shadow.distancePt,
+                  opacity: shadow.opacity,
+                },
+              }
             : {}),
         });
       } else if (element.type === "line") {

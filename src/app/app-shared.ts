@@ -20,9 +20,13 @@ export const themeColorRoleLabels: Record<string, string> = {
   surface: "页面底色",
   surfaceAlt: "浅色底",
   surfaceRaised: "浮起面",
+  surfaceSunken: "下沉面",
   border: "分隔线",
+  borderStrong: "强分隔线",
   textMuted: "图注与来源",
   accentSubtle: "强调色带",
+  accentStrong: "强调实心",
+  onAccent: "实心上文字",
 };
 export const themeAudienceLabels: Record<ThemeAudience, string> = {
   general: "通用",

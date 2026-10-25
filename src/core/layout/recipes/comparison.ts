@@ -16,6 +16,8 @@ const MIN_ITEM_SIZE_PT = 14;
 const MIN_GAP_PT = 10;
 const MAX_GAP_PT = 42;
 const MARKER_GUTTER = 0.022;
+/** The inset that keeps the column label off the edge of its accent field. */
+const HEADER_PADDING = 0.018;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -169,29 +171,50 @@ export const comparison: LayoutRecipe = {
       },
     ];
     columns.forEach((column) => {
+      const headerFrame = {
+        x: column.x,
+        y: panelTop,
+        width: columnWidth,
+        height: Math.min(headerHeight, 0.42 / pageHeightIn),
+      };
+      // A recessed field behind each column is what makes the two sides read as
+      // two zones instead of two lists on the same page. It is skipped on a
+      // template page: a filled panel would cover the artwork the user chose,
+      // which a text element does not.
+      if (!ctx.hasArtwork) {
+        elements.push(
+          rectElement(
+            frameFromNormalized(
+              {
+                x: Math.max(chrome.content.x - 0.01, headerFrame.x - 0.014),
+                y: panelTop,
+                width: headerFrame.width + 0.028,
+                height: panelHeight,
+              },
+              page,
+            ),
+            ctx.colors.surfaceSunken,
+          ),
+        );
+      }
+      // The label sits on a solid accent field rather than in accent ink on the
+      // page: the field carries `onAccent`, so the label is readable whatever
+      // the accent is, and a pale brand tone is deepened instead of unreadable.
+      elements.push(rectElement(frameFromNormalized(headerFrame, page), ctx.colors.accentStrong));
       const labelFrame = frameFromNormalized(
-        { x: column.x, y: panelTop, width: columnWidth, height: Math.min(headerHeight, 0.42 / pageHeightIn) },
+        {
+          x: headerFrame.x + HEADER_PADDING,
+          y: headerFrame.y + HEADER_PADDING * 0.5,
+          width: Math.max(0.1, headerFrame.width - HEADER_PADDING * 2),
+          height: Math.max(0.02, headerFrame.height - HEADER_PADDING),
+        },
         page,
       );
       const labelSize = Math.min(22, fittedFontSize(column.label, labelFrame, 22, 16, headingFamily, lineHeight));
       elements.push(
-        textElement(column.label, labelFrame, labelSize, colors.accent, true, "left", headingFamily, {
+        textElement(column.label, labelFrame, labelSize, ctx.colors.onAccent, true, "left", headingFamily, {
           lineHeight,
         }),
-      );
-      elements.push(
-        rectElement(
-          frameFromNormalized(
-            {
-              x: column.x,
-              y: panelTop + Math.min(headerHeight, 0.42 / pageHeightIn) + 0.015,
-              width: Math.min(0.12, columnWidth * 0.3),
-              height: 0.006,
-            },
-            page,
-          ),
-          colors.accent,
-        ),
       );
       column.flow.rows.forEach((row, index) => {
         const rowY = panelTop + headerHeight + pointsToNormalized(row.topPt, page.height);
@@ -235,7 +258,7 @@ export const comparison: LayoutRecipe = {
     });
 
     const centerX = chrome.content.x + chrome.content.width / 2;
-    elements.push(verticalRule(centerX, panelTop, panelHeight, 0.0014, page, colors.rule));
+    elements.push(verticalRule(centerX, panelTop, panelHeight, 0.0014, page, colors.borderStrong));
 
     return {
       elements,
