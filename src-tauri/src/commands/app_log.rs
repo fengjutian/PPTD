@@ -88,10 +88,13 @@ fn append_at(path: &Path, entry: AppLogEntry) -> Result<(), String> {
         "message": truncate(&entry.message, MAX_MESSAGE_CHARS),
         "context": context,
     });
-    let mut line = serde_json::to_string(&record).map_err(|error| format!("APP_LOG_SERIALIZE_FAILED: {error}"))?;
+    let mut line = serde_json::to_string(&record)
+        .map_err(|error| format!("APP_LOG_SERIALIZE_FAILED: {error}"))?;
     line.push('\n');
 
-    let _guard = LOG_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _guard = LOG_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| format!("APP_LOG_DIRECTORY_FAILED: {error}"))?;
     }
@@ -126,7 +129,8 @@ fn app_log_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .path()
         .app_log_dir()
         .map_err(|error| format!("APP_LOG_DIRECTORY_UNAVAILABLE: {error}"))?;
-    fs::create_dir_all(&directory).map_err(|error| format!("APP_LOG_DIRECTORY_CREATE_FAILED: {error}"))?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("APP_LOG_DIRECTORY_CREATE_FAILED: {error}"))?;
     Ok(directory.join(LOG_FILE))
 }
 
