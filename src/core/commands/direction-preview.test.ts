@@ -102,7 +102,7 @@ describe("direction preview", () => {
     expect(rail!.frame.x / instrumentPreview.pageSize.width).toBeCloseTo(0.185, 2);
   });
 
-  it("keeps every cover title clear of the accent panel", () => {
+  it("keeps every cover title inside the safe margin", () => {
     const document = buildDesignPreviewDocument();
     for (const deckConcept of [editorial, documentary, paper, instrument]) {
       const [preview] = buildDirectionPreviewPages({
@@ -113,9 +113,9 @@ describe("direction preview", () => {
         commandBase: { themePresetId: "editorial-teal" },
       });
       const title = titleFrame(preview!.document, 0);
-      // The cover's right accent panel starts at 0.78. A centred or right-shifted
-      // surface must shorten the title instead of running under the panel.
-      expect(title.x + title.width).toBeLessThanOrEqual(0.78);
+      // The cover is a full-bleed field now; the title still has to stop before
+      // the right safe margin instead of running off the page.
+      expect(title.x + title.width).toBeLessThanOrEqual(0.93);
     }
   });
 

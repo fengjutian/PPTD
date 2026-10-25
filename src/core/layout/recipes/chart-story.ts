@@ -52,39 +52,76 @@ export const chartStory: LayoutRecipe = {
 
     let contentTop = chrome.contentTop;
     const body = ctx.content.body.trim();
+    // A chart page reads better as "evidence + conclusion": the chart keeps the
+    // left two thirds and the reviewed takeaway sits in a narrow right column.
+    // When the sentence cannot fit there, it falls back to the old lead above.
+    let chartWidth = chrome.content.width;
     if (body) {
-      const leadFrame = frameFromNormalized(
-        { x: chrome.content.x, y: contentTop, width: chrome.content.width * 0.72, height: 0.16 },
+      const columnGap = 0.035;
+      const chartShare = 0.62;
+      const takeawayX = chrome.content.x + chrome.content.width * chartShare + columnGap;
+      const takeawayWidth = chrome.content.width * (1 - chartShare) - columnGap;
+      const takeawayTop = contentTop + 0.07;
+      const takeawayFrame = frameFromNormalized(
+        { x: takeawayX, y: takeawayTop, width: takeawayWidth, height: chrome.contentBottom - takeawayTop },
         page,
       );
-      const leadSize = fittedFontSize(
+      const takeawaySize = fittedFontSize(
         body,
-        leadFrame,
-        Math.min(ctx.tokens.type.bodyPt, 16),
-        12,
+        takeawayFrame,
+        Math.min(22, ctx.tokens.type.bodyPt + 4),
+        13,
         bodyFamily,
         lineHeight,
       );
-      if (!textFits(body, leadFrame, leadSize, bodyFamily, lineHeight)) {
-        return conflict("body", "图表页说明放不下");
-      }
-      const leadHeight = pointsToNormalized(
-        textHeightPt(body, leadFrame.width / 12_700, leadSize, bodyFamily, lineHeight),
-        page.height,
-      );
-      elements.push(
-        textElement(
+      if (textFits(body, takeawayFrame, takeawaySize, bodyFamily, lineHeight)) {
+        chartWidth = chrome.content.width * chartShare;
+        elements.push(
+          rectElement(
+            frameFromNormalized({ x: takeawayX, y: contentTop + 0.02, width: 0.08, height: 0.005 }, page),
+            ctx.colors.accent,
+          ),
+        );
+        elements.push(
+          textElement(body, takeawayFrame, takeawaySize, ctx.colors.title, true, "left", bodyFamily, {
+            contentRef: "body",
+            lineHeight,
+          }),
+        );
+      } else {
+        const leadFrame = frameFromNormalized(
+          { x: chrome.content.x, y: contentTop, width: chrome.content.width * 0.72, height: 0.16 },
+          page,
+        );
+        const leadSize = fittedFontSize(
           body,
-          { ...leadFrame, height: Math.round((leadHeight + 0.004) * page.height) as Emu },
-          leadSize,
-          ctx.colors.body,
-          false,
-          "left",
+          leadFrame,
+          Math.min(ctx.tokens.type.bodyPt, 16),
+          12,
           bodyFamily,
-          { contentRef: "body", lineHeight },
-        ),
-      );
-      contentTop += leadHeight + 0.03;
+          lineHeight,
+        );
+        if (!textFits(body, leadFrame, leadSize, bodyFamily, lineHeight)) {
+          return conflict("body", "图表页说明放不下");
+        }
+        const leadHeight = pointsToNormalized(
+          textHeightPt(body, leadFrame.width / 12_700, leadSize, bodyFamily, lineHeight),
+          page.height,
+        );
+        elements.push(
+          textElement(
+            body,
+            { ...leadFrame, height: Math.round((leadHeight + 0.004) * page.height) as Emu },
+            leadSize,
+            ctx.colors.body,
+            false,
+            "left",
+            bodyFamily,
+            { contentRef: "body", lineHeight },
+          ),
+        );
+        contentTop += leadHeight + 0.03;
+      }
     }
 
     const chartHeight = Math.min((chrome.contentBottom - contentTop) * 0.95, 0.72);
@@ -94,7 +131,7 @@ export const chartStory: LayoutRecipe = {
       contentBlockIds: [block.id],
       kind: block.kind,
       frame: frameFromNormalized(
-        { x: chrome.content.x, y: contentTop + 0.02, width: chrome.content.width, height: chartHeight },
+        { x: chrome.content.x, y: contentTop + 0.02, width: chartWidth, height: chartHeight },
         page,
       ),
       rotationMilliDegree: 0,

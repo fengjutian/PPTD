@@ -55,6 +55,8 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
   } = app;
 
   const [variantCount, setVariantCount] = useState(8);
+  /** Quick run: one concept call instead of four two-page direction previews. */
+  const [skipDirectionGate, setSkipDirectionGate] = useState(false);
   const batchRunning = designBusy && variantBatch !== undefined;
 
   return (
@@ -337,6 +339,20 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
               </div>
             </div>
             <div className="upload-dialog-actions">
+              {themePresetId && (
+                <label
+                  className="template-picker-fast"
+                  title="跳过 4 个方向的预览，按推荐方向直接排版：少 4 次两页设计请求"
+                >
+                  <input
+                    type="checkbox"
+                    checked={skipDirectionGate}
+                    disabled={designBusy}
+                    onChange={(event) => setSkipDirectionGate(event.target.checked)}
+                  />
+                  快速生成（跳过方向预览）
+                </label>
+              )}
               <button type="button" className="secondary-action" onClick={() => setTemplatePickerOpen(false)}>
                 {designBusy ? "转至后台" : "取消"}
               </button>
@@ -346,7 +362,11 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                 disabled={
                   (!themePresetId && (!selectedTemplate || !templateAnalysis)) || templatePreviewBusy || designBusy
                 }
-                onClick={() => void generateFromDraft(themePresetId ? "preset" : "template")}
+                onClick={() =>
+                  void generateFromDraft(themePresetId ? "preset" : "template", undefined, undefined, undefined, {
+                    skipDirectionGate,
+                  })
+                }
               >
                 {designBusy
                   ? `${designProgress.percent}%`

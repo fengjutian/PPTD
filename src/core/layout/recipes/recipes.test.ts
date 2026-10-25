@@ -616,6 +616,22 @@ describe("chart-story recipe", () => {
     expect(chart?.type === "chart" ? chart.kind : "").toBe("line");
     expect(chart?.type === "chart" ? chart.contentBlockIds : []).toEqual(["chart-1"]);
   });
+
+  it("puts a fitting takeaway beside the chart instead of over it", () => {
+    const content: SlideContent = { ...chartContent, body: "收入连续三个季度回升。" };
+    const ctx = context(content, {
+      facts: facts({ itemCount: 0, hasChart: true, hasRowBlock: true, layout: "cards" }),
+    });
+    const result = plan(chartStory, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, content)).toBeUndefined();
+    const chart = result.elements.find((element) => element.type === "chart");
+    const body = result.elements.find((element) => element.type === "text" && element.contentRef === "body");
+    expect(chart?.type).toBe("chart");
+    expect(body?.type).toBe("text");
+    if (chart?.type !== "chart" || body?.type !== "text") return;
+    expect(body.frame.x).toBeGreaterThan(chart.frame.x + chart.frame.width);
+  });
 });
 
 describe("weighted-split recipe", () => {

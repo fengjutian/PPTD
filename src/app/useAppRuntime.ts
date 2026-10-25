@@ -2,15 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   EMU_PER_INCH,
   emu,
-  inches,
   createDocument,
   type DesignDirectionRecord,
   type ElementId,
   type DocumentId,
-  type AnimationEffect,
   type PresentationDocument,
-  type SlideAnimation,
-  type SlideElement,
   type TextElement,
   type SupportedImageMimeType,
   nextTextSize,
@@ -123,7 +119,7 @@ import {
 import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
-import { recordAppError, recordAppLog, appLogLocation, readAppLog, type AppLogRecord } from "../services/app-log";
+import { recordAppError, recordAppLog } from "../services/app-log";
 import {
   analyzePptxTemplate,
   choosePresentationFile,
@@ -156,6 +152,9 @@ import {
   type PptxImportProgress,
 } from "../services/pptx-import";
 import { useEditorStore } from "../store/editor-store";
+import { useDiagnostics } from "./use-diagnostics";
+import { useClipboard } from "./use-clipboard";
+import { useAnimationPreview } from "./use-animation-preview";
 import { defaultThemePreset, findThemePreset } from "../core/design/theme-presets";
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
 import { themePresetMetadata } from "../core/design/theme-preset-metadata";
@@ -289,10 +288,6 @@ export function useAppRuntime() {
   const [editorRibbonTab, setEditorRibbonTab] = useState<
     "file" | "home" | "insert" | "design" | "arrange" | "animation" | "view"
   >("home");
-  const [animationPreviews, setAnimationPreviews] = useState<SlideAnimation[]>([]);
-  const [selectedAnimationId, setSelectedAnimationId] = useState<string>();
-  const [newAnimationEffect, setNewAnimationEffect] = useState<AnimationEffect>("fade");
-  const animationPreviewTimers = useRef<number[]>([]);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportReport, setExportReport] = useState<ExportReport>();
   const [exportPreflightOpen, setExportPreflightOpen] = useState(false);
@@ -328,25 +323,9 @@ export function useAppRuntime() {
    */
   const [uiLanguage, setUiLanguage] = useState<UiLanguage>("zh");
   const t = useMemo(() => createTranslator(uiLanguage), [uiLanguage]);
-  // 诊断面板：只读本机日志，入口在左侧导航。打开时才读，不轮询、不常驻。
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
-  const [logRecords, setLogRecords] = useState<AppLogRecord[]>([]);
-  const [logLoading, setLogLoading] = useState(false);
-  const [logLocation, setLogLocation] = useState<string>();
-  const loadDiagnostics = useCallback(async () => {
-    setLogLoading(true);
-    try {
-      const [records, location] = await Promise.all([readAppLog(200), appLogLocation()]);
-      setLogRecords(records);
-      setLogLocation(location);
-    } finally {
-      setLogLoading(false);
-    }
-  }, []);
-  const openDiagnostics = () => {
-    setDiagnosticsOpen(true);
-    void loadDiagnostics();
-  };
+  const { diagnosticsOpen, setDiagnosticsOpen, logRecords, logLoading, logLocation, loadDiagnostics, openDiagnostics } =
+    useDiagnostics();
+
   const [aiTopic, setAiTopic] = useState("");
   /**
    * 用户粘贴的参考素材（年报、报告、会议纪要）。
@@ -518,23 +497,6 @@ export function useAppRuntime() {
   const [aiImageBusy, setAiImageBusy] = useState(false);
   /** AI 配图失败的原因，对话框里如实显示。 */
   const [aiImageError, setAiImageError] = useState<string>();
-  /**
-   * The in-app clipboard.
-   *
-   * The objects are kept as the immutable document snapshots they were copied
-   * from, so a later edit cannot change the clipboard. `pastes` shifts each
-   * paste further from the source instead of stacking every copy on one spot.
-   */
-  const [clipboard, setClipboard] = useState<{ elements: SlideElement[]; pastes: number }>({
-    elements: [],
-    pastes: 0,
-  });
-  // The clipboard belongs to one document: its objects may reference assets of
-  // the project they came from. Switching projects clears it instead of letting
-  // a paste create a picture whose asset is not in the new project.
-  useEffect(() => {
-    setClipboard({ elements: [], pastes: 0 });
-  }, [document.id]);
   /** The find-and-replace bar is a display mode, so it never enters the document. */
   const [findOpen, setFindOpen] = useState(false);
   /** Table/chart insertion dialogs live outside the document until confirmed. */
@@ -577,64 +539,13 @@ export function useAppRuntime() {
   );
   const formatPainterStyle = useFormatPainterStore((state) => state.style);
 
-  /**
-   * Copies the unlocked selection into the in-app clipboard. Cutting is the same
-   * snapshot followed by one delete command, so the whole cut is one undo step.
-   *
-   * There is no system clipboard integration yet; the status message says so
-   * implicitly by anchoring paste to Ctrl+V inside the editor. This is the
-   * documented downgrade required by TRS 4.4.4.
-   */
-  const copySelection = useCallback(
-    (cut = false) => {
-      const elements = activeSlide.elements.filter(
-        (element) => selectedElementIds.includes(element.id) && !element.locked,
-      );
-      if (elements.length === 0) {
-        setTaskStatus("没有可复制的对象");
-        return;
-      }
-      setClipboard({ elements, pastes: 0 });
-      if (cut) {
-        execute({
-          type: "delete-elements",
-          slideId: activeSlide.id,
-          elementIds: elements.map((element) => element.id),
-        });
-        setTaskStatus(elements.length > 1 ? `已剪切 ${elements.length} 个对象` : "已剪切对象");
-        return;
-      }
-      setTaskStatus(
-        elements.length > 1 ? `已复制 ${elements.length} 个对象，可用 Ctrl+V 粘贴` : "已复制对象，可用 Ctrl+V 粘贴",
-      );
-    },
-    [activeSlide.elements, activeSlide.id, execute, selectedElementIds],
-  );
-
-  const pasteSelection = useCallback(() => {
-    if (clipboard.elements.length === 0) {
-      setTaskStatus("剪贴板里还没有对象，先复制或剪切");
-      return;
-    }
-    // Repeated pastes step away from the source instead of covering each other.
-    const offset = emu(inches(0.2) * (clipboard.pastes + 1));
-    try {
-      execute({
-        type: "paste-elements",
-        slideId: activeSlide.id,
-        elements: clipboard.elements,
-        offsetEmu: offset,
-      });
-    } catch (error) {
-      const code = error instanceof Error ? error.message : String(error);
-      setTaskStatus(
-        code === "PASTE_REQUIRES_CONTENT_BLOCK" ? "表格或图表只能在包含其内容块的页面粘贴" : `粘贴失败：${code}`,
-      );
-      return;
-    }
-    setClipboard((current) => ({ ...current, pastes: current.pastes + 1 }));
-    setTaskStatus(clipboard.elements.length > 1 ? `已粘贴 ${clipboard.elements.length} 个对象` : "已粘贴对象");
-  }, [activeSlide.id, clipboard.elements, clipboard.pastes, execute]);
+  const { clipboard, copySelection, pasteSelection } = useClipboard({
+    documentId: document.id,
+    activeSlide,
+    selectedElementIds,
+    execute,
+    setTaskStatus,
+  });
 
   const activeGuides = useCanvasGuidesStore((s) => s.guidesBySlide[activeSlideId]) ?? [];
   const addGuide = (axis: "x" | "y", position: number) => addGuideToSlide(activeSlide.id, axis, emu(position));
@@ -2489,6 +2400,7 @@ export function useAppRuntime() {
     draftOverride?: AiDraft,
     historyIdOverride?: string,
     prepared?: { presetId: string; concept: DeckConcept; design: AiPresentationDesign },
+    _options?: { skipDirectionGate?: boolean },
   ) => {
     const sourceDraft = draftOverride ?? aiDraft;
     if (!sourceDraft) return;
@@ -3923,81 +3835,17 @@ export function useAppRuntime() {
     selectElements(elementIds.filter((id): id is ElementId => existing.has(id as ElementId)));
     setDesignQualityReportOpen(false);
   };
-  const selectedAnimations = selected
-    ? (activeSlide.animations ?? []).filter((animation) => animation.elementId === selected.id)
-    : [];
-  const selectedAnimation =
-    selectedAnimations.find((animation) => animation.id === selectedAnimationId) ?? selectedAnimations.at(-1);
-  const selectedAnimationIndex = selectedAnimation
-    ? (activeSlide.animations ?? []).findIndex((animation) => animation.id === selectedAnimation.id)
-    : -1;
-
-  useEffect(() => {
-    const nextId = selectedAnimation?.id;
-    if (selectedAnimationId !== nextId) setSelectedAnimationId(nextId);
-  }, [selectedAnimation?.id, selectedAnimationId]);
-
-  const stopAnimationPreview = useCallback(() => {
-    animationPreviewTimers.current.forEach((timer) => window.clearTimeout(timer));
-    animationPreviewTimers.current = [];
-    setAnimationPreviews([]);
-  }, []);
-
-  useEffect(() => stopAnimationPreview, [stopAnimationPreview]);
-
-  const previewSelectedAnimation = () => {
-    if (!selectedAnimation) return;
-    stopAnimationPreview();
-    window.requestAnimationFrame(() => {
-      setAnimationPreviews([selectedAnimation]);
-      animationPreviewTimers.current = [
-        window.setTimeout(
-          () => setAnimationPreviews([]),
-          selectedAnimation.durationMs + selectedAnimation.delayMs + 120,
-        ),
-      ];
-    });
-  };
-
-  const previewSlideAnimations = () => {
-    const animations = activeSlide.animations ?? [];
-    if (animations.length === 0) return;
-    stopAnimationPreview();
-    let previousStart = 0;
-    let previousEnd = 0;
-    animations.forEach((animation, index) => {
-      const sequenceStart =
-        index === 0
-          ? 0
-          : animation.start === "with-previous"
-            ? previousStart
-            : animation.start === "after-previous"
-              ? previousEnd
-              : previousEnd + 250;
-      const visibleStart = sequenceStart;
-      const visibleEnd = sequenceStart + animation.delayMs + animation.durationMs + 80;
-      animationPreviewTimers.current.push(
-        window.setTimeout(() => {
-          setAnimationPreviews((current) => [
-            ...current.filter((item) => item.elementId !== animation.elementId),
-            animation,
-          ]);
-          setSelectedAnimationId(animation.id);
-        }, visibleStart),
-        window.setTimeout(() => {
-          setAnimationPreviews((current) => current.filter((item) => item.id !== animation.id));
-        }, visibleEnd),
-      );
-      previousStart = sequenceStart;
-      previousEnd = Math.max(previousEnd, sequenceStart + animation.delayMs + animation.durationMs);
-    });
-    animationPreviewTimers.current.push(
-      window.setTimeout(() => {
-        animationPreviewTimers.current = [];
-        setAnimationPreviews([]);
-      }, previousEnd + 350),
-    );
-  };
+  const {
+    animationPreviews,
+    selectedAnimation,
+    selectedAnimationIndex,
+    setSelectedAnimationId,
+    newAnimationEffect,
+    setNewAnimationEffect,
+    stopAnimationPreview,
+    previewSelectedAnimation,
+    previewSlideAnimations,
+  } = useAnimationPreview({ activeSlide, selectedElementId });
 
   const restoreContentVersion = (versionId: string) => {
     if (

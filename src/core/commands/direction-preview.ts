@@ -10,7 +10,8 @@
  * and discards them.
  */
 
-import { applyCommand, type AiSlideDraft, type DocumentCommand, toAiBlocks } from "./commands";
+import { applyCommand, type AiSlideDraft, type DocumentCommand } from "./commands";
+import { toAiBlocks } from "./command-helpers";
 import type { AiSlideDesign } from "./template-layouts";
 import { createDocument, type PresentationDocument, type Slide } from "../document-model";
 import type { DeckConcept } from "../design/deck-concept";

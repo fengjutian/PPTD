@@ -19,7 +19,7 @@ import { parseHexColor } from "../core/rendering/contrast";
 import { encodePng, type PixelImage } from "../core/rendering/png";
 
 const slides: AiSlideDraft[] = [
-  { title: "2026 年第二季度经营回顾", body: "区域连锁零售 · 管理层", speakerNotes: "" },
+  { title: "2026 年第二季度经营回顾", body: "区域连锁零售 · 管理层 · 2026 年 7 月", speakerNotes: "" },
   { title: "第二部分 门店效率", body: "从客流到复购的完整链路。", speakerNotes: "" },
   {
     title: "门店调整的三个判断",

@@ -5,9 +5,9 @@ import { rectElement, textElement } from "./elements";
 import { fittedFontSize, frameFromNormalized, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
-const TITLE = { x: 0.07, y: 0.18, width: 0.66, height: 0.34 };
-const ACCENT_BAR = { x: 0, y: 0, width: 0.035, height: 1 };
-const ACCENT_PANEL = { x: 0.78, y: 0, width: 0.22, height: 1 };
+const TITLE = { y: 0.22, width: 0.78, height: 0.32 };
+const RULE = { y: 0.62, width: 0.12, height: 0.006 };
+const SUBTITLE = { y: 0.69, width: 0.58, height: 0.1 };
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -34,39 +34,29 @@ export const coverStatement: LayoutRecipe = {
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
 
-    // The cover keeps its own composition, but it starts from the shared title
-    // axis instead of a private y. A cover that ignores the deck's chrome is
-    // how one deck ends up with two different left margins. The width also
-    // stops before the accent panel: a narrower/centred surface moves the axis
-    // inward, and a title that ran under the panel would be unreadable.
+    // The cover is a full-bleed field of the theme accent. Every stop is dark
+    // enough for white copy, so the same ink works on all presets.
+    const gradient = accentPanelGradient(ctx.colors.accent);
+    const ink = "#FFFFFF";
     const coverTitle = {
       x: chrome.title.x,
-      y: Math.min(0.7, chrome.title.y + 0.06),
-      width: Math.min(
-        TITLE.width,
-        Math.max(0.3, chrome.title.width),
-        Math.max(0.25, ACCENT_PANEL.x - chrome.title.x - 0.03),
-      ),
+      y: Math.max(TITLE.y, chrome.title.y + 0.04),
+      width: Math.min(TITLE.width, Math.max(0.4, 1 - chrome.title.x - 0.07)),
       height: TITLE.height,
     };
     const subtitleFrameNormalized = {
       x: coverTitle.x,
-      y: Math.min(0.8, coverTitle.y + coverTitle.height + 0.1),
-      width: Math.min(0.55, coverTitle.width),
-      height: 0.14,
+      y: SUBTITLE.y,
+      width: Math.min(SUBTITLE.width, coverTitle.width),
+      height: SUBTITLE.height,
     };
-    const ruleNormalized = {
-      x: coverTitle.x,
-      y: Math.max(coverTitle.y + 0.1, subtitleFrameNormalized.y - 0.07),
-      width: 0.12,
-      height: 0.006,
-    };
+    const ruleNormalized = { x: coverTitle.x, y: RULE.y, width: RULE.width, height: RULE.height };
 
     const titleFrame = frameFromNormalized(coverTitle, page);
     const titleSize = fittedFontSize(
       title,
       titleFrame,
-      Math.max(ctx.tokens.type.displayPt, 40),
+      Math.max(ctx.tokens.type.displayPt, 48),
       24,
       headingFamily,
       lineHeight,
@@ -76,16 +66,15 @@ export const coverStatement: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(frameFromNormalized(ACCENT_BAR, page), ctx.colors.accent, accentPanelGradient(ctx.colors.accent)),
-      rectElement(frameFromNormalized(ACCENT_PANEL, page), ctx.colors.accent, accentPanelGradient(ctx.colors.accent)),
-      rectElement(frameFromNormalized(ruleNormalized, page), ctx.colors.accent),
-      textElement(title, titleFrame, titleSize, ctx.colors.title, true, "left", headingFamily, {
+      rectElement(frameFromNormalized({ x: 0, y: 0, width: 1, height: 1 }, page), ctx.colors.accent, gradient),
+      textElement(title, titleFrame, titleSize, ink, true, "left", headingFamily, {
         contentRef: "title",
         lineHeight,
       }),
     ];
 
     if (subtitle) {
+      elements.push(rectElement(frameFromNormalized(ruleNormalized, page), ink));
       const subtitleFrame = frameFromNormalized(subtitleFrameNormalized, page);
       const subtitleSize = fittedFontSize(
         subtitle,
@@ -99,7 +88,7 @@ export const coverStatement: LayoutRecipe = {
         return conflict("body", "封面副标题在副标题框内放不下");
       }
       elements.push(
-        textElement(subtitle, subtitleFrame, subtitleSize, ctx.colors.body, false, "left", bodyFamily, {
+        textElement(subtitle, subtitleFrame, subtitleSize, ink, false, "left", bodyFamily, {
           contentRef: "body",
           lineHeight,
         }),

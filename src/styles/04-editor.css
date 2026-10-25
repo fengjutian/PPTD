@@ -1023,6 +1023,25 @@
   border-top: 1px solid #e1e5e9;
   background: #fff;
 }
+/* Quick run sits on the left of the actions row, away from the two buttons. */
+.template-picker-fast {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: #5b6d80;
+  font-size: 10px;
+  cursor: pointer;
+}
+.template-picker-fast input {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--ppt-accent);
+}
+:root:not([data-theme="light"]):not([data-theme="blue"]):not([data-theme="green"]):not([data-theme="amber"])
+  .template-picker-fast {
+  color: #9fb0c3;
+}
 
 /*
  * The batch row: the picker's real thesis is "you do not have to choose a

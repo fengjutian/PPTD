@@ -120,7 +120,7 @@ async function renderSlide(
     if (element.type === "line") drawLine(context, element, w, h, sx);
     if (element.type === "text") drawText(context, element, w, h, sx);
     if (element.type === "chart") drawChart(context, element, slide, w, h);
-    if (element.type === "table") drawTable(context, element, slide, w, h);
+    if (element.type === "table") drawTable(context, element, slide, w, h, sx);
     context.restore();
   }
   return canvas;
@@ -606,6 +606,7 @@ function drawTable(
   slide: Slide,
   width: number,
   height: number,
+  scale: number,
 ): void {
   const resolved = resolveTableData(slide, element);
   if (!resolved) return;
@@ -613,19 +614,13 @@ function drawTable(
   const rowCount = resolved.rows.length + 1;
   const columnWidth = width / columnCount;
   const rowHeight = height / rowCount;
-  const fontSize = Math.max(9, Math.min(rowHeight * 0.45, (element.style.fontSizePt * width) / 960));
+  // Points become the pixels of this render; the row height still caps the font
+  // so a short table cannot grow text past its own cells.
+  const fontSize = Math.max(9, Math.min(rowHeight * 0.45, (element.style.fontSizePt * scale * 914_400) / 72));
   const alignsRight = (column: number) => tableColumnAlignsRight(resolved.rows, column);
   context.font = `${fontSize}px "${element.style.fontFamily}"`;
   context.textBaseline = "middle";
-  const cell = (
-    text: string,
-    x: number,
-    y: number,
-    fill: string,
-    ink: string,
-    bold: boolean,
-    column: number,
-  ) => {
+  const cell = (text: string, x: number, y: number, fill: string, ink: string, bold: boolean, column: number) => {
     context.fillStyle = fill;
     context.fillRect(x, y, columnWidth, rowHeight);
     context.strokeStyle = element.style.borderColor;

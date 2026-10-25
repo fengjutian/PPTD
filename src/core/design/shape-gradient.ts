@@ -16,19 +16,20 @@ export function mixHex(from: string, to: string, amount: number): string {
 }
 
 /**
- * The gradient of a theme's large accent panel.
+ * The gradient of a theme's large accent field.
  *
- * Three stops, not two: a light shoulder, the brand accent and a deeper edge.
- * The middle stop keeps the theme color dominant while the ends give the panel
- * a soft light direction like a printed cover.
+ * Every stop is the accent darkened toward black, so white cover and section
+ * copy keeps a readable contrast on every theme — including the lighter gold
+ * and orange accents. The middle stop keeps the brand color dominant while the
+ * ends give the field a soft light direction.
  */
 export function accentPanelGradient(accent: string): ShapeFillGradient {
   return {
     angleDeg: 45,
     stops: [
-      { offset: 0, color: mixHex(accent, "#FFFFFF", 0.18) },
-      { offset: 0.52, color: accent },
-      { offset: 1, color: mixHex(accent, "#000000", 0.3) },
+      { offset: 0, color: mixHex(accent, "#000000", 0.15) },
+      { offset: 0.52, color: mixHex(accent, "#000000", 0.38) },
+      { offset: 1, color: mixHex(accent, "#000000", 0.58) },
     ],
   };
 }

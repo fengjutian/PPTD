@@ -177,25 +177,23 @@ export function rankThemePresets(signals: ThemeContentSignals): ThemePresetChoic
 
   return scored
     .sort((left, right) => right.score - left.score || left.catalogIndex - right.catalogIndex)
-    .map(
-      ({ preset, metadata, score, titleRule, bodyRule, genreMatches, presetGenre }): ThemePresetChoice => ({
-        presetId: preset.id,
-        name: preset.name,
-        description: preset.description,
-        score,
-        reason: reasonFor({
-          metadata,
-          structured,
-          metrics,
-          images,
-          titleRule,
-          bodyRule,
-          hasAnySignal,
-          genreMatches,
-          presetGenre,
-        }),
+    .map(({ preset, metadata, score, titleRule, bodyRule, genreMatches, presetGenre }): ThemePresetChoice => ({
+      presetId: preset.id,
+      name: preset.name,
+      description: preset.description,
+      score,
+      reason: reasonFor({
+        metadata,
+        structured,
+        metrics,
+        images,
+        titleRule,
+        bodyRule,
+        hasAnySignal,
+        genreMatches,
+        presetGenre,
       }),
-    );
+    }));
 }
 
 interface ReasonInput {

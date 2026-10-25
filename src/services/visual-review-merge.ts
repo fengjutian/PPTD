@@ -6,9 +6,6 @@ import { CONCEPT_SCORE_THRESHOLD, type PresentationVisualGoal, type VisualReview
 import { type TemplateFitReport, type TemplateReviewTarget } from "./template-review-target";
 import { type VisionReviewPort } from "./vision-review-port";
 
-/** 一次请求最多评审的页数。 */
-const REVIEW_BATCH_SIZE = 6;
-
 export interface DesignQualityStageOptions {
   /** AI 设计阶段产出的逐页设计。 */
   initialDesigns: AiSlideDesign[];

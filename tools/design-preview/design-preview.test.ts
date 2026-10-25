@@ -116,9 +116,9 @@ describe("ten-page design preview", () => {
     // regression or a rule that fires on a deliberate choice; both must be
     // resolved before the rule ships.
     expect(report.issues).toEqual([]);
-    // The cover has no body copy, and the report says so instead of passing the
-    // typography checks it never ran.
-    expect(report.skipped).toEqual(["typography:no-body"]);
+    // The cover is a full-bleed gradient and has no body copy. Both checks are
+    // reported as skipped instead of pretending they ran.
+    expect(report.skipped).toEqual(["full-bleed-artwork:color-whitespace", "typography:no-body"]);
   });
 
   it("exports ten pages as native objects", async () => {
