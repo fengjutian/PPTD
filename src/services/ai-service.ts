@@ -402,7 +402,7 @@ const aiDesignRecipeIds = [
   "section-statement",
 ] as const;
 
-const pageDesignPlanSchema = z.object({
+export const pageDesignPlanSchema = z.object({
   role: z.enum(["cover", "section", "claim", "comparison", "process", "timeline", "quote", "summary"]),
   composition: z.object({
     primitive: z.enum(["split", "stack", "grid", "rail", "overlay", "band"]),

@@ -34,6 +34,7 @@ import {
   loadRecentLooks,
   recordDesignLook,
   recordDesignPreference,
+  recommendedConceptPreset,
 } from "./design-memory";
 
 function memoryDocument() {
@@ -91,5 +92,28 @@ describe("design memory", () => {
     expect(await designMemorySummary()).toEqual({ decks: 1, preferences: 1 });
     await clearDesignMemory();
     expect(await designMemorySummary()).toEqual({ decks: 0, preferences: 0 });
+  });
+
+  it("recommends a preset only after two picks and leaves ties open", async () => {
+    const look = (id: string, concept: "editorial" | "documentary") => ({
+      id,
+      kind: "deck" as const,
+      scope: "deck",
+      payload: { concept, palette: [], fonts: { major: "", minor: "" }, pageCount: 1 },
+      createdAt: 1,
+    });
+    store.entries = [look("a", "documentary"), look("b", "documentary"), look("c", "editorial")];
+    expect(await recommendedConceptPreset()).toBe("documentary");
+
+    store.entries = [look("a", "editorial"), look("b", "documentary")];
+    expect(await recommendedConceptPreset()).toBeUndefined();
+
+    store.entries = [
+      look("a", "editorial"),
+      look("b", "editorial"),
+      look("c", "documentary"),
+      look("d", "documentary"),
+    ];
+    expect(await recommendedConceptPreset()).toBeUndefined();
   });
 });

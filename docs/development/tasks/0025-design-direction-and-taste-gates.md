@@ -2,7 +2,7 @@
 
 | 项目     | 内容                                                                                                                                                              |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 状态     | P0/P1/P2 全部；样式合同与字阶意图已收口，验收清单待执行（2026-10-25；UI/真实模型待目视）                                                                          |
+| 状态     | P0/P1/P2 全部；字阶意图、方向推荐、模板符合度、合同检查已收口（2026-10-25；UI/真实模型待目视）                                                                    |
 | 优先级   | P0                                                                                                                                                                |
 | 里程碑   | V0.4 设计能力                                                                                                                                                     |
 | 预估     | 10–13 人日                                                                                                                                                        |
@@ -738,4 +738,27 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 
 ### 验证
 
-- `design-tokens.test.ts`、`commands.test.ts` 通过；全量测试、类型检查、ESLint、生产构建、`cargo fmt --check`、`cargo check` 通过。
+- `design-tokens.test.ts`、`commands.test.ts` 通过。
+- 全量：1185 通过、1 跳过；类型检查、ESLint、生产构建、`cargo fmt --check`、`cargo check` 通过。
+
+## 24. 方向推荐与工作区收口（2026-10-25）
+
+- `design-memory.ts`：新增 `recommendedConceptPreset`——最近 5 个外观中同一方向至少 2 次且无并列才返回；否则留空。
+- `DesignDirectionDialog`：卡片显示“最近常选”徽标；App 在方向门读取推荐，仍由用户选择。
+- `design-memory.test.ts`：推荐、冷启动、并列三种情况。
+- 工作区里一套未完成的“模板符合度”改动被补齐：`design-quality-stage` 的 `finalTemplateFit` 生命周期、缺少的 `obstacleRegions` 默认值、模板置信度判断（两个可测版式即 high/90），使类型检查、构建与测试恢复绿色。
+
+### 验证
+
+- `design-memory.test.ts` 5 项、`template-review-target.test.ts` 7 项通过。
+- 全量：1194 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 25. 合同覆盖检查与方向历史（2026-10-25）
+
+- 新增 `design-contract.test.ts`：`pageDesignPlanSchema` 的字段必须与“有消费点”清单完全一致；`emphasis` 不得回流；逐页样式入口必须存在。这样新增 AI 字段只改 Schema、不改实现会直接失败。
+- `DirectionPanel` 增加“历史方向”折叠列表：最近 5 条历史记录，显示所选方向、日期、选择方式与用户原话；主记录仍显示完整备选。
+- `docs/development/design-style-contract.md` 的扩展规则与测试对应。
+
+### 验证
+
+- `design-contract.test.ts` 2 项通过；全量 1196 通过、1 跳过；类型检查、ESLint、生产构建通过。

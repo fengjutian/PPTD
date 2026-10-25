@@ -16,6 +16,8 @@ export interface DirectionOptionView {
   idea: string;
   rationale: string;
   presetLabel: string;
+  /** The preset this user has chosen most often in recent decks. */
+  recommended?: boolean;
   /** Two rendered pages, in the order they were previewed. */
   images: string[];
 }
@@ -74,6 +76,7 @@ export function DesignDirectionDialog({
                 <span className="design-direction-name">
                   <strong>{option.name}</strong>
                   <small>{option.presetLabel}</small>
+                  {option.recommended && <small className="design-direction-recommended">最近常选</small>}
                 </span>
                 <span className="design-direction-idea">{option.idea}</span>
                 <span className="design-direction-rationale">{option.rationale}</span>

@@ -7,6 +7,7 @@ import {
   visualRepairPlanSchema,
 } from "./visual-alignment";
 import type { PresentationRender } from "./presentation-renderer";
+import type { TemplateReviewTarget } from "./template-review-target";
 import { loadSettings } from "./settings";
 
 const MAX_VISUAL_IMAGE_BYTES = 6 * 1024 * 1024;
@@ -24,6 +25,8 @@ export const MAX_REVIEWED_SLIDES = 40;
 export interface RepairPlanContext {
   /** 逐页现状：索引、标题和当前版式。 */
   deck: Array<{ index: number; title: string; layout: string }>;
+  /** 上传模板的可测量目标；修复必须回到这些轴线。 */
+  template?: TemplateReviewTarget;
   /** 生成任务号：取消时后端会中断该任务下所有在途请求。 */
   taskId?: number;
 }
@@ -45,7 +48,7 @@ export interface VisionReviewPort {
     goal: PresentationVisualGoal,
     slideIndexes?: number[],
     taskId?: number,
-    options?: { includeContactSheet?: boolean },
+    options?: { includeContactSheet?: boolean; template?: TemplateReviewTarget },
   ): Promise<VisualReview>;
   /**
    * 整套总览评审：只看跨页一致性、节奏和重复度，不产生逐页几何。
@@ -53,7 +56,12 @@ export interface VisionReviewPort {
    * 可选实现。没有它时调用方退回“第一批附带缩略图”的旧行为，跨页一致性
    * 也就只能取那一批的评分。
    */
-  reviewDeck?(render: PresentationRender, goal: PresentationVisualGoal, taskId?: number): Promise<VisualReview>;
+  reviewDeck?(
+    render: PresentationRender,
+    goal: PresentationVisualGoal,
+    taskId?: number,
+    options?: { template?: TemplateReviewTarget },
+  ): Promise<VisualReview>;
   planRepairs(
     review: VisualReview,
     goal: PresentationVisualGoal,
@@ -245,7 +253,7 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     goal: PresentationVisualGoal,
     slideIndexes?: number[],
     taskId?: number,
-    options?: { includeContactSheet?: boolean },
+    options?: { includeContactSheet?: boolean; template?: TemplateReviewTarget },
   ): Promise<VisualReview> {
     validateVisualRenderPayload(render);
     // The deck overview is the same picture for every batch. Sending it with
@@ -259,6 +267,7 @@ export class TauriVisionReviewPort implements VisionReviewPort {
     return this.requestReview(
       {
         goal,
+        ...(options?.template === undefined ? {} : { template: options.template }),
         slideImages: indexes.map((index) => render.slides[index]!),
         ...(includeContactSheet ? { contactSheet: render.contactSheet } : {}),
         slideIndexes: indexes,
@@ -279,13 +288,19 @@ export class TauriVisionReviewPort implements VisionReviewPort {
    * only one whose consistency score is used. Per-page geometry is explicitly
    * out of scope here.
    */
-  async reviewDeck(render: PresentationRender, goal: PresentationVisualGoal, taskId?: number): Promise<VisualReview> {
+  async reviewDeck(
+    render: PresentationRender,
+    goal: PresentationVisualGoal,
+    taskId?: number,
+    options?: { template?: TemplateReviewTarget },
+  ): Promise<VisualReview> {
     validateVisualRenderPayload(render);
     const indexes = render.slides.map((_, index) => index);
     const settings = await loadSettings();
     return this.requestReview(
       {
         goal,
+        ...(options?.template === undefined ? {} : { template: options.template }),
         slideImages: [],
         contactSheet: render.contactSheet,
         slideIndexes: indexes,
@@ -322,6 +337,7 @@ export class TauriVisionReviewPort implements VisionReviewPort {
           review,
           goal,
           slides: context.deck,
+          ...(context.template === undefined ? {} : { template: context.template }),
           model: settings.aiModel,
           provider: settings.aiProviderId,
           taskId: context.taskId,

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { applyCommand, type AiSlideDesign } from "../core/commands/commands";
 import { createDocument, type PresentationDocument } from "../core/document-model";
 import { runDesignQualityStage, summarizeQualityIssues } from "./design-quality-stage";
+import type { TemplateReviewTarget } from "./template-review-target";
+import { applyTemplateToGoal } from "./template-review-target";
 import type { VisualReview } from "./visual-alignment";
 import { defaultPresentationVisualGoal } from "./visual-alignment";
 import { DisabledVisionReviewPort, type VisionReviewPort } from "./vision-review-port";
@@ -58,6 +60,50 @@ const renderStub = async () => ({
 });
 const contrastStub = async () => ({ issues: [], unreadableSlides: [] as number[] });
 
+const templateTarget = (): TemplateReviewTarget => ({
+  name: "示例模板",
+  page: { widthEmu: 12_192_000, heightEmu: 6_858_000 },
+  grid: {
+    left: 0.5,
+    right: 0.9,
+    top: 0.5,
+    bottom: 0.9,
+    titleX: 0.5,
+    titleY: 0.5,
+    titleWidth: 0.4,
+    titleHeight: 0.1,
+    bodyTop: 0.5,
+    bodyBottom: 0.9,
+  },
+  layouts: [
+    {
+      name: "内页",
+      grid: {
+        left: 0.5,
+        right: 0.9,
+        top: 0.5,
+        bottom: 0.9,
+        titleX: 0.5,
+        titleY: 0.5,
+        titleWidth: 0.4,
+        titleHeight: 0.1,
+        bodyTop: 0.5,
+        bodyBottom: 0.9,
+      },
+      titleSizePt: 28,
+      bodySizePt: 16,
+      freeComposition: false,
+    },
+  ],
+  palette: ["#0EA58C"],
+  titleSizePt: 28,
+  bodySizePt: 16,
+  alignment: "left-grid",
+  confidence: "high",
+  minimumFit: 90,
+  tolerances: { axis: 0.01, axisY: 0.005, margin: 0.01, fontSizePt: 1.5 },
+});
+
 describe("设计质检阶段", () => {
   it("视觉模型报错时降级，并照常产出文档", async () => {
     const result = await runDesignQualityStage({
@@ -85,6 +131,62 @@ describe("设计质检阶段", () => {
     expect(result.visualReview).toBeUndefined();
     expect(result.visualReviewCoverage).toBeUndefined();
     expect(result.visualPassed).toBe(false);
+  });
+
+  it("把上传模板接入评审输入、达标判断和修复计划", async () => {
+    const target = templateTarget();
+    let seenTemplate: unknown;
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: applyTemplateToGoal(defaultPresentationVisualGoal(), target),
+      template: target,
+      contentFingerprint: () => "content",
+      vision: {
+        available: true,
+        review: async (_render, _goal, _indexes, _taskId, options) => {
+          seenTemplate = options?.template;
+          return passingReview;
+        },
+        planRepairs: async (_review, _goal, context) => {
+          expect(context?.template).toEqual(target);
+          return { repairs: [] };
+        },
+      },
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+    });
+
+    expect(seenTemplate).toEqual(target);
+    expect(result.templateFit?.checked).toBe(true);
+    expect(result.templateFit?.passed).toBe(false);
+    // The visual model passed every dimension, but the deterministic template
+    // check keeps the deck from being reported as accepted.
+    expect(result.visualPassed).toBe(false);
+    expect(result.notes.join("；")).toContain("模板符合度");
+  });
+
+  it("视觉评审关闭时仍然生成模板符合度报告", async () => {
+    const target = templateTarget();
+    const result = await runDesignQualityStage({
+      initialDesigns: [design()],
+      buildDocument,
+      goal: applyTemplateToGoal(defaultPresentationVisualGoal(), target),
+      template: target,
+      contentFingerprint: () => "content",
+      vision: new DisabledVisionReviewPort(),
+      taskId: 1,
+      isCancelled: () => false,
+      renderForReview: renderStub,
+      inspectContrast: contrastStub,
+    });
+
+    expect(result.templateFit?.checked).toBe(true);
+    expect(result.notes.join("；")).toContain("模板符合度");
+    // 用户主动关闭视觉评审仍然是选择，不把未评审当成通过。
+    expect(result.visualPassed).toBeUndefined();
   });
 
   it("设置关闭视觉评审时说清楚这是主动选择，不把未评审当成通过", async () => {

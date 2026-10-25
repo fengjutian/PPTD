@@ -2,6 +2,12 @@ import type { PresentationDocument } from "../core/document-model";
 import type { PresentationRender } from "./presentation-renderer";
 import { renderPresentationForVisualReview } from "./presentation-renderer";
 import type { PresentationVisualGoal, VisualReview } from "./visual-alignment";
+import {
+  checkTemplateFit,
+  templateFitVisualIssues,
+  type TemplateFitReport,
+  type TemplateReviewTarget,
+} from "./template-review-target";
 import type { VisionReviewPort } from "./vision-review-port";
 
 const BATCH_SIZE = 6;
@@ -9,6 +15,7 @@ const BATCH_SIZE = 6;
 export interface ManualVisualReviewResult {
   review: VisualReview;
   deckReview?: VisualReview;
+  templateFit?: TemplateFitReport;
   render: PresentationRender;
   reviewedIndexes: number[];
   source: "真实 PPTX" | "画布预览";
@@ -40,6 +47,8 @@ export async function runManualVisualReview(options: {
   document: PresentationDocument;
   indexes: number[];
   goal: PresentationVisualGoal;
+  /** The uploaded template target; manual review must judge the same target. */
+  template?: TemplateReviewTarget;
   vision: VisionReviewPort;
   taskId: number;
   renderReal?: (document: PresentationDocument) => Promise<PresentationRender>;
@@ -68,14 +77,31 @@ export async function runManualVisualReview(options: {
   const [pageOutcomes, deckOutcome] = await Promise.all([
     Promise.all(
       batches.map((indexes) =>
-        options.vision.review(render, options.goal, indexes, options.taskId, { includeContactSheet: false }),
+        options.vision.review(render, options.goal, indexes, options.taskId, {
+          includeContactSheet: false,
+          ...(options.template === undefined ? {} : { template: options.template }),
+        }),
       ),
     ),
-    options.vision.reviewDeck?.(render, options.goal, options.taskId),
+    options.vision.reviewDeck?.(
+      render,
+      options.goal,
+      options.taskId,
+      options.template === undefined ? undefined : { template: options.template },
+    ),
   ]);
+  const merged = mergeManualReviews(pageOutcomes, deckOutcome);
+  const templateFit = options.template ? checkTemplateFit(options.document, options.template) : undefined;
   return {
-    review: mergeManualReviews(pageOutcomes, deckOutcome),
+    review: templateFit
+      ? {
+          ...merged,
+          templateFitScore: templateFit.checked ? templateFit.score : 0,
+          issues: [...templateFitVisualIssues(templateFit), ...merged.issues].slice(0, 100),
+        }
+      : merged,
     deckReview: deckOutcome,
+    ...(templateFit === undefined ? {} : { templateFit }),
     render,
     reviewedIndexes,
     source,

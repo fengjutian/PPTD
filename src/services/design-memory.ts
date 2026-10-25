@@ -151,6 +151,25 @@ export async function designMemorySummary(): Promise<DesignMemorySummary> {
   }
 }
 
+/**
+ * The direction this user has chosen most often in recent decks.
+ *
+ * Two picks are the minimum: a single deck is an anecdote, not a habit. Ties
+ * return undefined so the gate does not pretend to know.
+ */
+export async function recommendedConceptPreset(): Promise<"editorial" | "documentary" | undefined> {
+  const looks = await loadRecentLooks(5);
+  const counts = new Map<"editorial" | "documentary", number>();
+  for (const look of looks) {
+    if (look.concept !== "editorial" && look.concept !== "documentary") continue;
+    counts.set(look.concept, (counts.get(look.concept) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].filter(([, count]) => count >= 2).sort((left, right) => right[1] - left[1]);
+  if (ranked.length === 0) return undefined;
+  if (ranked.length > 1 && ranked[0]![1] === ranked[1]![1]) return undefined;
+  return ranked[0]![0];
+}
+
 export async function removeDesignMemory(id: string): Promise<void> {
   await removeStoredDesignMemory(id);
 }

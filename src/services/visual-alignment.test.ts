@@ -121,6 +121,19 @@ describe("visual alignment loop", () => {
     expect(result).toEqual([3]);
   });
 
+  it("does not reach the target when the template fit is below the goal", async () => {
+    const goal = defaultPresentationVisualGoal();
+    const result = await runVisualAlignmentLoop({
+      initial: { content: "frozen", design: 0 },
+      goal: { ...goal, minimumScores: { ...goal.minimumScores, templateFit: 90 } },
+      contentFingerprint: (value) => value.content,
+      review: async () => ({ ...review(92), templateFitScore: 80 }),
+      repair: async (value) => ({ ...value, design: value.design + 1 }),
+    });
+    expect(result.stopReason).not.toBe("target-reached");
+    expect(result.review.templateFitScore).toBe(80);
+  });
+
   it("authorizes a weak-distinctiveness page for a recipe change", () => {
     const result = affectedSlideIndexes(
       {

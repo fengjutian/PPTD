@@ -187,6 +187,7 @@ import {
   loadRecentLooks,
   recordDesignLook,
   recordDesignPreference,
+  recommendedConceptPreset,
 } from "../services/design-memory";
 import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
@@ -242,6 +243,12 @@ import { probeTemplateBackground, type TemplateBackgroundProbe } from "../servic
 import type { ExportReport } from "../features/pptx-export/export-pptx";
 import { renderRealPptxForReview } from "../features/pptx-export/render-real-pptx";
 import { runManualVisualReview } from "../services/manual-visual-review";
+import {
+  applyTemplateToGoal,
+  buildTemplateReviewTarget,
+  type TemplateFitCode,
+  type TemplateFitReport,
+} from "../services/template-review-target";
 import { renderPresentationForVisualReview } from "../services/presentation-renderer";
 import {
   initialAgentWorkflow,
@@ -270,6 +277,14 @@ const visualIssueLabels: Record<VisualReview["issues"][number]["issue"], string>
   "theme-mismatch": "主题不匹配",
   "weak-visual-focus": "视觉焦点不清",
   "generic-layout": "版式过于通用",
+  "template-mismatch": "模板不匹配",
+};
+const templateFitLabels: Record<TemplateFitCode, string> = {
+  "template-title-axis": "标题轴线偏离模板",
+  "template-content-bounds": "正文超出模板内容区",
+  "template-title-size": "标题字号偏离模板",
+  "template-body-size": "正文字号偏离模板",
+  "template-palette": "颜色偏离模板色板",
 };
 /** The narrowest and the widest the property panel may be dragged to. */
 const INSPECTOR_MIN_WIDTH = 220;
@@ -998,6 +1013,8 @@ export function App() {
     /** 视觉评审留下的结构化结论，用于在报告里逐条展示模型建议。 */
     visualReview?: VisualReview;
     visualReviewCoverage?: { reviewed: number; total: number };
+    /** Template adherence measured on the same snapshot as the review. */
+    templateFit?: TemplateFitReport;
     contactSheet?: string;
     deckReview?: VisualReview;
     reviewReuse?: { reviewed: number; reused: number };
@@ -2976,6 +2993,13 @@ export function App() {
           ) ?? defaultThemePreset())
         : undefined;
     const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
+    // The uploaded template already drives generation. Compile the same
+    // analysis into a measurable target so the review prompt, the acceptance
+    // gate, the repair plan and the report judge the deck against it too.
+    const templateTarget = preset ? undefined : buildTemplateReviewTarget(analysis, selectedTemplate?.name);
+    const visualGoal = templateTarget
+      ? applyTemplateToGoal(defaultPresentationVisualGoal(), templateTarget)
+      : defaultPresentationVisualGoal();
     const themeDirection = preset ? themeDirectionForPreset(preset) : undefined;
     const deckName = preset ? preset.name : selectedTemplate!.name;
     designBusyRef.current = true;
@@ -3054,6 +3078,7 @@ export function App() {
         // Local-only look fingerprints; empty when memory is disabled.
         const recentLooks = gateSettings.designMemoryEnabled ? await loadRecentLooks(3) : [];
         const preferences = gateSettings.designMemoryEnabled ? await loadDesignPreferences(5) : [];
+        const recommendedPreset = gateSettings.designMemoryEnabled ? await recommendedConceptPreset() : undefined;
         let regenerations = 0;
         while (regenerations <= 2) {
           setDesignProgress({ percent: 16, label: "正在生成两个设计方向" });
@@ -3125,6 +3150,7 @@ export function App() {
               idea: candidate.proposal.idea,
               rationale: candidate.proposal.rationale,
               presetLabel: candidate.proposal.preset === "documentary" ? "纪实全幅" : "编辑式",
+              ...(recommendedPreset === candidate.proposal.preset ? { recommended: true } : {}),
               images: candidate.images,
             })),
           );
@@ -3370,7 +3396,7 @@ export function App() {
               minorFont: analysis.minorFont ?? undefined,
               colors: analysis.themeColors.map((color) => ({ name: color.name, value: color.value })),
             },
-        backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+        backgroundRhythm: visualGoal.backgroundRhythm,
         visualAssets: visualAssets.map((asset) => ({
           slideIndex: asset.slideIndex,
           dataUrl: asset.dataUrl,
@@ -3405,7 +3431,8 @@ export function App() {
       const stage = await runDesignQualityStage({
         initialDesigns: design.slides,
         buildDocument: buildFinalDocument,
-        goal: defaultPresentationVisualGoal(),
+        goal: visualGoal,
+        ...(templateTarget === undefined ? {} : { template: templateTarget }),
         // 指纹必须来自修复后的真实文档快照。此前这里忽略了 designs，比较的
         // 始终是同一份生成时草稿，内容隔离守卫在生产里从未生效。
         contentFingerprint: (designs) => documentContentFingerprint(buildFinalDocument(designs)),
@@ -3517,6 +3544,7 @@ export function App() {
         notes: stage.notes,
         visualReview: stage.visualReview,
         visualReviewCoverage: stage.visualReviewCoverage,
+        templateFit: stage.templateFit,
         contactSheet: stage.contactSheet,
         deckReview: stage.deckReview,
         reviewReuse: stage.reviewReuse,
@@ -3967,10 +3995,18 @@ export function App() {
     );
     setTaskStatus(`正在复检 ${indexes.length} 页，并重新检查整册节奏…`);
     try {
+      const manualTarget =
+        selectedTemplate && templateAnalysis
+          ? buildTemplateReviewTarget(templateAnalysis, selectedTemplate.name)
+          : undefined;
+      const manualGoal = manualTarget
+        ? applyTemplateToGoal(defaultPresentationVisualGoal(), manualTarget)
+        : defaultPresentationVisualGoal();
       const result = await runManualVisualReview({
         document: structuredClone(document),
         indexes,
-        goal: defaultPresentationVisualGoal(),
+        goal: manualGoal,
+        ...(manualTarget === undefined ? {} : { template: manualTarget }),
         vision: new TauriVisionReviewPort(),
         taskId,
         renderReal: renderRealPptxForReview,
@@ -3987,6 +4023,7 @@ export function App() {
               ...previous,
               visualReview: result.review,
               visualReviewCoverage: { reviewed: result.reviewedIndexes.length, total: document.slides.length },
+              templateFit: result.templateFit,
               contactSheet: result.render.contactSheet,
               deckReview: result.deckReview,
               reviewReuse: {
@@ -6294,6 +6331,52 @@ export function App() {
                   </li>
                 ))}
               </ul>
+            )}
+            {designQualityReport.templateFit && (
+              <div className="design-quality-template">
+                <h3>模板符合度</h3>
+                {designQualityReport.templateFit.checked ? (
+                  <>
+                    <p className="design-quality-notes">
+                      模板「{designQualityReport.templateName}」· {designQualityReport.templateFit.score}/100（阈值{" "}
+                      {designQualityReport.templateFit.threshold}）· {designQualityReport.templateFit.issues.length}{" "}
+                      处偏差 · 版式覆盖 {designQualityReport.templateFit.layoutCoverage}/{document.slides.length} 页
+                      {designQualityReport.templateFit.passed ? " · 已达标" : " · 未达标"}
+                    </p>
+                    {designQualityReport.templateFit.issues.length === 0 ? (
+                      <div className="template-empty">标题轴线、内容区和字号都贴合上传模板。</div>
+                    ) : (
+                      <ul className="export-report-list">
+                        {designQualityReport.templateFit.issues.map((issue, index) => (
+                          <li
+                            key={`${issue.code}-${issue.slideIndex}-${index}`}
+                            className={issue.severity === "error" ? "error" : "warning"}
+                          >
+                            <CircleAlert />
+                            <div>
+                              <strong>
+                                第 {issue.slideIndex + 1} 页 · {templateFitLabels[issue.code]}
+                              </strong>
+                              <p>{issue.message}</p>
+                              <button
+                                type="button"
+                                className="quality-target-button"
+                                onClick={() => openQualityTarget(issue.slideIndex, issue.elementIds)}
+                              >
+                                打开第 {issue.slideIndex + 1} 页
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                ) : (
+                  <p className="design-quality-warning">
+                    上传模板没有可用的标题或内容占位符，模板符合度未执行；本次视觉结论不能视为已按模板验收。
+                  </p>
+                )}
+              </div>
             )}
             {designQualityReport.visualReview && (
               <div className="design-quality-visual">

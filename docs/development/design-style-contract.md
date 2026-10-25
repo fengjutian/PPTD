@@ -92,11 +92,13 @@ AI 不写点数，也不直接控制字体族。
 2. 在 Schema 与提示词中说明取值范围；
 3. 在编译器或配方里有真实消费点；
 4. 有行为测试（不是只测 Schema 接受）；
-5. 若暂时不消费，**不要加进 AI 合同**，或明确标为 reserved 并从提示词移除。
+5. 若暂时不消费，**不要加进 AI 合同**，或明确标为 reserved 并从提示词移除；
+6. 同步更新 `design-contract.test.ts` 的“有消费点”清单；清单与 Schema 不一致会直接失败。
 
 ## 验证
 
 - `design-compiler.test.ts`：dense claim/summary 选 asymmetric-split；`focal: number` 提升正文层字号。
+- `design-contract.test.ts`：plan 字段与消费点清单一致，`emphasis` 不会回流。
 - `ai-service.test.ts` / `prompt-regression.test.ts`：设计 Schema 不再接受 plan.emphasis，既有输出仍通过。
 - 全量测试、类型检查、构建、`cargo check` 通过。
 

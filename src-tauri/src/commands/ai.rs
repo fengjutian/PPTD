@@ -454,6 +454,9 @@ const MAX_SOURCE_MATERIAL_CHARS: usize = 40_000;
 #[serde(rename_all = "camelCase")]
 pub struct ReviewVisualsRequest {
     goal: serde_json::Value,
+    /// The uploaded template compiled into measurable axes, margins, type sizes
+    /// and tolerances. Absent for preset-only decks.
+    template: Option<serde_json::Value>,
     slide_images: Vec<String>,
     /// 整套缩略图。只在第一批评审时发送一次；重复发送同一张图既费 token
     /// 又容易撞上请求体上限。
@@ -508,6 +511,17 @@ pub async fn review_presentation_visuals(
     if goal.len() > 20_000 {
         return Err("AI_VISION_REQUEST_INVALID".into());
     }
+    let template = match &request.template {
+        Some(value) => {
+            let serialized =
+                serde_json::to_string(value).map_err(|_| "AI_VISION_REQUEST_INVALID")?;
+            if serialized.len() > 20_000 {
+                return Err("AI_VISION_REQUEST_INVALID".into());
+            }
+            serialized
+        }
+        None => "无（本次未使用上传模板）".into(),
+    };
     let repair_hint = request.repair_hint.as_deref().unwrap_or("").trim();
     if repair_hint.chars().count() > 500 {
         return Err("AI_VISION_REQUEST_INVALID".into());
@@ -540,6 +554,8 @@ pub async fn review_presentation_visuals(
 
 【评分标准】
 - hierarchyScore、alignmentScore、readabilityScore：按整套观感给出，不要因为个别页在缩略图上太小看不清就大幅扣分。
+- 模板是本次验收的硬参考：标题轴、内容区、字号和色板来自上传模板。整套的 alignmentScore 必须体现是否贴合模板；偏离模板轴线的页面即使页内整齐也要扣分。
+- 模板目标为“无”时按通用视觉目标评估，不得虚构模板要求。
 - consistencyScore：整套模板语言、颜色、字体、背景节奏和页面角色是否跨页一致，同时避免所有页面完全同构。这是本模式最重要的分数。
 - repetitionScore：整册对构图、背景和卡片骨架的重复控制；机械复用越多分数越低。
 - themeFitScore：视觉语言与主题、受众和场景的匹配程度；企业科技风用于古典文学等明显错位必须扣分。
@@ -555,6 +571,9 @@ pub async fn review_presentation_visuals(
 
 【本次整套视觉目标】
 {goal}
+
+【上传模板目标】
+{template}
 
 【重试纠正要求】
 {repair_hint}"#
@@ -609,7 +628,8 @@ pub async fn review_presentation_visuals(
 
 【评分标准】
 - hierarchyScore：标题、结论、正文和辅助信息是否形成清晰的三级以内层级；视觉入口是否明确。
-- alignmentScore：关键元素是否共享稳定轴线；列宽、卡片边界、间距和基线是否一致；不得仅因非关键装饰不完全对称而扣分。
+- alignmentScore：关键元素是否共享稳定轴线；列宽、卡片边界、间距和基线是否一致；不得仅因非关键装饰不完全对称而扣分。模板目标存在时，还要检查标题轴、内容区边界和字号是否贴合模板；偏离模板轴线的页面不得高于 79 分，并必须报告 misalignment。
+- 模板目标为“无”时按通用视觉目标评估，不得虚构模板要求；freeComposition=true 的封面、章节、引文页允许自由构图，不按内容轴扣分。
 - readabilityScore：文字与背景对比是否充分，字号和行长是否适合演示，是否存在拥挤、异常换行或背景干扰。
 - consistencyScore：模板语言、颜色、字体、圆角、线条、背景节奏和页面角色是否跨页一致，同时避免所有页面完全同构。
 - repetitionScore：构图、背景和组件是否机械重复；没有整册总览时只评价本批。
@@ -648,6 +668,9 @@ pub async fn review_presentation_visuals(
 【本次整套视觉目标】
 {goal}
 
+【上传模板目标】
+{template}
+
 【重试纠正要求】
 {repair_hint}"#
     );
@@ -680,6 +703,8 @@ pub struct PlanRepairsRequest {
     review: serde_json::Value,
     /// 整套演示的视觉目标。
     goal: serde_json::Value,
+    /// 上传模板的可测量目标；修复必须回到模板轴线。
+    template: Option<serde_json::Value>,
     /// 逐页现状，让模型知道页面顺序和当前版式。
     slides: Vec<PlanRepairSlide>,
     model: Option<String>,
@@ -717,8 +742,13 @@ pub async fn plan_presentation_repairs(
     }
     let review = serde_json::to_string(&request.review).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?;
     let goal = serde_json::to_string(&request.goal).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?;
+    let template = match &request.template {
+        Some(value) => serde_json::to_string(value).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?,
+        None => "无（本次未使用上传模板）".into(),
+    };
     let slides = serde_json::to_string(&request.slides).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?;
-    if review.len() > 120_000 || goal.len() > 20_000 || slides.len() > 40_000 {
+    if review.len() > 120_000 || goal.len() > 20_000 || template.len() > 20_000 || slides.len() > 40_000
+    {
         return Err("AI_REPAIR_REQUEST_TOO_LARGE".into());
     }
     let provider = ai::resolve(request.provider.as_deref())?;
@@ -763,13 +793,14 @@ region 的 move 和 resize 必须给出 to；没有 to 的区域移动会被丢�
 3. 坐标系是相对页面左上角的 0–1 归一化值，矩形必须完全位于页面内。
 4. 相邻页面的修复不要互相矛盾：不要在相邻两页上给出互相冲突的轴线。
 5. 全部演示只能使用 3–5 种版式形成节奏，不要把每一页都改成不同的版式。
+6. 上传模板的轴线、内容区和字号是硬参考：align/move 的最终位置必须落在模板的标题区或内容区；不要为了页内平衡把元素移出模板边距。模板目标为“无”时忽略这一条。
 
 五、输出协议
 只返回一个严格 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
 输出结构：
 {"repairs":[{"slideIndex":2,"layout":"title-body","recipe":"editorial-index","backgroundAction":"keep","hierarchyAction":"keep","elementActions":[],"reason":"等权卡片没有第一视觉入口，换成编号栏"}]}"##;
     let user_prompt = format!(
-        "上一轮视觉评审结果：\n{review}\n\n整套视觉目标：\n{goal}\n\n逐页现状（索引、标题、当前版式）：\n{slides}\n\n请为评审指出问题的页面给出修复计划。"
+        "上一轮视觉评审结果：\n{review}\n\n整套视觉目标：\n{goal}\n\n上传模板目标：\n{template}\n\n逐页现状（索引、标题、当前版式）：\n{slides}\n\n请为评审指出问题的页面给出修复计划。"
     );
     let body = ChatRequest {
         model,

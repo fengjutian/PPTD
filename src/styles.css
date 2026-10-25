@@ -10629,3 +10629,43 @@ button {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.design-direction-name .design-direction-recommended {
+  border-color: #6f3023;
+  color: #f0a58f;
+}
+
+.direction-history {
+  margin-top: 4px;
+  color: #8f939b;
+  font-size: 11px;
+}
+.direction-history summary {
+  cursor: pointer;
+  color: #cfd2d7;
+}
+.direction-history ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.direction-history li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid #2c2e33;
+  border-radius: 7px;
+}
+.direction-history strong {
+  color: #e9ebee;
+  font-size: 11px;
+}
+.direction-history small {
+  flex-basis: 100%;
+  color: #9da1a8;
+  font-size: 10px;
+}

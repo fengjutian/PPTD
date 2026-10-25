@@ -280,7 +280,8 @@ const DIRECTION_PRESET_LABELS: Readonly<Record<string, string>> = {
 
 function DirectionPanel() {
   const document = useEditorStore((state) => state.document);
-  const record = document.designDirections?.at(-1);
+  const records = document.designDirections ?? [];
+  const record = records.at(-1);
   const selected = record?.proposals.find((proposal) => proposal.id === record.selectedProposalId);
   return (
     <InspectorSection
@@ -315,6 +316,29 @@ function DirectionPanel() {
             ))}
           </ul>
           {record.regenerations > 0 && <p className="field-help">生成前换过 {record.regenerations} 组方向。</p>}
+          {records.length > 1 && (
+            <details className="direction-history">
+              <summary>历史方向（{records.length - 1}）</summary>
+              <ul>
+                {[...records]
+                  .reverse()
+                  .slice(1, 6)
+                  .map((item) => {
+                    const chosen = item.proposals.find((proposal) => proposal.id === item.selectedProposalId);
+                    return (
+                      <li key={item.id}>
+                        <strong>{chosen?.name ?? "已删除的方向"}</strong>
+                        <span>
+                          {new Date(item.createdAt).toLocaleDateString("zh-CN")} ·{" "}
+                          {item.selectedBy === "user" ? "你选的" : "按推荐"}
+                        </span>
+                        {item.userWords && <small>“{item.userWords}”</small>}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </details>
+          )}
         </div>
       )}
     </InspectorSection>

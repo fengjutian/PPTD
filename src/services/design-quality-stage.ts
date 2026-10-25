@@ -18,6 +18,13 @@ import {
   type PresentationVisualGoal,
   type VisualReview,
 } from "./visual-alignment";
+import {
+  checkTemplateFit,
+  templateFitVisualIssues,
+  templateTargetForSlide,
+  type TemplateFitReport,
+  type TemplateReviewTarget,
+} from "./template-review-target";
 import { MAX_REVIEWED_SLIDES, type VisionReviewPort } from "./vision-review-port";
 
 /** 一次请求最多评审的页数。 */
@@ -29,6 +36,12 @@ export interface DesignQualityStageOptions {
   /** 用给定设计重建文档快照。视觉评审和质检都在快照上跑。 */
   buildDocument: (designs: AiSlideDesign[]) => PresentationDocument;
   goal: PresentationVisualGoal;
+  /**
+   * The uploaded template compiled into a measurable target. When present the
+   * review prompt, the deterministic fit check, the repair planner and the
+   * report all use it; absent means the deck was generated from a preset.
+   */
+  template?: TemplateReviewTarget;
   /** 已审核内容的指纹：视觉修复不得改变它。 */
   contentFingerprint: (designs: AiSlideDesign[]) => string;
   vision: VisionReviewPort;
@@ -85,6 +98,11 @@ export interface DesignQualityStageResult {
   visualPassed?: boolean;
   /** 最终采用轮次的整册缩略图墙，可直接在报告中展示。 */
   contactSheet?: string;
+  /**
+   * Deterministic template adherence of the adopted round. Undefined when the
+   * deck was generated without an uploaded template.
+   */
+  templateFit?: TemplateFitReport;
   /**
    * What the visual conclusion is actually based on.
    *
@@ -204,6 +222,8 @@ type ReviewRound = {
   contactSheet?: string;
   deckReview?: VisualReview;
   reviewReuse?: { reviewed: number; reused: number };
+  /** Deterministic template fit measured on the same document snapshot. */
+  templateFit?: TemplateFitReport;
 };
 
 /**
@@ -353,6 +373,8 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   let reviewSource: "真实 PPTX" | "画布预览" | undefined;
   /** 最终采用结论所在的那一轮，用于报告证据等级。 */
   let finalReviewRound: ReviewRound | undefined;
+  /** Template fit measured on the adopted review round, if a template was supplied. */
+  let adoptedTemplateFit: TemplateFitReport | undefined;
   /** 真实渲染走不通的原因。 */
   let realRenderFailure: string | undefined;
   /** 最近一轮评审实际覆盖的页数和总页数。 */
@@ -421,6 +443,11 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         reviewedSlideCount = 0;
         reviewSlideCount = 0;
         const document = options.buildDocument(current);
+        // The deterministic template check runs on the same snapshot as the
+        // rendered review. It is not a model score: it measures the title axis,
+        // content bounds and placeholder type size against the uploaded
+        // template, so a generous model cannot talk the deck past the template.
+        const templateFit = options.template ? checkTemplateFit(document, options.template) : undefined;
         // 优先评审真实导出的 PPTX。画布渲染是近似值：PowerPoint 自行断行，
         // 字体度量与估算略有出入，图表和表格更是由 PowerPoint 自己画的。
         // 只有真实渲染走不通时才退回画布预览。
@@ -532,10 +559,16 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           return options.vision.review(render, goal, plan.indexes, options.taskId, {
             // 有专门的整册评审时，逐页批次不再重复上传缩略图。
             includeContactSheet: !hasDeckReview && batchIndex === 0,
+            ...(options.template === undefined ? {} : { template: options.template }),
           });
         });
         const deckReview = options.vision.reviewDeck
-          ? options.vision.reviewDeck(render, goal, options.taskId)
+          ? options.vision.reviewDeck(
+              render,
+              goal,
+              options.taskId,
+              options.template === undefined ? undefined : { template: options.template },
+            )
           : undefined;
         const outcomes = await Promise.allSettled([...pageReviews, ...(deckReview ? [deckReview] : [])]);
         const reviews: VisualReview[] = [];
@@ -652,9 +685,19 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
             reviewed: requestedThisRound,
             reused: Math.max(0, render.slides.length - requestedThisRound),
           },
+          ...(templateFit === undefined ? {} : { templateFit }),
         });
         if (reviews.length === 0) throw outcomes.find((outcome) => outcome.status === "rejected")?.reason;
-        return mergeReviews(reviews, overviewReview);
+        const merged = mergeReviews(reviews, overviewReview);
+        if (!templateFit) return merged;
+        return {
+          ...merged,
+          templateFitScore: templateFit.checked ? templateFit.score : 0,
+          // Template findings are measured, not guessed. Put them first so a
+          // model that already filled the issue cap cannot hide them from the
+          // repair loop.
+          issues: [...templateFitVisualIssues(templateFit), ...merged.issues].slice(0, 100),
+        };
       },
       repair: async (current, review, goal) => {
         options.onProgress?.("视觉评审已收到问题，正在生成修复计划", roundBase(currentIteration) + 7);
@@ -666,13 +709,62 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           layout: design.layout,
           ...(design.recipe === undefined ? {} : { recipe: design.recipe }),
         }));
-        const plan = await options.vision.planRepairs(review, goal, { deck, taskId: options.taskId });
+        const plan = await options.vision.planRepairs(review, goal, {
+          deck,
+          ...(options.template === undefined ? {} : { template: options.template }),
+          taskId: options.taskId,
+        });
         // A repair plan may name any page, and a fallback plan may be broader
         // than the findings. Only pages the review actually flagged are allowed
         // to change; the rest keep the design the user already saw.
         const affected = new Set(affectedSlideIndexes(review, goal.minimumScores));
+        const plannedRepairs = [...plan.repairs];
+        // The model can miss a template axis even after seeing the target. The
+        // measured violation is authoritative, so put the title back on the
+        // template axis with a deterministic move instead of leaving the deck
+        // off-template until the next round.
+        if (options.template) {
+          const bySlide = new Map(plannedRepairs.map((repair) => [repair.slideIndex, repair]));
+          for (const issue of review.issues) {
+            if (issue.code !== "template-title-axis") continue;
+            const resolved = templateTargetForSlide(document, options.template, issue.slideIndex);
+            const existing = bySlide.get(issue.slideIndex);
+            const actions = existing?.elementActions ?? [];
+            const hasTitleMove = actions.some((action) => action.action === "move" && action.target === "title");
+            if (hasTitleMove) continue;
+            const repair = existing ?? {
+              slideIndex: issue.slideIndex,
+              backgroundAction: "keep" as const,
+              hierarchyAction: "keep" as const,
+              elementActions: [],
+              reason: "把标题移回模板轴线",
+            };
+            const updated = {
+              ...repair,
+              obstacleRegions:
+                "obstacleRegions" in repair && Array.isArray(repair.obstacleRegions) ? repair.obstacleRegions : [],
+              elementActions: [
+                ...actions,
+                {
+                  action: "move" as const,
+                  target: "title" as const,
+                  frame: {
+                    x: resolved.grid.titleX,
+                    y: resolved.grid.titleY,
+                    width: resolved.grid.titleWidth,
+                    height: resolved.grid.titleHeight,
+                  },
+                },
+              ],
+            };
+            bySlide.set(issue.slideIndex, updated);
+          }
+          plannedRepairs.splice(0, plannedRepairs.length, ...bySlide.values());
+        }
         const repairs = new Map(
-          plan.repairs.filter((repair) => affected.has(repair.slideIndex)).map((repair) => [repair.slideIndex, repair]),
+          plannedRepairs
+            .filter((repair) => affected.has(repair.slideIndex))
+            .map((repair) => [repair.slideIndex, repair]),
         );
         return current.map((slide, slideIndex) => {
           const repair = repairs.get(slideIndex);
@@ -702,16 +794,33 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     // 不能用最后一轮的数字去描述更早的结论。
     const finalRound = reviewRounds.get(aligned.bestIteration);
     finalReviewRound = finalRound;
+    adoptedTemplateFit = finalRound?.templateFit;
     const finalCoverage = finalRound?.coverage ?? { reviewed: reviewedSlideCount, total: reviewSlideCount };
     visualReviewCoverage = finalCoverage;
     contactSheet = finalRound?.contactSheet;
     finalDeckReview = finalRound?.deckReview;
     reviewReuse = finalRound?.reviewReuse;
+    const minimumTemplateFit = options.goal.minimumScores.templateFit ?? options.template?.minimumFit ?? 90;
+    const templatePassed =
+      options.template === undefined ||
+      (adoptedTemplateFit?.checked === true && adoptedTemplateFit.score >= minimumTemplateFit);
     visualPassed =
       aligned.stopReason === "target-reached" &&
       finalCoverage.total > 0 &&
-      finalCoverage.reviewed === finalCoverage.total;
+      finalCoverage.reviewed === finalCoverage.total &&
+      templatePassed;
     notes.push(`视觉评审 ${aligned.iterations} 轮，${aligned.stopReason}`);
+    if (options.template) {
+      if (adoptedTemplateFit?.checked) {
+        notes.push(
+          `模板符合度 ${adoptedTemplateFit.score}/100（阈值 ${minimumTemplateFit}，${adoptedTemplateFit.issues.length} 处偏差，其中硬性问题 ${adoptedTemplateFit.hardFailures} 处）`,
+        );
+      } else {
+        // A template was selected but no usable grid could be compiled. This is
+        // not a pass: the deck was reviewed without the target the user chose.
+        notes.push("模板符合度未执行：上传模板没有可用的标题或内容占位符，视觉结论不能视为已按模板验收");
+      }
+    }
     // 评分和建议是评审留下的结构化结论。用户既要能看到它，也要知道它来自
     // 哪一轮、覆盖了多少页，避免把"评审过了"理解成"页面一定好看"。
     notes.push(
@@ -860,6 +969,23 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
   }
   const issues = [...gateIssues, ...contrastIssues(contrast.issues)];
   const passed = gatePassed && issues.length === 0;
+  // Template adherence is deterministic, so it still runs when the visual
+  // review is disabled or fails. The report must say what the template check
+  // found even when no model was involved.
+  const templateFitReport = options.template ? checkTemplateFit(document, options.template) : undefined;
+  if (options.template) {
+    if (templateFitReport?.checked) {
+      if (visualPassed === true && !templateFitReport.passed) visualPassed = false;
+      if (!notes.some((note) => note.startsWith("模板符合度"))) {
+        notes.push(
+          `模板符合度 ${templateFitReport.score}/100（阈值 ${templateFitReport.threshold}，${templateFitReport.issues.length} 处偏差，其中硬性问题 ${templateFitReport.hardFailures} 处）`,
+        );
+      }
+    } else if (!notes.some((note) => note.startsWith("模板符合度未执行"))) {
+      degraded = true;
+      notes.push("模板符合度未执行：上传模板没有可用的标题或内容占位符，视觉结论不能视为已按模板验收");
+    }
+  }
   // Evidence follows the round whose conclusions were adopted, not the last
   // render attempt. A canvas preview must never be reported as a final render.
   const visualEvidence: ReviewEvidence = finalReviewRound
@@ -897,5 +1023,6 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
     visualEvidence,
     deckReview: finalDeckReview,
     reviewReuse,
+    ...(templateFitReport === undefined ? {} : { templateFit: templateFitReport }),
   };
 }

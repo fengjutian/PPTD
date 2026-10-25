@@ -18,6 +18,11 @@ export const presentationVisualGoalSchema = z.object({
     consistency: z.number().min(0).max(100),
     /** Optional: older reviews and models may not score distinctiveness. */
     distinctiveness: z.number().min(0).max(100).optional(),
+    /**
+     * Optional template adherence floor. Only present when a template target
+     * was compiled; preset-only decks keep the previous behavior.
+     */
+    templateFit: z.number().min(0).max(100).optional(),
   }),
 });
 export type PresentationVisualGoal = z.infer<typeof presentationVisualGoalSchema>;
@@ -48,6 +53,12 @@ export const visualReviewSchema = z.object({
   conceptScore: z.number().min(0).max(100).optional(),
   /** True when the concept score capped the total. */
   conceptCapApplied: z.boolean().optional(),
+  /**
+   * Template adherence, measured deterministically against the uploaded
+   * template. Optional because decks generated without a template have no
+   * template target to compare against.
+   */
+  templateFitScore: z.number().min(0).max(100).optional(),
   /**
    * 逐页评分。逐页批次每个被检查页应有一条；整册总览不产生逐页评分。
    *
@@ -85,9 +96,12 @@ export const visualReviewSchema = z.object({
           "theme-mismatch",
           "weak-visual-focus",
           "generic-layout",
+          "template-mismatch",
         ]),
         elementIds: z.array(z.string()).default([]),
         suggestion: z.string().min(1).max(500),
+        /** Stable code when the finding was measured by the deterministic checker. */
+        code: z.string().min(1).max(80).optional(),
       }),
     )
     .max(100),
@@ -144,6 +158,7 @@ const visualIssueKinds = [
   "theme-mismatch",
   "weak-visual-focus",
   "generic-layout",
+  "template-mismatch",
 ] as const;
 const visualLayouts = ["cover", "title-body", "split", "cards", "quote", "section", "summary"] as const;
 const repairLayouts = visualLayouts;
@@ -258,6 +273,9 @@ export function normalizeVisualReview(input: unknown, expectedSlideIndexes: numb
             ? candidate.elementIds.filter((id): id is string => typeof id === "string").slice(0, 100)
             : [],
           suggestion: candidate.suggestion.trim().slice(0, 500),
+          ...(typeof candidate.code === "string" && candidate.code.trim().length > 0
+            ? { code: candidate.code.trim().slice(0, 80) }
+            : {}),
         },
       ];
     })
@@ -664,6 +682,9 @@ export async function runVisualAlignmentLoop<T>(options: {
       (options.goal.minimumScores.distinctiveness === undefined ||
         review.distinctivenessScore === undefined ||
         review.distinctivenessScore >= options.goal.minimumScores.distinctiveness) &&
+      (options.goal.minimumScores.templateFit === undefined ||
+        review.templateFitScore === undefined ||
+        review.templateFitScore >= options.goal.minimumScores.templateFit) &&
       !review.issues.some((issue) => issue.severity === "error");
     if (reached)
       return {
@@ -719,7 +740,10 @@ export function affectedSlideIndexes(
         review.consistencyScore < minimum.consistency ||
         (minimum.distinctiveness !== undefined &&
           review.distinctivenessScore !== undefined &&
-          review.distinctivenessScore < minimum.distinctiveness);
+          review.distinctivenessScore < minimum.distinctiveness) ||
+        (minimum.templateFit !== undefined &&
+          review.templateFitScore !== undefined &&
+          review.templateFitScore < minimum.templateFit);
   return [
     ...new Set(
       review.issues.filter((issue) => issue.severity === "error" || belowTarget).map((issue) => issue.slideIndex),
