@@ -18,6 +18,7 @@ import {
   Grid2x2,
   Grid3x3,
   ImagePlus,
+  Images,
   Info,
   LayoutDashboard,
   Magnet,
@@ -89,6 +90,7 @@ import {
   type ThemeDirectionAudit,
 } from "../core/design/theme-direction";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
+import { contrastRatio } from "../core/rendering/contrast";
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
 import { LogPanel } from "../features/diagnostics/LogPanel";
@@ -129,6 +131,7 @@ import { SpeakerNotesDialog } from "../features/ai/SpeakerNotesDialog";
 import { SplitSlideDialog } from "../features/ai/SplitSlideDialog";
 import { DeckReviewDialog } from "../features/ai/DeckReviewDialog";
 import { ThemePresetPicker } from "../features/ai/ThemePresetPicker";
+import { ThemeSpecimenDialog } from "../features/ai/ThemeSpecimenDialog";
 import {
   countSlidePoints,
   draftMetrics,
@@ -230,7 +233,12 @@ import {
 import { useEditorStore } from "../store/editor-store";
 import { THEME_PRESETS, defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
-import { themePresetMetadata } from "../core/design/theme-preset-metadata";
+import {
+  themePresetMetadata,
+  type ThemeAudience,
+  type ThemeContentDensity,
+  type ThemePageType,
+} from "../core/design/theme-preset-metadata";
 import type { BuiltinIconName } from "../core/document-model";
 import { IconPicker } from "../features/editor/IconPicker";
 import { inferThemePresetId } from "../core/design/theme-preset-inference";
@@ -270,6 +278,40 @@ import {
 } from "../services/image-url-service";
 
 const CANVAS_WIDTH = 960;
+/** 主题详情里的色板槽位与元数据用中文角色名呈现，原始 id 仍留给开发与复制。 */
+const themeColorRoleLabels: Record<string, string> = {
+  primary: "正文与标题",
+  accent: "主强调",
+  accent2: "辅助强调",
+  accent3: "点缀",
+  muted: "次要文字",
+  surface: "页面底色",
+  surfaceAlt: "浅色底",
+};
+const themeAudienceLabels: Record<ThemeAudience, string> = {
+  general: "通用",
+  education: "教育",
+  executive: "管理层",
+  professional: "专业",
+  public: "公共事务",
+  consumer: "消费",
+};
+const themePageTypeLabels: Record<ThemePageType, string> = {
+  cover: "封面",
+  section: "章节",
+  narrative: "正文",
+  comparison: "对比",
+  metrics: "指标",
+  table: "表格",
+  chart: "图表",
+  image: "图片",
+  summary: "结论",
+};
+const themeDensityLabels: Record<ThemeContentDensity, string> = {
+  airy: "疏朗",
+  balanced: "均衡",
+  compact: "紧凑",
+};
 /** 视觉评审的问题类型 → 用户能读懂的中文。 */
 const visualIssueLabels: Record<VisualReview["issues"][number]["issue"], string> = {
   "weak-hierarchy": "层级不强",
@@ -994,6 +1036,7 @@ export function App() {
   const aiTaskId = useRef(0);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateRecord>();
   const [themeDrawerOpen, setThemeDrawerOpen] = useState(false);
+  const [themeSpecimenPresetId, setThemeSpecimenPresetId] = useState<string>();
   const [templateLibrary, setTemplateLibrary] = useState<TemplateRecord[]>([]);
   const [templatePreview, setTemplatePreview] = useState<string | null>();
   const [templateAnalysis, setTemplateAnalysis] = useState<TemplateAnalysis>();
@@ -4042,11 +4085,13 @@ export function App() {
   const drawerThemeGuidance = drawerThemePreset ? themePresetGuidance(drawerThemePreset.id) : undefined;
   const drawerThemeMetadata = drawerThemePreset ? themePresetMetadata(drawerThemePreset.id) : undefined;
   const drawerThemeAiPrompt = drawerThemePreset ? themePresetAiPrompt(drawerThemePreset) : undefined;
+  const drawerSurfaceColor = drawerThemePreset?.theme.colors.find((color) => color.name === "surface")?.value;
   /** 生成中且预览的不是已选主题：详情可看，但不能在这里切换。 */
   const themePreviewLocked = designBusy && drawerThemePreset !== undefined && drawerThemePreset.id !== themePresetId;
   const closeThemeDrawer = () => {
     setThemeDrawerOpen(false);
     setThemePreviewPresetId("");
+    setThemeSpecimenPresetId(undefined);
   };
   const applyDrawerTheme = () => {
     if (themePreviewLocked) return;
@@ -5835,6 +5880,40 @@ export function App() {
                     <p>{drawerThemePreset.description}</p>
                     <p>{drawerThemeGuidance?.character}</p>
                   </section>
+                  <section className="theme-drawer-section theme-type-sample">
+                    <h3>字体样张</h3>
+                    <div
+                      className="theme-type-row theme-type-display"
+                      style={{ fontFamily: drawerThemePreset.theme.majorFont }}
+                    >
+                      <span>让内容层级、字体与色彩保持一致</span>
+                      <small>
+                        标题字体 {drawerThemePreset.theme.majorFont} · 封面{" "}
+                        {drawerThemePreset.theme.textStyles?.display?.fontSizePt ?? "—"} pt
+                      </small>
+                    </div>
+                    <div
+                      className="theme-type-row theme-type-title"
+                      style={{ fontFamily: drawerThemePreset.theme.majorFont }}
+                    >
+                      <span>页面标题示例 Section Title</span>
+                      <small>
+                        页标题 {drawerThemePreset.theme.textStyles?.title?.fontSizePt ?? "—"} pt · 字距{" "}
+                        {drawerThemePreset.theme.textStyles?.title?.letterSpacingPt ?? 0} pt
+                      </small>
+                    </div>
+                    <div
+                      className="theme-type-row theme-type-body"
+                      style={{ fontFamily: drawerThemePreset.theme.minorFont }}
+                    >
+                      <span>正文示例：主题决定字体、字号与颜色，已审核的内容结构保持不变。</span>
+                      <small>
+                        正文字体 {drawerThemePreset.theme.minorFont} · 正文{" "}
+                        {drawerThemePreset.theme.textStyles?.body?.fontSizePt ?? "—"} pt · 行高{" "}
+                        {drawerThemePreset.theme.textStyles?.body?.lineHeight ?? "—"}
+                      </small>
+                    </div>
+                  </section>
                   <section className="theme-drawer-section theme-guidance-grid">
                     <div>
                       <h3>适用场景</h3>
@@ -5853,15 +5932,65 @@ export function App() {
                       <p>{drawerThemeGuidance?.imageStyle}</p>
                     </div>
                     {drawerThemeMetadata && (
-                      <div>
-                        <h3>设计约束</h3>
-                        <p>
-                          密度 {drawerThemeMetadata.density}；推荐页面：
-                          {drawerThemeMetadata.recommendedPageTypes.join("、")}
-                        </p>
-                        <p>避免：{drawerThemeMetadata.forbiddenCombinations.join("；")}</p>
-                      </div>
+                      <>
+                        <div>
+                          <h3>推荐页型</h3>
+                          <div className="theme-tag-row">
+                            {drawerThemeMetadata.recommendedPageTypes.map((page) => (
+                              <span key={page}>{themePageTypeLabels[page]}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <h3>适用受众</h3>
+                          <div className="theme-tag-row">
+                            {drawerThemeMetadata.audiences.map((audience) => (
+                              <span key={audience}>{themeAudienceLabels[audience]}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="theme-guidance-wide">
+                          <h3>信息密度与约束</h3>
+                          <p>密度：{themeDensityLabels[drawerThemeMetadata.density]}</p>
+                          <p>避免：{drawerThemeMetadata.forbiddenCombinations.join("；")}</p>
+                        </div>
+                      </>
                     )}
+                  </section>
+                  <section className="theme-drawer-section theme-palette-detail">
+                    <div className="theme-drawer-section-heading">
+                      <h3>配色与可读性</h3>
+                      <p>点击色块可复制色值；对比度按页面底色计算，正文建议不低于 4.5:1。</p>
+                    </div>
+                    <div className="theme-palette-grid">
+                      {drawerThemePreset.theme.colors.map((color) => {
+                        const ratio =
+                          drawerSurfaceColor && (color.name === "primary" || color.name === "muted")
+                            ? contrastRatio(color.value, drawerSurfaceColor)
+                            : undefined;
+                        return (
+                          <button
+                            key={color.name}
+                            type="button"
+                            className="theme-palette-item"
+                            title={`复制 ${color.value}`}
+                            onClick={() => {
+                              void navigator.clipboard.writeText(color.value).then(
+                                () => setTaskStatus(`已复制色值 ${color.value}`),
+                                () => setTaskStatus("复制失败，请手动选择色值"),
+                              );
+                            }}
+                          >
+                            <span className="theme-palette-swatch" style={{ backgroundColor: color.value }} />
+                            <span className="theme-palette-copy">
+                              <b>{themeColorRoleLabels[color.name] ?? color.name}</b>
+                              <code>{color.value}</code>
+                              {ratio !== undefined && <em>对比 {ratio.toFixed(1)}:1</em>}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </section>
                   <section className="theme-drawer-section theme-token-details">
                     <h3>设计令牌</h3>
@@ -5883,19 +6012,24 @@ export function App() {
                         <dd>{drawerThemePreset.theme.textStyles?.title?.fontSizePt ?? "—"} pt</dd>
                       </div>
                       <div>
+                        <dt>副标题字号</dt>
+                        <dd>{drawerThemePreset.theme.textStyles?.subtitle?.fontSizePt ?? "—"} pt</dd>
+                      </div>
+                      <div>
                         <dt>正文字号</dt>
                         <dd>{drawerThemePreset.theme.textStyles?.body?.fontSizePt ?? "—"} pt</dd>
                       </div>
+                      <div>
+                        <dt>注释字号</dt>
+                        <dd>{drawerThemePreset.theme.textStyles?.caption?.fontSizePt ?? "—"} pt</dd>
+                      </div>
+                      <div>
+                        <dt>主题 ID</dt>
+                        <dd>
+                          <code>{drawerThemePreset.id}</code>
+                        </dd>
+                      </div>
                     </dl>
-                    <div className="theme-color-spec" aria-label="主题色">
-                      {drawerThemePreset.theme.colors.map((color) => (
-                        <div key={color.name} title={`${color.name} ${color.value}`}>
-                          <span style={{ backgroundColor: color.value }} />
-                          <small>{color.name}</small>
-                          <code>{color.value}</code>
-                        </div>
-                      ))}
-                    </div>
                     {drawerThemeMetadata && (
                       <dl>
                         <div>
@@ -5908,7 +6042,14 @@ export function App() {
                         </div>
                         <div>
                           <dt>图表色板</dt>
-                          <dd>{drawerThemeMetadata.chartPalette.join("、")}</dd>
+                          <dd>
+                            <span className="theme-chart-palette" aria-hidden>
+                              {drawerThemeMetadata.chartPalette.map((value) => (
+                                <i key={value} style={{ backgroundColor: value }} />
+                              ))}
+                            </span>{" "}
+                            {drawerThemeMetadata.chartPalette.join("、")}
+                          </dd>
                         </div>
                       </dl>
                     )}
@@ -6075,6 +6216,16 @@ export function App() {
               )}
             </div>
             <div className="theme-drawer-actions">
+              {drawerThemePreset && (
+                <button
+                  type="button"
+                  className="secondary-action theme-sample-action"
+                  onClick={() => setThemeSpecimenPresetId(drawerThemePreset.id)}
+                >
+                  <Images />
+                  查看 8 页样张
+                </button>
+              )}
               <button type="button" className="secondary-action" onClick={closeThemeDrawer}>
                 关闭
               </button>
@@ -6091,6 +6242,14 @@ export function App() {
             </div>
           </aside>
         </div>
+      )}
+
+      {activeView === "theme" && themeSpecimenPresetId && (
+        <ThemeSpecimenDialog
+          presetId={themeSpecimenPresetId}
+          aboveDrawer
+          onClose={() => setThemeSpecimenPresetId(undefined)}
+        />
       )}
 
       {activeView === "settings" && (
