@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LogPanel } from "./LogPanel";
+import { formatLogRecords } from "./log-text";
 import { formatLogTime } from "./log-time";
 import type { AppLogRecord } from "../../services/app-log";
 
@@ -41,6 +42,9 @@ describe("LogPanel", () => {
     expect(markup).toContain("EXPORT_PACKAGE_INVALID");
     expect(markup).toContain("缺少 presentation.xml");
     expect(markup).toContain("app.log");
+    // 有记录时复制按钮可用，并且整段记录可以一次带走。
+    expect(markup).toContain("复制全部诊断记录");
+    expect(/<button[^>]*diagnostics-copy[^>]*>/.exec(markup)?.[0] ?? "").not.toContain("disabled");
     // Newest first: the export failure appears before the earlier direction one.
     expect(markup.indexOf("EXPORT_PACKAGE_INVALID")).toBeLessThan(markup.indexOf("AI_DIRECTIONS_INCOMPLETE"));
   });
@@ -51,6 +55,8 @@ describe("LogPanel", () => {
     );
     expect(markup).toContain("还没有失败记录");
     expect(markup).toContain("浏览器预览模式没有本地日志");
+    // 没有记录就没有可复制的内容，按钮保持禁用而不是复制一段空文本。
+    expect(/<button[^>]*diagnostics-copy[^>]*>/.exec(markup)?.[0] ?? "").toContain("disabled");
   });
 
   it("shows the loading state while the file is being read", () => {

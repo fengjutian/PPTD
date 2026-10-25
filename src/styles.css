@@ -10796,6 +10796,14 @@ button {
   cursor: default;
   opacity: 0.55;
 }
+.diagnostics-meta button.diagnostics-copy-copied {
+  border-color: #52613d;
+  color: #9fbd72;
+}
+.diagnostics-meta button.diagnostics-copy-failed {
+  border-color: #6b3940;
+  color: #ee9199;
+}
 .diagnostics-location {
   min-width: 0;
   overflow-wrap: anywhere;

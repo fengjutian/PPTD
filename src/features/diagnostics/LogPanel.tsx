@@ -1,8 +1,14 @@
-import { RefreshCw, ScrollText, X } from "lucide-react";
-import { useMemo } from "react";
+import { Check, Copy, RefreshCw, ScrollText, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AppLogRecord } from "../../services/app-log";
 import { createTranslator, type UiLanguage } from "../../services/i18n";
+import { formatLogRecords } from "./log-text";
 import { formatLogTime } from "./log-time";
+
+type CopyState = "idle" | "copied" | "failed";
+
+/** 复制结果只在按钮上停留一会儿，避免一条旧提示一直挂着。 */
+const COPY_FEEDBACK_MS = 2_000;
 
 export interface LogPanelProps {
   language: UiLanguage;
@@ -24,6 +30,26 @@ export interface LogPanelProps {
 export function LogPanel({ language, records, loading, location, onRefresh, onClose }: LogPanelProps) {
   const t = useMemo(() => createTranslator(language), [language]);
   const ordered = useMemo(() => [...records].reverse(), [records]);
+  const [copyState, setCopyState] = useState<CopyState>("idle");
+  useEffect(() => {
+    if (copyState === "idle") return;
+    const timer = window.setTimeout(() => setCopyState("idle"), COPY_FEEDBACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+
+  const copyDisabled = loading || ordered.length === 0;
+  const copyLogs = useCallback(async () => {
+    if (copyDisabled) return;
+    try {
+      if (!navigator.clipboard) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(formatLogRecords(ordered, location));
+      setCopyState("copied");
+    } catch {
+      // 浏览器预览没有剪贴板权限时也要给用户一个明确的失败提示。
+      setCopyState("failed");
+    }
+  }, [copyDisabled, location, ordered]);
+
   return (
     <div className="upload-dialog-backdrop" role="presentation">
       <section
@@ -48,6 +74,20 @@ export function LogPanel({ language, records, loading, location, onRefresh, onCl
           <button type="button" onClick={onRefresh} disabled={loading}>
             <RefreshCw size={14} />
             {loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.refresh")}
+          </button>
+          <button
+            type="button"
+            className={`diagnostics-copy diagnostics-copy-${copyState}`}
+            title={t("diagnostics.panel.copyTitle")}
+            onClick={() => void copyLogs()}
+            disabled={copyDisabled}
+          >
+            {copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}
+            {copyState === "copied"
+              ? t("diagnostics.panel.copied")
+              : copyState === "failed"
+                ? t("diagnostics.panel.copyFailed")
+                : t("diagnostics.panel.copy")}
           </button>
           <code className="diagnostics-location">{location ?? t("diagnostics.panel.unavailable")}</code>
         </div>
