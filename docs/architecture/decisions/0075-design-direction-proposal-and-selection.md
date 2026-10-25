@@ -4,6 +4,8 @@
 
 已接受（2026-10-24）。实施见 [TASK-DESIGN-025](../development/tasks/0025-design-direction-and-taste-gates.md) 第 13 节。
 
+> 2026-10-25 更新：方向数量由 2 调整为 4，并新增 `paper` / `instrument` 两个可渲染预设。本文第 2 节“两个方向”和第 6 节“成本上限”的数量部分由 [ADR 0087](0087-four-renderable-directions.md) 取代；事务、指纹、跳过、回退与模板边界继续有效。
+
 ## 背景
 
 设计阶段只有一个可渲染的概念预设 `editorial`，`resolveDeckConcept` 会把其他意图降级。用户在生成前只能选主题色板，看不到两种不同骨架的封面与正文，方向错了只能整册重来。

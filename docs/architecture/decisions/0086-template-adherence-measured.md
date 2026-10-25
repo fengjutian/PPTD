@@ -88,6 +88,7 @@ passed = checked && errors === 0 && score >= minimumFit
 4. `visualPassed` 要求模板检查已执行且通过；模板不可检查时记为 `false`，不能把“没检查”当成通过。
 5. 确定性检查不依赖模型，因此视觉评审关闭或失败时仍然运行并进入报告；没有模型结论时报告只展示模板符合度。
 6. 报告单独列出模板名、得分/阈值、偏差数量、版式覆盖和逐条偏差，不与“视觉评审建议”合并成一个成功状态；导出报告也会带上模板符合度的摘要。
+7. 模板分析抽屉展示编译后的验收目标（标题轴、内容区、字号、字体、版式数量、置信度/阈值），用户在选择模板时就能看到系统将以什么为基准验收。
 
 ### 8. 模板目标随项目保存
 
@@ -115,7 +116,7 @@ passed = checked && errors === 0 && score >= minimumFit
 - `design-quality-stage.test.ts` 25 项：模板目标参与评审输入、修复计划、达标判断与报告；视觉评审关闭时仍生成模板符合度报告。
 - `visual-alignment.test.ts` 23 项：`templateFitScore` 低于阈值时循环不算达标。
 - `export-pptx.test.ts` 40 项（含导出报告的模板符合度摘要）、`content-version-restore.test.ts` 9 项（含模板目标随设计快照恢复）通过。
-- Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 除一条既有导出视觉回归基线差异外通过。
+- Rust `cargo check`、TypeScript 类型检查、ESLint 和生产构建通过；全量 Vitest 1214 项通过（含导出视觉回归）。
 
 ## 备选方案
 

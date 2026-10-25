@@ -1,10 +1,6 @@
 import { applyCommand } from "../../src/core/commands";
 import { createDocument } from "../../src/core/document-model";
-import {
-  defaultConceptForPreset,
-  resolveDeckConcept,
-  type ConceptPresetId,
-} from "../../src/core/design/deck-concept";
+import { defaultConceptForPreset, resolveDeckConcept, type ConceptPresetId } from "../../src/core/design/deck-concept";
 import type { AiSlideDesign, AiSlideDraft } from "../../src/core/commands";
 import type { CompositionFacts } from "../../src/core/commands/design-intent";
 import { encodePng, type PixelImage } from "../../src/core/rendering/png";

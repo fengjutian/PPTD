@@ -24,7 +24,7 @@ npx vitest run src/services/prompt-regression.test.ts
 
 ```text
 src/services/__fixtures__/prompt-regression/
-  direction.json       方向提案：两个方向、重复 preset、非法 imagery
+  direction.json       方向提案：四个方向、重复 preset、缺项、非法 imagery
   visual-review.json   视觉评审：低概念封顶、高概念不封顶、旧响应缺字段
   design.json          设计输出：带 relation 的图表页、缺字段的非法输出
   data-relation.json   数据关系：变化覆盖饼图、占比点数、旧行为
@@ -47,7 +47,7 @@ src/services/__fixtures__/prompt-regression/
 
 ## 覆盖边界
 
-- **覆盖**：方向数量/preset 唯一/字段枚举；概念分封顶；设计输出必填字段；数据关系选择图型。
+- **覆盖**：4 个方向/preset 唯一/缺项拒绝/字段枚举；概念分封顶；设计输出必填字段；数据关系选择图型。
 - **不覆盖**：真实模型的措辞质量、方向是否真的不同、概念分是否公允、图表数据是否正确。这些需要真实模型抽样与人工评审，不能由固定样例代替。
 - **不覆盖**：Rust 提示词文本本身。版本号是人工同步的；以后可以把提示词文本哈希纳入样例，当前不做。
 

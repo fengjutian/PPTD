@@ -5,7 +5,13 @@ import {
   previewFacts,
   previewSlides,
 } from "../../../tools/design-preview/fixture";
-import { defaultInstrumentConcept, defaultPaperConcept, defaultDocumentaryConcept, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
+import {
+  defaultInstrumentConcept,
+  defaultPaperConcept,
+  defaultDocumentaryConcept,
+  defaultEditorialConcept,
+  resolveDeckConcept,
+} from "../design/deck-concept";
 import type { ShapeElement, TextElement } from "../document-model";
 import { buildDirectionPreviewPages } from "./direction-preview";
 
@@ -27,7 +33,11 @@ function titleFrame(document: ReturnType<typeof buildDesignPreviewDocument>, sli
   const title = document.slides[slideIndex]!.elements.find(
     (element): element is TextElement => element.type === "text" && element.contentRef === "title",
   )!;
-  return { x: title.frame.x / document.pageSize.width, y: title.frame.y / document.pageSize.height };
+  return {
+    x: title.frame.x / document.pageSize.width,
+    y: title.frame.y / document.pageSize.height,
+    width: title.frame.width / document.pageSize.width,
+  };
 }
 
 describe("direction preview", () => {
@@ -90,6 +100,23 @@ describe("direction preview", () => {
     );
     expect(rail).toBeDefined();
     expect(rail!.frame.x / instrumentPreview.pageSize.width).toBeCloseTo(0.185, 2);
+  });
+
+  it("keeps every cover title clear of the accent panel", () => {
+    const document = buildDesignPreviewDocument();
+    for (const deckConcept of [editorial, documentary, paper, instrument]) {
+      const [preview] = buildDirectionPreviewPages({
+        document,
+        concept: deckConcept,
+        pageIndexes: [0],
+        designs: [previewDesigns[0]!],
+        commandBase: { themePresetId: "editorial-teal" },
+      });
+      const title = titleFrame(preview!.document, 0);
+      // The cover's right accent panel starts at 0.78. A centred or right-shifted
+      // surface must shorten the title instead of running under the panel.
+      expect(title.x + title.width).toBeLessThanOrEqual(0.78);
+    }
   });
 
   it("rejects mismatched page and design counts", () => {

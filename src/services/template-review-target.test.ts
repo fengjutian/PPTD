@@ -16,6 +16,7 @@ const x = (value: number) => emu(Math.round(value * PAGE_WIDTH));
 const y = (value: number) => emu(Math.round(value * PAGE_HEIGHT));
 
 const analysis = (overrides: Partial<TemplateAnalysis> = {}): TemplateAnalysis => ({
+  contentHash: "hash:test",
   slideCount: 3,
   slideWidthEmu: PAGE_WIDTH,
   slideHeightEmu: PAGE_HEIGHT,
@@ -143,6 +144,7 @@ describe("template review target", () => {
     expect(report.checked).toBe(true);
     expect(report.score).toBe(100);
     expect(report.passed).toBe(true);
+    expect(report.checkedSlides).toBe(1);
     expect(report.issues).toEqual([]);
   });
 
@@ -247,6 +249,7 @@ describe("template review target", () => {
     document.slides[0]!.elements[0]!.frame = { ...document.slides[0]!.elements[0]!.frame, x: x(0.3), y: y(0.5) };
     const report = checkTemplateFit(document, target);
     expect(report.issues).toEqual([]);
+    expect(report.checkedSlides).toBe(0);
     expect(templateTargetForSlide(document, target, 0).freeComposition).toBe(true);
   });
 

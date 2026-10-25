@@ -215,6 +215,41 @@ describe("presentation document schema", () => {
     expect(parsed.designDirections?.[0]?.proposals).toHaveLength(2);
   });
 
+  it("accepts four direction proposals with the new presets", () => {
+    const document = createDocument();
+    const presets = ["editorial", "documentary", "paper", "instrument"] as const;
+    const proposals = presets.map((preset, index) => ({
+      id: crypto.randomUUID(),
+      preset,
+      name: `方向${index + 1}`,
+      idea: "测试方向",
+      rationale: "测试理由",
+      typeContrast: "strong" as const,
+      imagery: "none" as const,
+      previewPages: [{ index: 0, contentFingerprint: "fingerprint" }],
+    }));
+    document.designDirections = [
+      {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        contentRevision: 0,
+        contentFingerprint: "fingerprint",
+        proposals,
+        selectedProposalId: proposals[2]!.id,
+        selectedBy: "user",
+        regenerations: 0,
+        promptVersion: "design-directions-v2",
+      },
+    ];
+    const parsed = parsePresentationDocument(JSON.parse(JSON.stringify(document)));
+    expect(parsed.designDirections?.[0]?.proposals.map((proposal) => proposal.preset)).toEqual([...presets]);
+    expect(parsed.designDirections?.[0]?.proposals).toHaveLength(4);
+
+    const tooMany = JSON.parse(JSON.stringify(document));
+    tooMany.designDirections[0].proposals.push(tooMany.designDirections[0].proposals[0]);
+    expect(() => parsePresentationDocument(tooMany)).toThrow();
+  });
+
   it("keeps image provenance from a version 21 fixture", () => {
     const parsed = parsePresentationDocument(versionTwentyOneFixture);
     const image = parsed.slides[0]!.elements.find((element) => element.type === "image");

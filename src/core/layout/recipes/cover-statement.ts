@@ -35,11 +35,17 @@ export const coverStatement: LayoutRecipe = {
 
     // The cover keeps its own composition, but it starts from the shared title
     // axis instead of a private y. A cover that ignores the deck's chrome is
-    // how one deck ends up with two different left margins.
+    // how one deck ends up with two different left margins. The width also
+    // stops before the accent panel: a narrower/centred surface moves the axis
+    // inward, and a title that ran under the panel would be unreadable.
     const coverTitle = {
       x: chrome.title.x,
       y: Math.min(0.7, chrome.title.y + 0.06),
-      width: Math.min(TITLE.width, Math.max(0.3, chrome.title.width)),
+      width: Math.min(
+        TITLE.width,
+        Math.max(0.3, chrome.title.width),
+        Math.max(0.25, ACCENT_PANEL.x - chrome.title.x - 0.03),
+      ),
       height: TITLE.height,
     };
     const subtitleFrameNormalized = {

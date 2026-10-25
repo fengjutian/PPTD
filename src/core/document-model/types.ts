@@ -638,6 +638,8 @@ export interface TemplateTolerances {
 /** The measurable target derived from an uploaded template. */
 export interface TemplateReviewTarget {
   name: string;
+  /** SHA-256 of the source template file, when the target came from one. */
+  templateHash?: string;
   page: { widthEmu: number; heightEmu: number };
   grid: TemplateGrid;
   layouts: TemplateLayoutTarget[];

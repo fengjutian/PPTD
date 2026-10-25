@@ -59,7 +59,9 @@ export interface TemplateFitReport {
   passed: boolean;
   issues: TemplateFitIssue[];
   hardFailures: number;
-  /** How many slides resolved to a concrete template layout. */
+  /** Pages the checker actually measured (free-composition pages are skipped). */
+  checkedSlides: number;
+  /** Checked pages that resolved to a concrete template layout. */
   layoutCoverage: number;
 }
 
@@ -277,6 +279,7 @@ export function buildTemplateReviewTarget(
   ];
   return {
     name,
+    ...(analysis.contentHash ? { templateHash: analysis.contentHash } : {}),
     page: { widthEmu, heightEmu },
     grid,
     layouts,
@@ -447,7 +450,6 @@ export function checkTemplateFit(
   for (const [slideIndex, slide] of document.slides.entries()) {
     if (scope && !scope.has(slideIndex)) continue;
     const resolved = templateTargetForSlide(document, target, slideIndex);
-    if (resolved.layoutName) layoutCoverage += 1;
     if (resolved.freeComposition) continue;
     const title =
       slide.elements.find((element) => element.type === "text" && element.contentRef === "title") ??
@@ -455,6 +457,7 @@ export function checkTemplateFit(
     const bodies = slide.elements.filter((element) => element.type === "text" && element.contentRef === "body");
     if (!title && bodies.length === 0) continue;
     checkedSlides += 1;
+    if (resolved.layoutName) layoutCoverage += 1;
     const grid = resolved.grid;
     if (title && title.type === "text") {
       const box = rectOf(title.frame, pageWidth, pageHeight);
@@ -574,6 +577,7 @@ export function checkTemplateFit(
     passed: checked && errors === 0 && score >= target.minimumFit,
     issues,
     hardFailures: errors,
+    checkedSlides,
     layoutCoverage,
   };
 }

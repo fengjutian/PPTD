@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDocument } from "../core/document-model";
+import type { ConceptPresetId } from "../core/design/deck-concept";
 
 const store = vi.hoisted(() => ({
   entries: [] as Array<{
@@ -108,7 +109,7 @@ describe("design memory", () => {
   });
 
   it("recommends a preset only after two picks and leaves ties open", async () => {
-    const look = (id: string, concept: "editorial" | "documentary") => ({
+    const look = (id: string, concept: ConceptPresetId) => ({
       id,
       kind: "deck" as const,
       scope: "deck",
@@ -117,6 +118,9 @@ describe("design memory", () => {
     });
     store.entries = [look("a", "documentary"), look("b", "documentary"), look("c", "editorial")];
     expect(await recommendedConceptPreset()).toBe("documentary");
+
+    store.entries = [look("a", "paper"), look("b", "paper"), look("c", "instrument"), look("d", "documentary")];
+    expect(await recommendedConceptPreset()).toBe("paper");
 
     store.entries = [look("a", "editorial"), look("b", "documentary")];
     expect(await recommendedConceptPreset()).toBeUndefined();

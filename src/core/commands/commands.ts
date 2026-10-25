@@ -25,6 +25,7 @@ import type {
   IconElementStyle,
   TableElementStyle,
   SlideTransition,
+  TemplateReviewTarget,
   TextElement,
   TextElementStyle,
   TextRun,
@@ -901,7 +902,8 @@ export type DocumentCommand =
     }
   | { type: "approve-slide-content"; slideId: SlideId }
   | { type: "reopen-slide-content"; slideId: SlideId }
-  | { type: "restore-content-version"; versionId: string; includeDesign?: boolean };
+  | { type: "restore-content-version"; versionId: string; includeDesign?: boolean }
+  | { type: "set-template-style"; templateStyle?: TemplateReviewTarget };
 
 /** Text styling is presentation-only, so every guard here rejects values the exporter or the schema could not round-trip. */ function assertTextStyle(
   style: Partial<TextElementStyle>,
@@ -1214,6 +1216,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-slide":
       return null;
     case "set-page-size":
+      return "design";
+    case "set-template-style":
       return "design";
     case "group-elements":
     case "ungroup-elements":
@@ -1547,6 +1551,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const title = command.title.trim();
     if (!title || title.length > 512) throw new Error("DOCUMENT_TITLE_INVALID");
     document.title = title;
+    return;
+  }
+  if (command.type === "set-template-style") {
+    if (command.templateStyle) document.templateStyle = structuredClone(command.templateStyle);
+    else delete document.templateStyle;
     return;
   }
   if (command.type === "set-page-size") {

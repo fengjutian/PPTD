@@ -10,6 +10,8 @@
 | 需求依据 | [PPTD 设计方向与品味门 需求说明 v0.1](../../requirements/PPTD-Design-Direction-TRS-v0.1.md) FR-D1–FR-D5、C-1–C-7                                                  |
 | 影响范围 | `core/design`、`core/document-model`、`core/commands`、`services/ai-*`、`features/ai`、`features/pptx-export`、`tools/design-preview`、`src-tauri/commands/ai.rs` |
 
+> 2026-10-25 后续变更：方向数量已由 2 调整为 4，新增 `paper` / `instrument` 两个可渲染预设与 `column` / `rail` 两种 surface，见 [ADR 0087](../../architecture/decisions/0087-four-renderable-directions.md)。下文第 2、5、13、19 节中的“2 个方向”“2–3 个”是当时的实施记录，不再代表当前行为；事务、指纹、跳过、回退与模板边界仍然有效。
+
 ## 1. 背景与现状
 
 设计阶段的三个结构性缺口已经在需求文档 1.1 中列出。与本任务直接相关的代码事实：

@@ -193,6 +193,7 @@ import {
 import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
+import { recordAppError, recordAppLog } from "../services/app-log";
 import {
   analyzePptxTemplate,
   choosePresentationFile,
@@ -784,6 +785,7 @@ const SlideThumbnail = memo(function SlideThumbnail({
 function presetTemplateAnalysis(preset: ThemePreset): TemplateAnalysis {
   const color = (slot: string) => preset.theme.colors.find((entry) => entry.name === slot)?.value ?? "#FFFFFF";
   return {
+    contentHash: `preset:${preset.id}`,
     slideCount: 0,
     slideWidthEmu: 12192000,
     slideHeightEmu: 6858000,
@@ -1362,7 +1364,12 @@ export function App() {
             setProjectMtime(Date.now());
           }
         },
-        (error: unknown) => setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`),
+        (error: unknown) => {
+          // 自动保存失败是数据安全事件：状态栏一句话会被下一次操作覆盖，
+          // 日志里要留下失败的是哪一版。
+          void recordAppError("自动保存", error, { revision: revisionAtStart });
+          setTaskStatus(`自动保存失败：${error instanceof Error ? error.message : String(error)}`);
+        },
       );
     }, 1500);
     return () => window.clearTimeout(timer);
@@ -1505,6 +1512,7 @@ export function App() {
       await refreshRecentProjects();
       setTaskStatus("项目已打开");
     } catch (error) {
+      void recordAppError("打开项目", error);
       setTaskStatus(`打开失败：${error instanceof Error ? error.message : String(error)}`);
       void refreshRecentProjects();
     }
@@ -1558,6 +1566,7 @@ export function App() {
       );
       void refreshRecentProjects();
     } catch (error) {
+      void recordAppError("保存项目", error, { slides: document.slides.length });
       setTaskStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`);
     } finally {
       savingRef.current = false;
@@ -1694,6 +1703,12 @@ export function App() {
         setTaskStatus("导出已取消");
       } else {
         const detail = error instanceof Error ? error.message : String(error);
+        // 导出失败是复现成本最高的一类错误：项目、模板和字体都不在这里，
+        // 只留阶段与计数，够定位是哪一步，不把正文带出去。
+        void recordAppError("导出 PPTX", error, {
+          slides: document.slides.length,
+          hasTemplate: Boolean(document.templateStyle),
+        });
         setAgentWorkflow((state) => transitionAgentWorkflow(state, "failed", { error: detail }));
         setTaskStatus(`导出失败：${detail}`);
       }
@@ -1897,6 +1912,7 @@ export function App() {
     } catch (error) {
       if (requestId !== aiRequestId.current) return;
       const detail = describeAiError(error);
+      void recordAppError("AI 内容生成", error, { slideCount: requestedSlideCount });
       setAgentWorkflow((state) => transitionAgentWorkflow(state, "failed", { error: detail }));
       setTaskStatus(`AI 内容生成失败：${detail}`);
       void notifySystem({ title: "PPTD · AI 生成失败", body: detail });
@@ -1985,6 +2001,7 @@ export function App() {
       setTaskStatus("已重新生成整份草稿，可用撤销回到上一版");
     } catch (error) {
       if (requestId !== aiRequestId.current) return;
+      void recordAppError("AI 重新生成", error);
       setTaskStatus(`重新生成失败：${describeAiError(error)}`);
     } finally {
       unlisten?.();
@@ -3098,6 +3115,9 @@ export function App() {
             });
           } catch (error) {
             if (designCancelRef.current) throw error;
+            // 方向提案失败会静默退回单方向，界面上只表现为"没有四个方向可选"。
+            // 没有这条记录，就看不出是模型没按合同返回还是网络失败。
+            void recordAppError("设计方向提案", error, { directions: 4 });
             return { unavailable: true };
           }
           if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
@@ -3144,9 +3164,23 @@ export function App() {
               const message = error instanceof Error ? error.message : String(error);
               if (designCancelRef.current || message.includes("CANCELLED")) throw error;
               // A direction whose preview cannot be drawn is not offered.
+              // Which direction failed is the only way to tell a bad concept
+              // from a renderer gap, so it goes to the diagnostic log.
+              void recordAppError("设计方向预览", error, { preset: proposal.preset });
             }
           }
-          if (candidates.length < 4) return { unavailable: true };
+          if (candidates.length < 4) {
+            // 四个方向是产品约定。不足四个说明提案或预览掉了，退回单方向，
+            // 但不展示一张残缺的对比表；原因必须留下来，否则这次静默回退
+            // 下次还会发生而没人知道。
+            void recordAppLog({
+              level: "warn",
+              code: "AI_DIRECTIONS_INCOMPLETE",
+              message: `四个设计方向只有 ${candidates.length} 个可以渲染`,
+              context: { received: proposals.length, rendered: candidates.length },
+            });
+            return { unavailable: true };
+          }
           setDirectionRegenerations(regenerations);
           setDirectionOptions(
             candidates.map((candidate) => ({
@@ -3626,6 +3660,11 @@ export function App() {
             ? transitionAgentWorkflow(state, "failed", { error: describeAiError(error) })
             : state,
         );
+        void recordAppError("AI 设计生成", error, {
+          slides: sourceDraft.slides.length,
+          mode,
+          hasTemplate: Boolean(selectedTemplate),
+        });
         setDesignProgress({ percent: 0, label: "生成失败，请重试" });
         setDesignDetail(describeAiError(error));
         setTaskStatus(`AI 设计生成失败：${describeAiError(error)}`);
@@ -4035,6 +4074,12 @@ export function App() {
         renderCanvas: renderPresentationForVisualReview,
       });
       if (manualReviewCancelled.current) throw new Error("AI_GENERATION_CANCELLED");
+      // A fresh analysis can be newer than the contract saved in the project.
+      // Persist it as a design transaction so export and later reviews use the
+      // target that was actually applied.
+      if (manualTarget && JSON.stringify(manualTarget) !== JSON.stringify(document.templateStyle)) {
+        execute({ type: "set-template-style", templateStyle: manualTarget });
+      }
       const refreshedSignatures = [...designQualityReport.slideSignatures];
       result.reviewedIndexes.forEach((index) => {
         refreshedSignatures[index] = currentSignatures[index]!;
@@ -6422,8 +6467,8 @@ export function App() {
                       模板「{designQualityReport.templateTargetName ?? designQualityReport.templateName}」·{" "}
                       {designQualityReport.templateFit.score}/100（阈值 {designQualityReport.templateFit.threshold}）·{" "}
                       {designQualityReport.templateFit.issues.length} 处偏差 · 版式覆盖{" "}
-                      {designQualityReport.templateFit.layoutCoverage}/{document.slides.length} 页
-                      {designQualityReport.templateFit.passed ? " · 已达标" : " · 未达标"}
+                      {designQualityReport.templateFit.layoutCoverage}/{designQualityReport.templateFit.checkedSlides}{" "}
+                      页{designQualityReport.templateFit.passed ? " · 已达标" : " · 未达标"}
                     </p>
                     {designQualityReport.templateFit.issues.length === 0 ? (
                       <div className="template-empty">标题轴线、内容区和字号都贴合上传模板。</div>

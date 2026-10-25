@@ -116,9 +116,7 @@ describe("AI structured outputs", () => {
       "instrument",
     ]);
     // The same skeleton twice is a colour swap, not a fifth choice.
-    expect(() =>
-      aiDeckDirectionsSchema.parse({ directions: [editorial, editorial, paper, instrument] }),
-    ).toThrow();
+    expect(() => aiDeckDirectionsSchema.parse({ directions: [editorial, editorial, paper, instrument] })).toThrow();
     // A short list would make the gate promise four options and show three.
     expect(() => aiDeckDirectionsSchema.parse({ directions: [editorial, documentary, paper] })).toThrow();
   });
@@ -178,12 +176,7 @@ describe("AI structured outputs", () => {
       taskId: 7,
       preferences: [{ text: "想要更像杂志", scope: "deck" }],
     });
-    expect(result.map((direction) => direction.preset)).toEqual([
-      "editorial",
-      "documentary",
-      "paper",
-      "instrument",
-    ]);
+    expect(result.map((direction) => direction.preset)).toEqual(["editorial", "documentary", "paper", "instrument"]);
     expect(invoke).toHaveBeenCalledWith(
       "generate_deck_directions",
       expect.objectContaining({

@@ -357,6 +357,7 @@ const templateTolerancesSchema = z.object({
 
 const templateReviewTargetSchema = z.object({
   name: z.string().min(1).max(200),
+  templateHash: z.string().max(128).optional(),
   page: z.object({ widthEmu: positiveEmu, heightEmu: positiveEmu }),
   grid: templateGridSchema,
   layouts: z.array(templateLayoutTargetSchema).min(1).max(200),

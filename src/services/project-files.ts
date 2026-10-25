@@ -67,6 +67,8 @@ export interface TemplateLayoutSummary {
   regions: TemplateRegion[];
 }
 export interface TemplateAnalysis {
+  /** SHA-256 of the template file this analysis was produced from. */
+  contentHash: string;
   slideCount: number;
   slideWidthEmu: number | null;
   slideHeightEmu: number | null;
