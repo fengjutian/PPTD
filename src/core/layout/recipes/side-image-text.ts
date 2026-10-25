@@ -13,14 +13,14 @@ import {
 } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
-/** The picture column, as a share of the content width. */
+/** The picture plate, as a share of the content width. */
 const PICTURE_SHARE = 0.42;
-/** The air between the picture column and the copy column. */
+/** The air between the picture plate and the copy column. */
 const COLUMN_GAP = 0.055;
 /** A copy column narrower than this cannot carry a headline. */
-const MIN_TEXT_WIDTH = 0.3;
+const MIN_TEXT_WIDTH = 0.18;
 /** The padding between the headline and the tinted band behind it. */
-const BAND_PADDING = 0.018;
+const BAND_PADDING = 0.016;
 /** Five points is one page; six is a list and belongs to another recipe. */
 const MAX_ITEMS = 5;
 
@@ -33,19 +33,20 @@ function pointsToNormalized(points: number, pageHeight: Emu): number {
 }
 
 /**
- * Two facing columns: a picture plate on one side, a measured copy column on
- * the other.
+ * Two facing columns under the shared header: a picture plate and a copy column.
  *
- * `image-led` gives the picture the page edge and keeps the copy in a narrow
- * column beside it. This recipe is the opposite bet: both columns are inset by
- * the page margin, the picture is a framed plate rather than a bleed, and the
- * headline sits on a tinted band (`accentSubtle`) with a hairline separating the
- * columns. The result reads as an opened spread instead of a slide with a photo
- * on it, which is what a deck of ten `image-led` pages was missing.
+ * `image-led` gives the picture the page edge — it bleeds off the top, the side
+ * and the bottom — and keeps the copy in a narrow column beside it. This recipe
+ * is the opposite bet: the picture is an inset plate that starts below the
+ * header and keeps the page margin, the copy column faces it across a hairline,
+ * and the headline sits on a tinted band (`accentSubtle`) on the *shared* title
+ * axis. So a deck of picture pages alternates between "the photo is the page"
+ * and "the photo is a plate on the page" without either of them losing the
+ * header rhythm of the other content pages (ADR 0063).
  *
- * The band is drawn before the headline, so the ink sits on top of it: a tint
- * that is only 12% accent keeps body ink readable, and the band is small enough
- * that it cannot become the page's background.
+ * The band is a 12% accent tint, drawn before the headline so the ink sits on
+ * top of it. It is deliberately small: a tint that covered the column would be
+ * a page background, and body ink on it would no longer be the page's body ink.
  */
 export const sideImageText: LayoutRecipe = {
   id: "side-image-text",
@@ -54,8 +55,8 @@ export const sideImageText: LayoutRecipe = {
     if (!concept.recipes.includes("side-image-text")) return false;
     if (!options.hasAsset) return false;
     if (options.hasArtwork && !options.hasTemplateImage) return false;
-    // A band picture is a wide strip. Cropping it into a tall column would
-    // throw away most of the frame the picture was generated for.
+    // A band picture is a wide strip. Cropping it into a tall plate would throw
+    // away most of the frame the picture was generated for.
     if (options.assetRole === "band") return false;
     if (facts.hasRowBlock || facts.hasComparison || facts.hasQuote) return false;
     if (facts.layout === "quote") return false;
@@ -83,20 +84,41 @@ export const sideImageText: LayoutRecipe = {
     const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const isCover = ctx.facts.layout === "cover";
     const area = chrome.content;
-    const pictureWidth = Math.max(0.24, area.width * PICTURE_SHARE);
-    const textWidth = area.width - pictureWidth - COLUMN_GAP;
+    // A template page already states where its picture and its body go. Laying
+    // a calculated plate over those regions is how the recipe used to refuse a
+    // page whose body placeholder was narrower than the plate it wanted; the
+    // template's own geometry is the composition, so it is used as given.
+    const templateImage = ctx.templateImage;
+    // On a narrow body placeholder the plate gives way to the copy instead of
+    // the page being refused: the two columns are still columns, just smaller.
+    const preferredPicture = Math.max(0.2, area.width * PICTURE_SHARE);
+    const textWidth = templateImage
+      ? area.width
+      : Math.max(MIN_TEXT_WIDTH, area.width - preferredPicture - COLUMN_GAP);
+    const pictureWidth = templateImage
+      ? templateImage.width
+      : Math.max(0.16, area.width - textWidth - COLUMN_GAP);
     if (textWidth < MIN_TEXT_WIDTH) return conflict("title", "对开图文页的文字栏太窄");
-    // A `left` variant puts the picture on the left and the copy on the right,
-    // so two picture pages in a row do not mirror the same side.
+    // A `left` variant puts the plate on the left and the copy on the right, so
+    // two picture pages in a row do not mirror the same side.
     const pictureLeft = ctx.variant === "left";
-    const pictureX = pictureLeft ? area.x : area.x + area.width - pictureWidth;
-    const textX = pictureLeft ? area.x + pictureWidth + COLUMN_GAP : area.x;
+    const pictureX = templateImage
+      ? templateImage.x
+      : pictureLeft
+        ? area.x
+        : area.x + area.width - pictureWidth;
+    const textX = templateImage || !pictureLeft ? area.x : area.x + pictureWidth + COLUMN_GAP;
     const separatorX = pictureLeft ? pictureX + pictureWidth + COLUMN_GAP / 2 : pictureX - COLUMN_GAP / 2;
 
-    // The headline is fitted against the copy column and the band is drawn
-    // around the result: a band sized first would clip a long title.
+    // The headline keeps the chrome title frame and is fitted inside it. Only
+    // its width follows the copy column, so the page still starts where the
+    // other content pages start.
+    const titleWidth = Math.max(
+      MIN_TEXT_WIDTH,
+      Math.min(chrome.title.width, templateImage ? chrome.title.width : textWidth),
+    );
     const titleProbe = frameFromNormalized(
-      { x: textX, y: area.y, width: textWidth, height: Math.max(0.16, Math.min(0.34, area.height * 0.44)) },
+      { x: chrome.title.x, y: chrome.title.y, width: titleWidth, height: chrome.title.height },
       page,
     );
     const titleSize = (isCover ? fittedFontSizeWithoutOrphan : fittedFontSize)(
@@ -108,33 +130,47 @@ export const sideImageText: LayoutRecipe = {
       lineHeight,
     );
     if (!textFits(title, titleProbe, titleSize, displayFamily, lineHeight)) {
-      return conflict("title", "对开图文页的标题放不下");
+      return conflict("title", "对开图文页的标题在标题轴内放不下");
     }
     const titleHeight = pointsToNormalized(
-      textHeightPt(title, textWidth * pageWidthIn * 72, titleSize, displayFamily, titleLineHeight),
+      textHeightPt(title, titleWidth * pageWidthIn * 72, titleSize, displayFamily, titleLineHeight),
       page.height,
     );
-    const bandTop = area.y;
-    const bandHeight = titleHeight + BAND_PADDING * 2;
 
     const elements: RecipePlan["elements"] = [
-      rectElement(
-        frameFromNormalized({ x: textX, y: bandTop, width: textWidth, height: bandHeight }, page),
-        ctx.colors.accentSubtle,
-      ),
+      // The band is behind the headline and only as tall as the line box: a
+      // tint that filled the title frame's full height would read as a masthead.
       rectElement(
         frameFromNormalized(
-          // 0.75pt expressed as a share of the page width: a column separator is
-          // a hairline, not a 2px border, and the export writes points anyway.
-          { x: separatorX, y: area.y, width: 0.75 / 72 / pageWidthIn, height: area.height },
+          {
+            x: chrome.title.x - BAND_PADDING,
+            y: chrome.title.y - BAND_PADDING,
+            width: Math.min(1 - chrome.title.x + BAND_PADDING, titleWidth + BAND_PADDING * 2),
+            height: titleHeight + BAND_PADDING * 2,
+          },
           page,
         ),
-        ctx.colors.border,
+        ctx.colors.accentSubtle,
       ),
+      // A template page already separates its own regions; drawing a second
+      // hairline next to the template's would read as a stray rule.
+      ...(templateImage
+        ? []
+        : [
+            rectElement(
+              frameFromNormalized(
+                // 0.75pt expressed as a share of the page width: a column
+                // separator is a hairline, and the export writes points anyway.
+                { x: separatorX, y: area.y, width: 0.75 / 72 / pageWidthIn, height: area.height },
+                page,
+              ),
+              ctx.colors.border,
+            ),
+          ]),
       textElement(
         title,
         frameFromNormalized(
-          { x: textX, y: bandTop + BAND_PADDING, width: textWidth, height: titleHeight + 0.004 },
+          { x: chrome.title.x, y: chrome.title.y, width: titleWidth, height: titleHeight + 0.004 },
           page,
         ),
         titleSize,
@@ -146,7 +182,7 @@ export const sideImageText: LayoutRecipe = {
       ),
     ];
 
-    let cursor = bandTop + bandHeight + 0.03;
+    let cursor = area.y;
     if (units.lead) {
       const leadHeight = pointsToNormalized(
         textHeightPt(units.lead, textWidth * pageWidthIn * 72, ctx.tokens.type.bodyPt, bodyFamily, lineHeight),

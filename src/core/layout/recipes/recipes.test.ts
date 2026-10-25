@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CompositionFacts } from "../../commands/design-intent";
 import { inches, type ContentBlock, type SlideContent, type TextElement } from "../../document-model";
 import {
+  defaultConceptForPreset,
   defaultEditorialConcept,
   defaultInstrumentConcept,
   defaultPaperConcept,
@@ -18,12 +19,15 @@ import { comparison } from "./comparison";
 import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
+import { fullBleedImage } from "./full-bleed-image";
 import { imageLed } from "./image-led";
 import { instrumentColumns } from "./instrument-columns";
+import { frameFromNormalized, rectsOverlap } from "./measure";
 import { paperColumn } from "./paper-column";
 import { processRail } from "./process-rail";
 import { quoteField } from "./quote-field";
 import { sectionStatement } from "./section-statement";
+import { sideImageText } from "./side-image-text";
 import { timelineRail } from "./timeline-rail";
 import { weightedSplit } from "./weighted-split";
 import { consumptionProblem } from "./plan";
@@ -304,6 +308,125 @@ describe("image-led recipe", () => {
       }),
     ).toBe(true);
     const result = plan(imageLed, ctx);
+    expect(result.imageFrame).toEqual(ctx.templateImage);
+  });
+});
+
+describe("full-bleed-image recipe", () => {
+  const statement: SlideContent = {
+    title: "一条河改变了一座城",
+    body: "二十年治理的现场记录",
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  function documentary(): DeckConcept {
+    return resolveDeckConcept({
+      concept: defaultConceptForPreset("documentary"),
+      pageFacts: [facts()],
+      pageCount: 1,
+      id: "recipe-documentary",
+    }).concept;
+  }
+
+  it("gives the picture the page and sets the copy on a raised plate", () => {
+    const ctx = context(statement, { facts: facts({ layout: "cover", itemCount: 0 }) });
+    ctx.concept = documentary();
+    expect(
+      fullBleedImage.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: true, assetRole: "hero" }),
+    ).toBe(true);
+    const result = plan(fullBleedImage, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, statement)).toBeUndefined();
+    expect(result.imageFrame).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+
+    // The plate is a filled surface, not a rule: it spans the page width, covers
+    // a real share of the height, and is the theme's raised tone rather than the
+    // page background.
+    const plate = result.elements.find(
+      (element) =>
+        element.type === "shape" && element.frame.width >= page.width - 1 && element.frame.height > page.height * 0.15,
+    );
+    expect(plate?.type).toBe("shape");
+    expect(plate?.type === "shape" ? plate.style.fill : undefined).toBe(
+      deriveSemanticColors({ surface: "#FFFFFF", ink: "#465368", accent: "#1F4E79" }).surfaceRaised,
+    );
+    // The headline sits inside the plate, not on the picture above it.
+    const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(title?.type).toBe("text");
+    if (title?.type !== "text" || plate?.type !== "shape") return;
+    expect(title.frame.y).toBeGreaterThanOrEqual(plate.frame.y);
+    expect(title.frame.y + title.frame.height).toBeLessThanOrEqual(plate.frame.y + plate.frame.height + 1);
+  });
+
+  it("refuses a page with a list or without a picture", () => {
+    const list = facts({ itemCount: 4 });
+    expect(fullBleedImage.supports(list, documentary(), { hasArtwork: false, hasAsset: true, assetRole: "hero" })).toBe(
+      false,
+    );
+    expect(fullBleedImage.supports(facts(), documentary(), { hasArtwork: false, hasAsset: false })).toBe(false);
+  });
+
+  it("refuses to paint over a template's own artwork without a picture placeholder", () => {
+    expect(
+      fullBleedImage.supports(facts({ itemCount: 0 }), documentary(), {
+        hasArtwork: true,
+        hasAsset: true,
+        assetRole: "hero",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("side-image-text recipe", () => {
+  const pageContent = content(["品牌认知持续提升", "重点行业渗透加快", "客户续约保持稳定"]);
+
+  it("keeps the copy column clear of the picture plate", () => {
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    expect(
+      sideImageText.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: true, assetRole: "side" }),
+    ).toBe(true);
+    const result = plan(sideImageText, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, pageContent)).toBeUndefined();
+    expect(result.imageFrame).toBeDefined();
+    const picture = frameFromNormalized(result.imageFrame!, page);
+    // The plate is inset: it starts below the header instead of bleeding off the
+    // top edge, which is what the `image-led` composition does.
+    expect(result.imageFrame!.y).toBeGreaterThan(0);
+    for (const element of result.elements) {
+      if (element.type !== "text") continue;
+      expect(rectsOverlap(element.frame, picture)).toBe(false);
+    }
+  });
+
+  it("keeps the shared title axis and puts the band behind the headline", () => {
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    const result = plan(sideImageText, ctx);
+    const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(title?.type).toBe("text");
+    if (title?.type !== "text") return;
+    expect(title.frame.y).toBe(ctx.frame.title.y);
+
+    const bandIndex = result.elements.findIndex(
+      (element) => element.type === "shape" && element.frame.height > title.frame.height,
+    );
+    const titleIndex = result.elements.findIndex((element) => element.id === title.id);
+    expect(bandIndex).toBeGreaterThanOrEqual(0);
+    expect(bandIndex).toBeLessThan(titleIndex);
+    const band = result.elements[bandIndex]!;
+    expect(band.type === "shape" ? band.style.fill : undefined).toBe(
+      deriveSemanticColors({ surface: "#FFFFFF", ink: "#465368", accent: "#1F4E79" }).accentSubtle,
+    );
+  });
+
+  it("refuses a band picture and uses the template placeholder as given", () => {
+    expect(
+      sideImageText.supports(facts(), concept(), { hasArtwork: false, hasAsset: true, assetRole: "band" }),
+    ).toBe(false);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    ctx.templateImage = { x: 0.56, y: 0.2, width: 0.38, height: 0.6 };
+    const result = plan(sideImageText, ctx);
     expect(result.imageFrame).toEqual(ctx.templateImage);
   });
 });

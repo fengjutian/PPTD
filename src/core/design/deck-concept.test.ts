@@ -42,6 +42,7 @@ describe("deck concept", () => {
       "data-story",
       "chart-story",
       "image-led",
+      "side-image-text",
       "editorial-index",
       "asymmetric-split",
       "process-rail",
@@ -51,6 +52,9 @@ describe("deck concept", () => {
       "quote-field",
       "section-statement",
     ]);
+    // The full-bleed composition belongs to the documentary direction: the
+    // editorial set spends the page on type, not on a photograph.
+    expect(resolved.concept.recipes).not.toContain("full-bleed-image");
     expect(resolved.concept.rhythm).toHaveLength(10);
     expect(resolved.concept.rhythm[0]).toBe("statement");
     expect(resolved.concept.rhythm[9]).toBe("close");
@@ -68,6 +72,7 @@ describe("deck concept", () => {
     expect(resolved.concept.surface).toBe("full-bleed");
     expect(resolved.concept.motif).toBe("documentary");
     expect(resolved.concept.imagery).toBe("hero");
+    expect(resolved.concept.recipes).toContain("full-bleed-image");
     expect(resolved.conflicts).toEqual([]);
   });
 

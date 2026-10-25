@@ -1,5 +1,5 @@
 import { EMU_PER_INCH, type DocumentTheme, type Emu } from "../document-model";
-import { colorLuminance } from "../rendering/contrast";
+import { colorLuminance, contrastRatio, MINIMUM_CONTRAST } from "../rendering/contrast";
 import { mixHex } from "./shape-gradient";
 import { resolveTypeScale } from "./type-scale";
 import type { DeckConcept } from "./deck-concept";
@@ -40,13 +40,32 @@ export interface SemanticColors {
  * page; a single fixed mix would make a card on a navy page darker than the
  * navy and therefore invisible.
  */
+/**
+ * Secondary ink: lighter than body copy, still readable on the page.
+ *
+ * The mix is bounded by contrast rather than by a fixed percentage: a third of
+ * the way from a mid-toned body ink to a white page lands at 3.9:1, which is a
+ * caption nobody can read. The amount walks back until the muted tone clears
+ * the body-text floor, so a light palette gets a lighter mute and a dark one
+ * keeps more.
+ */
+function muteInk(ink: string, surface: string): string {
+  let amount = 0.38;
+  let muted = mixHex(ink, surface, amount);
+  while (amount > 0 && (contrastRatio(muted, surface) ?? 0) < MINIMUM_CONTRAST) {
+    amount = Math.round((amount - 0.04) * 100) / 100;
+    muted = mixHex(ink, surface, Math.max(0, amount));
+  }
+  return muted;
+}
+
 export function deriveSemanticColors(input: { surface: string; ink: string; accent: string }): SemanticColors {
   const dark = (colorLuminance(input.surface) ?? 1) < 0.45;
   const towards = dark ? "#FFFFFF" : input.ink;
   return {
     surfaceRaised: mixHex(input.surface, towards, dark ? 0.1 : 0.05),
     border: mixHex(input.surface, towards, dark ? 0.2 : 0.14),
-    textMuted: mixHex(input.ink, input.surface, 0.38),
+    textMuted: muteInk(input.ink, input.surface),
     accentSubtle: mixHex(input.surface, input.accent, dark ? 0.22 : 0.12),
   };
 }

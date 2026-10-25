@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildPptx } from "../../src/features/pptx-export/export-pptx";
 import type { ImageElement, TextElement } from "../../src/core/document-model";
 import { lintTaste } from "../../src/core/design/taste-lint";
+import { rectsOverlap } from "../../src/core/layout/recipes/measure";
 import { buildDesignPreviewDocument, previewPage, previewSlides } from "./fixture";
 
 /**
@@ -66,15 +67,22 @@ describe("ten-page design preview", () => {
     expect(ellipses(7)).toHaveLength(5);
     expect(texts(8)).toEqual(expect.arrayContaining(["“", "先天下之忧而忧，后天下之乐而乐。", "— 范仲淹"]));
 
+    // The picture page is a plate, not a bleed: it starts below the header and
+    // keeps the page margin, and the copy column faces it. Bleeding the picture
+    // off the page edge is the `image-led` composition, still available when a
+    // page asks for it.
     const image = document.slides[9]!.elements.find(
       (element): element is ImageElement => element.type === "image" && element.placement === "content",
     )!;
-    expect(image.frame).toEqual({
-      x: Math.round(document.pageSize.width * 0.52),
-      y: 0,
-      width: Math.round(document.pageSize.width * 0.48),
-      height: document.pageSize.height,
-    });
+    // The plate keeps the page margin on every side instead of bleeding off it,
+    // and no copy runs under it: the two columns are separate.
+    expect(image.frame.y).toBeGreaterThan(0);
+    expect(image.frame.y + image.frame.height).toBeLessThanOrEqual(document.pageSize.height);
+    expect(image.frame.x + image.frame.width).toBeLessThanOrEqual(document.pageSize.width);
+    const covered = document.slides[9]!.elements.filter(
+      (element) => element.type === "text" && rectsOverlap(element.frame, image.frame),
+    );
+    expect(covered).toHaveLength(0);
   });
 
   it("preserves every reviewed title", () => {

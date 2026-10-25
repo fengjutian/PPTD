@@ -153,7 +153,7 @@ describe("taste lint", () => {
     expect(report.issues[0]?.metrics?.ratio).toBeCloseTo(2, 5);
   });
 
-  it("flags more than two font families", () => {
+  it("allows one display face on top of the body face", () => {
     const document = documentWith(1);
     document.slides[0]!.elements = [
       textElement("标题", { fontSizePt: 36, fontFamily: "华文中宋" }, undefined, "title"),
@@ -164,6 +164,24 @@ describe("taste lint", () => {
         "body",
       ),
       textElement("注释", { fontSizePt: 10, fontFamily: "Arial" }, { x: 0.8, y: 6.6, width: 2, height: 0.3 }),
+    ];
+    // Two text faces plus one face used only at display size is a designed
+    // pairing, not three voices fighting on one page.
+    expect(lintTaste(document).counts.FONT_FAMILY_COUNT).toBe(0);
+  });
+
+  it("flags three text families even when a display face is set", () => {
+    const document = documentWith(1);
+    document.slides[0]!.elements = [
+      textElement("标题", { fontSizePt: 36, fontFamily: "华文中宋" }, undefined, "title"),
+      textElement(
+        "这是一段足够长的正文内容用于测试字体数量",
+        { fontSizePt: 14, fontFamily: "微软雅黑" },
+        undefined,
+        "body",
+      ),
+      textElement("注释", { fontSizePt: 10, fontFamily: "Arial" }, { x: 0.8, y: 6.6, width: 2, height: 0.3 }),
+      textElement("来源", { fontSizePt: 10, fontFamily: "楷体" }, { x: 3.2, y: 6.6, width: 2, height: 0.3 }),
     ];
     expect(lintTaste(document).counts.FONT_FAMILY_COUNT).toBe(1);
   });
@@ -231,14 +249,31 @@ describe("taste lint", () => {
     expect(lintTaste(document).counts.DECORATION_EMOJI).toBe(1);
   });
 
-  it("flags a single highlighted word inside the title", () => {
+  it("allows one highlighted phrase inside the title", () => {
     const document = documentWith(1);
     const title = "季度增长来自复购";
     document.slides[0]!.elements = [
       textElement(title, { fontSizePt: 36 }, undefined, "title", [{ start: 6, end: 8, color: "#C0392B" }]),
       textElement("这是一段足够长的正文内容用于测试单字变色", { fontSizePt: 14 }, undefined, "body"),
     ];
-    expect(lintTaste(document).counts.DECORATION_ACCENT_WORD).toBe(1);
+    // One emphasis is the page's point; the check exists to stop word-by-word
+    // colouring, not to forbid emphasis.
+    expect(lintTaste(document).counts.DECORATION_ACCENT_WORD).toBe(0);
+  });
+
+  it("flags a second highlighted phrase inside the title", () => {
+    const document = documentWith(1);
+    const title = "季度增长来自复购";
+    document.slides[0]!.elements = [
+      textElement(title, { fontSizePt: 36 }, undefined, "title", [
+        { start: 0, end: 2, color: "#C0392B" },
+        { start: 6, end: 8, color: "#C0392B" },
+      ]),
+      textElement("这是一段足够长的正文内容用于测试单字变色", { fontSizePt: 14 }, undefined, "body"),
+    ];
+    const report = lintTaste(document);
+    expect(report.counts.DECORATION_ACCENT_WORD).toBe(1);
+    expect(report.issues.find((issue) => issue.code === "DECORATION_ACCENT_WORD")?.metrics?.runs).toBe(2);
   });
 
   it("flags three consecutive pages with the same skeleton", () => {

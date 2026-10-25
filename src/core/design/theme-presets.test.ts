@@ -13,6 +13,18 @@ describe("built-in theme presets", () => {
     }
   });
 
+  it("writes the four semantic roles into every preset", () => {
+    // The roles are derived once and stored, so the page builder, the picker and
+    // any future export read the same values instead of each mixing its own tint.
+    const semantic = ["surfaceRaised", "border", "textMuted", "accentSubtle"];
+    for (const preset of THEME_PRESETS) {
+      const slots = new Map(preset.theme.colors.map((color) => [color.name, color.value]));
+      for (const name of semantic) expect(slots.get(name)).toMatch(/^#[0-9A-F]{6}$/i);
+      expect(slots.get("surfaceRaised")).not.toBe(slots.get("surface"));
+      expect(new Set(preset.theme.colors.map((color) => color.name)).size).toBe(preset.theme.colors.length);
+    }
+  });
+
   it("descends from display to caption on every preset", () => {
     for (const preset of THEME_PRESETS) {
       const styles = preset.theme.textStyles!;

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { inches } from "../document-model";
 import { findThemePreset } from "./theme-presets";
 import { defaultEditorialConcept, resolveDeckConcept } from "./deck-concept";
-import { deriveDesignTokens } from "./design-tokens";
+import { deriveDesignTokens, deriveSemanticColors } from "./design-tokens";
+import { colorLuminance, contrastRatio } from "../rendering/contrast";
 import type { CompositionFacts } from "../commands/design-intent";
 
 function concept(typeContrast: "calm" | "strong" | "dramatic") {
@@ -41,6 +42,17 @@ describe("design tokens", () => {
     expect(tokens.grid.margin).toBe(0.07);
   });
 
+  it("defaults the display face to the heading face and follows the theme", () => {
+    const theme = findThemePreset("consulting-navy")!.theme;
+    const withoutDisplay = deriveDesignTokens(theme, page, concept("strong"));
+    expect(withoutDisplay.fonts.display).toBe(withoutDisplay.fonts.heading);
+
+    const withDisplay = deriveDesignTokens({ ...theme, displayFont: "思源宋体" }, page, concept("strong"));
+    expect(withDisplay.fonts.display).toBe("思源宋体");
+    // Only the display level changes: body copy keeps the theme's minor face.
+    expect(withDisplay.fonts.body).toBe(withoutDisplay.fonts.body);
+  });
+
   it("uses type contrast only on the display and title levels", () => {
     const strong = deriveDesignTokens(findThemePreset("consulting-navy")!.theme, page, concept("strong"));
     const dramatic = deriveDesignTokens(findThemePreset("consulting-navy")!.theme, page, concept("dramatic"));
@@ -77,5 +89,30 @@ describe("design tokens", () => {
     expect(tokens.type.titlePt).toBe(30);
     expect(tokens.type.bodyPt).toBe(18);
     expect(tokens.type.lineHeight).toBe(1.25);
+  });
+});
+
+describe("semantic color roles", () => {
+  it("raises the surface away from the page on both light and dark pages", () => {
+    const light = deriveSemanticColors({ surface: "#FFFFFF", ink: "#1E3550", accent: "#0F7869" });
+    const dark = deriveSemanticColors({ surface: "#12233D", ink: "#E8EEF6", accent: "#2E75B6" });
+    // A card has to be visible as a card: on a light page it darkens, on a dark
+    // page it lightens. A single fixed mix would make one of the two vanish.
+    expect(colorLuminance(light.surfaceRaised)!).toBeLessThan(colorLuminance("#FFFFFF")!);
+    expect(colorLuminance(dark.surfaceRaised)!).toBeGreaterThan(colorLuminance("#12233D")!);
+    // The hairline is stronger than the raised surface so a stroked card still
+    // reads when it sits on the raised tone.
+    expect(colorLuminance(light.border)!).toBeLessThan(colorLuminance(light.surfaceRaised)!);
+    expect(colorLuminance(dark.border)!).toBeGreaterThan(colorLuminance(dark.surfaceRaised)!);
+  });
+
+  it("mutes the secondary ink without losing the page's hue and tints the accent", () => {
+    const colors = deriveSemanticColors({ surface: "#FFFFFF", ink: "#1E3550", accent: "#0F7869" });
+    // Secondary copy is lighter than body ink but still dark enough to read.
+    expect(colorLuminance(colors.textMuted)!).toBeGreaterThan(colorLuminance("#1E3550")!);
+    expect(contrastRatio(colors.textMuted, "#FFFFFF")!).toBeGreaterThan(4.5);
+    // The tint stays close to the page so body ink on it stays the body ink.
+    expect(contrastRatio(colors.accentSubtle, "#FFFFFF")!).toBeLessThan(1.3);
+    expect(colors.accentSubtle).not.toBe("#FFFFFF");
   });
 });

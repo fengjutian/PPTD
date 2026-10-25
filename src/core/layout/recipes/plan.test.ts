@@ -86,14 +86,41 @@ describe("recipe planning", () => {
     expect(chooseRecipeId(facts({ layout: "section", itemCount: 1 }), concept(), options)).toBe("section-statement");
   });
 
-  it("chooses the image-led recipe when the page has a picture", () => {
+  it("picks the picture composition from the content shape", () => {
+    // A page with a few points and a side picture opens as two facing columns.
     expect(
       chooseRecipeId(facts({ itemCount: 3 }), concept(), {
         hasArtwork: false,
         hasAsset: true,
         assetRole: "side",
       }),
-    ).toBe("image-led");
+    ).toBe("side-image-text");
+    // A statement page gives the picture the page and sets the copy on a plate.
+    // Only the documentary direction carries that composition, so the set it is
+    // resolved against decides whether the request is even legal.
+    const documentary = resolveDeckConcept({
+      concept: defaultConceptForPreset("documentary"),
+      pageFacts: [facts({ itemCount: 1, layout: "cover" })],
+      pageCount: 1,
+      id: "plan-documentary",
+    }).concept;
+    expect(
+      chooseRecipeId(facts({ itemCount: 1, layout: "cover" }), documentary, {
+        hasArtwork: false,
+        hasAsset: true,
+        assetRole: "hero",
+      }),
+    ).toBe("full-bleed-image");
+    // A band picture is a wide strip: it cannot become a tall column, and a
+    // four-point page is not a statement. No recipe claims it, so the page keeps
+    // the legacy layout that plans the band itself.
+    expect(
+      chooseRecipeId(facts({ itemCount: 4 }), concept(), {
+        hasArtwork: false,
+        hasAsset: true,
+        assetRole: "band",
+      }),
+    ).toBeUndefined();
   });
 
   it("leaves structured pages to the legacy renderer", () => {
