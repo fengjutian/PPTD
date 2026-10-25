@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AiSlideDesign } from "../core/commands/commands";
-import { planVisualAssets } from "./ai-visual-asset";
+import { planAssetTopUp, planVisualAssets } from "./ai-visual-asset";
 
 /** 一页最简单的设计：标题正文页。 */
 function design(overrides: Partial<AiSlideDesign> = {}): AiSlideDesign {
@@ -95,5 +95,35 @@ describe("配图计划", () => {
 
     expect(decisions[0]).toMatchObject({ enabled: true, role: "side" });
     expect(prompts.get(0)).toContain("一间明亮的现代化数据中心");
+  });
+});
+
+describe("配图补缺", () => {
+  it("只买批量还没买过的那几页", () => {
+    // 批量已经生成过 0 页和 2 页的图，保留那一版时不能再买一次同样的照片。
+    const topUp = planAssetTopUp({
+      decisions: [
+        { enabled: true, role: "hero" },
+        { enabled: true, role: "side" },
+        { enabled: true, role: "band" },
+        { enabled: false, reason: "该页有结构化内容块" },
+      ],
+      covered: new Set([0, 2]),
+    });
+
+    expect(topUp.targets).toBe(1);
+    expect(topUp.decisions[1]).toMatchObject({ enabled: true, role: "side" });
+    // 已经买过的页和原本就不配图的页都不再下单。
+    expect(topUp.decisions[0]).toMatchObject({ enabled: false });
+    expect(topUp.decisions[2]).toMatchObject({ enabled: false });
+    expect(topUp.decisions[3]).toMatchObject({ enabled: false });
+  });
+
+  it("整册都有图时一张都不再生成", () => {
+    const topUp = planAssetTopUp({
+      decisions: [{ enabled: true, role: "hero" }],
+      covered: new Set([0]),
+    });
+    expect(topUp.targets).toBe(0);
   });
 });

@@ -7,7 +7,15 @@ import { rectElement, textElement } from "./elements";
 import { fittedFontSize, frameFromNormalized, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
-const IMAGE = { x: 0.52, y: 0, width: 0.48, height: 1 };
+const PICTURE_X = 0.52;
+/** The air between the copy column and the picture. */
+const COLUMN_GAP = 0.04;
+/** The widest copy column an image page uses, whatever the surface allows. */
+const TEXT_COLUMN = 0.4;
+/** A column narrower than this cannot carry a headline. */
+const MIN_TITLE_WIDTH = 0.24;
+/** The picture never gives up more than this share of the page to the copy. */
+const MAX_PICTURE_X = 0.7;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -49,9 +57,17 @@ export const imageLed: LayoutRecipe = {
     const isCover = ctx.facts.layout === "cover";
     const templateImage = ctx.templateImage;
     const textX = chrome.title.x;
+    // The picture takes the right side of the page, and the copy may not run
+    // under it. The title axis moves with the direction's surface (a rail or a
+    // column pushes it inward), so the frame that stays on the page is derived
+    // from where the picture starts — not from a fixed 40% width, which put the
+    // headline underneath the picture on those surfaces.
+    const pictureX = templateImage
+      ? PICTURE_X
+      : Math.max(PICTURE_X, Math.min(MAX_PICTURE_X, textX + TEXT_COLUMN + COLUMN_GAP));
     const titleWidth = templateImage
       ? Math.max(0.25, chrome.title.width)
-      : Math.min(0.4, Math.max(0.25, chrome.title.width));
+      : Math.max(MIN_TITLE_WIDTH, Math.min(TEXT_COLUMN, pictureX - textX - COLUMN_GAP));
     const titleFrameNormalized = {
       x: textX,
       y: chrome.title.y,
@@ -169,7 +185,7 @@ export const imageLed: LayoutRecipe = {
         blockIds: units.blockIds,
       },
       conflicts: [],
-      imageFrame: templateImage ?? IMAGE,
+      imageFrame: templateImage ?? { x: pictureX, y: 0, width: 1 - pictureX, height: 1 },
     };
   },
 };

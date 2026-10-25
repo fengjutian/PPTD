@@ -120,7 +120,7 @@ export function VariantGalleryDialog({ options, onSelect, onDiscard, renderPages
             ))}
           </div>
           <p className="variant-gallery-note">
-            预览版用占位块代替配图、也不做视觉复检；配图位已经按成品的位置留好，选定那一版之后才会补真图并跑完整质检。
+            整册配图只生成一套，所有版本共用；选定那一版之后不再重复生成配图，只补上缺图的页并跑完整质检。
           </p>
           <div className="upload-dialog-actions">
             <button type="button" className="secondary-action" onClick={onDiscard}>

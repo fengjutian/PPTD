@@ -255,6 +255,32 @@ describe("image-led recipe", () => {
     expect(imageLed.supports(facts(), concept(), { hasArtwork: false, hasAsset: false })).toBe(false);
   });
 
+  it("never sets the headline under the picture on an indented surface", () => {
+    // A rail or column surface pushes the title axis to 0.17–0.22. With a fixed
+    // 40% column the headline ran from there into the picture at 0.52 and
+    // disappeared into it (white copy on a photograph).
+    const pageContent: SlideContent = {
+      title: "Alphabet 2023 年报：广告基本盘与 AI 第二曲线同时加速",
+      body: "广告基本盘稳固，云与 AI 重塑增长路径",
+      speakerNotes: "",
+      status: "approved",
+    };
+    const ctx = context(pageContent, { facts: facts({ layout: "cover", itemCount: 0 }) });
+    ctx.frame.title = { x: inches(2.93), y: inches(0.6), width: inches(9.5), height: inches(1.5) };
+    ctx.chrome = planPageChrome({
+      page,
+      title: ctx.frame.title,
+      content: ctx.frame.content,
+      safe: ctx.frame.safe,
+    });
+    const result = plan(imageLed, ctx);
+    const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(title?.type).toBe("text");
+    if (title?.type !== "text" || !result.imageFrame) return;
+    const titleRight = (title.frame.x + title.frame.width) / page.width;
+    expect(titleRight).toBeLessThanOrEqual(result.imageFrame.x);
+  });
+
   it("uses the template picture placeholder when the template has one", () => {
     const pageContent = content(["品牌认知持续提升", "重点行业渗透加快", "客户续约保持稳定"]);
     const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });

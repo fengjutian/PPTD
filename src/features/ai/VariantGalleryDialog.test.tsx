@@ -59,7 +59,7 @@ describe("VariantGalleryDialog", () => {
     expect(markup).toContain("排版检查通过");
     expect(markup).toContain("2 处排版待调整");
     // The preview is not the final deck; the dialog has to say why.
-    expect(markup).toContain("预览版用占位块代替配图");
+    expect(markup).toContain("整册配图只生成一套");
     expect(markup).toContain("选定后只保留这一版");
   });
 });

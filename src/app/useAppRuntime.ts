@@ -18,6 +18,7 @@ import {
   directionContentFingerprint,
   importedDeckToDocument,
   type AiSlideDesign,
+  type AiVisualAssetData,
   type DocumentCommand,
   type ImportReport,
 } from "../core/commands";
@@ -66,7 +67,13 @@ import {
   withSlideIds,
   type AiDraftSaveState,
 } from "../features/ai/content-review";
-import { generateDeckVisualAssets, planVisualAssets, requestVisualAsset } from "../services/ai-visual-asset";
+import {
+  generateDeckVisualAssets,
+  planAssetTopUp,
+  planVisualAssets,
+  requestVisualAsset,
+  type GeneratedVisualAsset,
+} from "../services/ai-visual-asset";
 import type { AiVisualAssetRole } from "../core/commands/visual-asset";
 
 import { bodyFromBlocks } from "../services/ai-draft-content";
@@ -251,6 +258,19 @@ function variantPreviewIndexes(draft: AiDraft): number[] {
   const fallback = Math.min(1, draft.slides.length - 1);
   const second = contentIndex > 0 ? contentIndex : fallback;
   return second === 0 ? [0] : [0, second];
+}
+
+/** A generated picture in the shape the document command accepts. */
+function toDocumentAssets(assets: readonly GeneratedVisualAsset[]): AiVisualAssetData[] {
+  return assets.map((asset) => ({
+    slideIndex: asset.slideIndex,
+    dataUrl: asset.dataUrl,
+    mimeType:
+      asset.mimeType === "image/jpeg" ? "image/jpeg" : asset.mimeType === "image/webp" ? "image/webp" : "image/png",
+    naturalWidth: asset.naturalWidth,
+    naturalHeight: asset.naturalHeight,
+    altText: asset.altText,
+  }));
 }
 
 /** The preset the picker marks as recommended, for this reviewed draft. */
@@ -445,7 +465,16 @@ export function useAppRuntime() {
   const [variantOptions, setVariantOptions] = useState<VariantOptionView[]>();
   const [variantBatch, setVariantBatch] = useState<VariantBatchProgress>();
   const variantDesignsRef = useRef(
-    new Map<string, { presetId: string; concept: DeckConcept; design: AiPresentationDesign }>(),
+    new Map<
+      string,
+      {
+        presetId: string;
+        concept: DeckConcept;
+        design: AiPresentationDesign;
+        /** The batch's pictures, reused when this version is kept. */
+        visualAssets?: readonly GeneratedVisualAsset[];
+      }
+    >(),
   );
   /** 方向门：两个真实预览，等用户选择或跳过。 */
   const [directionOptions, setDirectionOptions] = useState<DirectionOptionView[]>();
@@ -2396,13 +2425,20 @@ export function useAppRuntime() {
    * `prepared` is how the variant batch re-enters this pipeline without paying
    * for a second design pass: the chosen variant already has its design, so the
    * gate, the concept call and the design call are skipped and everything after
-   * them (pictures, quality stage, project write) still runs unchanged.
+   * them (pictures, quality stage, project write) still runs unchanged. The
+   * batch's pictures ride along too, so keeping a version does not pay for the
+   * same photographs a second time.
    */
   const generateFromDraft = async (
     mode: "template" | "preset" = "template",
     draftOverride?: AiDraft,
     historyIdOverride?: string,
-    prepared?: { presetId: string; concept: DeckConcept; design: AiPresentationDesign },
+    prepared?: {
+      presetId: string;
+      concept: DeckConcept;
+      design: AiPresentationDesign;
+      visualAssets?: readonly GeneratedVisualAsset[];
+    },
     _options?: { skipDirectionGate?: boolean },
   ) => {
     const sourceDraft = draftOverride ?? aiDraft;
@@ -2774,22 +2810,34 @@ export function useAppRuntime() {
         // 内容阶段产出的配图意图是用户审核过的，它优先于设计阶段的建议。
         intents: sourceDraft.slides.map((slide) => slide.plan?.visualAsset),
       });
-      const assetTargets = assetPlan.decisions.filter((decision) => decision.enabled && decision.role).length;
+      // The batch already bought most of these photographs. Regenerating the
+      // pages it covered would charge the user twice for the same picture; the
+      // pages it did not cover are topped up here.
+      const preparedAssets = prepared?.visualAssets ?? [];
+      const coveredPages = new Set(preparedAssets.map((asset) => asset.slideIndex));
+      const topUp = planAssetTopUp({ decisions: assetPlan.decisions, covered: coveredPages });
+      const assetTargets = topUp.targets;
       if (assetTargets > 0) {
         setDesignProgress({ percent: 76, label: "正在生成页面配图" });
         setDesignDetail(`配图 0/${assetTargets}`);
       }
-      const visualAssets = await generateDeckVisualAssets({
-        decisions: assetPlan.decisions,
-        prompts: assetPlan.prompts,
-        onProgress: (completed, total) => {
-          setDesignProgress({
-            percent: 76 + Math.round((6 * completed) / Math.max(1, total)),
-            label: "正在生成页面配图",
-          });
-          setDesignDetail(`配图 ${completed}/${total}`);
-        },
-      });
+      const visualAssets =
+        assetTargets === 0
+          ? [...preparedAssets]
+          : [
+              ...preparedAssets,
+              ...(await generateDeckVisualAssets({
+                decisions: topUp.decisions,
+                prompts: assetPlan.prompts,
+                onProgress: (completed, total) => {
+                  setDesignProgress({
+                    percent: 76 + Math.round((6 * completed) / Math.max(1, total)),
+                    label: "正在生成页面配图",
+                  });
+                  setDesignDetail(`配图 ${completed}/${total}`);
+                },
+              })),
+            ];
       setDesignProgress({ percent: 82, label: "正在准备导出与评审" });
       setDesignDetail("配图与底图测量已完成，开始导出 PPTX");
       const generationCommand: DocumentCommand = {
@@ -2861,19 +2909,7 @@ export function useAppRuntime() {
               colors: analysis.themeColors.map((color) => ({ name: color.name, value: color.value })),
             },
         backgroundRhythm: visualGoal.backgroundRhythm,
-        visualAssets: visualAssets.map((asset) => ({
-          slideIndex: asset.slideIndex,
-          dataUrl: asset.dataUrl,
-          mimeType:
-            asset.mimeType === "image/jpeg"
-              ? "image/jpeg"
-              : asset.mimeType === "image/webp"
-                ? "image/webp"
-                : "image/png",
-          naturalWidth: asset.naturalWidth,
-          naturalHeight: asset.naturalHeight,
-          altText: asset.altText,
-        })),
+        visualAssets: toDocumentAssets(visualAssets),
       };
       const buildFinalDocument = (designs: AiSlideDesign[]) => {
         const candidate = structuredClone(document);
@@ -3133,6 +3169,41 @@ export function useAppRuntime() {
    * real local rendering per version, so every card is a deck that exists —
    * picking one continues into the normal pipeline instead of re-generating.
    */
+  /**
+   * The pictures one batch uses on every card.
+   *
+   * Planned from the reviewed content and the first card's design: the prompts
+   * come from the content stage's intents, so all eight cards ask for the same
+   * picture. Generating per variant would buy the same photo eight times, and
+   * generating none left the cards half empty — the picture is half the page.
+   * Failures return what succeeded: a card without a picture still renders, and
+   * the preview falls back to a placeholder.
+   */
+  const generateVariantAssets = async (
+    draft: AiDraft,
+    designs: readonly AiSlideDesign[],
+  ): Promise<GeneratedVisualAsset[]> => {
+    const plan = planVisualAssets({
+      designs,
+      itemCounts: draft.slides.map((slide) => countSlidePoints(slide)),
+      deterministicBlocks: draft.slides.map((slide) =>
+        (slide.blocks ?? []).some(
+          (block) => block.type !== "paragraph" && block.type !== "bullet-list" && block.type !== "quote",
+        ),
+      ),
+      topic: draft.title,
+      intents: draft.slides.map((slide) => slide.plan?.visualAsset),
+    });
+    const targets = plan.decisions.filter((decision) => decision.enabled && decision.role).length;
+    if (targets === 0) return [];
+    setDesignDetail(`正在生成整册配图 0/${targets}`);
+    return generateDeckVisualAssets({
+      decisions: plan.decisions,
+      prompts: plan.prompts,
+      onProgress: (completed, total) => setDesignDetail(`正在生成整册配图 ${completed}/${total}`),
+    });
+  };
+
   const generateVariantBatch = async (count: number) => {
     const sourceDraft = aiDraft;
     if (!sourceDraft || sourceDraft.slides.length === 0) {
@@ -3213,6 +3284,19 @@ export function useAppRuntime() {
       const baseline = createDocument();
       applyCommand(baseline, { type: "apply-ai-draft", title: sourceDraft.title, slides: sourceDraft.slides });
       const variants: VariantOptionView[] = [];
+      // Pass 1: the designs. Pass 2 renders cards from them, after the batch's
+      // pictures exist — a card has to show the deck the user will keep, and the
+      // picture is half of that page.
+      const pending: Array<{
+        id: string;
+        presetId: string;
+        concept: DeckConcept;
+        design: AiPresentationDesign;
+        name: string;
+        description: string;
+        reason: string;
+        issueCount: number;
+      }> = [];
       let failed = 0;
       for (const [index, choice] of plan.entries()) {
         if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
@@ -3224,7 +3308,7 @@ export function useAppRuntime() {
         const variantConcept = conceptForSkeleton(variantConceptPresetId(concept.preset, index));
         const skeletonLabel = CONCEPT_PRESET_LABELS[variantConcept.preset];
         setDesignProgress({
-          percent: 8 + Math.round((86 * index) / plan.length),
+          percent: 8 + Math.round((78 * index) / plan.length),
           label: `正在排第 ${index + 1}/${plan.length} 个版本`,
         });
         setDesignDetail(`「${preset.name}」· ${skeletonLabel} · ${choice.reason}`);
@@ -3250,42 +3334,89 @@ export function useAppRuntime() {
             // issue count is measured on the composition the user sees.
             backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
           });
-          const issues = validatePresentationVisualQuality(candidate, design.slides).issues;
-          const pages = buildDirectionPreviewPages({
-            document: baseline,
-            concept: variantConcept,
-            pageIndexes: previewIndexes,
-            designs: previewIndexes.map((pageIndex) => design.slides[pageIndex]!),
-            // The card keeps the picture slots the design asked for: without
-            // them the page shows the white half the photo was going to fill.
-            commandBase: { themePresetId: preset.id, visualAssets: buildPreviewAssets(design.slides) },
-            title: sourceDraft.title,
-          });
-          const rendered = await Promise.all(
-            pages.map(async (page) => (await renderPresentationForVisualReview(page.document, 640)).slides[0]),
-          );
-          const id = crypto.randomUUID();
-          variantDesignsRef.current.set(id, { presetId: preset.id, concept: variantConcept, design });
-          variants.push({
-            id,
+          pending.push({
+            id: crypto.randomUUID(),
             presetId: preset.id,
+            concept: variantConcept,
+            design,
             name: `${preset.name} · ${skeletonLabel}`,
             description: preset.description,
             reason: choice.reason,
-            images: rendered.filter((image): image is string => image !== undefined),
-            pageCount: sourceDraft.slides.length,
-            issueCount: issues.length,
+            issueCount: validatePresentationVisualQuality(candidate, design.slides).issues.length,
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           if (designCancelRef.current || message.includes("CANCELLED")) throw error;
           failed += 1;
-          // One version that fails to render must not take the batch with it;
+          // One version that fails to design must not take the batch with it;
           // which template failed is the only way to tell a bad design from a
           // renderer gap later.
           void recordAppError("批量版本生成", error, { preset: preset.id });
         }
-        setVariantBatch({ total: plan.length, completed: variants.length + failed, failed });
+        setVariantBatch({ total: plan.length, completed: pending.length + failed, failed });
+      }
+
+      // The pictures are bought once for the whole batch, then every card and
+      // the kept deck reuse them: the prompt comes from the reviewed content,
+      // so eight variants would ask for the same photo eight times.
+      if (pending.length > 0) {
+        setDesignProgress({ percent: 88, label: "正在生成整册配图" });
+        const batchAssets = await generateVariantAssets(sourceDraft, pending[0]!.design.slides).catch(
+          (error: unknown) => {
+            void recordAppError("批量配图", error, { variants: pending.length });
+            return [];
+          },
+        );
+        const assetsByPage = batchAssets.length > 0 ? batchAssets : undefined;
+
+        // Pass 2: the cards.
+        for (const [index, entry] of pending.entries()) {
+          if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+          setDesignProgress({ percent: 92 + Math.round((6 * index) / pending.length), label: "正在渲染预览" });
+          setDesignDetail(`渲染「${entry.name}」的封面与正文页`);
+          try {
+            const pages = buildDirectionPreviewPages({
+              document: baseline,
+              concept: entry.concept,
+              pageIndexes: previewIndexes,
+              designs: previewIndexes.map((pageIndex) => entry.design.slides[pageIndex]!),
+              // 真实配图优先；没有图的页退回占位块，构图照样成立。
+              commandBase: {
+                themePresetId: entry.presetId,
+                visualAssets: assetsByPage ? toDocumentAssets(assetsByPage) : buildPreviewAssets(entry.design.slides),
+              },
+              title: sourceDraft.title,
+            });
+            const rendered = await Promise.all(
+              pages.map(async (page) => (await renderPresentationForVisualReview(page.document, 640)).slides[0]),
+            );
+            variantDesignsRef.current.set(entry.id, {
+              presetId: entry.presetId,
+              concept: entry.concept,
+              design: entry.design,
+              visualAssets: assetsByPage,
+            });
+            variants.push({
+              id: entry.id,
+              presetId: entry.presetId,
+              name: entry.name,
+              description: entry.description,
+              reason: entry.reason,
+              images: rendered.filter((image): image is string => image !== undefined),
+              pageCount: sourceDraft.slides.length,
+              issueCount: entry.issueCount,
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (designCancelRef.current || message.includes("CANCELLED")) throw error;
+            failed += 1;
+            void recordAppError("批量版本渲染", error, { preset: entry.presetId });
+          }
+          // The batch is one design pass plus one render pass over the same
+          // cards, so the count of finished versions must not restart at zero
+          // when the second pass begins.
+          setVariantBatch({ total: plan.length, completed: pending.length + failed, failed });
+        }
       }
       if (variants.length === 0) {
         setDesignProgress({ percent: 0, label: "批量生成失败" });
@@ -3351,9 +3482,9 @@ export function useAppRuntime() {
   /**
    * 整册预览：把这一版已经排好的设计重新应用到已审核草稿，逐页渲染。
    *
-   * 只读路径。设计数据在 ref 里，重放一次比常驻六份整册文档省内存；不用预览
-   * 结果写项目、不动 revision，也不补配图。渲染宽度取 960：够看清版式与断行，
-   * 又不至于让一册二十页的 data URL 压满内存。
+   * 只读路径。设计数据在 ref 里，重放一次比常驻八份整册文档省内存；不用预览
+   * 结果写项目、不动 revision。批量已经买过的配图直接用上，缺图的页退回占位块；
+   * 渲染宽度取 960：够看清版式与断行，又不至于让一册二十页的 data URL 压满内存。
    */
   const renderVariantPreview = async (id: string) => {
     const variant = variantDesignsRef.current.get(id);
@@ -3369,8 +3500,11 @@ export function useAppRuntime() {
       themePresetId: variant.presetId,
       // 与批量生成、与最终保留的那一版使用同一套背景节奏。
       backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
-      // 配图位用占位块，而不是留白：这一版真正的构图里，那块地方是要放图的。
-      visualAssets: buildPreviewAssets(variant.design.slides),
+      // 批量生成的真图优先；没有图的页用占位块，而不是留白。
+      visualAssets:
+        variant.visualAssets && variant.visualAssets.length > 0
+          ? toDocumentAssets(variant.visualAssets)
+          : buildPreviewAssets(variant.design.slides),
     });
     if (preview.slides.length === 0) throw new Error("VARIANT_PREVIEW_MISSING");
     return renderPresentationPages(preview, 960);

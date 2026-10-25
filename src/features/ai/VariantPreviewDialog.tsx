@@ -109,7 +109,7 @@ export function VariantPreviewDialog({
               <h2 id="variant-preview-title">{option.name} · 整册预览</h2>
               <p>
                 同一份已审核内容 · 共 {option.pageCount} 页 · 第 {currentPage + 1} / {totalPages} 页 ·
-                配图位以占位块显示
+                配图与成品一致（缺图页为占位块）
               </p>
             </div>
           </div>

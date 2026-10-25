@@ -125,6 +125,28 @@ export interface VisualAssetDecision {
 }
 
 /**
+ * The pages a deck still has to buy pictures for.
+ *
+ * A variant batch generates the deck's pictures once and hands them to the kept
+ * version. Re-running the whole plan there would buy the same photograph twice
+ * and replace it with a different one; running only the missing pages keeps the
+ * batch's pictures and still fills the pages the batch did not cover.
+ */
+export function planAssetTopUp(input: {
+  decisions: readonly VisualAssetDecision[];
+  /** Page indexes that already have a picture. */
+  covered: ReadonlySet<number>;
+}): { decisions: VisualAssetDecision[]; targets: number } {
+  let targets = 0;
+  const decisions = input.decisions.map((decision, index) => {
+    if (!decision.enabled || !decision.role || input.covered.has(index)) return { enabled: false };
+    targets += 1;
+    return decision;
+  });
+  return { decisions, targets };
+}
+
+/**
  * 内容阶段产出的配图意图。
  *
  * 它比设计阶段的建议更可信：用户在审核页看过、改过。设计阶段只是兜底。
