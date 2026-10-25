@@ -24,6 +24,28 @@
       }
     },
     {
+      "name": "focal-string-shorthand",
+      "expect": "accepted",
+      "output": {
+        "slides": [
+          {
+            "layout": "title-body",
+            "background": "#FFFFFF",
+            "accent": "#3366CC",
+            "titleColor": "#111111",
+            "bodyColor": "#333333",
+            "designPlan": {
+              "role": "claim",
+              "composition": { "primitive": "stack" },
+              "density": "normal",
+              "templatePolicy": "use",
+              "focal": "title"
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "missing-body-color",
       "expect": "rejected",
       "output": {

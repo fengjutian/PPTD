@@ -403,6 +403,8 @@ const aiDesignRecipeIds = [
   "section-statement",
 ] as const;
 
+const DESIGN_PLAN_FOCAL_KINDS = ["title", "number", "image", "chart", "none"] as const;
+
 export const pageDesignPlanSchema = z.object({
   role: z.enum(["cover", "section", "claim", "comparison", "process", "timeline", "quote", "summary"]),
   composition: z.object({
@@ -415,13 +417,29 @@ export const pageDesignPlanSchema = z.object({
   typeScale: z.enum(["compact", "normal", "expressive"]).optional(),
   templatePolicy: z.enum(["use", "takeover", "ignore"]),
   recipe: z.enum(aiDesignRecipeIds).optional(),
-  focal: z
-    .object({
-      kind: z.enum(["title", "number", "image", "chart", "none"]),
-      blockId: z.string().max(120).optional(),
-      brief: z.string().max(600).optional(),
-    })
-    .optional(),
+  /**
+   * The first visual entry of the page.
+   *
+   * The design prompt exposes two fields with the same word: the page-level
+   * `focal` enum (`title` / `index` / `body`) and this object. Models
+   * occasionally write the enum shorthand here. A string matching a focal kind
+   * is normalised; layer names are dropped instead of failing the whole page
+   * (and, with it, the four-direction gate).
+   */
+  focal: z.preprocess(
+    (value) => {
+      if (typeof value !== "string") return value;
+      const kind = DESIGN_PLAN_FOCAL_KINDS.find((candidate) => candidate === value);
+      return kind ? { kind } : undefined;
+    },
+    z
+      .object({
+        kind: z.enum(DESIGN_PLAN_FOCAL_KINDS),
+        blockId: z.string().max(120).optional(),
+        brief: z.string().max(600).optional(),
+      })
+      .optional(),
+  ),
   chart: z
     .object({
       kind: z.enum(["column", "bar", "line", "pie"]),

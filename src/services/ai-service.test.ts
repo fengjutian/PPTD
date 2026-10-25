@@ -244,6 +244,59 @@ describe("AI structured outputs", () => {
     });
   });
 
+  it("normalises a string designPlan.focal instead of failing the page", () => {
+    const designPlan = {
+      role: "claim" as const,
+      composition: { primitive: "stack" as const },
+      density: "normal" as const,
+      templatePolicy: "use" as const,
+    };
+    const title = aiPresentationDesignSchema.parse({
+      slides: [
+        {
+          layout: "cards",
+          background: "#FFFFFF",
+          accent: "#1F4E79",
+          titleColor: "#12233D",
+          bodyColor: "#465368",
+          designPlan: { ...designPlan, focal: "title" },
+        },
+      ],
+    });
+    // The page-level focal enum is the field the model meant; the plan object
+    // gets the equivalent kind instead of rejecting the whole design.
+    expect(title.slides[0]?.designPlan?.focal).toEqual({ kind: "title" });
+
+    const number = aiPresentationDesignSchema.parse({
+      slides: [
+        {
+          layout: "cards",
+          background: "#FFFFFF",
+          accent: "#1F4E79",
+          titleColor: "#12233D",
+          bodyColor: "#465368",
+          designPlan: { ...designPlan, focal: "number" },
+        },
+      ],
+    });
+    expect(number.slides[0]?.designPlan?.focal).toEqual({ kind: "number" });
+
+    const body = aiPresentationDesignSchema.parse({
+      slides: [
+        {
+          layout: "cards",
+          background: "#FFFFFF",
+          accent: "#1F4E79",
+          titleColor: "#12233D",
+          bodyColor: "#465368",
+          designPlan: { ...designPlan, focal: "body" },
+        },
+      ],
+    });
+    // A typographic layer name is not a focal object; drop the hint, keep the page.
+    expect(body.slides[0]?.designPlan?.focal).toBeUndefined();
+  });
+
   it("accepts the process and comparison recipes", () => {
     for (const recipe of ["process-rail", "comparison"] as const) {
       const design = aiPresentationDesignSchema.parse({

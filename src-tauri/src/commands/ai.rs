@@ -1739,7 +1739,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - 有 table 内容块的页面不选配方；有 comparison 优先 comparison，有 process 优先 process-rail，有 timeline 优先 timeline-rail，有 metric 优先 data-story。
 - 结尾总结页暂不选配方；section 页优先 section-statement。
 - 封面优先 cover-statement；section 优先 section-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 timeline 优先 timeline-rail；有 quote 且 layout=quote 优先 quote-field；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
-- variant 只能是 left 或 right；focal 只能是 title、index 或 body；不确定就省略。
+- variant 只能是 left 或 right；页面级 focal 只能是 title、index 或 body；不确定就省略。
 
 【设计计划 designPlan（可选，优先于逐块微调）】
 当页面正文落在模板的卡片/网格里，文字被卡片几何限制，或整页只是等权卡片时，可以给该页一个 designPlan：
@@ -1749,7 +1749,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - typeScale 可选：compact、normal、expressive；只表达字阶意图，具体字号由代码换算并夹取，不要输出点数。
 - templatePolicy：use 表示填模板占位；takeover 表示保留模板页眉/Logo/页脚，但用干净内容面覆盖正文卡片后重新构图；ignore 暂不使用。
 - recipe 可选，必须是已实现配方；designPlan 存在时由编译器决定几何，recipe 只是首选。
-- focal 只描述第一视觉入口（title/number/image/chart/none），不输出坐标；编译器只把 title 映射为标题层，其余映射为正文层。
+- designPlan.focal 必须是对象，不是字符串：{"kind":"title"}、{"kind":"number"}、{"kind":"image"}、{"kind":"chart"} 或 {"kind":"none"}；可选 blockId、brief。不要把它写成 title/index/body，那是页面级 focal 的取值。它只描述第一视觉入口，不输出坐标；编译器只把 title 映射为标题层，其余映射为正文层。
 - 数据页先判断 chart.relation：proportion（占整体的份额）、change（随时间变化）、composition（由哪些部分组成）、comparison（类别之间对比）、magnitude（量级大小）；再给 chart.kind：proportion/composition 用 pie（≤5 类）或 bar，change 用 line，comparison/magnitude 用 column/bar。kind 与 relation 不匹配时编译器会改用关系对应的图型；数据仍来自 metric 内容块，不得在 designPlan 里写数值。
 - 只有正文页使用 takeover；封面、章节、引文页不要 takeover。
 示例：
