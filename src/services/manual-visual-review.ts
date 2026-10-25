@@ -5,6 +5,7 @@ import type { PresentationVisualGoal, VisualReview } from "./visual-alignment";
 import {
   checkTemplateFit,
   templateFitVisualIssues,
+  templateTargetForPrompt,
   type TemplateFitReport,
   type TemplateReviewTarget,
 } from "./template-review-target";
@@ -74,12 +75,13 @@ export async function runManualVisualReview(options: {
   const batches: number[][] = [];
   for (let start = 0; start < reviewedIndexes.length; start += BATCH_SIZE)
     batches.push(reviewedIndexes.slice(start, start + BATCH_SIZE));
+  const promptTemplate = options.template ? templateTargetForPrompt(options.template, options.document) : undefined;
   const [pageOutcomes, deckOutcome] = await Promise.all([
     Promise.all(
       batches.map((indexes) =>
         options.vision.review(render, options.goal, indexes, options.taskId, {
           includeContactSheet: false,
-          ...(options.template === undefined ? {} : { template: options.template }),
+          ...(promptTemplate === undefined ? {} : { template: promptTemplate }),
         }),
       ),
     ),
@@ -87,11 +89,13 @@ export async function runManualVisualReview(options: {
       render,
       options.goal,
       options.taskId,
-      options.template === undefined ? undefined : { template: options.template },
+      promptTemplate === undefined ? undefined : { template: promptTemplate },
     ),
   ]);
   const merged = mergeManualReviews(pageOutcomes, deckOutcome);
-  const templateFit = options.template ? checkTemplateFit(options.document, options.template) : undefined;
+  const templateFit = options.template
+    ? checkTemplateFit(options.document, options.template, reviewedIndexes)
+    : undefined;
   return {
     review: templateFit
       ? {

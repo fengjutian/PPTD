@@ -21,6 +21,7 @@ import {
 import {
   checkTemplateFit,
   templateFitVisualIssues,
+  templateTargetForPrompt,
   templateTargetForSlide,
   type TemplateFitReport,
   type TemplateReviewTarget,
@@ -448,6 +449,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         // content bounds and placeholder type size against the uploaded
         // template, so a generous model cannot talk the deck past the template.
         const templateFit = options.template ? checkTemplateFit(document, options.template) : undefined;
+        const promptTemplate = options.template ? templateTargetForPrompt(options.template, document) : undefined;
         // 优先评审真实导出的 PPTX。画布渲染是近似值：PowerPoint 自行断行，
         // 字体度量与估算略有出入，图表和表格更是由 PowerPoint 自己画的。
         // 只有真实渲染走不通时才退回画布预览。
@@ -559,7 +561,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
           return options.vision.review(render, goal, plan.indexes, options.taskId, {
             // 有专门的整册评审时，逐页批次不再重复上传缩略图。
             includeContactSheet: !hasDeckReview && batchIndex === 0,
-            ...(options.template === undefined ? {} : { template: options.template }),
+            ...(promptTemplate === undefined ? {} : { template: promptTemplate }),
           });
         });
         const deckReview = options.vision.reviewDeck
@@ -567,7 +569,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               render,
               goal,
               options.taskId,
-              options.template === undefined ? undefined : { template: options.template },
+              promptTemplate === undefined ? undefined : { template: promptTemplate },
             )
           : undefined;
         const outcomes = await Promise.allSettled([...pageReviews, ...(deckReview ? [deckReview] : [])]);
@@ -703,6 +705,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         options.onProgress?.("视觉评审已收到问题，正在生成修复计划", roundBase(currentIteration) + 7);
         // 修复计划由模型出，模型需要知道每页的标题和当前版式才能决定改什么。
         const document = options.buildDocument(current);
+        const promptTemplate = options.template ? templateTargetForPrompt(options.template, document) : undefined;
         const deck = current.map((design, index) => ({
           index,
           title: document.slides[index]?.content.title ?? "",
@@ -711,7 +714,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
         }));
         const plan = await options.vision.planRepairs(review, goal, {
           deck,
-          ...(options.template === undefined ? {} : { template: options.template }),
+          ...(promptTemplate === undefined ? {} : { template: promptTemplate }),
           taskId: options.taskId,
         });
         // A repair plan may name any page, and a fallback plan may be broader
@@ -743,8 +746,9 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
               ...repair,
               obstacleRegions:
                 "obstacleRegions" in repair && Array.isArray(repair.obstacleRegions) ? repair.obstacleRegions : [],
+              // The command layer selects the first title action. Prepend the
+              // measured move so an earlier model resize cannot hide it.
               elementActions: [
-                ...actions,
                 {
                   action: "move" as const,
                   target: "title" as const,
@@ -755,6 +759,7 @@ export async function runDesignQualityStage(options: DesignQualityStageOptions):
                     height: resolved.grid.titleHeight,
                   },
                 },
+                ...actions,
               ],
             };
             bySlide.set(issue.slideIndex, updated);

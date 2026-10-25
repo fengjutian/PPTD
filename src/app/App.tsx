@@ -284,7 +284,6 @@ const templateFitLabels: Record<TemplateFitCode, string> = {
   "template-content-bounds": "正文超出模板内容区",
   "template-title-size": "标题字号偏离模板",
   "template-body-size": "正文字号偏离模板",
-  "template-palette": "颜色偏离模板色板",
 };
 /** The narrowest and the widest the property panel may be dragged to. */
 const INSPECTOR_MIN_WIDTH = 220;
@@ -1005,6 +1004,8 @@ export function App() {
   /** 质量门未过时保留报告，让用户决定进入编辑器调整还是稍后处理。 */
   const [designQualityReport, setDesignQualityReport] = useState<{
     templateName: string;
+    /** The uploaded template's display name, distinct from the deck title. */
+    templateTargetName?: string;
     concept?: DeckConcept;
     themeDirection?: ThemeDirection;
     themeDirectionAudit?: ThemeDirectionAudit;
@@ -3533,6 +3534,7 @@ export function App() {
       const visualBelowTarget = stage.visualPassed === false;
       const qualityReport = {
         templateName: deckName,
+        ...(templateTarget === undefined ? {} : { templateTargetName: templateTarget.name }),
         concept,
         themeDirection,
         themeDirectionAudit: auditThemeDirection(themeDirection, concept),
@@ -6338,9 +6340,10 @@ export function App() {
                 {designQualityReport.templateFit.checked ? (
                   <>
                     <p className="design-quality-notes">
-                      模板「{designQualityReport.templateName}」· {designQualityReport.templateFit.score}/100（阈值{" "}
-                      {designQualityReport.templateFit.threshold}）· {designQualityReport.templateFit.issues.length}{" "}
-                      处偏差 · 版式覆盖 {designQualityReport.templateFit.layoutCoverage}/{document.slides.length} 页
+                      模板「{designQualityReport.templateTargetName ?? designQualityReport.templateName}」·{" "}
+                      {designQualityReport.templateFit.score}/100（阈值 {designQualityReport.templateFit.threshold}）·{" "}
+                      {designQualityReport.templateFit.issues.length} 处偏差 · 版式覆盖{" "}
+                      {designQualityReport.templateFit.layoutCoverage}/{document.slides.length} 页
                       {designQualityReport.templateFit.passed ? " · 已达标" : " · 未达标"}
                     </p>
                     {designQualityReport.templateFit.issues.length === 0 ? (

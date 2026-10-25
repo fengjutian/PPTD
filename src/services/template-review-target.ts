@@ -76,7 +76,7 @@ export interface TemplateReviewTarget {
 }
 
 export type TemplateFitCode =
-  "template-title-axis" | "template-content-bounds" | "template-title-size" | "template-body-size" | "template-palette";
+  "template-title-axis" | "template-content-bounds" | "template-title-size" | "template-body-size";
 
 export interface TemplateFitIssue {
   slideIndex: number;
@@ -283,6 +283,25 @@ export function buildTemplateReviewTarget(
   };
 }
 
+/**
+ * A prompt-sized view of the target.
+ *
+ * The full target may carry every layout of a large template; the review
+ * prompt only needs the layouts this deck actually references. The
+ * deterministic checker keeps the full target, so clipping the prompt cannot
+ * weaken the acceptance check.
+ */
+export function templateTargetForPrompt(
+  target: TemplateReviewTarget,
+  document: PresentationDocument,
+  maxLayouts = 12,
+): TemplateReviewTarget {
+  const used = new Set(document.layouts?.map((layout) => layout.name) ?? []);
+  const relevant = target.layouts.filter((layout) => used.has(layout.name));
+  const layouts = (relevant.length > 0 ? relevant : target.layouts).slice(0, maxLayouts);
+  return { ...target, layouts };
+}
+
 /** The layout a slide was designed against, falling back to the deck grid. */
 export function templateTargetForSlide(
   document: PresentationDocument,
@@ -329,13 +348,22 @@ const unionRect = (rects: Array<{ x: number; y: number; width: number; height: n
  * content bounds and placeholder type size. Decorative geometry, sampled ink
  * inside artwork and visual balance stay with the vision review.
  */
-export function checkTemplateFit(document: PresentationDocument, target: TemplateReviewTarget): TemplateFitReport {
+export function checkTemplateFit(
+  document: PresentationDocument,
+  target: TemplateReviewTarget,
+  slideIndexes?: readonly number[],
+): TemplateFitReport {
   const pageWidth = document.pageSize.width;
   const pageHeight = document.pageSize.height;
+  const scope =
+    slideIndexes === undefined
+      ? undefined
+      : new Set(slideIndexes.filter((index) => Number.isInteger(index) && index >= 0));
   const issues: TemplateFitIssue[] = [];
   let checkedSlides = 0;
   let layoutCoverage = 0;
   for (const [slideIndex, slide] of document.slides.entries()) {
+    if (scope && !scope.has(slideIndex)) continue;
     const resolved = templateTargetForSlide(document, target, slideIndex);
     if (resolved.layoutName) layoutCoverage += 1;
     if (resolved.freeComposition) continue;
@@ -436,9 +464,7 @@ export function templateFitVisualIssues(report: TemplateFitReport): VisualReview
     slideIndex: issue.slideIndex,
     severity: issue.severity,
     issue:
-      issue.code === "template-title-size" || issue.code === "template-body-size" || issue.code === "template-palette"
-        ? "theme-mismatch"
-        : "misalignment",
+      issue.code === "template-title-size" || issue.code === "template-body-size" ? "theme-mismatch" : "misalignment",
     elementIds: issue.elementIds,
     suggestion: issue.suggestion,
     code: issue.code,

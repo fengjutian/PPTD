@@ -25,6 +25,27 @@
       "expected": { "overallScore": 92 }
     },
     {
+      "name": "template-mismatch-issue",
+      "input": {
+        "overallScore": 88,
+        "hierarchyScore": 88,
+        "alignmentScore": 76,
+        "readabilityScore": 90,
+        "consistencyScore": 88,
+        "templateFitScore": 72,
+        "issues": [
+          {
+            "slideIndex": 0,
+            "severity": "warning",
+            "issue": "template-mismatch",
+            "elementIds": [],
+            "suggestion": "把标题移回模板标题区。"
+          }
+        ]
+      },
+      "expected": { "overallScore": 88 }
+    },
+    {
       "name": "legacy-review-without-concept",
       "input": {
         "overallScore": 85,

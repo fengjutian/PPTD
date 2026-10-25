@@ -683,8 +683,7 @@ export async function runVisualAlignmentLoop<T>(options: {
         review.distinctivenessScore === undefined ||
         review.distinctivenessScore >= options.goal.minimumScores.distinctiveness) &&
       (options.goal.minimumScores.templateFit === undefined ||
-        review.templateFitScore === undefined ||
-        review.templateFitScore >= options.goal.minimumScores.templateFit) &&
+        (review.templateFitScore !== undefined && review.templateFitScore >= options.goal.minimumScores.templateFit)) &&
       !review.issues.some((issue) => issue.severity === "error");
     if (reached)
       return {

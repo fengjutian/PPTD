@@ -747,7 +747,10 @@ pub async fn plan_presentation_repairs(
         None => "无（本次未使用上传模板）".into(),
     };
     let slides = serde_json::to_string(&request.slides).map_err(|_| "AI_REPAIR_REQUEST_INVALID")?;
-    if review.len() > 120_000 || goal.len() > 20_000 || template.len() > 20_000 || slides.len() > 40_000
+    if review.len() > 120_000
+        || goal.len() > 20_000
+        || template.len() > 20_000
+        || slides.len() > 40_000
     {
         return Err("AI_REPAIR_REQUEST_TOO_LARGE".into());
     }

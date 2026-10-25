@@ -762,3 +762,15 @@ P1/P2 的 ADR：0077（本地设计记忆与指纹，已创建）、0078（导�
 ### 验证
 
 - `design-contract.test.ts` 2 项通过；全量 1196 通过、1 跳过；类型检查、ESLint、生产构建通过。
+
+## 26. 模板符合度决策与回归（2026-10-25）
+
+- 新增 ADR 0086：模板符合度是确定性测量，不是模型评分；记录目标编译、自由构图、四类偏差、分数公式、置信度/阈值、与评审循环合并方式。
+- 删除从未产生的 `template-palette` 错误码与界面标签，避免“永远不会出现的合同”。
+- `prompt-regression/visual-review.json` 增加 `template-mismatch` 样例，锁住问题类型与归一化。
+- `template-review-target.test.ts` 覆盖网格/字号/轴语言、无占位、通过、标题偏移、正文越界、自由构图、目标阈值继承。
+
+### 验证
+
+- `prompt-regression.test.ts` 15 项、`template-review-target.test.ts` 7 项通过。
+- 全量：1199 通过、1 跳过；类型检查、ESLint、生产构建通过。
