@@ -431,6 +431,52 @@ describe("cover-statement recipe", () => {
     expect(coverStatement.supports(facts(), concept(), { hasArtwork: false, hasAsset: false })).toBe(false);
   });
 
+  it("splits a topic：conclusion title into an eyebrow and a headline", () => {
+    const pageContent = {
+      title: "Alphabet 2023 年报：广告基本盘与 AI 第二曲线同时加速",
+      body: "广告基本盘稳固，云与 AI 重塑增长路径",
+      speakerNotes: "",
+      status: "approved" as const,
+    };
+    const result = plan(
+      coverStatement,
+      context(pageContent, { facts: facts({ layout: "cover", itemCount: 1 }) }),
+    );
+    const texts = result.elements.filter((element): element is TextElement => element.type === "text");
+    const headline = texts.find((element) => element.contentRef === "title")!;
+    const eyebrow = texts.find((element) => element.contentRef === undefined && element.text.startsWith("Alphabet"))!;
+    expect(eyebrow.text).toBe("Alphabet 2023 年报");
+    expect(headline.text).toBe("广告基本盘与 AI 第二曲线同时加速");
+    // The headline is a view of the same reviewed title: editing it writes back
+    // into this range instead of replacing the whole field.
+    expect(headline.contentRange).toEqual({
+      start: pageContent.title.indexOf("：") + 1,
+      end: pageContent.title.length,
+    });
+    // The eyebrow sits above the headline and is set smaller.
+    expect(eyebrow.frame.y).toBeLessThan(headline.frame.y);
+    expect(eyebrow.style.fontSizePt).toBeLessThan(headline.style.fontSizePt);
+    expect(headline.frame.y + headline.frame.height).toBeLessThanOrEqual(Math.round(0.62 * page.height) + 1);
+  });
+
+  it("keeps one title when there is no topic label to lift", () => {
+    const pageContent = {
+      title: "年度销售汇报",
+      body: "2026 财年 · 董事会",
+      speakerNotes: "",
+      status: "approved" as const,
+    };
+    const result = plan(
+      coverStatement,
+      context(pageContent, { facts: facts({ layout: "cover", itemCount: 1 }) }),
+    );
+    const texts = result.elements.filter((element): element is TextElement => element.type === "text");
+    const titles = texts.filter((element) => element.contentRef === "title");
+    expect(titles).toHaveLength(1);
+    expect(titles[0]!.text).toBe("年度销售汇报");
+    expect(titles[0]!.contentRange).toBeUndefined();
+  });
+
   it("paints the brand panel on a dark page instead of the light accent ink", () => {
     const pageContent = {
       title: "年度销售汇报",

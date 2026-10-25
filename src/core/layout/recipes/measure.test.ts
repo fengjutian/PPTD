@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { emu, inches } from "../../document-model";
+import { breakIntoLines } from "../../rendering/cjk-linebreak";
+import { measureTextWidthEm } from "../../rendering/text-fit";
 import {
   fittedFontSize,
   fittedFontSizeInRange,
+  fittedFontSizeWithoutOrphan,
   frameFromNormalized,
   rectsOverlap,
   ruleHeight,
@@ -61,5 +64,19 @@ describe("recipe measurement", () => {
     const c = { x: emu(200), y: emu(0), width: emu(100), height: emu(100) };
     expect(rectsOverlap(a, b)).toBe(true);
     expect(rectsOverlap(a, c)).toBe(false);
+  });
+
+  it("shrinks a headline until its last line is not a single character", () => {
+    const frame = { x: emu(0), y: emu(0), width: inches(6), height: inches(1.6) };
+    const headline = "广告基本盘与 AI 第二曲线同时加速";
+    const plain = fittedFontSize(headline, frame, 48, 24, "Microsoft YaHei", 1.25);
+    const balanced = fittedFontSizeWithoutOrphan(headline, frame, 48, 24, "Microsoft YaHei", 1.25);
+    expect(balanced).toBeLessThanOrEqual(plain);
+    // Whatever size it lands on, the break it produces keeps a readable tail.
+    const lines = breakIntoLines(headline, {
+      widthEm: frame.width / 12_700 / balanced,
+      widthOf: (character) => measureTextWidthEm(character, "Microsoft YaHei"),
+    });
+    expect((lines[lines.length - 1] ?? "").length).toBeGreaterThanOrEqual(3);
   });
 });

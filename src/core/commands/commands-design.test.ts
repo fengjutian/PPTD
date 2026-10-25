@@ -1096,6 +1096,72 @@ describe("commands 3", () => {
     }
   });
 
+  it("edits a split cover headline without dropping the topic", () => {
+    const source = createDocument();
+    const content = {
+      title: "Alphabet 2023 年报：广告基本盘与 AI 第二曲线同时加速",
+      body: "广告基本盘稳固，云与 AI 重塑增长路径",
+      speakerNotes: "",
+    };
+    const design = {
+      layout: "cover" as const,
+      background: "#FFFFFF",
+      accent: "#1F4E79",
+      titleColor: "#FFFFFF",
+      bodyColor: "#FFFFFF",
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultEditorialConcept(),
+      pageFacts: [
+        {
+          itemCount: 0,
+          shortItems: false,
+          longestItemLength: 0,
+          bodyLength: 20,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "cover",
+        },
+      ],
+      pageCount: 1,
+      id: "cover-split",
+    }).concept;
+    const built = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "封面",
+        slides: [content],
+        designs: [design],
+        designConcept: concept,
+      }),
+    );
+    const slide = built.slides[0]!;
+    const headline = slide.elements.find(
+      (element): element is TextElement => element.type === "text" && element.contentRef === "title",
+    )!;
+    expect(headline.text).toBe("广告基本盘与 AI 第二曲线同时加速");
+    expect(headline.contentRange).toBeDefined();
+    const edited = produce(built, (draft) =>
+      applyCommand(draft, {
+        type: "edit-text",
+        slideId: slide.id,
+        elementId: headline.id,
+        text: "云与 AI 重塑增长路径",
+      }),
+    );
+    const next = edited.slides[0]!;
+    // The fragment writes back into its own range: the topic survives the edit.
+    expect(next.content.title).toBe("Alphabet 2023 年报：云与 AI 重塑增长路径");
+    const nextHeadline = next.elements.find(
+      (element): element is TextElement => element.type === "text" && element.contentRef === "title",
+    )!;
+    expect(nextHeadline.contentRange).toEqual({
+      start: 17,
+      end: "Alphabet 2023 年报：云与 AI 重塑增长路径".length,
+    });
+  });
+
   it("keeps a cover title readable when the template probe describes artwork that is not painted", () => {
     const source = createDocument();
     const content = {

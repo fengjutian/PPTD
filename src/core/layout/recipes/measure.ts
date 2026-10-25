@@ -1,5 +1,7 @@
 import type { Emu, RectEmu } from "../../document-model";
 import { estimateTextLines } from "../../rendering/text-fit";
+import { breakIntoLines } from "../../rendering/cjk-linebreak";
+import { measureTextWidthEm } from "../../rendering/text-fit";
 import type { NormalizedFrame } from "./types";
 
 /** One point in EMU. */
@@ -92,6 +94,40 @@ export function fittedFontSizeInRange(
     if (textFits(text, frame, size, fontFamily, lineHeight)) return size;
   }
   return minimum;
+}
+
+/**
+ * The largest size that does not leave an orphan on the last line.
+ *
+ * A two-line headline whose second line holds a single character reads as a
+ * mistake, and that is exactly what a fitted size can produce: the size is the
+ * largest that fits, not the one that breaks well. A point or two smaller
+ * usually balances the break; a headline that is slightly smaller beats one with
+ * a stranded character.
+ */
+export function fittedFontSizeWithoutOrphan(
+  text: string,
+  frame: RectEmu,
+  preferredPt: number,
+  minimumPt: number,
+  fontFamily: string | undefined,
+  lineHeight: number,
+  minimumLastLineChars = 3,
+): number {
+  let size = fittedFontSize(text, frame, preferredPt, minimumPt, fontFamily, lineHeight);
+  const widthPt = frame.width / EMU_PER_PT;
+  const linesAt = (candidate: number): string[] =>
+    breakIntoLines(text, {
+      widthEm: Math.max(1, widthPt / candidate),
+      widthOf: (character) => measureTextWidthEm(character, fontFamily),
+    });
+  while (size > minimumPt) {
+    const lines = linesAt(size);
+    const lastLine = (lines[lines.length - 1] ?? "").replace(/\s/g, "");
+    if (lines.length <= 1 || lastLine.length >= minimumLastLineChars) return size;
+    size -= 1;
+  }
+  return size;
 }
 
 export function rectsOverlap(left: RectEmu, right: RectEmu): boolean {

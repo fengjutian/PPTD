@@ -30,6 +30,13 @@ const textElement = base.extend({
       field: z.enum(["label", "value"]),
     })
     .optional(),
+  /** The slice of the bound field this element renders; see `TextElement`. */
+  contentRange: z
+    .object({
+      start: z.number().int().nonnegative(),
+      end: z.number().int().nonnegative(),
+    })
+    .optional(),
   style: z.object({
     fontFamily: z.string().min(1),
     fontSizePt: z.number().positive(),

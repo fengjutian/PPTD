@@ -4,7 +4,7 @@ import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits } from "./measure";
+import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 const PICTURE_X = 0.52;
@@ -79,7 +79,9 @@ export const imageLed: LayoutRecipe = {
     // Fitted against the body leading (conservative), rendered with the tighter
     // headline leading: the copy block gets shorter without the size growing
     // into an extra line the frame cannot hold.
-    const titleSize = fittedFontSize(
+    // A cover headline gets the orphan guard; a content title keeps the plain
+    // fit so a long claim page is not shrunk for one dangling character.
+    const titleSize = (isCover ? fittedFontSizeWithoutOrphan : fittedFontSize)(
       title,
       titleFrame,
       isCover ? Math.max(ctx.tokens.type.displayPt, 40) : ctx.tokens.type.titlePt,

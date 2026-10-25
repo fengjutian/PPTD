@@ -1,16 +1,39 @@
 import type { IntentConflict } from "../../commands/design-intent";
-import { accentPanelGradient } from "../../design/shape-gradient";
+import { accentPanelGradient, mixHex } from "../../design/shape-gradient";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits } from "./measure";
+import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 const TITLE = { y: 0.22, width: 0.78, height: 0.32 };
 const RULE = { y: 0.62, width: 0.12, height: 0.006 };
 const SUBTITLE = { y: 0.69, width: 0.58, height: 0.1 };
+/** Height of the eyebrow line above the headline, in page height. */
+const EYEBROW_HEIGHT = 0.055;
+/** The air between the eyebrow and the headline. */
+const EYEBROW_GAP = 0.02;
+/** An eyebrow longer than this is not a topic label, it is the headline. */
+const MAX_EYEBROW_CHARS = 16;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
+}
+
+/**
+ * Splits "topic：conclusion" into the two things it says.
+ *
+ * Returns `undefined` when the title has no full-width colon, when the part
+ * before it is too short to read as a label, or when it is so long that setting
+ * it small would be worse than leaving the title whole.
+ */
+function splitCoverTitle(title: string): { eyebrow: string; headline: string; headlineStart: number } | undefined {
+  const colon = title.indexOf("：");
+  if (colon <= 0) return undefined;
+  const eyebrow = title.slice(0, colon).trim();
+  const headlineStart = colon + 1;
+  const headline = title.slice(headlineStart).trim();
+  if (!headline || eyebrow.length < 2 || eyebrow.length > MAX_EYEBROW_CHARS) return undefined;
+  return { eyebrow, headline, headlineStart };
 }
 
 export const coverStatement: LayoutRecipe = {
@@ -56,28 +79,74 @@ export const coverStatement: LayoutRecipe = {
     const ruleNormalized = { x: coverTitle.x, y: RULE.y, width: RULE.width, height: RULE.height };
 
     const titleFrame = frameFromNormalized(coverTitle, page);
+    // A title written as "topic：conclusion" is two pieces of information: the
+    // topic names the deck, the conclusion is the headline. Setting both at
+    // display size is why long covers read as a wall of words. The topic becomes
+    // an eyebrow and the conclusion keeps the headline — one reviewed title, two
+    // views of it, and typing in the headline splices back into its range.
+    const split = splitCoverTitle(title);
+    const headline = split ? split.headline : title;
+    const headlineFrame = split
+      ? frameFromNormalized(
+          {
+            ...coverTitle,
+            y: coverTitle.y + EYEBROW_HEIGHT + EYEBROW_GAP,
+            height: Math.max(0.16, TITLE.height - EYEBROW_HEIGHT - EYEBROW_GAP),
+          },
+          page,
+        )
+      : titleFrame;
     // The size is fitted against the body leading, which is the conservative
     // measure: the headline renders tighter than that, so the block ends up
     // shorter than the box and never grows a line it did not have before.
-    const titleSize = fittedFontSize(
-      title,
-      titleFrame,
+    const titleSize = fittedFontSizeWithoutOrphan(
+      headline,
+      headlineFrame,
       Math.max(ctx.tokens.type.displayPt, 48),
       24,
       headingFamily,
       lineHeight,
     );
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    if (!textFits(headline, headlineFrame, titleSize, headingFamily, lineHeight)) {
       return conflict("title", "封面标题在标题框内放不下");
     }
 
     const elements: RecipePlan["elements"] = [
       rectElement(frameFromNormalized({ x: 0, y: 0, width: 1, height: 1 }, page), ctx.colors.panel, gradient),
-      textElement(title, titleFrame, titleSize, ink, true, "left", headingFamily, {
+    ];
+    if (split) {
+      const eyebrowFrameNormalized = { ...coverTitle, height: EYEBROW_HEIGHT };
+      const eyebrowFrame = frameFromNormalized(eyebrowFrameNormalized, page);
+      const eyebrowSize = fittedFontSize(
+        split.eyebrow,
+        eyebrowFrame,
+        Math.max(14, ctx.tokens.type.captionPt + 4),
+        10,
+        headingFamily,
+        lineHeight,
+      );
+      elements.push(
+        textElement(
+          split.eyebrow,
+          eyebrowFrame,
+          eyebrowSize,
+          mixHex(ink, ctx.colors.panel, 0.22),
+          false,
+          "left",
+          headingFamily,
+          {
+            lineHeight,
+          },
+        ),
+      );
+    }
+    elements.push(
+      textElement(headline, headlineFrame, titleSize, ink, true, "left", headingFamily, {
         contentRef: "title",
+        ...(split ? { contentRange: { start: split.headlineStart, end: title.length } } : {}),
         lineHeight: titleLineHeight,
       }),
-    ];
+    );
 
     if (subtitle) {
       elements.push(rectElement(frameFromNormalized(ruleNormalized, page), ink));

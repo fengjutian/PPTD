@@ -245,6 +245,16 @@ export interface TextElement extends ElementBase {
   contentRef?: TextContentRole;
   /** Links a generated card text to the content block it reproduces. */
   contentBlockRef?: TextBlockRef;
+  /**
+   * The slice of the bound field this element renders.
+   *
+   * A cover splits one reviewed title into an eyebrow and a headline: both are
+   * views of the same field, and typing in one splices its text back into that
+   * range instead of replacing the whole title. Offsets are UTF-16, the same
+   * units `String.prototype.slice` uses. Absent means the element renders the
+   * whole field, which is every document that predates the split.
+   */
+  contentRange?: { start: number; end: number };
   style: TextElementStyle;
   /** Presentation-only fragments of the text. Absent means one uniform style. */
   runs?: TextRun[];

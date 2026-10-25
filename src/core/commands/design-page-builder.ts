@@ -2341,9 +2341,15 @@ export function buildDesignedSlide(
   const bodyToken = document.theme?.textStyles?.body;
   for (const element of slide.elements) {
     if (element.type !== "text") continue;
-    if (element.text === content.title) element.contentRef = "title";
-    else if (content.body.trim() && element.text === content.body) element.contentRef = "body";
-    else element.contentRef = "decorative";
+    // A fragment of a field (the headline of a split cover) names its own field
+    // and range. The exact-match pass below would read it as decoration because
+    // its text is not the whole title; that would silently detach it from the
+    // content its edits splice back into.
+    if (!element.contentRange) {
+      if (element.text === content.title) element.contentRef = "title";
+      else if (content.body.trim() && element.text === content.body) element.contentRef = "body";
+      else element.contentRef = "decorative";
+    }
     // Display type for the headline, text type for running copy. Using the
     // template major font for both made dense body copy look heavy.
     if (element.contentRef !== "title" && bodyFontFamily) element.style.fontFamily = bodyFontFamily;

@@ -10,6 +10,8 @@ import type {
 
 interface TextOptions {
   contentRef?: TextContentRole;
+  /** The slice of the bound field this element renders; see `TextElement`. */
+  contentRange?: { start: number; end: number };
   lineHeight?: number;
   contentBlockRef?: { blockId: string; field: "label" | "value" };
 }
@@ -29,6 +31,7 @@ export function textElement(
     id: crypto.randomUUID() as ElementId,
     type: "text",
     ...(options.contentRef ? { contentRef: options.contentRef } : {}),
+    ...(options.contentRange ? { contentRange: { ...options.contentRange } } : {}),
     ...(options.contentBlockRef ? { contentBlockRef: options.contentBlockRef } : {}),
     frame,
     rotationMilliDegree: 0,

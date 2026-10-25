@@ -235,13 +235,26 @@ export function applyTextEdit(slide: Slide, element: TextElement, text: string):
   // wrong words once the copy changed. Dropping them keeps the emphasis honest
   // instead of highlighting something the reviewer did not select.
   element.runs = undefined;
+  // A fragment of a split title (the headline of a cover, say) edits its own
+  // range: replacing the whole field here would delete the part of the title
+  // that this element does not show.
+  const range = element.contentRange;
+  const splice = (field: string): string =>
+    range ? field.slice(0, range.start) + text + field.slice(range.end) : text;
   if (element.contentRef === "title" || (!element.contentRef && slide.elements[0]?.id === element.id))
-    slide.content.title = text;
+    slide.content.title = splice(slide.content.title);
   if (element.contentRef === "body") {
-    slide.content.body = text;
-    slide.content.blocks = text.trim()
-      ? [{ id: slide.content.blocks?.[0]?.id ?? crypto.randomUUID(), type: "paragraph", text }]
-      : [];
+    slide.content.body = splice(slide.content.body);
+    // A whole-body edit rebuilds the paragraph block. A fragment keeps the
+    // blocks untouched: it is a view of the field, not its source.
+    if (!range) {
+      slide.content.blocks = text.trim()
+        ? [{ id: slide.content.blocks?.[0]?.id ?? crypto.randomUUID(), type: "paragraph", text }]
+        : [];
+    }
+  }
+  if (range && element.contentRef === "title") {
+    element.contentRange = { start: range.start, end: range.start + text.length };
   }
   if (metric && blockRef) {
     // A card is a view of the metric, not a second copy of it: typing in the
@@ -383,6 +396,7 @@ export function cloneElement(element: SlideElement): SlideElement {
       frame: { ...element.frame },
       style: { ...element.style },
       ...(element.contentBlockRef ? { contentBlockRef: { ...element.contentBlockRef } } : {}),
+      ...(element.contentRange ? { contentRange: { ...element.contentRange } } : {}),
       ...(element.runs ? { runs: element.runs.map((run) => ({ ...run })) } : {}),
     };
   if (element.type === "shape") return { ...element, frame: { ...element.frame }, style: { ...element.style } };
