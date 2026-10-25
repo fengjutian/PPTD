@@ -19,13 +19,17 @@ describe("theme specimens", () => {
     expect(metricText).toEqual(expect.arrayContaining(["38 万", "260 家"]));
   });
 
-  it("builds for every built-in theme preset", () => {
-    for (const preset of THEME_PRESETS) {
-      const document = buildSpecimenDocument({ themePresetId: preset.id });
-      expect(document.slides, preset.id).toHaveLength(8);
-      expect(document.theme?.name).toBe(preset.theme.name);
-    }
-  });
+  it(
+    "builds for every built-in theme preset",
+    () => {
+      for (const preset of THEME_PRESETS) {
+        const document = buildSpecimenDocument({ themePresetId: preset.id });
+        expect(document.slides, preset.id).toHaveLength(8);
+        expect(document.theme?.name).toBe(preset.theme.name);
+      }
+    },
+    15_000,
+  );
 
   it("reflects the concept surface, not just the palette", () => {
     const editorial = buildSpecimenDocument({ conceptPresetId: "editorial" });

@@ -146,8 +146,8 @@ export function buildSpecimenDocument(options: SpecimenOptions = {}): Presentati
         slideIndex: 6,
         dataUrl: specimenImage(preset),
         mimeType: "image/png",
-        naturalWidth: 320,
-        naturalHeight: 180,
+        naturalWidth: 240,
+        naturalHeight: 135,
         altText: "门店现场示意图",
       },
     ],
@@ -181,8 +181,8 @@ function presetColor(preset: ThemePreset, slot: string, fallback: Rgb): Rgb {
  * keep it from reading as a flat colour swatch.
  */
 function specimenImage(preset: ThemePreset): string {
-  const width = 320;
-  const height = 180;
+  const width = 240;
+  const height = 135;
   const primary = presetColor(preset, "primary", [30, 53, 80]);
   const accent = presetColor(preset, "accent", [15, 120, 105]);
   const accent3 = presetColor(preset, "accent3", [214, 168, 75]);
@@ -194,8 +194,12 @@ function specimenImage(preset: ThemePreset): string {
       const ny = y / (height - 1);
       const diagonal = nx * 0.62 + (1 - ny) * 0.38;
       const base = mix(primary, accent, diagonal);
-      const highlight = Math.max(0, 1 - Math.hypot(nx - 0.76, ny - 0.22) / 0.5);
-      const warm = Math.max(0, 1 - Math.hypot(nx - 0.18, ny - 0.82) / 0.45);
+      const lightX = nx - 0.76;
+      const lightY = ny - 0.22;
+      const highlight = Math.max(0, 1 - (lightX * lightX + lightY * lightY) / 0.25);
+      const warmX = nx - 0.18;
+      const warmY = ny - 0.82;
+      const warm = Math.max(0, 1 - (warmX * warmX + warmY * warmY) / 0.2);
       const [red, green, blue] = mix(mix(base, surface, highlight * highlight * 0.35), accent3, warm * warm * 0.18);
       const offset = (y * width + x) * 4;
       data[offset] = red;

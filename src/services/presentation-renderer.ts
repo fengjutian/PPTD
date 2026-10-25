@@ -354,9 +354,13 @@ function drawCartesianChart(
   });
   context.fillStyle = withAlpha(ink, 0.78);
   context.font = `${fontSize}px "${family}"`;
-  context.textAlign = "center";
   context.textBaseline = "top";
   resolved.categories.forEach((category, index) => {
+    // On a line chart the first and last labels sit on the plot edges; aligning
+    // them inward keeps them off the value axis and inside the frame.
+    const atEdge = element.kind === "line" && resolved.categories.length > 1;
+    context.textAlign =
+      atEdge && index === 0 ? "left" : atEdge && index === resolved.categories.length - 1 ? "right" : "center";
     context.fillText(fitLabel(context, category, slot - fontSize * 0.5), xAt(index), plot.bottom + fontSize * 0.6);
   });
 
@@ -408,18 +412,24 @@ function drawCartesianChart(
     return;
   }
 
-  // Column chart: bars grow from the baseline and are capped so three months do
-  // not become three full-width blocks.
+  // Column chart: bars grow from the zero baseline and are capped so three
+  // months do not become three full-width blocks.
+  const baseline = chartValueY(0, domain, plot);
   const groupWidth = Math.min(slot * 0.62, fontSize * 7);
   const barWidth = groupWidth / resolved.series.length;
   const gap = resolved.series.length > 1 ? Math.min(3, barWidth * 0.12) : 0;
   resolved.categories.forEach((_category, categoryIndex) => {
     resolved.series.forEach((series, seriesIndex) => {
       const value = series.values[categoryIndex] ?? 0;
-      const y = chartValueY(value, domain, plot);
+      const valueY = chartValueY(value, domain, plot);
       const x = xAt(categoryIndex) - groupWidth / 2 + seriesIndex * barWidth;
       context.fillStyle = color(seriesIndex);
-      context.fillRect(x, y, Math.max(1, barWidth - gap), plot.bottom - y);
+      context.fillRect(
+        x,
+        Math.min(valueY, baseline),
+        Math.max(1, barWidth - gap),
+        Math.max(1, Math.abs(baseline - valueY)),
+      );
     });
   });
   if (element.style.showValueLabels && resolved.series.length === 1) {
@@ -429,8 +439,12 @@ function drawCartesianChart(
     context.textBaseline = "bottom";
     resolved.categories.forEach((_category, index) => {
       const value = resolved.series[0]!.values[index] ?? 0;
-      const y = chartValueY(value, domain, plot);
-      context.fillText(valueLabel(value), xAt(index), Math.max(plot.top + fontSize, y - fontSize * 0.35));
+      const valueY = chartValueY(value, domain, plot);
+      const labelY =
+        value >= 0
+          ? Math.max(plot.top + fontSize, valueY - fontSize * 0.35)
+          : Math.min(plot.bottom - fontSize * 0.2, valueY + fontSize * 1.1);
+      context.fillText(valueLabel(value), xAt(index), labelY);
     });
   }
 }
