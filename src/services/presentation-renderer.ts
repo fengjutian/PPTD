@@ -364,6 +364,31 @@ function drawCartesianChart(
     context.fillText(fitLabel(context, category, slot - fontSize * 0.5), xAt(index), plot.bottom + fontSize * 0.6);
   });
 
+  // Multi-series charts carry their names in the top gutter: a second line
+  // without a legend is a guess, not a chart.
+  if (element.style.showLegend && resolved.series.length > 1) {
+    context.font = `${fontSize * 0.9}px "${family}"`;
+    context.textBaseline = "middle";
+    context.textAlign = "right";
+    const legendY = Math.max(fontSize * 0.55, plot.top - fontSize * 0.95);
+    let cursor = plot.right;
+    for (let index = resolved.series.length - 1; index >= 0; index -= 1) {
+      const label = resolved.series[index]!.name || `系列 ${index + 1}`;
+      const labelWidth = context.measureText(label).width;
+      context.fillStyle = withAlpha(ink, 0.85);
+      context.fillText(label, cursor, legendY);
+      const swatchRight = cursor - labelWidth - fontSize * 0.35;
+      const swatchLeft = swatchRight - fontSize * 1.2;
+      context.strokeStyle = color(index);
+      context.lineWidth = Math.max(2, fontSize * 0.18);
+      context.beginPath();
+      context.moveTo(swatchLeft, legendY);
+      context.lineTo(swatchRight, legendY);
+      context.stroke();
+      cursor = swatchLeft - fontSize * 0.8;
+    }
+  }
+
   if (element.kind === "line") {
     resolved.series.forEach((series, seriesIndex) => {
       const points = series.values.map((value, index) => ({ x: xAt(index), y: chartValueY(value, domain, plot) }));

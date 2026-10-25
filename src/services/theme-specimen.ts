@@ -34,7 +34,7 @@ const slides: AiSlideDraft[] = [
   },
   {
     title: "本季度三项核心指标",
-    body: "",
+    body: "整体经营质量较上季度改善。",
     speakerNotes: "",
     blocks: [
       { type: "metric", label: "销售收入", value: "38 万" },
@@ -60,21 +60,30 @@ const slides: AiSlideDraft[] = [
   },
   {
     title: "客流与复购的变化",
-    body: "",
+    body: "客流连续三个月回升，复购同步改善。",
     speakerNotes: "",
     blocks: [
       {
         type: "chart",
         kind: "line",
         categories: ["4 月", "5 月", "6 月"],
-        values: [100, 112, 128],
+        series: [
+          { name: "客流", values: [100, 112, 128] },
+          { name: "复购", values: [92, 99, 113] },
+        ],
       },
     ],
   },
   {
     title: "门店现场",
-    body: "陈列调整后，高频品类被放到入口，复购率连续三个月上升。",
+    body: "陈列调整后，高频品类移到入口。",
     speakerNotes: "",
+    blocks: [
+      {
+        type: "bullet-list",
+        items: ["复购率连续三个月上升", "入口端动销提升 18%"],
+      },
+    ],
   },
   {
     title: "下一步",
