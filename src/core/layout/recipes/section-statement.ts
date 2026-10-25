@@ -1,5 +1,6 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { Emu } from "../../document-model";
+import { accentPanelGradient } from "../../design/shape-gradient";
 import { rectElement, textElement } from "./elements";
 import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
@@ -45,7 +46,7 @@ export const sectionStatement: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(frameFromNormalized(PANEL, page), colors.accent),
+      rectElement(frameFromNormalized(PANEL, page), colors.accent, accentPanelGradient(colors.accent)),
       textElement(
         String(ctx.page.index + 1).padStart(2, "0"),
         frameFromNormalized(NUMBER, page),

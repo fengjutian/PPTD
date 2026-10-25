@@ -79,6 +79,25 @@ const shapeElement = base.extend({
     stroke: z.string(),
     strokeWidthPt: z.number().nonnegative(),
     radiusPt: z.number().nonnegative(),
+    fillGradient: z
+      .object({
+        angleDeg: z.number().min(0).max(360),
+        stops: z
+          .array(
+            z.object({
+              offset: z.number().min(0).max(1),
+              color: hexColor,
+              transparency: z.number().min(0).max(100).optional(),
+            }),
+          )
+          .min(2)
+          .max(10)
+          .refine(
+            (stops) => stops.every((stop, index) => index === 0 || stop.offset >= stops[index - 1]!.offset),
+            "gradient stops must be ordered by offset",
+          ),
+      })
+      .optional(),
   }),
 });
 

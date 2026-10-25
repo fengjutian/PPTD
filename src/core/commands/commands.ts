@@ -856,6 +856,32 @@ function assertShapeStyle(style: Partial<ShapeElementStyle>): void {
     throw new Error("INVALID_SHAPE_STYLE");
   if (style.radiusPt !== undefined && (!Number.isFinite(style.radiusPt) || style.radiusPt < 0 || style.radiusPt > 1000))
     throw new Error("INVALID_SHAPE_STYLE");
+  const gradient = style.fillGradient;
+  if (gradient !== undefined) {
+    if (
+      !Number.isFinite(gradient.angleDeg) ||
+      gradient.angleDeg < 0 ||
+      gradient.angleDeg > 360 ||
+      !Array.isArray(gradient.stops) ||
+      gradient.stops.length < 2 ||
+      gradient.stops.length > 10
+    )
+      throw new Error("INVALID_SHAPE_STYLE");
+    let previous = -1;
+    for (const stop of gradient.stops) {
+      if (
+        !Number.isFinite(stop.offset) ||
+        stop.offset < 0 ||
+        stop.offset > 1 ||
+        stop.offset < previous ||
+        !HEX_COLOR_PATTERN.test(stop.color) ||
+        (stop.transparency !== undefined &&
+          (!Number.isFinite(stop.transparency) || stop.transparency < 0 || stop.transparency > 100))
+      )
+        throw new Error("INVALID_SHAPE_STYLE");
+      previous = stop.offset;
+    }
+  }
 }
 
 /** The style of a line is presentation-only, so it is guarded like the others. */
@@ -2359,7 +2385,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   if (command.type === "set-shape-style") {
     if (element.type !== "shape") throw new Error("ELEMENT_NOT_SHAPE");
     assertShapeStyle(command.style);
-    element.style = { ...element.style, ...command.style };
+    const next = { ...element.style, ...command.style };
+    // A new solid fill is a request to leave the gradient behind; otherwise the
+    // old gradient would keep painting over the color the user just picked.
+    if (command.style.fill !== undefined && command.style.fillGradient === undefined) delete next.fillGradient;
+    element.style = next;
     return;
   }
   if (command.type === "set-line-style") {

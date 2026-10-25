@@ -42,13 +42,16 @@ export interface ThemePresetChoice {
   reason: string;
 }
 
-/** A preset whose accent sits closer than this to one already picked is a recolour. */
-const MIN_ACCENT_HUE_GAP = 22;
-
 /** Copy longer than this per page reads as a structured, evidence-heavy deck. */
 const DENSE_COPY_PER_SLIDE = 140;
 /** Copy shorter than this per page reads as a sparse, statement-led deck. */
 const SPARSE_COPY_PER_SLIDE = 60;
+/** Two presets whose accents sit within this many degrees read as the same colour. */
+const SIMILAR_HUE_GAP = 18;
+/** How many presets of one accent family a batch may contain. */
+const MAX_PER_HUE = 2;
+/** Colourless presets form their own family; one per batch is enough. */
+const MAX_NEUTRAL_PRESETS = 1;
 
 /**
  * Ranks every built-in preset for one reviewed draft.
@@ -143,29 +146,33 @@ function reasonFor(input: ReasonInput): string {
 /**
  * Picks the presets for one batch of design variants.
  *
- * The best-scoring preset always leads. Every following pick must move the
- * accent hue at least `MIN_ACCENT_HUE_GAP` away from the presets already
- * chosen: eight decks that differ only by a shade of navy are one option shown
- * eight times, which is exactly the choice the batch is supposed to replace.
- * When the catalogue runs out of distant hues, the remaining slots fall back to
- * score order rather than returning fewer variants than asked.
+ * Relevance first, repetition second.
+ *
+ * The batch keeps the score order: it walks the ranked list and takes the next
+ * preset whose accent is not a near-duplicate of two already chosen. The cap
+ * matters because the accent wheel is clustered (five presets are blue, three
+ * are teal): a purely "most distant hue" walk filled an annual report with
+ * green, rose and red templates just because tech-blue was the second-best fit.
+ * When every remaining preset violates the cap, the best-scoring one is taken
+ * anyway — returning seven versions for an eight-version request would be a
+ * worse answer than two of them sharing a blue.
  */
 export function planThemePresetVariants(signals: ThemeContentSignals, count: number): ThemePresetChoice[] {
   const ranked = rankThemePresets(signals);
   const wanted = Math.max(1, Math.min(Math.floor(count) || 1, ranked.length));
-  const first = ranked[0];
-  if (!first) return [];
-  const picked: ThemePresetChoice[] = [first];
-  const rest = ranked.slice(1);
-  while (picked.length < wanted && rest.length > 0) {
+  const remaining = [...ranked];
+  const picked: ThemePresetChoice[] = [];
+  while (picked.length < wanted && remaining.length > 0) {
     const pickedHues = picked
-      .map((choice) => accentHue(choice.presetId))
+      .map((choice) => themePresetAccentHue(choice.presetId))
       .filter((hue): hue is number => hue !== undefined);
-    const index = rest.findIndex((choice) => {
-      const hue = accentHue(choice.presetId);
-      return hue === undefined || pickedHues.every((pickedHue) => hueDistance(pickedHue, hue) >= MIN_ACCENT_HUE_GAP);
+    const neutralCount = picked.filter((choice) => themePresetAccentHue(choice.presetId) === undefined).length;
+    const index = remaining.findIndex((choice) => {
+      const hue = themePresetAccentHue(choice.presetId);
+      if (hue === undefined) return neutralCount < MAX_NEUTRAL_PRESETS;
+      return pickedHues.filter((pickedHue) => hueDistance(pickedHue, hue) < SIMILAR_HUE_GAP).length < MAX_PER_HUE;
     });
-    const [next] = rest.splice(index >= 0 ? index : 0, 1);
+    const [next] = remaining.splice(index >= 0 ? index : 0, 1);
     if (!next) break;
     picked.push(next);
   }
@@ -189,12 +196,18 @@ export function defaultConceptIdForTheme(presetId: string): ConceptPresetId {
   return "editorial";
 }
 
-/** Accent hue of a preset, or undefined when the accent is a neutral. */
-function accentHue(presetId: string): number | undefined {
+/**
+ * The accent hue that decides whether two presets read as the same colour.
+ *
+ * A preset whose accent is a neutral has no hue to compare, so the chain keeps
+ * looking: `minimal-gray` says "almost no colour" with a near-black accent, but
+ * its brass mark is the only chromatic note on the page.
+ */
+export function themePresetAccentHue(presetId: string): number | undefined {
   const preset = findThemePreset(presetId);
   if (!preset) return undefined;
   const byName = new Map(preset.theme.colors.map((color) => [color.name, color.value]));
-  for (const slot of ["accent", "accent2", "primary"]) {
+  for (const slot of ["accent", "accent2", "accent3", "primary"]) {
     const value = byName.get(slot);
     const hsl = value ? hexToHsl(value) : undefined;
     // A grey has no meaningful hue; letting it satisfy the gap would make the

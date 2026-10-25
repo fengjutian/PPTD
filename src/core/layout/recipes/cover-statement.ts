@@ -1,4 +1,5 @@
 import type { IntentConflict } from "../../commands/design-intent";
+import { accentPanelGradient } from "../../design/shape-gradient";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
 import { fittedFontSize, frameFromNormalized, textFits } from "./measure";
@@ -75,8 +76,8 @@ export const coverStatement: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(frameFromNormalized(ACCENT_BAR, page), ctx.colors.accent),
-      rectElement(frameFromNormalized(ACCENT_PANEL, page), ctx.colors.accent),
+      rectElement(frameFromNormalized(ACCENT_BAR, page), ctx.colors.accent, accentPanelGradient(ctx.colors.accent)),
+      rectElement(frameFromNormalized(ACCENT_PANEL, page), ctx.colors.accent, accentPanelGradient(ctx.colors.accent)),
       rectElement(frameFromNormalized(ruleNormalized, page), ctx.colors.accent),
       textElement(title, titleFrame, titleSize, ctx.colors.title, true, "left", headingFamily, {
         contentRef: "title",

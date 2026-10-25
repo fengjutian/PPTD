@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { ArrowRight, Check, CircleAlert, FileUp, Palette, Sparkles, X } from "lucide-react";
 
 import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
+import { VariantGalleryDialog } from "../features/ai/VariantGalleryDialog";
 
 import type { AppRuntime } from "./app-runtime";
 import { visualIssueLabels, templateFitLabels, reviewEvidenceLabel, formatElapsed } from "./app-shared";
@@ -15,6 +17,7 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
     setTemplatePickerOpen,
     themePresetId,
     recommendedThemePreset,
+    recommendedThemeReason,
     handleSelectThemePreset,
     templateLibrary,
     selectedTemplate,
@@ -29,6 +32,12 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
     templatePreview,
     templateAnalysis,
     generateFromDraft,
+    variantOptions,
+    variantBatch,
+    generateVariantBatch,
+    chooseVariant,
+    discardVariantBatch,
+    cancelVariantBatch,
     designQualityReport,
     designQualityReportOpen,
     setDesignQualityReportOpen,
@@ -44,6 +53,9 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
     setActiveView,
     setEditorSurface,
   } = app;
+
+  const [variantCount, setVariantCount] = useState(8);
+  const batchRunning = designBusy && variantBatch !== undefined;
 
   return (
     <>
@@ -113,9 +125,55 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
               <strong>主题来源</strong>
               <span>
                 {themePresetId
-                  ? `内置 · ${findThemePreset(themePresetId)?.name ?? "主题"}${themePresetId === recommendedThemePreset.id ? "（内容匹配）" : ""}`
+                  ? `内置 · ${findThemePreset(themePresetId)?.name ?? "主题"}${themePresetId === recommendedThemePreset.id ? "（AI 推荐）" : ""}`
                   : "已上传 PPT"}
               </span>
+            </div>
+            <div className="template-picker-batch">
+              <div className="template-picker-batch-copy">
+                <Sparkles />
+                <div>
+                  <strong>不想选也行：让 AI 按内容挑 {variantCount} 套模板，一次排完再对比</strong>
+                  <small>
+                    {batchRunning && variantBatch
+                      ? `已完成 ${variantBatch.completed}/${variantBatch.total}${
+                          variantBatch.failed > 0 ? `，${variantBatch.failed} 个失败` : ""
+                        }`
+                      : "每版都是完整排版，选定一版后其余丢弃；内容不会变，约需几分钟。"}
+                  </small>
+                </div>
+              </div>
+              <div className="template-picker-batch-controls">
+                <label htmlFor="variant-count">
+                  版本数
+                  <select
+                    id="variant-count"
+                    value={variantCount}
+                    disabled={designBusy}
+                    onChange={(event) => setVariantCount(Number(event.target.value))}
+                  >
+                    {[4, 6, 8].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {batchRunning ? (
+                  <button type="button" className="batch-cancel" onClick={cancelVariantBatch}>
+                    停止生成
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!aiDraft || designBusy}
+                    onClick={() => void generateVariantBatch(variantCount)}
+                  >
+                    <Sparkles size={13} />
+                    生成 {variantCount} 个版本
+                  </button>
+                )}
+              </div>
             </div>
             <div className="template-picker-body">
               <div className="template-picker-sources">
@@ -145,7 +203,7 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                             <strong>{preset.name}</strong>
                             <small>{preset.description}</small>
                           </span>
-                          {preset.id === recommendedThemePreset.id && <em>内容匹配</em>}
+                          {preset.id === recommendedThemePreset.id && <em>AI 推荐</em>}
                           {themePresetId === preset.id && <Check />}
                         </button>
                       );
@@ -253,6 +311,12 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                         <span key={scenario}>{scenario}</span>
                       ))}
                     </div>
+                    {themePresetId === recommendedThemePreset.id && recommendedThemeReason && (
+                      <p>
+                        <strong>AI 为什么推荐：</strong>
+                        {recommendedThemeReason}
+                      </p>
+                    )}
                     <p>
                       <strong>图片建议：</strong>
                       {pickerThemeGuidance.imageStyle}
@@ -611,6 +675,13 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
             </div>
           </section>
         </div>
+      )}
+      {variantOptions && variantOptions.length > 0 && (
+        <VariantGalleryDialog
+          options={variantOptions}
+          onSelect={chooseVariant}
+          onDiscard={discardVariantBatch}
+        />
       )}
     </>
   );

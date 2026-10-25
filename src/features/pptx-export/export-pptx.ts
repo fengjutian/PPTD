@@ -25,6 +25,7 @@ import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package"
 import { linkThemeColors, normalizeThemeColors, patchThemeColors } from "./theme-xml";
 import { normalizePackagePartNames } from "./package-parts";
 import { patchImageCrops } from "./image-crop-xml";
+import { patchShapeGradients } from "./shape-gradient-xml";
 import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
 import { lintTaste } from "../../core/design/taste-lint";
@@ -556,6 +557,11 @@ export async function buildPptx(
   // slot value can point at the slot instead of at a literal color. That is
   // what lets a later theme edit in PowerPoint recolor the deck.
   const themeColorReferences = themeSlots.length > 0 ? linkThemeColors(entries, themeSlots) : 0;
+  const gradientPatch = patchShapeGradients(entries, document.slides);
+  const gradientWarnings =
+    gradientPatch.expected > gradientPatch.patched
+      ? [`${gradientPatch.expected - gradientPatch.patched} 个渐变形状未能写入原生渐变，已回退为纯色`]
+      : [];
   const nativeTransitionCount = patchSlideTransitions(entries, document.slides);
   const animationResult = patchSlideAnimations(entries, document.slides);
   const animationWarnings =
@@ -641,7 +647,7 @@ export async function buildPptx(
       ...(tasteLint ? { tasteLint } : {}),
       ...(templateFit ? { templateFit } : {}),
       parity,
-      warnings: [...issues.map((issue) => issue.message), ...animationWarnings],
+      warnings: [...issues.map((issue) => issue.message), ...animationWarnings, ...gradientWarnings],
       issues,
       package: packageValidation,
     },

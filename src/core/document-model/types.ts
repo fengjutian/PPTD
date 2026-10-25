@@ -120,12 +120,33 @@ export interface TextElementStyle {
   indentLevel?: number;
 }
 
+/** One stop of a native linear gradient. */
+export interface ShapeFillGradientStop {
+  /** Position along the gradient, 0–1. */
+  offset: number;
+  color: string;
+  /** 0–100, the PowerPoint "Fill > Transparency" value. */
+  transparency?: number;
+}
+
+/**
+ * A native linear gradient of a vector shape.
+ *
+ * `angleDeg` uses the DrawingML convention: 0 points right, 90 points down.
+ * `fill` stays the solid fallback for renderers and for a failed export patch.
+ */
+export interface ShapeFillGradient {
+  angleDeg: number;
+  stops: ShapeFillGradientStop[];
+}
+
 /** Presentation-only styling of a vector shape. Never part of the content hash. */
 export interface ShapeElementStyle {
   fill: string;
   stroke: string;
   strokeWidthPt: number;
   radiusPt: number;
+  fillGradient?: ShapeFillGradient;
 }
 
 /**

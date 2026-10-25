@@ -1,4 +1,5 @@
 import type { ShapeElement, ShapeKind } from "../../core/document-model";
+import { gradientCss, gradientLinePoints } from "../../core/design/shape-gradient";
 import { ptToPx, type SceneScale } from "./scene-metrics";
 
 /**
@@ -12,12 +13,13 @@ import { ptToPx, type SceneScale } from "./scene-metrics";
 export function ShapeView({ element, scale }: { element: ShapeElement; scale: SceneScale }) {
   const width = element.frame.width * scale;
   const height = element.frame.height * scale;
+  const fillGradient = element.style.fillGradient;
   if (element.shape === "rectangle" || element.shape === "ellipse") {
     return (
       <div
         className={`shape-fill ${element.shape}`}
         style={{
-          background: element.style.fill,
+          background: fillGradient ? gradientCss(fillGradient) : element.style.fill,
           borderColor: element.style.stroke,
           borderWidth: ptToPx(element.style.strokeWidthPt, scale),
           borderRadius: element.shape === "ellipse" ? "50%" : ptToPx(element.style.radiusPt, scale),
@@ -26,6 +28,8 @@ export function ShapeView({ element, scale }: { element: ShapeElement; scale: Sc
     );
   }
   const strokeWidth = ptToPx(element.style.strokeWidthPt, scale);
+  const gradientId = fillGradient ? `shape-gradient-${element.id}` : undefined;
+  const gradientPoints = fillGradient ? gradientLinePoints(fillGradient.angleDeg, width, height) : undefined;
   return (
     <svg
       className="shape-vector"
@@ -35,9 +39,30 @@ export function ShapeView({ element, scale }: { element: ShapeElement; scale: Sc
       preserveAspectRatio="none"
       aria-hidden
     >
+      {fillGradient && gradientId && gradientPoints && (
+        <defs>
+          <linearGradient
+            id={gradientId}
+            x1={gradientPoints.x1}
+            y1={gradientPoints.y1}
+            x2={gradientPoints.x2}
+            y2={gradientPoints.y2}
+            gradientUnits="userSpaceOnUse"
+          >
+            {fillGradient.stops.map((stop) => (
+              <stop
+                key={`${stop.offset}-${stop.color}`}
+                offset={stop.offset}
+                stopColor={stop.color}
+                stopOpacity={1 - (stop.transparency ?? 0) / 100}
+              />
+            ))}
+          </linearGradient>
+        </defs>
+      )}
       <path
         d={pathFor(element.shape, width, height)}
-        fill={element.style.fill}
+        fill={gradientId ? `url(#${gradientId})` : element.style.fill}
         stroke={strokeWidth > 0 ? element.style.stroke : "none"}
         strokeWidth={strokeWidth}
         strokeLinejoin="round"

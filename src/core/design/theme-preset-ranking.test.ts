@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { hexToHsl } from "../rendering/color-analysis";
 import {
   defaultConceptIdForTheme,
   planThemePresetVariants,
   rankThemePresets,
+  themePresetAccentHue,
   type ThemeContentSignals,
 } from "./theme-preset-ranking";
 import { DEFAULT_THEME_PRESET_ID, THEME_PRESETS, findThemePreset } from "./theme-presets";
@@ -53,16 +53,17 @@ describe("variant plan", () => {
     for (const choice of plan) expect(findThemePreset(choice.presetId)).toBeDefined();
   });
 
-  it("moves each pick away from the accent hues already chosen", () => {
+  it("does not fill the batch with one colour family", () => {
     const plan = planThemePresetVariants(annualReport, 8);
     const hues = plan
-      .map((choice) => accentHue(choice.presetId))
+      .map((choice) => themePresetAccentHue(choice.presetId))
       .filter((hue): hue is number => hue !== undefined);
-    for (let left = 0; left < hues.length; left += 1) {
-      for (let right = left + 1; right < hues.length; right += 1) {
-        expect(hueDistance(hues[left]!, hues[right]!)).toBeGreaterThanOrEqual(22);
-      }
+    // At most two presets of the same accent family; a third is the same look
+    // under another name.
+    for (const hue of hues) {
+      expect(hues.filter((other) => Math.abs(other - hue) < 18).length).toBeLessThanOrEqual(2);
     }
+    expect(hues.length).toBeGreaterThanOrEqual(6);
   });
 
   it("clamps the requested count to the catalogue", () => {
@@ -83,20 +84,3 @@ describe("concept fallback per theme", () => {
     expect(defaultConceptIdForTheme("editorial-teal")).toBe("editorial");
   });
 });
-
-function accentHue(presetId: string): number | undefined {
-  const preset = findThemePreset(presetId);
-  if (!preset) return undefined;
-  const byName = new Map(preset.theme.colors.map((color) => [color.name, color.value]));
-  for (const slot of ["accent", "accent2", "primary"]) {
-    const value = byName.get(slot);
-    const hsl = value ? hexToHsl(value) : undefined;
-    if (hsl && hsl.s >= 0.15) return hsl.h;
-  }
-  return undefined;
-}
-
-function hueDistance(left: number, right: number): number {
-  const delta = Math.abs(left - right) % 360;
-  return delta > 180 ? 360 - delta : delta;
-}

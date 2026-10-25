@@ -27,6 +27,7 @@ import {
 } from "../core/commands";
 import {
   CONCEPT_PRESET_LABELS,
+  defaultConceptForPreset,
   defaultEditorialConcept,
   resolveDeckConcept,
   type AiDeckConcept,
@@ -102,6 +103,7 @@ import {
   writeSpeakerNotes,
   type AiDraft,
   type AiGenerationProgress,
+  type AiPresentationDesign,
   type AiVisualAssetIntent,
   type ContentCheck,
   type DeckReviewIssue,
@@ -158,7 +160,13 @@ import { defaultThemePreset, findThemePreset } from "../core/design/theme-preset
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
 import { themePresetMetadata } from "../core/design/theme-preset-metadata";
 
-import { inferThemePresetId } from "../core/design/theme-preset-inference";
+import {
+  defaultConceptIdForTheme,
+  planThemePresetVariants,
+  rankThemePresets,
+  type ThemeContentSignals,
+  type ThemePresetChoice,
+} from "../core/design/theme-preset-ranking";
 import { defaultPresentationVisualGoal, type VisualReview } from "../services/visual-alignment";
 import {
   documentContentFingerprint,
@@ -166,7 +174,7 @@ import {
   summarizeQualityIssues,
   type ReviewEvidence,
 } from "../services/design-quality-stage";
-import type { PresentationQualityIssue } from "../services/presentation-quality-gate";
+import { validatePresentationVisualQuality, type PresentationQualityIssue } from "../services/presentation-quality-gate";
 import { DisabledVisionReviewPort, TauriVisionReviewPort } from "../services/vision-review-port";
 import { probeTemplateBackground, type TemplateBackgroundProbe } from "../services/template-background";
 import type { ExportReport } from "../features/pptx-export/export-pptx";
@@ -205,6 +213,45 @@ import {
   presetTemplateAnalysis,
 } from "./app-shared";
 import type { AppView, PageMessage, DesignProgress, DirectionChoice, TemplateLayoutRender } from "./app-shared";
+import type { VariantBatchProgress, VariantOptionView } from "./app-shared";
+
+/** The facts the theme ranking reads. Nothing here is invented by the batch. */
+function themeSignalsFromDraft(draft: AiDraft): ThemeContentSignals {
+  let chartCount = 0;
+  let tableCount = 0;
+  let metricCount = 0;
+  let imageSlotCount = 0;
+  for (const slide of draft.slides) {
+    for (const block of slide.blocks ?? []) {
+      if (block.type === "chart") chartCount += 1;
+      else if (block.type === "table-data") tableCount += 1;
+      else if (block.type === "metric") metricCount += 1;
+    }
+    if (slide.plan?.visualAsset?.enabled) imageSlotCount += 1;
+  }
+  return {
+    title: draft.title,
+    bodyText: draft.slides.map((slide) => `${slide.title} ${slide.body}`).join(" "),
+    slideCount: draft.slides.length,
+    chartCount,
+    tableCount,
+    metricCount,
+    imageSlotCount,
+  };
+}
+
+/** Cover plus the first page with real copy: the two pages a variant card shows. */
+function variantPreviewIndexes(draft: AiDraft): number[] {
+  const contentIndex = draft.slides.findIndex((slide, index) => index > 0 && slide.body.trim().length >= 60);
+  const fallback = Math.min(1, draft.slides.length - 1);
+  const second = contentIndex > 0 ? contentIndex : fallback;
+  return second === 0 ? [0] : [0, second];
+}
+
+/** The preset the picker marks as recommended, for this reviewed draft. */
+function recommendedPresetFor(title: string, draft?: AiDraft): ThemePresetChoice {
+  return rankThemePresets(draft ? themeSignalsFromDraft(draft) : { title })[0]!;
+}
 
 export function useAppRuntime() {
   const {
@@ -404,6 +451,17 @@ export function useAppRuntime() {
   const [themePreviewPresetId, setThemePreviewPresetId] = useState("");
   const [designBusy, setDesignBusy] = useState(false);
   const designBusyRef = useRef(false);
+  /**
+   * 批量版本：AI 挑模板，一次排完，用户只挑一版。
+   *
+   * 设计结果留在 ref 里而不是 state 里：八套完整版式每页都可能上千个字段，
+   * 放进 React 状态只会让每次进度刷新都深比较一遍，而画廊需要的只是预览图。
+   */
+  const [variantOptions, setVariantOptions] = useState<VariantOptionView[]>();
+  const [variantBatch, setVariantBatch] = useState<VariantBatchProgress>();
+  const variantDesignsRef = useRef(
+    new Map<string, { presetId: string; concept: DeckConcept; design: AiPresentationDesign }>(),
+  );
   /** 方向门：两个真实预览，等用户选择或跳过。 */
   const [directionOptions, setDirectionOptions] = useState<DirectionOptionView[]>();
   const [directionRegenerations, setDirectionRegenerations] = useState(0);
@@ -2382,8 +2440,13 @@ export function useAppRuntime() {
   // Once the draft exists it is the reviewed source of truth. `aiTopic` is an
   // input-field state and may already have been cleared or replaced when the
   // user reaches the theme step; using it produced "青编" for a 岳阳楼记 deck.
-  const recommendedThemePresetId = inferThemePresetId(aiDraft?.title.trim() || aiTopic.trim());
-  const recommendedThemePreset = findThemePreset(recommendedThemePresetId) ?? defaultThemePreset();
+  // The marked preset comes from the same ranking the batch uses, so the
+  // recommendation the picker shows is always the batch's first card.
+  const recommendedTheme = useMemo(
+    () => recommendedPresetFor(aiDraft?.title.trim() || aiTopic.trim(), aiDraft),
+    [aiDraft, aiTopic],
+  );
+  const recommendedThemePreset = findThemePreset(recommendedTheme.presetId) ?? defaultThemePreset();
 
   // 设计进度不再靠定时器"爬"：计时器只负责已用时，百分比由真实阶段和
   // 流式页数决定。任务结束时归零，下一次生成从头计时。
@@ -2410,10 +2473,19 @@ export function useAppRuntime() {
     setTemplatePickerOpen(true);
   };
 
+  /**
+   * Generates the deck for one reviewed draft.
+   *
+   * `prepared` is how the variant batch re-enters this pipeline without paying
+   * for a second design pass: the chosen variant already has its design, so the
+   * gate, the concept call and the design call are skipped and everything after
+   * them (pictures, quality stage, project write) still runs unchanged.
+   */
   const generateFromDraft = async (
     mode: "template" | "preset" = "template",
     draftOverride?: AiDraft,
     historyIdOverride?: string,
+    prepared?: { presetId: string; concept: DeckConcept; design: AiPresentationDesign },
   ) => {
     const sourceDraft = draftOverride ?? aiDraft;
     if (!sourceDraft) return;
@@ -2423,9 +2495,12 @@ export function useAppRuntime() {
       return;
     }
     const sourceRecommendedThemePreset =
-      findThemePreset(inferThemePresetId(sourceDraft.title.trim())) ?? defaultThemePreset();
-    const preset =
-      mode === "preset"
+      findThemePreset(recommendedPresetFor(sourceDraft.title.trim(), sourceDraft).presetId) ?? defaultThemePreset();
+    const preparedPreset = prepared ? findThemePreset(prepared.presetId) : undefined;
+    if (prepared && !preparedPreset) return;
+    const preset = preparedPreset
+      ? preparedPreset
+      : mode === "preset"
         ? (findThemePreset(
             draftOverride ? sourceRecommendedThemePreset.id : themePresetId || sourceRecommendedThemePreset.id,
           ) ?? defaultThemePreset())
@@ -2484,8 +2559,9 @@ export function useAppRuntime() {
       const briefs = briefsFromDraft(sourceDraft);
       const pageFacts = compositionFactsFromDraft(sourceDraft);
       setDesignDetail("已拆出每页的设计目的、视觉意图与信息密度");
-      let concept: DeckConcept;
+      let concept!: DeckConcept;
       let designDirection: DesignDirectionRecord | undefined;
+      let design!: AiPresentationDesign;
 
       /**
        * Four directions, two real pages each, then the user decides.
@@ -2660,51 +2736,60 @@ export function useAppRuntime() {
         return { unavailable: true };
       };
 
-      const gated = await directionGate();
-      if (gated && "concept" in gated) {
-        concept = gated.concept;
-        designDirection = gated.record;
+      if (prepared) {
+        // The batch already designed this deck; keep the user's choice and go
+        // straight to the part that costs images and review time.
+        concept = prepared.concept;
+        design = prepared.design;
+        setDesignProgress({ percent: 70, label: "正在校验选中的版本" });
+        setDesignDetail(`已收到 ${sourceDraft.slides.length} 页设计，正在核对页数与配色合法性`);
       } else {
-        if (gated?.unavailable) {
-          // The gate is an enhancement, not a prerequisite. Say so instead of
-          // silently skipping a step the user expected.
-          setTaskStatus("方向预览不可用，已按单方向生成");
+        const gated = await directionGate();
+        if (gated && "concept" in gated) {
+          concept = gated.concept;
+          designDirection = gated.record;
+        } else {
+          if (gated?.unavailable) {
+            // The gate is an enhancement, not a prerequisite. Say so instead of
+            // silently skipping a step the user expected.
+            setTaskStatus("方向预览不可用，已按单方向生成");
+          }
+          setDesignProgress({ percent: 16, label: "正在确定整册设计方向" });
+          setDesignDetail("模型在判断整册的视觉气质、配色与版面节奏");
+          try {
+            const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, {
+              taskId,
+              themeDirection,
+            });
+            concept = resolveDeckConcept({
+              concept: aiConcept,
+              pageFacts,
+              pageCount: sourceDraft.slides.length,
+            }).concept;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (designCancelRef.current || message.includes("CANCELLED")) throw error;
+            // A direction is an enhancement, not a prerequisite. A failed concept
+            // call falls back to the editorial preset and still produces the deck.
+            concept = resolveDeckConcept({
+              concept: defaultEditorialConcept(),
+              pageFacts,
+              pageCount: sourceDraft.slides.length,
+            }).concept;
+          }
         }
-        setDesignProgress({ percent: 16, label: "正在确定整册设计方向" });
-        setDesignDetail("模型在判断整册的视觉气质、配色与版面节奏");
-        try {
-          const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, {
-            taskId,
-            themeDirection,
-          });
-          concept = resolveDeckConcept({
-            concept: aiConcept,
-            pageFacts,
-            pageCount: sourceDraft.slides.length,
-          }).concept;
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (designCancelRef.current || message.includes("CANCELLED")) throw error;
-          // A direction is an enhancement, not a prerequisite. A failed concept
-          // call falls back to the editorial preset and still produces the deck.
-          concept = resolveDeckConcept({
-            concept: defaultEditorialConcept(),
-            pageFacts,
-            pageCount: sourceDraft.slides.length,
-          }).concept;
-        }
+        if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+        setDesignProgress({ percent: 20, label: "正在生成逐页版式与配色" });
+        setDesignDetail(`共 ${sourceDraft.slides.length} 页，等待模型写出第一页设计`);
+        design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
+          taskId,
+          concept,
+          themeDirection,
+        });
+        if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+        setDesignProgress({ percent: 70, label: "正在校验 AI 设计结果" });
+        setDesignDetail(`已收到 ${sourceDraft.slides.length} 页设计，正在核对页数与配色合法性`);
       }
-      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-      setDesignProgress({ percent: 20, label: "正在生成逐页版式与配色" });
-      setDesignDetail(`共 ${sourceDraft.slides.length} 页，等待模型写出第一页设计`);
-      const design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
-        taskId,
-        concept,
-        themeDirection,
-      });
-      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-      setDesignProgress({ percent: 70, label: "正在校验 AI 设计结果" });
-      setDesignDetail(`已收到 ${sourceDraft.slides.length} 页设计，正在核对页数与配色合法性`);
       const hasTemplateSize = analysis.slideWidthEmu && analysis.slideHeightEmu;
       const templateColors = new Map(analysis.themeColors.map((color) => [color.name.toLowerCase(), color.value]));
       const resolveTemplateColor = (value: string | null) =>
@@ -3118,6 +3203,208 @@ export function useAppRuntime() {
       setGeneratingHistoryId(undefined);
       setDesignBusy(false);
     }
+  };
+
+  /**
+   * Builds several complete designs of the same reviewed content, then lets the
+   * user keep one.
+   *
+   * The batch stops before pictures and the visual review: those are the two
+   * expensive steps, and paying for them eight times to then throw seven decks
+   * away is the wrong trade. What it does do is run the real design call and
+   * real local rendering per version, so every card is a deck that exists —
+   * picking one continues into the normal pipeline instead of re-generating.
+   */
+  const generateVariantBatch = async (count: number) => {
+    const sourceDraft = aiDraft;
+    if (!sourceDraft || sourceDraft.slides.length === 0) {
+      setTaskStatus("先完成内容审核，再让 AI 批量排版");
+      return;
+    }
+    if (designBusyRef.current) {
+      setTaskStatus("已有 PPT 正在生成，请等待当前任务完成");
+      return;
+    }
+    const plan = planThemePresetVariants(themeSignalsFromDraft(sourceDraft), count);
+    const firstChoice = plan[0];
+    if (!firstChoice) return;
+    const previewIndexes = variantPreviewIndexes(sourceDraft);
+
+    designBusyRef.current = true;
+    designCancelRef.current = false;
+    setGeneratingHistoryId(activeHistoryId);
+    setDesignQualityReport(undefined);
+    setVariantOptions(undefined);
+    setVariantBatch({ total: plan.length, completed: 0, failed: 0 });
+    variantDesignsRef.current.clear();
+    designTaskId.current += 1;
+    const taskId = designTaskId.current;
+    setDesignBusy(true);
+    setAgentWorkflow((state) => {
+      const prepared =
+        state.stage === "reviewing-content" ? state : transitionAgentWorkflow(startAgentWorkflow(state), "planning");
+      return transitionAgentWorkflow(prepared, "generating-design");
+    });
+    designStartedAtRef.current = Date.now();
+    setDesignElapsed(0);
+    setDesignProgress({ percent: 4, label: `正在准备 ${plan.length} 个版本的排版` });
+    setDesignDetail("AI 按内容先挑模板，再用同一套版面骨架逐版排版");
+    try {
+      const briefs = briefsFromDraft(sourceDraft);
+      const pageFacts = compositionFactsFromDraft(sourceDraft);
+      const topPreset = findThemePreset(firstChoice.presetId) ?? defaultThemePreset();
+      // One skeleton for the whole batch: the template is the variable the user
+      // is choosing between, and eight different skeletons would make the
+      // comparison about composition instead of the look they asked for.
+      setDesignProgress({ percent: 6, label: "正在确定整册设计方向" });
+      setDesignDetail(`基准方向按「${topPreset.name}」的气质生成，八个版本共用它`);
+      let baseConcept: AiDeckConcept;
+      try {
+        baseConcept = await generateDeckConcepts(sourceDraft, briefs, presetTemplateAnalysis(topPreset), {
+          taskId,
+          themeDirection: themeDirectionForPreset(topPreset),
+        });
+      } catch (error) {
+        if (designCancelRef.current) throw error;
+        void recordAppError("批量版本设计方向", error, { variants: plan.length });
+        baseConcept = defaultConceptForPreset(defaultConceptIdForTheme(topPreset.id));
+      }
+      if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+      const concept = resolveDeckConcept({
+        concept: baseConcept,
+        pageFacts,
+        pageCount: sourceDraft.slides.length,
+      }).concept;
+      // The previews need a document for page numbers and section labels, but
+      // not a designed one: a neutral draft document carries the reviewed copy.
+      const baseline = createDocument();
+      applyCommand(baseline, { type: "apply-ai-draft", title: sourceDraft.title, slides: sourceDraft.slides });
+      const variants: VariantOptionView[] = [];
+      let failed = 0;
+      for (const [index, choice] of plan.entries()) {
+        if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+        const preset = findThemePreset(choice.presetId);
+        if (!preset) {
+          failed += 1;
+          continue;
+        }
+        setDesignProgress({
+          percent: 8 + Math.round((86 * index) / plan.length),
+          label: `正在排第 ${index + 1}/${plan.length} 个版本`,
+        });
+        setDesignDetail(`「${preset.name}」· ${choice.reason}`);
+        try {
+          const analysis = presetTemplateAnalysis(preset);
+          const design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
+            taskId,
+            concept,
+            themeDirection: themeDirectionForPreset(preset),
+          });
+          if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
+          // The issue count must describe the pages the card draws, so it is
+          // measured on the same document the preview renders.
+          const candidate = createDocument();
+          applyCommand(candidate, {
+            type: "apply-ai-designed-draft",
+            title: sourceDraft.title,
+            slides: sourceDraft.slides,
+            designs: design.slides,
+            designConcept: concept,
+            themePresetId: preset.id,
+          });
+          const issues = validatePresentationVisualQuality(candidate, design.slides).issues;
+          const pages = buildDirectionPreviewPages({
+            document: baseline,
+            concept,
+            pageIndexes: previewIndexes,
+            designs: previewIndexes.map((pageIndex) => design.slides[pageIndex]!),
+            commandBase: { themePresetId: preset.id },
+            title: sourceDraft.title,
+          });
+          const rendered = await Promise.all(
+            pages.map(async (page) => (await renderPresentationForVisualReview(page.document, 640)).slides[0]),
+          );
+          const id = crypto.randomUUID();
+          variantDesignsRef.current.set(id, { presetId: preset.id, concept, design });
+          variants.push({
+            id,
+            presetId: preset.id,
+            name: preset.name,
+            description: preset.description,
+            reason: choice.reason,
+            images: rendered.filter((image): image is string => image !== undefined),
+            issueCount: issues.length,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (designCancelRef.current || message.includes("CANCELLED")) throw error;
+          failed += 1;
+          // One version that fails to render must not take the batch with it;
+          // which template failed is the only way to tell a bad design from a
+          // renderer gap later.
+          void recordAppError("批量版本生成", error, { preset: preset.id });
+        }
+        setVariantBatch({ total: plan.length, completed: variants.length + failed, failed });
+      }
+      if (variants.length === 0) {
+        setDesignProgress({ percent: 0, label: "批量生成失败" });
+        setDesignDetail("所有版本都没能排出来，原因已写入诊断日志");
+        setTaskStatus("批量生成失败：八个版本都没有产出，请改用单版本生成或稍后重试");
+        return;
+      }
+      setVariantOptions(variants);
+      setDesignProgress({ percent: 100, label: `${variants.length} 个版本已排好` });
+      setDesignDetail("挑一版继续；其余版本会丢弃，已审核内容不会改变");
+      setTaskStatus(
+        failed > 0
+          ? `AI 排好 ${variants.length} 个版本，另有 ${failed} 个失败；选一版继续`
+          : `AI 排好 ${variants.length} 个版本，选一版继续`,
+      );
+      setTemplatePickerOpen(false);
+    } catch (error) {
+      // A failed batch has nothing worth keeping; a successful one keeps its
+      // designs in the map until the user picks or discards.
+      variantDesignsRef.current.clear();
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === "AI_GENERATION_CANCELLED" || message.includes("AI_REQUEST_CANCELLED")) {
+        setDesignProgress({ percent: 0, label: "已取消批量生成" });
+        setDesignDetail("在途请求已中断，未写入任何内容");
+        setTaskStatus("已取消批量生成");
+      } else {
+        setDesignProgress({ percent: 0, label: "批量生成失败，请重试" });
+        setDesignDetail(describeAiError(error));
+        setTaskStatus(`批量生成失败：${describeAiError(error)}`);
+        void recordAppError("批量版本生成", error, { variants: plan.length });
+      }
+    } finally {
+      setVariantBatch(undefined);
+      void endAiGeneration(taskId).catch(() => undefined);
+      designBusyRef.current = false;
+      setGeneratingHistoryId(undefined);
+      setDesignBusy(false);
+    }
+  };
+
+  /** Keeps the chosen variant: the design is already paid for, only the tail runs. */
+  const chooseVariant = (id: string) => {
+    const variant = variantDesignsRef.current.get(id);
+    if (!variant) return;
+    setVariantOptions(undefined);
+    variantDesignsRef.current.clear();
+    void generateFromDraft("preset", undefined, undefined, variant);
+  };
+
+  /** Drops the batch and returns to the picker without writing anything. */
+  const discardVariantBatch = () => {
+    setVariantOptions(undefined);
+    variantDesignsRef.current.clear();
+    setTemplatePickerOpen(true);
+  };
+
+  const cancelVariantBatch = () => {
+    designCancelRef.current = true;
+    setDesignProgress((current) => ({ percent: current.percent, label: "正在取消批量生成…" }));
+    void cancelAiGeneration(designTaskId.current).catch(() => undefined);
   };
 
   const handleChooseTemplate = async () => {
@@ -3944,11 +4231,18 @@ export function useAppRuntime() {
     templatePickerOpen,
     setTemplatePickerOpen,
     recommendedThemePreset,
+    recommendedThemeReason: recommendedTheme.reason,
     designDetail,
     designElapsed,
     pickerThemePreset,
     pickerThemeGuidance,
     generateFromDraft,
+    variantOptions,
+    variantBatch,
+    generateVariantBatch,
+    chooseVariant,
+    discardVariantBatch,
+    cancelVariantBatch,
     designQualityReport,
     designQualityReportOpen,
     setDesignQualityReportOpen,

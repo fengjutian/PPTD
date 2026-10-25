@@ -1,0 +1,1499 @@
+.slide-element.line .line-svg {
+  display: block;
+  overflow: visible;
+}
+.slide-element.image {
+  overflow: hidden;
+}
+.slide-element.image .image-fill {
+  display: block;
+  position: absolute;
+  object-fit: fill;
+  pointer-events: none;
+}
+/* 读不到的图片必须看得出来。一块纯白会被当成作者本来就没放图，模板版式背景就是
+   这样消失得无声无息：斜纹加虚线边框占住原来的位置，缺口一眼可见。 */
+.slide-element.image .image-missing {
+  background-color: rgba(230, 174, 98, 0.08);
+  background-image: repeating-linear-gradient(45deg, rgba(230, 174, 98, 0.22) 0 5px, transparent 5px 10px);
+  outline: 1px dashed rgba(230, 174, 98, 0.75);
+  outline-offset: -1px;
+}
+.slide-element.chart {
+  overflow: hidden;
+}
+.chart-view {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  pointer-events: none;
+}
+.chart-vertical {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-around;
+  gap: 4%;
+  padding: 2% 1% 0;
+}
+.chart-column {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 2px;
+}
+.chart-column .chart-bar {
+  width: 62%;
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+.chart-horizontal {
+  flex-direction: column;
+  justify-content: space-around;
+  gap: 4%;
+  padding: 2% 1%;
+}
+.chart-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-row .chart-category {
+  flex: 0 0 22%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chart-row .chart-track {
+  flex: 1 1 auto;
+  height: 60%;
+  background: rgba(127, 138, 152, 0.16);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.chart-row .chart-bar {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+.chart-row .chart-value {
+  flex: 0 0 auto;
+}
+.chart-value {
+  line-height: 1.1;
+}
+.chart-category {
+  line-height: 1.1;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chart-pie {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6%;
+}
+.chart-pie-disc {
+  width: 62%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+}
+.chart-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.chart-legend-item i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.chart-line {
+  flex-direction: column;
+}
+.chart-line-svg {
+  width: 100%;
+  flex: 1 1 auto;
+  overflow: visible;
+}
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 2px;
+}
+.chart-axis-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.chart-missing {
+  align-items: center;
+  justify-content: center;
+  color: #8a94a6;
+}
+.slide-element.table {
+  overflow: hidden;
+}
+.table-view {
+  width: 100%;
+  height: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  pointer-events: none;
+}
+/* 表格的行高与边框跟随字号，缩略图里的表格才和画布里的表格一样小。 */
+.table-view th,
+.table-view td {
+  border: 0.08em solid;
+  padding: 0.17em 0.33em;
+  text-align: left;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table-view th {
+  font-weight: 700;
+}
+.table-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a94a6;
+}
+.slide-element.selected::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--ppt-accent);
+  pointer-events: none;
+}
+.element-handle {
+  position: absolute;
+  z-index: 3;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 2px solid var(--ppt-accent);
+  border-radius: 2px;
+  background: #fff;
+}
+.element-handle.nw {
+  left: -6px;
+  top: -6px;
+  cursor: nwse-resize;
+}
+.element-handle.ne {
+  right: -6px;
+  top: -6px;
+  cursor: nesw-resize;
+}
+.element-handle.sw {
+  left: -6px;
+  bottom: -6px;
+  cursor: nesw-resize;
+}
+.element-handle.se {
+  right: -6px;
+  bottom: -6px;
+  cursor: nwse-resize;
+}
+.element-handle.n {
+  left: 50%;
+  top: -6px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.element-handle.s {
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+}
+.element-handle.w {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+.element-handle.e {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: ew-resize;
+}
+.element-rotate-handle {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: -25px;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 2px solid var(--ppt-accent);
+  border-radius: 50%;
+  background: #fff;
+  cursor: grab;
+  transform: translateX(-50%);
+}
+.element-rotate-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 11px;
+  width: 1px;
+  height: 12px;
+  background: var(--ppt-accent);
+}
+
+.inspector-title {
+  justify-content: flex-start;
+  gap: 9px;
+}
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.type-chip {
+  margin-left: auto;
+  padding: 2px 9px;
+  border: 1px solid var(--ppt-accent-soft);
+  border-radius: 999px;
+  background: rgba(211, 82, 48, 0.16);
+  color: #f0a58f;
+  font-size: 10px;
+  font-weight: 500;
+}
+.property-form {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 16px 28px;
+  overflow-y: auto;
+}
+.property-form label {
+  display: grid;
+  gap: 6px;
+  color: #8f939b;
+  font-size: 11px;
+  margin-bottom: 14px;
+}
+.property-form input,
+.property-form textarea {
+  width: 100%;
+  color: #e9ebee;
+  background: #222429;
+  border: 1px solid #34363d;
+  border-radius: 7px;
+  padding: 8px 9px;
+  outline: none;
+}
+.property-form textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+.property-form select {
+  width: 100%;
+  color: #e9ebee;
+  background: #222429;
+  border: 1px solid #34363d;
+  border-radius: 7px;
+  padding: 8px 9px;
+  outline: none;
+}
+.property-form input:focus,
+.property-form textarea:focus,
+.property-form select:focus {
+  border-color: var(--ppt-accent);
+  outline: 1px solid var(--ppt-accent);
+}
+.property-form input.invalid {
+  border-color: #c95b66;
+}
+.property-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+/* 结构化内容：表格格子与图表指标。数据本身就是内容，字段密度高一些。 */
+.table-data-fields {
+  margin-bottom: 14px;
+}
+.table-data-fields summary {
+  cursor: pointer;
+  color: #9aa0aa;
+  font-size: 11px;
+  user-select: none;
+}
+.table-data-fields summary:hover {
+  color: #c9ccd2;
+}
+.table-grid {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  overflow-x: auto;
+}
+.property-form .table-grid input {
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.property-form .table-grid input.header {
+  font-weight: 700;
+}
+.metric-fields {
+  margin-bottom: 10px;
+}
+.metric-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.metric-field-row .field {
+  margin-bottom: 6px;
+}
+.property-form .field-wide {
+  grid-column: 1 / -1;
+}
+
+.element-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 6px;
+}
+.element-actions.arrange {
+  grid-template-columns: repeat(2, 1fr);
+}
+.element-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 7px 4px;
+  border: 1px solid #3b3d44;
+  border-radius: 6px;
+  background: #292b30;
+  color: #c9cbd0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.element-actions button:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+}
+.element-actions button.danger:hover:not(:disabled) {
+  border-color: #c95b66;
+  color: #ff8d98;
+}
+.element-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.element-actions svg {
+  width: 13px;
+  height: 13px;
+}
+/* 常驻在面板底部的对象操作，属性再长也不用滚到底才能点到。 */
+.inspector-actions {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--panel-border, #2c2e33);
+  background: var(--panel-surface, #17181b);
+}
+.inspector-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 8px 4px;
+  border: 1px solid #3b3d44;
+  border-radius: 7px;
+  background: #292b30;
+  color: #c9cbd0;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.inspector-actions button:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+  color: #fff;
+  background: var(--ppt-accent);
+}
+.inspector-actions button.danger:hover:not(:disabled) {
+  border-color: #c95b66;
+  color: #fff;
+  background: #c95b66;
+}
+.inspector-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.inspector-actions svg {
+  width: 13px;
+  height: 13px;
+}
+.property-form .field-readonly {
+  display: block;
+  padding: 8px 9px;
+  border: 1px dashed #3b3d44;
+  border-radius: 7px;
+  color: #9a9ea6;
+  background: #1c1e22;
+  font-size: 12px;
+}
+.empty-inspector {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  padding: 24px 6px 20px;
+  color: #656972;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.empty-inspector-mark {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid #34363d;
+  border-radius: 14px;
+  color: #9a9ea6;
+  background: #222429;
+}
+.empty-inspector-mark svg {
+  width: 19px;
+  height: 19px;
+}
+.empty-inspector strong {
+  color: #c9cbd0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.empty-inspector p {
+  margin: 0;
+}
+.empty-inspector-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-top: 5px;
+}
+.empty-inspector-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid #3b3d44;
+  border-radius: 7px;
+  background: #292b30;
+  color: #c9cbd0;
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.empty-inspector-actions button:hover {
+  border-color: var(--ppt-accent);
+  color: #fff;
+  background: var(--ppt-accent);
+}
+.empty-inspector-actions svg {
+  width: 13px;
+  height: 13px;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 4px;
+}
+.panel-heading .panel-tab {
+  width: auto;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #8f939b;
+  font-size: 12px;
+  font-weight: 500;
+}
+.panel-heading .panel-tab:hover {
+  color: #c9ccd2;
+  background: #282a2f;
+}
+.panel-heading .panel-tab.active {
+  border-color: #3a3c42;
+  background: #282a2f;
+  color: #fff;
+}
+.layer-list {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 8px;
+  overflow-y: auto;
+}
+.layer-empty {
+  margin: 24px 0;
+  color: #656972;
+  text-align: center;
+  font-size: 12px;
+}
+.layer-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 16px 1fr 14px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #c9ccd2;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.layer-row:hover {
+  background: #212327;
+}
+.layer-row.active {
+  border-color: var(--ppt-accent);
+  background: rgba(211, 82, 48, 0.16);
+  color: #fff;
+}
+.layer-row svg {
+  width: 13px;
+  height: 13px;
+  color: #7d818a;
+}
+.layer-row.active svg {
+  color: var(--ppt-accent-hover);
+}
+.layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer-lock {
+  justify-self: end;
+}
+
+.inspector-warning {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid #6a4a1f;
+  border-radius: 7px;
+  background: rgba(214, 158, 74, 0.12);
+  color: #e8c48b;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.inspector-warning > svg {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+.inspector-warning strong {
+  display: block;
+  color: #f0cf9a;
+  font-weight: 600;
+}
+.inspector-warning span {
+  display: block;
+  margin-top: 2px;
+  color: #c8ab7d;
+}
+.inspector-warning button {
+  margin-top: 7px;
+  padding: 4px 9px;
+  border: 1px solid #8a6631;
+  border-radius: 5px;
+  background: #3a2e1b;
+  color: #f0cf9a;
+  font-size: 11px;
+  cursor: pointer;
+}
+.inspector-warning button:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+  background: var(--ppt-accent);
+  color: #fff;
+}
+.inspector-warning button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.inspector-hint {
+  margin: 10px 0 0;
+  color: #7f838c;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.inspector-section {
+  border-bottom: 1px solid #2c2e33;
+}
+.inspector-section:last-child {
+  border-bottom: none;
+}
+.inspector-section h4 {
+  margin: 0;
+  color: #8f939b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+/* 分区标题吸附在面板顶部，滚动时始终知道当前字段属于哪一组。 */
+.section-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 11px 16px 9px;
+  background: var(--panel-surface, #17181b);
+}
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.section-toggle svg {
+  width: 13px;
+  height: 13px;
+  color: #6f737c;
+  transition: transform 0.15s ease;
+}
+.section-toggle svg.folded {
+  transform: rotate(-90deg);
+}
+.section-toggle:hover h4 {
+  color: #c9ccd2;
+}
+.section-body {
+  padding: 2px 0 14px;
+}
+.section-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.segmented.compact {
+  margin-left: 0;
+}
+.segmented.compact button {
+  width: auto;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #3b3d44;
+  border-radius: 6px;
+  background: #292b30;
+  color: #c9cbd0;
+  cursor: pointer;
+}
+.icon-button svg {
+  width: 13px;
+  height: 13px;
+}
+.icon-button:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+}
+.icon-button.active {
+  border-color: var(--ppt-accent);
+  background: rgba(211, 82, 48, 0.2);
+  color: #fff;
+}
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.property-form .field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.property-form .field-label {
+  color: #8f939b;
+  font-size: 11px;
+}
+.property-form .field-label.scrubbable {
+  cursor: ew-resize;
+  user-select: none;
+}
+.property-form .field-label.scrubbable:hover {
+  color: #c9ccd2;
+}
+.property-form .field-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.property-form .field-control input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 8px;
+}
+.property-form .field-control input[type="number"] {
+  padding: 8px 6px;
+}
+/* 多行字段：标签在上，输入框占满整行，不然长备注挤在右半边没法写。 */
+.property-form .field-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+.property-form .field-stacked .field-control {
+  align-items: stretch;
+}
+.property-form .field-stacked textarea {
+  width: 100%;
+  min-height: 68px;
+  padding: 7px 8px;
+  border: 1px solid #34373d;
+  border-radius: 6px;
+  background: #1b1c20;
+  color: #e1e3e7;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.property-form .field-stacked textarea:focus {
+  outline: none;
+  border-color: var(--ppt-accent);
+}
+.property-form .field-unit {
+  color: #6f737c;
+  font-size: 10px;
+  white-space: nowrap;
+}
+/* 单位放进输入框里，输入框右缘不再被单位顶出面板。 */
+.property-form .field-input {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.property-form .field-input input {
+  width: 100%;
+}
+.property-form .field-input .field-unit {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.property-form .field-input.with-unit input {
+  padding-right: 26px;
+}
+/* 主题色卡排成固定尺寸的网格：模板的几套配色合在一起有几十个色值，内联换行会把它们挤成参差的几行。 */
+.color-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 20px);
+  justify-content: start;
+  gap: 6px;
+  margin-top: 8px;
+}
+.color-chip {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 5px;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.color-chip:hover:not(:disabled) {
+  transform: scale(1.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.color-chip:focus-visible {
+  outline: 2px solid var(--ppt-accent);
+  outline-offset: 2px;
+}
+.color-chip.active {
+  box-shadow:
+    0 0 0 2px var(--panel-surface, #17181b),
+    0 0 0 3px var(--ppt-accent);
+}
+.color-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.property-form input[type="number"]::-webkit-outer-spin-button,
+.property-form input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.property-form input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.property-form .field-stepper {
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #34363d;
+  border-radius: 4px;
+  background: #222429;
+  color: #8f939b;
+  cursor: pointer;
+}
+.property-form .field-stepper svg {
+  width: 12px;
+  height: 12px;
+}
+.property-form .field-stepper:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+  color: #fff;
+}
+.property-form .field-stepper:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.property-form .field-error {
+  color: #ff8d98;
+  font-size: 10px;
+}
+.property-form .crop-label {
+  margin: 6px 0 8px;
+}
+.property-form .color-control {
+  gap: 6px;
+}
+.property-form .color-control .color-swatch {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.property-form .color-control .color-swatch:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.align-group {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.align-group-label {
+  color: #6f737c;
+  font-size: 10px;
+}
+/* 对齐九宫格：行是垂直位置，列是水平位置。 */
+.align-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.align-cell {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #3b3d44;
+  border-radius: 6px;
+  background: #292b30;
+  color: #c9cbd0;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.align-cell:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+  color: #fff;
+}
+.align-cell:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.align-mark {
+  width: 15px;
+  height: 15px;
+}
+.align-page {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.45;
+}
+.align-block {
+  fill: currentColor;
+}
+/* 属性标题栏里的对象预览。 */
+.element-preview {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  margin-left: auto;
+  flex: 0 0 auto;
+  border: 1px solid var(--panel-border, #2c2e33);
+  border-radius: 6px;
+}
+.element-preview-canvas {
+  position: absolute;
+}
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border: 1px solid #3b3d44;
+  border-radius: 6px;
+  background: #292b30;
+  color: #c9cbd0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.toggle-button svg {
+  width: 13px;
+  height: 13px;
+}
+.toggle-button:hover:not(:disabled) {
+  border-color: var(--ppt-accent);
+}
+.toggle-button.active {
+  border-color: var(--ppt-accent);
+  background: rgba(211, 82, 48, 0.2);
+  color: #fff;
+}
+.toggle-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.segmented {
+  display: inline-flex;
+  margin-left: auto;
+  border: 1px solid #3b3d44;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.segmented button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-right: 1px solid #3b3d44;
+  background: #292b30;
+  color: #c9cbd0;
+  cursor: pointer;
+}
+.segmented button:last-child {
+  border-right: none;
+}
+.segmented button svg {
+  width: 14px;
+  height: 14px;
+}
+.segmented button:hover:not(:disabled) {
+  background: #33363c;
+}
+.segmented button.active {
+  background: rgba(211, 82, 48, 0.28);
+  color: #fff;
+}
+.segmented button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.statusbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 14px;
+  background: #101114;
+  border-top: 1px solid #303136;
+  color: #7d818a;
+  font-size: 10px;
+}
+.module-shell .statusbar {
+  grid-row: 2;
+}
+.saved-dot {
+  color: #9bad56;
+  margin-left: auto;
+}
+.saved-dot.dirty {
+  color: #e6ae62;
+}
+.missing-assets {
+  color: #e6ae62;
+}
+.content-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.content-status {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: inherit;
+  white-space: nowrap;
+}
+.content-status.pending {
+  color: var(--ppt-accent);
+}
+.content-review-action {
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.content-review-action:hover {
+  background: rgba(128, 128, 128, 0.18);
+}
+.content-review-action.approve {
+  color: var(--ppt-accent);
+}
+.content-review-action.approve:hover {
+  background: var(--ppt-accent);
+  color: #fff;
+}
+.content-history-open {
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid #35373d;
+  border-radius: 4px;
+  color: #b9bcc3;
+  background: #1b1c20;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.content-history-open:hover {
+  border-color: #4b4e56;
+  color: #fff;
+}
+.content-history-dialog {
+  width: min(860px, 100%);
+}
+.content-history-traces {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+}
+.content-history-traces h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #d8dae0;
+}
+.content-history-traces ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.content-history-traces li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  color: #8f939b;
+  font-size: 11px;
+}
+.content-history-traces li strong {
+  color: #e0b45a;
+}
+.content-history-body {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+  min-height: 300px;
+}
+.content-history-versions {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  max-height: 56vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.content-history-versions button {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #35373d;
+  border-radius: 7px;
+  color: #c9ccd3;
+  background: #1c1d21;
+  text-align: left;
+  cursor: pointer;
+}
+.content-history-versions button:hover {
+  border-color: #4b4e56;
+}
+.content-history-versions button.active {
+  border-color: var(--ppt-accent);
+  background: rgba(216, 165, 95, 0.08);
+}
+.content-history-versions strong {
+  font-size: 12px;
+}
+.content-history-versions span {
+  color: #92969e;
+  font-size: 10px;
+}
+.content-history-versions em {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: #d8a55f;
+  background: rgba(216, 165, 95, 0.16);
+  font-size: 9px;
+  font-style: normal;
+}
+.content-history-diff {
+  min-width: 0;
+  padding-left: 18px;
+  border-left: 1px solid #303238;
+}
+.content-history-diff-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.content-history-diff-heading strong {
+  font-size: 12px;
+}
+.content-history-diff-heading span {
+  color: #92969e;
+  font-size: 10px;
+}
+.content-history-diff-heading > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.content-history-restore {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--ppt-accent);
+  border-radius: 5px;
+  color: var(--ppt-accent);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.content-history-restore:hover:not(:disabled) {
+  color: #fff;
+  background: var(--ppt-accent);
+}
+.content-history-restore:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.content-history-hint {
+  margin: 0 0 8px;
+  color: #d8a55f;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.content-history-empty {
+  margin: 10px 0;
+  color: #92969e;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.content-diff-list {
+  display: grid;
+  gap: 8px;
+  max-height: 56vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.content-diff-page {
+  padding: 10px 12px;
+  border: 1px solid #35373d;
+  border-radius: 8px;
+  background: #202126;
+}
+.content-diff-page.removed {
+  border-color: #6b3940;
+  background: #2a2022;
+}
+.content-diff-page.added {
+  border-color: #3d5a45;
+  background: #1f2a22;
+}
+.content-diff-page-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.content-diff-page-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.content-diff-page-heading > span:last-child {
+  margin-left: auto;
+  color: #92969e;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.content-diff-badge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+}
+.content-diff-badge.changed,
+.content-diff-badge.moved {
+  color: #d8a55f;
+  background: rgba(216, 165, 95, 0.16);
+}
+.content-diff-badge.added {
+  color: #8fd3a1;
+  background: rgba(111, 180, 130, 0.18);
+}
+.content-diff-badge.removed {
+  color: #ee9199;
+  background: rgba(238, 145, 153, 0.16);
+}
+.content-diff-page > p {
+  margin: 6px 0 0;
+  color: #92969e;
+  font-size: 10px;
+}
+.content-diff-changes {
+  display: grid;
+  gap: 5px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.content-diff-changes li {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.content-diff-changes li > span:first-child {
+  color: #92969e;
+}
+.content-diff-values {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.content-diff-changes del {
+  color: #ee9199;
+  text-decoration: line-through;
+  word-break: break-word;
+}
+.content-diff-changes ins {
+  color: #8fd3a1;
+  text-decoration: none;
+  word-break: break-word;
+}
+.content-diff-added {
+  color: #8fd3a1;
+}
+.content-diff-removed {
+  color: #ee9199;
+}
+@media (max-width: 720px) {
+  .content-history-body {
+    grid-template-columns: 1fr;
+  }
+  .content-history-diff {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .content-history-versions {
+    max-height: 30vh;
+  }
+}
+.zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.zoom-controls button {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid #35373d;
+  border-radius: 4px;
+  color: #b9bcc3;
+  background: #1b1c20;
+  font-size: 10px;
+  cursor: pointer;
+}
+.zoom-controls button:hover {
+  border-color: #4b4e56;
+  color: #fff;
+}
+.zoom-controls .zoom {
+  min-width: 44px;
+  border-color: transparent;
+  background: transparent;
+}
+.zoom {
+  min-width: 40px;
+  text-align: right;
+  color: #c6c8cd;
+}
+.page-message {
+  position: fixed;
+  z-index: 50;
+  bottom: 42px;
+  right: 18px;
+  width: min(420px, calc(100vw - 36px));
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #484b52;
+  border-radius: 9px;
+  color: #e6e8ec;
+  background: #24262b;
+  font-size: 12px;
+}
+/* 提示条固定在右下角，底边距让开 28px 的状态栏。 */
+.page-message > svg {
+  width: 18px;
+  height: 18px;
+}
+.page-message.info > svg {
+  color: #7fa6dc;
+}
+.page-message.success {
+  border-color: #52613d;
+  background: #20261a;
+}
+.page-message.success > svg {
+  color: #9fbd72;
+}
+.page-message.error {
+  border-color: #6b3940;
+  background: #2a2022;
+}
+.page-message.error > svg {
+  color: #ee9199;
+}
+.page-message button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: #8d929b;
+  background: transparent;
+  cursor: pointer;
+}
+.page-message button:hover {
+  color: currentColor;
+}
+.page-message button svg {
+  width: 14px;
+  height: 14px;
+}
+.settings-page {
+  width: min(900px, calc(100% - 64px));
+  margin: 34px auto 70px;
+  display: grid;
+  gap: 16px;
+}
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #35373d;
+}

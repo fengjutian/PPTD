@@ -91,6 +91,31 @@ export type AppView = "editor" | "ai" | "theme" | "settings";
 export type PageMessage = { id: number; text: string; kind: "info" | "success" | "error" };
 export type DesignProgress = { percent: number; label: string };
 
+/**
+ * One generated design variant, as the gallery needs it.
+ *
+ * The full design stays in the runtime; this view carries only what a card
+ * draws, so the gallery cannot accidentally edit a design.
+ */
+export interface VariantOptionView {
+  id: string;
+  presetId: string;
+  name: string;
+  description: string;
+  /** Why the AI picked this template for this deck. */
+  reason: string;
+  /** Two representative rendered pages, cover first. */
+  images: string[];
+  issueCount: number;
+}
+
+/** How far the variant batch has got; `failed` counts attempts that produced no card. */
+export interface VariantBatchProgress {
+  total: number;
+  completed: number;
+  failed: number;
+}
+
 /** The user's answer to the direction gate. */
 export type DirectionChoice =
   { kind: "select"; id: string; words?: string } | { kind: "skip"; words?: string } | { kind: "retry" };

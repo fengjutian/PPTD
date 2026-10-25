@@ -42,4 +42,30 @@ describe("shape view", () => {
       expect(path.endsWith(" Z")).toBe(true);
     }
   });
+
+  it("draws a native gradient instead of the solid fallback", () => {
+    const markup = renderToStaticMarkup(
+      <ShapeView
+        element={shape({
+          shape: "rectangle",
+          style: {
+            fill: "#A62B1F",
+            stroke: "#A62B1F",
+            strokeWidthPt: 0,
+            radiusPt: 0,
+            fillGradient: {
+              angleDeg: 45,
+              stops: [
+                { offset: 0, color: "#B34439" },
+                { offset: 1, color: "#74201A" },
+              ],
+            },
+          },
+        })}
+        scale={1 as never}
+      />,
+    );
+    expect(markup).toContain("linear-gradient(135deg");
+    expect(markup).toContain("rgba(179, 68, 57");
+  });
 });

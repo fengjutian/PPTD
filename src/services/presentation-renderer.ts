@@ -15,6 +15,7 @@ import {
 import { breakAtoms } from "../core/rendering/cjk-linebreak";
 import { chartPlotArea, chartValueY, niceChartDomain } from "../core/rendering/chart-geometry";
 import { isLargeText } from "../core/rendering/contrast";
+import { gradientLinePoints, rgba as gradientRgba } from "../core/design/shape-gradient";
 import { cropGeometry } from "../core/rendering/image-crop";
 import { resolveImageUrl } from "./image-url-service";
 
@@ -92,7 +93,17 @@ async function renderSlide(
       }
     }
     if (element.type === "shape") {
-      context.fillStyle = element.style.fill;
+      const fillGradient = element.style.fillGradient;
+      if (fillGradient) {
+        const points = gradientLinePoints(fillGradient.angleDeg, w, h);
+        const gradient = context.createLinearGradient(points.x1, points.y1, points.x2, points.y2);
+        for (const stop of [...fillGradient.stops].sort((first, second) => first.offset - second.offset)) {
+          gradient.addColorStop(stop.offset, gradientRgba(stop.color, stop.transparency));
+        }
+        context.fillStyle = gradient;
+      } else {
+        context.fillStyle = element.style.fill;
+      }
       if (element.shape === "ellipse") {
         context.beginPath();
         context.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);

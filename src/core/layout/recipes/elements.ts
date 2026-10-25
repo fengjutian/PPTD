@@ -1,4 +1,12 @@
-import type { ElementId, Emu, RectEmu, SlideElement, TextAlign, TextContentRole } from "../../document-model";
+import type {
+  ElementId,
+  Emu,
+  RectEmu,
+  ShapeFillGradient,
+  SlideElement,
+  TextAlign,
+  TextContentRole,
+} from "../../document-model";
 
 interface TextOptions {
   contentRef?: TextContentRole;
@@ -39,7 +47,7 @@ export function textElement(
 }
 
 /** A generated filled rectangle. Rules and bars are rectangles, not pictures. */
-export function rectElement(frame: RectEmu, fill: string): SlideElement {
+export function rectElement(frame: RectEmu, fill: string, fillGradient?: ShapeFillGradient): SlideElement {
   return {
     id: crypto.randomUUID() as ElementId,
     type: "shape",
@@ -48,7 +56,7 @@ export function rectElement(frame: RectEmu, fill: string): SlideElement {
     locked: false,
     origin: "generated",
     shape: "rectangle",
-    style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: 0 },
+    style: { fill, stroke: fill, strokeWidthPt: 0, radiusPt: 0, ...(fillGradient ? { fillGradient } : {}) },
   };
 }
 

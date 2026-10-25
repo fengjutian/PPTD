@@ -137,6 +137,16 @@ describe("PPTX export", () => {
     expect(result.report.assetProvenance).toEqual({ verified: 1, pending: 0, user: 0, missing: 0 });
   });
 
+  it("writes a native gradient into the slide part, not an image", async () => {
+    const document = buildSpecimenDocument();
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain("<a:gradFill");
+    expect(slideXml).toContain('<a:lin ang="2700000"');
+    expect(result.report.warnings.some((warning) => warning.includes("渐变"))).toBe(false);
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("writes a changed page size into the presentation part", async () => {
     const document = createDocument();
     applyCommand(document, { type: "set-page-size", pageSize: pageSizeFromInches(10, 7.5)! });

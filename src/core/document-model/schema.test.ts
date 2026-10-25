@@ -207,6 +207,32 @@ describe("presentation document schema", () => {
     expect(versionNineteenFixture.schemaVersion).toBe(19);
   });
 
+  it("accepts a native fill gradient and rejects unordered stops", () => {
+    const document = parsePresentationDocument(versionNineteenFixture);
+    const shape = document.slides[0]!.elements[1]!;
+    expect(shape.type).toBe("shape");
+    if (shape.type !== "shape") return;
+    shape.style.fillGradient = {
+      angleDeg: 45,
+      stops: [
+        { offset: 0, color: "#B34439" },
+        { offset: 0.52, color: "#A62B1F", transparency: 20 },
+        { offset: 1, color: "#74201A" },
+      ],
+    };
+    expect(presentationDocumentSchema.parse(document).slides[0]!.elements[1]).toMatchObject({
+      style: { fillGradient: { angleDeg: 45 } },
+    });
+    shape.style.fillGradient = {
+      angleDeg: 45,
+      stops: [
+        { offset: 1, color: "#B34439" },
+        { offset: 0, color: "#74201A" },
+      ],
+    };
+    expect(() => presentationDocumentSchema.parse(document)).toThrow();
+  });
+
   it("keeps the design direction of a version 20 fixture", () => {
     const parsed = parsePresentationDocument(versionTwentyFixture);
     expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
