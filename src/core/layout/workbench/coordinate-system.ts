@@ -1,5 +1,5 @@
-import type { Emu, RectEmu } from "../document-model";
-import type { NormalizedRect, PageChrome } from "./page-chrome";
+import type { Emu, RectEmu } from "../../document-model";
+import type { NormalizedRect, PageChrome } from "../page-chrome";
 
 export const LAYOUT_SPACE_SIZE = 1000;
 

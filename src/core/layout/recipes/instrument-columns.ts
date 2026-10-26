@@ -1,8 +1,8 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { Emu } from "../../document-model";
-import { layoutRectToNormalized, normalizedToLayoutRect } from "../coordinate-system";
-import { layoutColumns } from "../layout-functions";
 import { resolveChrome } from "../page-chrome";
+import { layoutRectToNormalized, normalizedToLayoutRect } from "../workbench/coordinate-system";
+import { layoutColumns } from "../workbench/layout-functions";
 import { readContentUnits } from "./content";
 import { rectElement, textElement, verticalRule } from "./elements";
 import {

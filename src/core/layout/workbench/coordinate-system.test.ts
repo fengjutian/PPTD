@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { inches } from "../document-model";
+import { inches } from "../../document-model";
 import { layoutRect, layoutRectToEmu, pageCoordinateSystemFromChrome } from "./coordinate-system";
-import { planPageChrome } from "./page-chrome";
+import { planPageChrome } from "../page-chrome";
 import { validatePageCoordinateSystem } from "./layout-validator";
 
 describe("page coordinate system", () => {
