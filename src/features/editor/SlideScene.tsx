@@ -1,5 +1,5 @@
 import { type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from "react";
-import { type ImageFrameShape, type Slide, type SlideElement } from "../../core/document-model";
+import { visibleElements, type ImageFrameShape, type Slide, type SlideElement } from "../../core/document-model";
 import { ChartView } from "./ChartView";
 import { CroppedImage } from "./CroppedImage";
 import { LineView } from "./LineView";
@@ -108,7 +108,7 @@ export function SlideScene({ slide, pageWidth, pageHeight, scale, className, sty
       className={className}
       style={{ width: pageWidth * scale, height: pageHeight * scale, background: slide.background, ...style }}
     >
-      {slide.elements.map((element) => (
+      {visibleElements(slide).map((element) => (
         <SlideElementFrame key={element.id} element={element} scale={scale}>
           <SlideElementContent element={element} slide={slide} scale={scale} imageAlt={imageAlt} />
         </SlideElementFrame>

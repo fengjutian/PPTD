@@ -38,12 +38,17 @@ export function elementKind(element: SlideElement): string {
   return SHAPE_LABELS[element.shape];
 }
 
-/** The full name, used for the tooltip and the search. */
-export function fullElementName(element: SlideElement): string {
+/** The name read from the object itself, used when no custom name exists. */
+export function derivedElementName(element: SlideElement): string {
   if (element.type === "text") return element.text.replace(/\s+/g, " ").trim().slice(0, 80) || "文本";
   if (element.type === "image") return element.altText.trim().slice(0, 80) || "图片";
   if (element.type === "icon") return ICON_LABELS[element.name];
   return elementKind(element);
+}
+
+/** The layer name: the user's name when set, otherwise the derived one. */
+export function fullElementName(element: SlideElement): string {
+  return element.name?.trim() || derivedElementName(element);
 }
 
 /**
@@ -189,6 +194,7 @@ export interface LayerMenuState {
   blockIds: ElementId[];
   anyLocked: boolean;
   allLocked: boolean;
+  allHidden: boolean;
   /** The one group the selection is, when "取消组合" is possible. */
   groupId?: string;
   canGroup: boolean;
@@ -223,6 +229,7 @@ export function layerMenuState(
     blockIds,
     anyLocked,
     allLocked,
+    allHidden: elements.length > 0 && elements.every((element) => element.hidden === true),
     ...(group ? { groupId: group.id } : {}),
     canGroup: selectedElementIds.length >= 2 && !anyLocked && !alreadyGrouped,
     canUngroup: group !== undefined,

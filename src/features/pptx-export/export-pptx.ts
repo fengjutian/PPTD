@@ -2,6 +2,7 @@ import PptxGenJS from "pptxgenjs";
 import { unzipSync, zipSync } from "fflate";
 import {
   EMU_PER_INCH,
+  hiddenElementCount,
   resolveChartData,
   resolveFragmentStyle,
   resolveTableData,
@@ -9,6 +10,7 @@ import {
   iconOutline,
   ICON_GRID,
   textFragments,
+  withoutHiddenElements,
   type ChartElement,
   type ImageElement,
   type PresentationDocument,
@@ -231,19 +233,29 @@ export async function buildPptx(
   }
   throwIfCancelled(options.signal);
 
+  // Hidden objects are editor-only. Every pass below works on one snapshot
+  // without them, so pictures, gradients, animations, parity and provenance
+  // cannot disagree about which objects the package contains.
+  const hiddenCount = document.slides.reduce((sum, slide) => sum + hiddenElementCount(slide), 0);
+  const exportDocument = withoutHiddenElements(document);
+
   const pptx = new PptxGenJS();
   const layoutName = "PPTD_CUSTOM";
-  pptx.defineLayout({ name: layoutName, width: inch(document.pageSize.width), height: inch(document.pageSize.height) });
+  pptx.defineLayout({
+    name: layoutName,
+    width: inch(exportDocument.pageSize.width),
+    height: inch(exportDocument.pageSize.height),
+  });
   pptx.layout = layoutName;
   pptx.author = "PPTD";
   pptx.subject = "Created with PPTD";
-  pptx.title = document.title;
+  pptx.title = exportDocument.title;
   pptx.company = "PPTD";
 
   // The theme of the template becomes the theme of the presentation, so the
   // fonts of the deck are the fonts PowerPoint offers when the user picks a
   // new one in the design panel.
-  const theme = document.theme;
+  const theme = exportDocument.theme;
   const themeSlots = theme ? normalizeThemeColors(theme.colors) : [];
   if (theme) {
     pptx.theme = { headFontFace: theme.majorFont, bodyFontFace: theme.minorFont };
@@ -252,7 +264,7 @@ export async function buildPptx(
   // Every template layout the deck was designed against becomes a slide
   // master. Slides that share a layout inherit its background instead of
   // painting a copy of it on the page.
-  const masters = planMasters(document);
+  const masters = planMasters(exportDocument);
   for (const plan of masters.values()) {
     pptx.defineSlideMaster({
       title: plan.title,
@@ -269,7 +281,7 @@ export async function buildPptx(
   // The crop and the frame shape of every picture, in the order the pictures
   // were added. Both are written into the slide XML later, in one pass.
   const picturesBySlide: PictureTreatment[][] = [];
-  for (const model of document.slides) {
+  for (const model of exportDocument.slides) {
     throwIfCancelled(options.signal);
     const master = model.layoutId ? masters.get(model.layoutId) : undefined;
     const slide = master ? pptx.addSlide({ masterName: master.title }) : pptx.addSlide();
@@ -574,16 +586,20 @@ export async function buildPptx(
   // slot value can point at the slot instead of at a literal color. That is
   // what lets a later theme edit in PowerPoint recolor the deck.
   const themeColorReferences = themeSlots.length > 0 ? linkThemeColors(entries, themeSlots) : 0;
-  const gradientPatch = patchShapeGradients(entries, document.slides);
+  const gradientPatch = patchShapeGradients(entries, exportDocument.slides);
   const gradientWarnings =
     gradientPatch.expected > gradientPatch.patched
       ? [`${gradientPatch.expected - gradientPatch.patched} 个渐变形状未能写入原生渐变，已回退为纯色`]
       : [];
-  const nativeTransitionCount = patchSlideTransitions(entries, document.slides);
-  const animationResult = patchSlideAnimations(entries, document.slides);
+  const nativeTransitionCount = patchSlideTransitions(entries, exportDocument.slides);
+  const animationResult = patchSlideAnimations(entries, exportDocument.slides);
   const animationWarnings =
     animationResult.skipped > 0 && !issues.some((issue) => issue.code === "animation-not-exported")
       ? [`${animationResult.skipped} 个动画缺少原生目标或效果不支持，未写入 PPTX`]
+      : [];
+  const hiddenWarnings =
+    hiddenCount > 0 && !issues.some((issue) => issue.code === "hidden-not-exported")
+      ? [`${hiddenCount} 个隐藏对象未写入 PPTX`]
       : [];
   const _picturesPatched = patchImageFrames(entries, picturesBySlide);
   const bytes = zipSync(entries, { level: 6 });
@@ -592,9 +608,9 @@ export async function buildPptx(
     throw new Error(`EXPORT_PACKAGE_INVALID: ${packageValidation.issues.join("；")}`);
   }
   // Read the written package back, independently of the mapping above.
-  const parity = verifyExportedPptx(bytes, document);
+  const parity = verifyExportedPptx(bytes, exportDocument);
   const assetProvenance = { verified: 0, pending: 0, user: 0, missing: 0 };
-  for (const slide of document.slides) {
+  for (const slide of exportDocument.slides) {
     for (const element of slide.elements) {
       if (element.type !== "image" || element.placement === "layout-background") continue;
       const verification = element.provenance?.verification;
@@ -611,7 +627,7 @@ export async function buildPptx(
       ? undefined
       : (() => {
           try {
-            const lint = lintTaste(document);
+            const lint = lintTaste(exportDocument);
             const codes = Object.fromEntries(Object.entries(lint.counts).filter(([, count]) => count > 0));
             return {
               hard: lint.issues.filter((issue) => issue.severity === "hard").length,
@@ -624,12 +640,12 @@ export async function buildPptx(
         })();
 
   const templateFit = (() => {
-    if (!document.templateStyle) return undefined;
+    if (!exportDocument.templateStyle) return undefined;
     // An old target must not describe a deck whose page size, theme or
     // layouts were changed after generation.
-    if (!templateTargetMatchesDocument(document.templateStyle, document)) return undefined;
+    if (!templateTargetMatchesDocument(exportDocument.templateStyle, exportDocument)) return undefined;
     try {
-      const fit = checkTemplateFit(document, document.templateStyle);
+      const fit = checkTemplateFit(exportDocument, exportDocument.templateStyle);
       return {
         checked: fit.checked,
         score: fit.score,
@@ -648,7 +664,7 @@ export async function buildPptx(
   return {
     bytes,
     report: {
-      slideCount: document.slides.length,
+      slideCount: exportDocument.slides.length,
       nativeObjectCount,
       croppedImages: croppedImageCount,
       nativeChartCount,
@@ -664,7 +680,7 @@ export async function buildPptx(
       ...(tasteLint ? { tasteLint } : {}),
       ...(templateFit ? { templateFit } : {}),
       parity,
-      warnings: [...issues.map((issue) => issue.message), ...animationWarnings, ...gradientWarnings],
+      warnings: [...issues.map((issue) => issue.message), ...animationWarnings, ...gradientWarnings, ...hiddenWarnings],
       issues,
       package: packageValidation,
     },

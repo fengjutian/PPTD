@@ -70,7 +70,7 @@ export function cloneContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
  * 内容占位符不能被复制成第二份——那会让一页出现两个标题，所以文本副本
  * 变成装饰性文本。
  */
-export function copyElementForPaste(element: SlideElement, offset: number): SlideElement {
+function copyElementBase(element: SlideElement, offset: number): SlideElement {
   const moved = { ...element.frame, x: (element.frame.x + offset) as Emu, y: (element.frame.y + offset) as Emu };
   if (element.type === "text") {
     const copy: TextElement = {
@@ -103,6 +103,29 @@ export function copyElementForPaste(element: SlideElement, offset: number): Slid
   if (element.type === "icon")
     return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, style: { ...element.style } };
   return { ...element, id: crypto.randomUUID() as ElementId, frame: moved, source: { ...element.source } };
+}
+
+/**
+ * The copy used by paste and duplicate.
+ *
+ * A copy is a fresh, visible edit target: hiding is editor state of the source,
+ * not a property of the copy. The custom name stays, so a renamed object is
+ * still recognisable after it is duplicated.
+ */
+export function copyElementForPaste(element: SlideElement, offset: number): SlideElement {
+  const copy = copyElementBase(element, offset);
+  delete copy.hidden;
+  return copy;
+}
+
+/**
+ * Layer names are one-line labels: collapse internal whitespace and trim.
+ *
+ * The schema and the rename command share this normalization, so typing two
+ * spaces into the layer input cannot produce a name that later fails to load.
+ */
+export function normalizeElementName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 /**

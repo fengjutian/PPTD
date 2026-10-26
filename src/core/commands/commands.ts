@@ -4,6 +4,7 @@ import {
   createDocument,
   diffContentVersion,
   emu,
+  ELEMENT_NAME_MAX_LENGTH,
   inches,
   phaseForEffect,
   SHAPE_KINDS,
@@ -52,6 +53,7 @@ import {
   normalizedToEmuRect,
   fitImageIntoBox,
   makeRoomForAsset,
+  normalizeElementName,
 } from "./command-helpers";
 
 export type {
@@ -116,6 +118,22 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
             (item.contentRef === "title" || item.contentRef === "body"),
         ) ?? false;
       return touchesContent ? "content" : "design";
+    }
+    case "rename-element": {
+      // A name is design metadata, never content. Re-typing the same name (or
+      // clearing an already absent one) must not leave an undo entry.
+      if (!document) return "design";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const element = slide?.elements.find((item) => item.id === command.elementId);
+      return normalizeElementName(element?.name ?? "") === normalizeElementName(command.name) ? null : "design";
+    }
+    case "set-elements-hidden": {
+      // Setting every target to the state it already has is not an edit.
+      if (!document) return "design";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const targets = slide?.elements.filter((item) => command.elementIds.includes(item.id)) ?? [];
+      if (targets.length === 0) return "design";
+      return targets.some((item) => (item.hidden === true) !== command.hidden) ? "design" : null;
     }
     case "align-elements":
     case "distribute-elements":
@@ -440,6 +458,30 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     const targets = slide.elements.filter((element) => command.elementIds.includes(element.id));
     if (targets.length === 0) throw new Error("ELEMENT_NOT_FOUND");
     for (const target of targets) target.locked = command.locked;
+    return;
+  }
+
+  if (command.type === "rename-element") {
+    // Naming is metadata; a locked object can still be renamed from the layer
+    // list so a locked background can be labelled without unlocking it.
+    const target = slide.elements.find((element) => element.id === command.elementId);
+    if (!target) throw new Error("ELEMENT_NOT_FOUND");
+    const name = normalizeElementName(command.name);
+    if (name.length > ELEMENT_NAME_MAX_LENGTH) throw new Error("ELEMENT_NAME_TOO_LONG");
+    if (name) target.name = name;
+    else delete target.name;
+    return;
+  }
+
+  if (command.type === "set-elements-hidden") {
+    // Visibility is editor state; hiding a locked object is allowed, otherwise a
+    // locked object could never be taken off the page or brought back.
+    const targets = slide.elements.filter((element) => command.elementIds.includes(element.id));
+    if (targets.length === 0) throw new Error("ELEMENT_NOT_FOUND");
+    for (const target of targets) {
+      if (command.hidden) target.hidden = true;
+      else delete target.hidden;
+    }
     return;
   }
 

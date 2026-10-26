@@ -476,6 +476,37 @@ describe("data-story recipe", () => {
     expect(metricValues).toHaveLength(3);
   });
 
+  it("sets each metric on a recessed card with a muted label", () => {
+    const ctx = context(metricContent, {
+      facts: facts({ itemCount: 0, hasRowBlock: true, hasMetric: true }),
+    });
+    const result = plan(dataStory, ctx);
+    const cards = result.elements.filter(
+      (element) =>
+        element.type === "shape" &&
+        element.style.fill === ctx.colors.surfaceSunken &&
+        element.frame.height > page.height * 0.1,
+    );
+    // Three measurements, three cards: the page stops reading as a list.
+    expect(cards).toHaveLength(3);
+    // The label sits back so the number leads; the card is neutral, so the
+    // muted ink still clears the contrast floor.
+    for (const label of ["销售收入", "客户数", "平均交付"]) {
+      const text = result.elements.find((element) => element.type === "text" && element.text === label);
+      expect(text?.type === "text" ? text.style.color : undefined).toBe(ctx.colors.textMuted);
+    }
+  });
+
+  it("keeps template artwork clear of the metric cards", () => {
+    const ctx = context(metricContent, {
+      facts: facts({ itemCount: 0, hasRowBlock: true, hasMetric: true }),
+    });
+    ctx.hasArtwork = true;
+    const result = plan(dataStory, ctx);
+    const fills = result.elements.flatMap((element) => (element.type === "shape" ? [element.style.fill] : []));
+    expect(fills).not.toContain(ctx.colors.surfaceSunken);
+  });
+
   it("draws a native chart when the metrics share a unit", () => {
     const numeric: SlideContent = {
       ...metricContent,

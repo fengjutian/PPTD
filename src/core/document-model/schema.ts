@@ -2,9 +2,9 @@ import { z } from "zod";
 import { phaseForEffect } from "./animation";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
-import { MAX_DESIGN_DIRECTIONS } from "./types";
+import { ELEMENT_NAME_MAX_LENGTH, MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 24 as const;
+export const CURRENT_SCHEMA_VERSION = 25 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -14,6 +14,9 @@ const base = z.object({
   frame: rect,
   rotationMilliDegree: z.number().int(),
   locked: z.boolean(),
+  /** Editor-side layer metadata; absent means the derived name and visible. */
+  name: z.string().trim().min(1).max(ELEMENT_NAME_MAX_LENGTH).optional(),
+  hidden: z.boolean().optional(),
   /** Missing in legacy documents; the relayout command infers it structurally. */
   origin: z.enum(["generated", "user"]).optional(),
 });
@@ -699,6 +702,11 @@ const versionEighteenDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentyFourDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(24) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTwentyThreeDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(23) })
   .superRefine(validateUniqueIds)
@@ -882,6 +890,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 24 adds the frame shape of a picture. Optional, so a version 23
   // document keeps its rectangular pictures and renders exactly as it did.
   23: (document) => ({ ...versionTwentyThreeDocumentSchema.parse(document), schemaVersion: 24 }),
+  // Version 25 adds the editor-side layer name and visibility flag. Both are
+  // optional: a version 24 document keeps deriving every name and stays fully
+  // visible, so approving a deck does not silently hide an object.
+  24: (document) => ({ ...versionTwentyFourDocumentSchema.parse(document), schemaVersion: 25 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

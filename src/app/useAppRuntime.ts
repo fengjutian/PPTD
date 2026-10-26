@@ -11,6 +11,8 @@ import {
   type SupportedImageMimeType,
   nextTextSize,
   normalizeTextFormat,
+  visibleElements,
+  isElementVisible,
 } from "../core/document-model";
 import {
   applyCommand,
@@ -588,7 +590,8 @@ export function useAppRuntime() {
   // 多选时属性面板显示这一组的公共信息，而不是某一个对象。
   const marquee = useMarqueeSelection({
     scale,
-    elements: activeSlide.elements,
+    // Hidden objects have no place on the canvas, so a marquee cannot catch them.
+    elements: visibleElements(activeSlide),
     onSelect: (ids) => selectElements(ids),
     onClear: () => selectElement(null),
   });
@@ -3654,7 +3657,9 @@ export function useAppRuntime() {
       if (shortcut === "select-all") {
         if (editorSurface !== "canvas") return;
         event.preventDefault();
-        const ids = activeSlide.elements.filter((element) => !element.locked).map((element) => element.id);
+        const ids = activeSlide.elements
+          .filter((element) => !element.locked && isElementVisible(element))
+          .map((element) => element.id);
         selectElements(ids);
         setTaskStatus(ids.length > 0 ? `已选择 ${ids.length} 个对象` : "本页没有可选对象");
         return;

@@ -3,6 +3,8 @@ import {
   BarChart3,
   Circle,
   Copy,
+  Eye,
+  EyeOff,
   Image as ImageIcon,
   Layers,
   Lock,
@@ -26,6 +28,7 @@ import {
   arrayInsertionIndex,
   blockMoved,
   blockMoveIndex,
+  derivedElementName,
   dragBlockIds,
   elementKind,
   filterLayerRows,
@@ -40,7 +43,7 @@ import {
 const DRAG_THRESHOLD_PX = 4;
 
 /** The footprint of the context menu, used to keep it inside the window. */
-const MENU_SIZE = { width: 196, height: 316 };
+const MENU_SIZE = { width: 196, height: 380 };
 
 function ElementIcon({ element }: { element: SlideElement }) {
   if (element.type === "text") return <Type />;
@@ -100,6 +103,8 @@ export const LayerList = memo(function LayerList({
 }: LayerListProps) {
   const [query, setQuery] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; elementId: ElementId } | null>(null);
+  const [editingId, setEditingId] = useState<ElementId | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
   const allRows = useMemo(() => layerRows(slide), [slide]);
   const rows = useMemo(() => filterLayerRows(allRows, query), [allRows, query]);
   const filtering = query.trim().length > 0;
@@ -127,6 +132,8 @@ export const LayerList = memo(function LayerList({
   const [drag, setDrag] = useState<DragPreview | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const cancelRenameRef = useRef(false);
   const rowRefs = useRef(new Map<ElementId, HTMLDivElement>());
   const dragRef = useRef<ActiveDrag | null>(null);
   const anchorRef = useRef<ElementId | null>(null);
@@ -148,6 +155,15 @@ export const LayerList = memo(function LayerList({
     rowRefs.current.get(focused)?.scrollIntoView?.({ block: "nearest" });
   }, [selectedElementIds, slide.id]);
 
+  // A rename belongs to one page and one object. Leaving the page, or deleting
+  // the row from another panel, cancels it instead of writing to a stale row.
+  useEffect(() => {
+    setEditingId(null);
+  }, [slide.id]);
+  useEffect(() => {
+    if (editingId && !slide.elements.some((element) => element.id === editingId)) setEditingId(null);
+  }, [editingId, slide.elements]);
+
   const focusRow = (elementId: ElementId) => {
     // The store update re-renders the row before the focus call lands.
     window.requestAnimationFrame(() => rowRefs.current.get(elementId)?.focus());
@@ -165,6 +181,43 @@ export const LayerList = memo(function LayerList({
   const toggleLock = (elementId: ElementId) => {
     const elementIds = blockOf(elementId);
     onCommand({ type: "set-elements-lock", slideId: slide.id, elementIds, locked: !blockLocked(elementIds) });
+  };
+
+  const toggleHidden = (elementId: ElementId) => {
+    const elementIds = blockOf(elementId);
+    const allHidden = elementIds.every(
+      (id) => slide.elements.find((element) => element.id === id)?.hidden === true,
+    );
+    onCommand({ type: "set-elements-hidden", slideId: slide.id, elementIds, hidden: !allHidden });
+  };
+
+  const startRename = (element: SlideElement) => {
+    cancelRenameRef.current = false;
+    setEditingId(element.id);
+    setNameDraft(element.name ?? "");
+    window.requestAnimationFrame(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    });
+  };
+
+  const commitRename = (element: SlideElement, value: string) => {
+    if (cancelRenameRef.current) {
+      cancelRenameRef.current = false;
+      return;
+    }
+    setEditingId(null);
+    const name = value.replace(/\s+/g, " ").trim();
+    if (name !== (element.name ?? "")) {
+      onCommand({ type: "rename-element", slideId: slide.id, elementId: element.id, name });
+    }
+    focusRow(element.id);
+  };
+
+  const cancelRename = (element: SlideElement) => {
+    cancelRenameRef.current = true;
+    setEditingId(null);
+    focusRow(element.id);
   };
 
   const duplicate = (elementId: ElementId) => {
@@ -227,6 +280,12 @@ export const LayerList = memo(function LayerList({
       event.preventDefault();
       event.stopPropagation();
       onSelectMany(rows.map((item) => item.id));
+      return;
+    }
+    if (key === "F2") {
+      event.preventDefault();
+      event.stopPropagation();
+      startRename(row);
       return;
     }
     if (event.altKey && (key === "ArrowUp" || key === "ArrowDown")) {
@@ -300,7 +359,8 @@ export const LayerList = memo(function LayerList({
    */
   const handlePointerDown = (event: React.PointerEvent, element: SlideElement) => {
     if (event.button !== 0) return;
-    if ((event.target as HTMLElement).closest("button")) return;
+    if ((event.target as HTMLElement).closest("button, input")) return;
+    if (editingId === element.id) return;
     // Modified clicks belong to selection, never to a drag.
     if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!selectedSet.has(element.id)) onSelect(element.id);
@@ -517,6 +577,7 @@ export const LayerList = memo(function LayerList({
             selected ? "active" : "",
             groupMate ? "group-mate" : "",
             element.locked ? "locked" : "",
+            element.hidden ? "is-hidden" : "",
             dragging ? "dragging" : "",
             dropBeforeId === element.id ? "drop-before" : "",
             dropAfterId === element.id ? "drop-after" : "",
@@ -531,9 +592,9 @@ export const LayerList = memo(function LayerList({
               role="option"
               aria-selected={selected}
               aria-label={`${kind}：${name}${element.locked ? "，已锁定" : ""}${
-                group ? `，与另外 ${group.elementIds.length - 1} 个对象同组` : ""
-              }`}
-              aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Shift+F10"
+                element.hidden ? "，已隐藏" : ""
+              }${group ? `，与另外 ${group.elementIds.length - 1} 个对象同组` : ""}`}
+              aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Shift+F10 F2"
               title={`${kind}：${name}`}
               data-layer-id={element.id}
               className={className}
@@ -555,7 +616,42 @@ export const LayerList = memo(function LayerList({
               </span>
 
               <span className="layer-copy">
-                <span className="layer-name">{name}</span>
+                {editingId === element.id ? (
+                  <input
+                    ref={nameInputRef}
+                    className="layer-name-input"
+                    value={nameDraft}
+                    maxLength={80}
+                    placeholder={derivedElementName(element)}
+                    aria-label="图层名称"
+                    onChange={(event) => setNameDraft(event.target.value)}
+                    onClick={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      // The row would otherwise nudge, delete or move the layer.
+                      event.stopPropagation();
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      } else if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelRename(element);
+                      }
+                    }}
+                    onBlur={(event) => commitRename(element, event.currentTarget.value)}
+                  />
+                ) : (
+                  <span
+                    className="layer-name"
+                    title={name}
+                    onDoubleClick={(event) => {
+                      event.stopPropagation();
+                      startRename(element);
+                    }}
+                  >
+                    {name}
+                  </span>
+                )}
                 {(group !== undefined || animatedElementIds.has(element.id) || element.locked) && (
                   <span className="layer-meta">
                     {group && (
@@ -586,6 +682,19 @@ export const LayerList = memo(function LayerList({
                 onPointerDown={(event) => event.stopPropagation()}
                 onKeyDown={(event) => event.stopPropagation()}
               >
+                <button
+                  type="button"
+                  className="layer-action"
+                  title={element.hidden ? "显示图层" : "隐藏图层"}
+                  aria-label={element.hidden ? "显示图层" : "隐藏图层"}
+                  aria-pressed={!element.hidden}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleHidden(element.id);
+                  }}
+                >
+                  {element.hidden ? <EyeOff /> : <Eye />}
+                </button>
                 <button
                   type="button"
                   className="layer-action"

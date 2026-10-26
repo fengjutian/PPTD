@@ -1,6 +1,8 @@
 import {
   EMU_PER_INCH,
   animationExportsNatively,
+  hiddenElementCount,
+  isElementVisible,
   resolveChartData,
   resolveTableData,
   type PresentationDocument,
@@ -20,7 +22,8 @@ export type ExportIssueCode =
   | "invalid-chart-data"
   | "invalid-table-data"
   | "animation-not-exported"
-  | "group-not-exported";
+  | "group-not-exported"
+  | "hidden-not-exported";
 
 export type ExportIssueSeverity = "error" | "warning";
 
@@ -62,11 +65,22 @@ export async function validatePresentationForExport(
   const fontCache = new Map<string, boolean>();
 
   for (const [slideIndex, slide] of document.slides.entries()) {
-    if (slide.elements.length === 0) {
+    const hiddenCount = hiddenElementCount(slide);
+    if (slide.elements.length - hiddenCount === 0) {
       issues.push({
         code: "empty-slide",
         severity: "warning",
         message: `第 ${slideIndex + 1} 页没有可导出对象`,
+        slideIndex,
+      });
+    }
+    if (hiddenCount > 0) {
+      // The exporter writes a snapshot without hidden objects. Say it before the
+      // file is written instead of letting the report imply nothing was left out.
+      issues.push({
+        code: "hidden-not-exported",
+        severity: "warning",
+        message: `第 ${slideIndex + 1} 页有 ${hiddenCount} 个隐藏对象，导出时不会写入 PPTX`,
         slideIndex,
       });
     }
@@ -78,10 +92,14 @@ export async function validatePresentationForExport(
         slideIndex,
       });
     }
-    if (slide.animations && slide.animations.length > 0) {
+    const hiddenIds = new Set(
+      slide.elements.filter((element) => !isElementVisible(element)).map((element) => element.id),
+    );
+    const exportedAnimations = (slide.animations ?? []).filter((animation) => !hiddenIds.has(animation.elementId));
+    if (exportedAnimations.length > 0) {
       // Every current effect has a native node; this guard stays for future
       // effects so a new enum value cannot silently disappear at export.
-      const unsupported = slide.animations.filter((animation) => !animationExportsNatively(animation.effect));
+      const unsupported = exportedAnimations.filter((animation) => !animationExportsNatively(animation.effect));
       if (unsupported.length > 0) {
         issues.push({
           code: "animation-not-exported",
@@ -117,6 +135,9 @@ export async function validatePresentationForExport(
         });
       }
       seenIds.add(element.id);
+      // Hidden objects never reach the package, so their geometry, fonts and
+      // data cannot block or warn about an export they are not part of.
+      if (!isElementVisible(element)) continue;
 
       if (frameOutsidePage(element, document)) {
         issues.push({

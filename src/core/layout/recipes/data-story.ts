@@ -12,6 +12,8 @@ type MetricBlock = Extract<ContentBlock, { type: "metric" }>;
 const LABEL_GAP = 0.018;
 /** The shortest accent rule above a metric group. */
 const RULE_GAP = 0.05;
+/** How far the recessed card around a metric extends past its text. */
+const CARD_PAD = 0.022;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -161,7 +163,10 @@ export const dataStory: LayoutRecipe = {
     }
 
     const columns = metrics.length;
-    const gap = 0.035;
+    // The gap has to stay wider than twice the card padding, otherwise the
+    // three cards touch and the page reads as one grey band instead of three
+    // measurements.
+    const gap = 0.07;
     const columnWidth = (chrome.content.width - gap * (columns - 1)) / columns;
     const preferredValueSize = columns === 1 ? 84 : columns === 2 ? 68 : 56;
     const maximumValueSize = columns === 1 ? 96 : columns === 2 ? 80 : 72;
@@ -218,6 +223,29 @@ export const dataStory: LayoutRecipe = {
     measured.forEach((item, index) => {
       const x = chrome.content.x + index * (columnWidth + gap);
       const ruleY = groupTop - RULE_GAP;
+      // Each metric sits on its own recessed card. On a bare page the numbers
+      // used to float on the same white field as everything else, and three
+      // big numbers in a row read as a list of facts rather than three
+      // measurements. The card is skipped on a template page, whose artwork is
+      // the surface the user chose.
+      if (!ctx.hasArtwork) {
+        const left = Math.max(chrome.content.x, x - CARD_PAD);
+        const right = Math.min(chrome.content.x + chrome.content.width, x + columnWidth + CARD_PAD);
+        elements.push(
+          rectElement(
+            frameFromNormalized(
+              {
+                x: left,
+                y: ruleY - CARD_PAD,
+                width: Math.max(0.1, right - left),
+                height: groupHeight + RULE_GAP + CARD_PAD * 2,
+              },
+              page,
+            ),
+            ctx.colors.surfaceSunken,
+          ),
+        );
+      }
       elements.push(
         rectElement(
           frameFromNormalized({ x, y: ruleY, width: Math.min(0.1, columnWidth * 0.3), height: 0.006 }, page),
@@ -247,7 +275,7 @@ export const dataStory: LayoutRecipe = {
             page,
           ),
           item.labelSize,
-          ctx.colors.body,
+          ctx.colors.textMuted,
           false,
           "left",
           bodyFamily,

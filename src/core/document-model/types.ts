@@ -205,11 +205,26 @@ export interface ChartElementStyle {
   showValueLabels: boolean;
 }
 
+/** The longest layer name the editor accepts, in UTF-16 code units. */
+export const ELEMENT_NAME_MAX_LENGTH = 80;
+
 export interface ElementBase {
   id: ElementId;
   frame: RectEmu;
   rotationMilliDegree: number;
   locked: boolean;
+  /**
+   * User-facing layer name. Absent means the name is derived from the object
+   * (its text, alternative text or kind). It is editor metadata: it never
+   * changes the copy, the content hash or the exported geometry.
+   */
+  name?: string;
+  /**
+   * Editor-only visibility. A hidden object stays in the document and in the
+   * layer list, but is not drawn on the canvas or in previews and is left out of
+   * the exported PPTX, which the export report states.
+   */
+  hidden?: boolean;
   /** Design provenance used by design-only relayout. */
   origin?: ElementOrigin;
 }

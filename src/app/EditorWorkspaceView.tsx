@@ -10,6 +10,7 @@ import { CanvasGridLayer, CanvasGuideLayer } from "../features/editor/CanvasOver
 
 import { ElementView } from "../features/editor/ElementView";
 import { SlideThumbnail } from "../features/editor/SlideThumbnail";
+import { isElementVisible } from "../core/document-model";
 
 import type { AppRuntime } from "./app-runtime";
 import { CANVAS_WIDTH } from "./app-shared";
@@ -146,7 +147,7 @@ export function EditorWorkspaceView({ app }: { app: AppRuntime }) {
               onPointerDown={marquee.onPointerDown}
             >
               <CanvasGridLayer scale={scale} />
-              {activeSlide.elements.map((element) => (
+              {activeSlide.elements.filter(isElementVisible).map((element) => (
                 <ElementView
                   key={element.id}
                   element={element}

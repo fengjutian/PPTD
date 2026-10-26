@@ -185,6 +185,14 @@ export type DocumentCommand =
   | { type: "delete-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "set-element-lock"; slideId: SlideId; elementId: ElementId; locked: boolean }
   | { type: "set-elements-lock"; slideId: SlideId; elementIds: ElementId[]; locked: boolean }
+  | {
+      type: "rename-element";
+      slideId: SlideId;
+      elementId: ElementId;
+      /** Empty or whitespace removes the custom name and restores the derived one. */
+      name: string;
+    }
+  | { type: "set-elements-hidden"; slideId: SlideId; elementIds: ElementId[]; hidden: boolean }
   | { type: "group-elements"; slideId: SlideId; elementIds: ElementId[] }
   | { type: "ungroup-elements"; slideId: SlideId; groupId: string }
   | { type: "reorder-element"; slideId: SlideId; elementId: ElementId; toIndex: number }

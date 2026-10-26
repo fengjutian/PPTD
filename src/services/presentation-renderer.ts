@@ -1,5 +1,6 @@
 import {
   formatChartValue,
+  isElementVisible,
   resolveChartData,
   resolveFragmentStyle,
   resolveTableData,
@@ -63,6 +64,9 @@ async function renderSlide(
   const sx = width / document.pageSize.width;
   const sy = height / document.pageSize.height;
   for (const element of slide.elements) {
+    // A hidden object is not on the page, so it must not appear in a review or
+    // preview image either.
+    if (!isElementVisible(element)) continue;
     if (!includeText && element.type === "text") continue;
     const x = element.frame.x * sx;
     const y = element.frame.y * sy;
@@ -178,7 +182,7 @@ export async function inspectRenderedTextContrast(
     const sx = canvas.width / document.pageSize.width;
     const sy = canvas.height / document.pageSize.height;
     for (const element of slide.elements) {
-      if (element.type !== "text") continue;
+      if (element.type !== "text" || !isElementVisible(element)) continue;
       const foreground = parseHexColor(element.style.color);
       if (!foreground) continue;
       const x = element.frame.x * sx;

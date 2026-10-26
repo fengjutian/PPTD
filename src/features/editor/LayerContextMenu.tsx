@@ -4,9 +4,12 @@ import {
   ArrowUp,
   BringToFront,
   Copy,
+  Eye,
+  EyeOff,
   Group,
   Lock,
   LockOpen,
+  Pencil,
   SendToBack,
   Trash2,
   Ungroup,
@@ -26,6 +29,8 @@ export interface LayerContextMenuProps {
   x: number;
   y: number;
   onClose: () => void;
+  /** Starts the inline name editor on this row. */
+  onRename: (elementId: ElementId) => void;
   /** Each entry is one command, so one undo entry. */
   onCommand: (command: DocumentCommand) => void;
 }
@@ -44,6 +49,7 @@ export function LayerContextMenu({
   x,
   y,
   onClose,
+  onRename,
   onCommand,
 }: LayerContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);

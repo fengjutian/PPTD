@@ -22,6 +22,7 @@ import versionTwentyFixture from "./__fixtures__/v20-document.json";
 import versionTwentyOneFixture from "./__fixtures__/v21-document.json";
 import versionTwentyTwoFixture from "./__fixtures__/v22-document.json";
 import versionTwentyThreeFixture from "./__fixtures__/v23-document.json";
+import versionTwentyFourFixture from "./__fixtures__/v24-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
@@ -312,6 +313,38 @@ describe("presentation document schema", () => {
     const image = parsed.slides[0]!.elements.find((element) => element.type === "image");
     expect(image?.type).toBe("image");
     expect(image?.type === "image" ? image.frameShape : undefined).toBeUndefined();
+  });
+
+  it("keeps a picture frame shape from a version 24 fixture", () => {
+    const parsed = parsePresentationDocument(versionTwentyFourFixture);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const image = parsed.slides[0]!.elements.find((element) => element.type === "image");
+    expect(image?.type === "image" ? image.frameShape : undefined).toBe("roundRect");
+    expect(versionTwentyFourFixture.schemaVersion).toBe(24);
+  });
+
+  it("migrates a version 24 fixture without inventing a layer name or hiding", () => {
+    const parsed = parsePresentationDocument(versionTwentyFourFixture);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(parsed.slides[0]!.elements.every((element) => element.name === undefined)).toBe(true);
+    expect(parsed.slides[0]!.elements.every((element) => element.hidden === undefined)).toBe(true);
+  });
+
+  it("keeps a layer name and visibility through a save and a re-read", () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    element.name = "封面主标题";
+    element.hidden = true;
+    const parsed = parsePresentationDocument(JSON.parse(JSON.stringify(document)));
+    expect(parsed.slides[0]!.elements[0]).toMatchObject({ name: "封面主标题", hidden: true });
+  });
+
+  it("rejects a blank or overlong layer name instead of storing a broken label", () => {
+    const document = createDocument();
+    document.slides[0]!.elements[0]!.name = "   ";
+    expect(() => presentationDocumentSchema.parse(document)).toThrow();
+    document.slides[0]!.elements[0]!.name = "x".repeat(81);
+    expect(() => presentationDocumentSchema.parse(document)).toThrow();
   });
 
   it("keeps a shadow token through a save and a re-read", () => {
