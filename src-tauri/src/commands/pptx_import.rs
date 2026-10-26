@@ -733,10 +733,7 @@ fn theme_part_path(archive: &mut ZipArchive<File>) -> Option<String> {
     None
 }
 
-fn read_theme(archive: &mut ZipArchive<File>) -> Option<ImportedTheme> {
-    let xml = theme_part_path(archive)
-        .and_then(|path| read_xml(archive, &path).ok().flatten())
-        .or_else(|| read_xml(archive, "ppt/theme/theme1.xml").ok().flatten())?;
+fn parse_theme_xml(xml: &str) -> Option<ImportedTheme> {
     let document = Document::parse(&xml).ok()?;
     let root = document.root_element();
     let mut theme = ImportedTheme::default();
@@ -769,6 +766,55 @@ fn read_theme(archive: &mut ZipArchive<File>) -> Option<ImportedTheme> {
             .map(str::to_string);
     }
     Some(theme)
+}
+
+fn read_theme_at(archive: &mut ZipArchive<File>, path: &str) -> Option<ImportedTheme> {
+    read_xml(archive, path)
+        .ok()
+        .flatten()
+        .and_then(|xml| parse_theme_xml(&xml))
+}
+
+fn read_theme(archive: &mut ZipArchive<File>) -> Option<ImportedTheme> {
+    theme_part_path(archive)
+        .and_then(|path| read_theme_at(archive, &path))
+        .or_else(|| read_theme_at(archive, "ppt/theme/theme1.xml"))
+}
+
+/// Theme override parts are intentionally partial. Missing fonts or colour
+/// slots inherit from the deck theme instead of resetting to editor defaults.
+fn merge_theme(base: &Option<ImportedTheme>, override_theme: ImportedTheme) -> Option<ImportedTheme> {
+    let mut merged = base.clone().unwrap_or_default();
+    if override_theme.major_font.is_some() {
+        merged.major_font = override_theme.major_font;
+    }
+    if override_theme.minor_font.is_some() {
+        merged.minor_font = override_theme.minor_font;
+    }
+    for color in override_theme.colors {
+        if let Some(existing) = merged.colors.iter_mut().find(|item| item.name == color.name) {
+            *existing = color;
+        } else {
+            merged.colors.push(color);
+        }
+    }
+    Some(merged)
+}
+
+fn theme_for_part(
+    archive: &mut ZipArchive<File>,
+    part: &str,
+    rels: &HashMap<String, Rel>,
+    base: &Option<ImportedTheme>,
+) -> Option<ImportedTheme> {
+    let override_path = rels
+        .values()
+        .find(|rel| !rel.external && rel.kind.ends_with("/themeOverride"))
+        .map(|rel| resolve_target(part, &rel.target));
+    override_path
+        .and_then(|path| read_theme_at(archive, &path))
+        .map(|theme| merge_theme(base, theme))
+        .unwrap_or_else(|| base.clone())
 }
 
 fn theme_color(theme: &Option<ImportedTheme>, name: &str) -> Option<String> {
@@ -1057,6 +1103,7 @@ fn parse_slide(
 ) -> Result<ImportedSlide, String> {
     let document = Document::parse(xml).map_err(|_| "PPTX_SLIDE_XML_INVALID")?;
     let rels = read_relationships(archive, part);
+    let slide_theme = theme_for_part(archive, part, &rels, theme);
     let layout_rel = rels.values().find(|rel| rel.kind.ends_with("/slideLayout"));
     let layout_frames = layout_rel
         .map(|rel| {
@@ -1092,7 +1139,7 @@ fn parse_slide(
         }
         match node.tag_name().name() {
             "sp" => {
-                if let Some(element) = parse_shape(index, node, &layout_frames, theme, report) {
+                if let Some(element) = parse_shape(index, node, &layout_frames, &slide_theme, report) {
                     push_element(&mut slide, element, report);
                 }
             }
@@ -1111,7 +1158,7 @@ fn parse_slide(
                 }
             }
             "cxnSp" => {
-                if let Some(element) = parse_connector(node, &layout_frames, theme) {
+                if let Some(element) = parse_connector(node, &layout_frames, &slide_theme) {
                     push_element(&mut slide, element, report);
                 }
             }
@@ -1122,7 +1169,7 @@ fn parse_slide(
                     part,
                     rels: &rels,
                     layout_frames: &layout_frames,
-                    theme,
+                    theme: &slide_theme,
                     session,
                 };
                 parser.parse_children(node, None, &mut slide, archive, media_cache, report)?;

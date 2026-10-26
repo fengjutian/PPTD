@@ -573,6 +573,10 @@
 :root[data-theme="light"] .layer-meta {
   color: #7a8089;
 }
+:root[data-theme="light"] .layer-name-input {
+  background: #fff;
+  color: #22252a;
+}
 :root[data-theme="light"] .layer-lock {
   color: #a9662c;
 }

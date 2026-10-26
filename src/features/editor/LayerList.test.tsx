@@ -149,4 +149,16 @@ describe("layer list", () => {
     expect(markup).toContain('aria-label="搜索图层"');
     expect(markup).toContain("Alt+↑↓");
   });
+
+  it("shows a custom layer name and marks a hidden row with a show action", () => {
+    const slide = slideWith([textElement("a", "原名")]);
+    slide.elements[0]!.name = "背景底图";
+    slide.elements[0]!.hidden = true;
+    const markup = renderList(slide);
+    expect(markup).toContain("背景底图");
+    expect(markup).toContain("is-hidden");
+    expect(markup).toContain('aria-label="显示图层"');
+    expect(markup).toContain("已隐藏");
+    expect(renderList(slideWith([textElement("b", "可见")]))).toContain('aria-label="隐藏图层"');
+  });
 });

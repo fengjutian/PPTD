@@ -33,6 +33,7 @@ function renderMenu(slide: Slide, elementId: string, selectedElementIds: string[
       x={40}
       y={60}
       onClose={noop}
+      onRename={noop}
       onCommand={noop}
     />,
   );
@@ -55,12 +56,32 @@ describe("layer context menu", () => {
   it("offers every layer action", () => {
     const slide = slideWith([shape("a"), shape("b")]);
     const markup = renderMenu(slide, "b", ["a", "b"]);
-    for (const label of ["置于顶层", "上移一层", "下移一层", "置于底层", "复制", "锁定", "组合", "取消组合", "删除"]) {
+    for (const label of [
+      "重命名",
+      "隐藏",
+      "置于顶层",
+      "上移一层",
+      "下移一层",
+      "置于底层",
+      "复制",
+      "锁定",
+      "组合",
+      "取消组合",
+      "删除",
+    ]) {
       expect(markup).toContain(label);
     }
     expect(markup).toContain('role="menu"');
     expect(markup).toContain('role="menuitem"');
     expect(markup).toContain('role="separator"');
+  });
+
+  it("switches the visibility entry to 显示 for a hidden block", () => {
+    const slide = slideWith([shape("a"), shape("b")]);
+    slide.elements[1]!.hidden = true;
+    const markup = renderMenu(slide, "b", ["b"]);
+    expect(markup).toContain("显示");
+    expect(isDisabled(markup, "显示")).toBe(false);
   });
 
   it("disables the moves that would leave the page, based on the row position", () => {

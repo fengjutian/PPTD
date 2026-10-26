@@ -964,4 +964,24 @@ describe("PPTX export", () => {
     expect(xml).not.toContain("<p:pic>");
     expect(xml).not.toContain(".svg");
   });
+
+  it("leaves a hidden object out of the package and says so", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.content.status = "approved";
+    applyCommand(document, { type: "add-shape", slideId: slide.id, shape: "rectangle" });
+    applyCommand(document, { type: "add-shape", slideId: slide.id, shape: "ellipse" });
+    const visibleShape = slide.elements[1]!;
+    const hiddenShape = slide.elements[2]!;
+    hiddenShape.hidden = true;
+    hiddenShape.name = "草稿底板";
+
+    const result = await buildPptx(document);
+    const xml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(xml).toContain(`name="${visibleShape.id}"`);
+    expect(xml).not.toContain(`name="${hiddenShape.id}"`);
+    expect(xml).not.toContain("草稿底板");
+    expect(result.report.nativeObjectCount).toBe(2);
+    expect(result.report.warnings.some((warning) => warning.includes("隐藏对象"))).toBe(true);
+  });
 });

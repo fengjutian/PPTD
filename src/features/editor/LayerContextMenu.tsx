@@ -113,6 +113,20 @@ export function LayerContextMenu({
         style={{ left: x, top: y }}
         onPointerDown={(event) => event.stopPropagation()}
       >
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onRename(elementId);
+            onClose();
+          }}
+        >
+          <Pencil />
+          <span>重命名</span>
+        </button>
+
+        <div className="layer-menu-separator" role="separator" />
+
         <button type="button" role="menuitem" disabled={!state.canMove.front} onClick={() => move("front")}>
           <BringToFront />
           <span>置于顶层</span>
@@ -155,6 +169,21 @@ export function LayerContextMenu({
         >
           {state.allLocked ? <LockOpen /> : <Lock />}
           <span>{state.allLocked ? "解锁" : "锁定"}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() =>
+            run({
+              type: "set-elements-hidden",
+              slideId: slide.id,
+              elementIds: state.blockIds,
+              hidden: !state.allHidden,
+            })
+          }
+        >
+          {state.allHidden ? <Eye /> : <EyeOff />}
+          <span>{state.allHidden ? "显示" : "隐藏"}</span>
         </button>
         <button
           type="button"

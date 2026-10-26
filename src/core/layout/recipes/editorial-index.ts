@@ -115,7 +115,14 @@ export const editorialIndex: LayoutRecipe = {
     const contentHeight = chrome.contentBottom - contentTop;
     if (contentHeight < 0.2) return conflict("items", "标题与条目之间没有足够的正文区");
     const sparse = units.items.length <= 4 && units.items.every((item) => item.length <= 18);
-    const preferred = Math.min(22, ctx.tokens.type.bodyPt + (sparse ? 4 : 1));
+    // A three-point page in the body size of a dense page leaves the lower half
+    // empty: the list is correct and the page looks unfinished. A sparse list
+    // therefore gets larger type and a wider row gap, both bounded — the page
+    // fills because the copy is allowed to take the room it has, not because
+    // the rows were stretched to fixed slots.
+    const preferred = sparse
+      ? Math.min(32, Math.max(18, Math.round(ctx.tokens.type.bodyPt * 1.8)))
+      : Math.min(22, ctx.tokens.type.bodyPt + 1);
     // The column is measured, not divided. A three-point page used to give each
     // 17pt line a 1.35in row because the content area was split into equal
     // slots; the leftover space is now a bounded gap, and the block keeps the
@@ -127,7 +134,10 @@ export const editorialIndex: LayoutRecipe = {
       preferredFontSizePt: preferred,
       minimumFontSizePt: 14,
       minimumGapPt: MIN_ROW_GAP_PT,
-      maximumGapPt: MAX_ROW_GAP_PT,
+      // A sparse list may take more air, but the row pitch stays under the
+      // bound the layout test pins: the gap is bounded by the page, not by the
+      // urge to fill it.
+      maximumGapPt: sparse ? 44 : MAX_ROW_GAP_PT,
       verticalAlign: "center",
       lineHeightRatio: lineHeight,
       fontFamily: bodyFamily,

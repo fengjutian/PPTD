@@ -49,7 +49,7 @@ export function ImportModeDialog({
           <button type="button" className="import-mode-option" disabled={busy} onClick={onImportContent}>
             <FileText />
             <span>
-              <strong>导入内容（Level A）</strong>
+              <strong>导入可编辑内容</strong>
               <small>页面尺寸与顺序、文字、图片、基础形状和基础表格；不支持的对象会逐项报告。</small>
             </span>
           </button>

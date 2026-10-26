@@ -83,4 +83,13 @@ describe("slide scene", () => {
     );
     expect(markup).toContain("background:#101820");
   });
+
+  it("leaves a hidden element out of a page preview", () => {
+    const slide = slideWithText();
+    slide.elements[0]!.hidden = true;
+    const markup = renderToStaticMarkup(
+      <SlideScene slide={slide} pageWidth={PAGE_WIDTH} pageHeight={PAGE_HEIGHT} scale={sceneScale(240, PAGE_WIDTH)} />,
+    );
+    expect(markup).not.toContain("标题");
+  });
 });

@@ -18,6 +18,7 @@ import type {
   SlideElement,
   TextElement,
 } from "../document-model";
+import { visibleElements } from "../document-model";
 import { isNeutralColor, normalizeHexColor } from "../rendering/color-analysis";
 import { measureLine, MEASURE_BAND } from "../rendering/text-fit";
 
@@ -173,7 +174,7 @@ function normalizedFamily(name: string): string {
 }
 
 function textElements(slide: Slide): TextElement[] {
-  return slide.elements.filter((element): element is TextElement => element.type === "text");
+  return visibleElements(slide).filter((element): element is TextElement => element.type === "text");
 }
 
 function isBackgroundElement(element: SlideElement): boolean {
@@ -188,7 +189,7 @@ function isBackgroundElement(element: SlideElement): boolean {
  * as a page crammed with elements.
  */
 function hasFullBleedArtwork(slide: Slide, pageWidth: number, pageHeight: number): boolean {
-  return slide.elements.some(
+  return visibleElements(slide).some(
     (element) =>
       (element.type === "image" || element.type === "shape") &&
       element.frame.width >= pageWidth * 0.98 &&
@@ -257,7 +258,7 @@ function accentColors(slide: Slide, pageWidth: number, pageHeight: number): stri
     const color = colorOf(value);
     if (color && !isNeutralColor(color)) colors.add(color);
   };
-  for (const element of slide.elements) {
+  for (const element of visibleElements(slide)) {
     if (element.type === "text") {
       add(element.style.color);
       for (const run of element.runs ?? []) add(run.color);
@@ -275,7 +276,7 @@ function accentColors(slide: Slide, pageWidth: number, pageHeight: number): stri
 
 /** Coarse skeleton: element kinds and content roles in reading order. */
 function structureSignature(slide: Slide, pageHeight: number): string {
-  return slide.elements
+  return visibleElements(slide)
     .filter((element) => !isBackgroundElement(element))
     .filter((element) => !(element.type === "text" && isFooter(element, pageHeight)))
     .slice()
@@ -371,7 +372,7 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
   const signatures: string[] = [];
 
   document.slides.forEach((slide, slideIndex) => {
-    const hasArtwork = slide.elements.some(
+    const hasArtwork = visibleElements(slide).some(
       (element) => element.type === "image" && element.placement === "layout-background",
     );
     const fullBleed = hasFullBleedArtwork(slide, pageWidth, pageHeight);
@@ -591,7 +592,7 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
     // Whitespace is judged on copy and pictures, not on panels, rules or edge
     // bands: a cover made of two full-height colour panels is a composition, and
     // its bounding box says nothing about how much air the page has.
-    const painted = slide.elements.filter(
+    const painted = visibleElements(slide).filter(
       (element) =>
         (element.type === "text" || element.type === "image" || element.type === "chart" || element.type === "table") &&
         !isBackgroundElement(element) &&

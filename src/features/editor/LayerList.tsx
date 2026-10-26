@@ -133,7 +133,9 @@ export const LayerList = memo(function LayerList({
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  const cancelRenameRef = useRef(false);
+  // The ref is the synchronous truth for the blur that follows a commit or a
+  // cancel; React state updates cannot stop that second call in time.
+  const editingIdRef = useRef<ElementId | null>(null);
   const rowRefs = useRef(new Map<ElementId, HTMLDivElement>());
   const dragRef = useRef<ActiveDrag | null>(null);
   const anchorRef = useRef<ElementId | null>(null);
@@ -158,10 +160,14 @@ export const LayerList = memo(function LayerList({
   // A rename belongs to one page and one object. Leaving the page, or deleting
   // the row from another panel, cancels it instead of writing to a stale row.
   useEffect(() => {
+    editingIdRef.current = null;
     setEditingId(null);
   }, [slide.id]);
   useEffect(() => {
-    if (editingId && !slide.elements.some((element) => element.id === editingId)) setEditingId(null);
+    if (editingId && !slide.elements.some((element) => element.id === editingId)) {
+      editingIdRef.current = null;
+      setEditingId(null);
+    }
   }, [editingId, slide.elements]);
 
   const focusRow = (elementId: ElementId) => {
@@ -192,7 +198,7 @@ export const LayerList = memo(function LayerList({
   };
 
   const startRename = (element: SlideElement) => {
-    cancelRenameRef.current = false;
+    editingIdRef.current = element.id;
     setEditingId(element.id);
     setNameDraft(element.name ?? "");
     window.requestAnimationFrame(() => {
@@ -201,21 +207,19 @@ export const LayerList = memo(function LayerList({
     });
   };
 
-  const commitRename = (element: SlideElement, value: string) => {
-    if (cancelRenameRef.current) {
-      cancelRenameRef.current = false;
-      return;
-    }
+  const commitRename = (element: SlideElement, value: string, restoreFocus: boolean) => {
+    if (editingIdRef.current !== element.id) return;
+    editingIdRef.current = null;
     setEditingId(null);
     const name = value.replace(/\s+/g, " ").trim();
     if (name !== (element.name ?? "")) {
       onCommand({ type: "rename-element", slideId: slide.id, elementId: element.id, name });
     }
-    focusRow(element.id);
+    if (restoreFocus) focusRow(element.id);
   };
 
   const cancelRename = (element: SlideElement) => {
-    cancelRenameRef.current = true;
+    editingIdRef.current = null;
     setEditingId(null);
     focusRow(element.id);
   };
@@ -632,13 +636,13 @@ export const LayerList = memo(function LayerList({
                       event.stopPropagation();
                       if (event.key === "Enter") {
                         event.preventDefault();
-                        event.currentTarget.blur();
+                        commitRename(element, event.currentTarget.value, true);
                       } else if (event.key === "Escape") {
                         event.preventDefault();
                         cancelRename(element);
                       }
                     }}
-                    onBlur={(event) => commitRename(element, event.currentTarget.value)}
+                    onBlur={(event) => commitRename(element, event.currentTarget.value, false)}
                   />
                 ) : (
                   <span
@@ -687,7 +691,7 @@ export const LayerList = memo(function LayerList({
                   className="layer-action"
                   title={element.hidden ? "显示图层" : "隐藏图层"}
                   aria-label={element.hidden ? "显示图层" : "隐藏图层"}
-                  aria-pressed={!element.hidden}
+                  aria-pressed={element.hidden === true}
                   onClick={(event) => {
                     event.stopPropagation();
                     toggleHidden(element.id);
@@ -760,6 +764,10 @@ export const LayerList = memo(function LayerList({
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
+          onRename={(elementId) => {
+            const element = slide.elements.find((item) => item.id === elementId);
+            if (element) startRename(element);
+          }}
           onCommand={onCommand}
         />
       )}

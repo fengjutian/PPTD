@@ -154,6 +154,15 @@ describe("layer order helpers", () => {
     expect(fullElementName(shape("s"))).toBe("矩形");
   });
 
+  it("prefers a custom layer name for display and search", () => {
+    const element = text("t", "原文内容");
+    element.name = "主视觉";
+    expect(fullElementName(element)).toBe("主视觉");
+    expect(filterLayerRows([element], "主视觉")).toEqual([element]);
+    // The custom name is what the row shows, so it is what the search matches.
+    expect(filterLayerRows([element], "原文内容")).toEqual([]);
+  });
+
   it("only treats an exactly selected group as ungroupable", () => {
     const slide = slideWith(["a", "b", "c"]);
     slide.groups = [{ id: "g", elementIds: ["a" as ElementId, "b" as ElementId] }];
@@ -178,6 +187,11 @@ describe("layer order helpers", () => {
     expect(top.canUngroup).toBe(false);
     expect(top.canMove).toEqual({ front: false, back: true, up: false, down: true });
     expect(top.deletableIds).toEqual(["c"]);
+    expect(top.allHidden).toBe(false);
+
+    const hiddenRow = slideWith(["a", "b"]);
+    hiddenRow.elements[1]!.hidden = true;
+    expect(layerMenuState(hiddenRow, "b" as ElementId, ["b" as ElementId]).allHidden).toBe(true);
 
     const locked = slideWith(["a", "b"]);
     locked.elements[1]!.locked = true;
