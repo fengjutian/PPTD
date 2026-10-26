@@ -63,11 +63,7 @@ export function SlideLayoutMenu({
         <LayoutTemplate />
       </RibbonCompactButton>
       {open && (
-        <div
-          className="ribbon-menu-popover layout-menu-popover"
-          role="menu"
-          aria-label="更改当前页版式"
-        >
+        <div className="ribbon-menu-popover layout-menu-popover" role="menu" aria-label="更改当前页版式">
           {options.map((option) => (
             <button
               key={option.layout.id}

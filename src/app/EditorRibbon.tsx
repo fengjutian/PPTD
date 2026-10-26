@@ -312,9 +312,7 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
                 onApply={(layoutId) => {
                   const layout = document.layouts?.find((candidate) => candidate.id === layoutId);
                   execute({ type: "apply-slide-layout", slideId: activeSlide.id, layoutId });
-                  setTaskStatus(
-                    `已应用版式“${layout?.name || "未命名版式"}”，已审核内容和手工对象已保留`,
-                  );
+                  setTaskStatus(`已应用版式“${layout?.name || "未命名版式"}”，已审核内容和手工对象已保留`);
                 }}
               />
               <RibbonCompactButton

@@ -309,17 +309,11 @@ describe("design-only relayout", () => {
           (element) => element.type === "text" && element.text === "手工备注" && element.origin === "user",
         ),
       ).toBe(true);
-      const first = resultSlide.elements.find(
-        (element) => element.type === "text" && element.text === "第一项",
-      );
-      const second = resultSlide.elements.find(
-        (element) => element.type === "text" && element.text === "第二项",
-      );
+      const first = resultSlide.elements.find((element) => element.type === "text" && element.text === "第一项");
+      const second = resultSlide.elements.find((element) => element.type === "text" && element.text === "第二项");
       // A 双栏 target has to actually draw two columns, not only rewrite layoutId.
       expect(first?.type === "text" && first.frame.x < result.pageSize.width / 2).toBe(true);
-      expect(
-        second?.type === "text" && second.frame.x > result.pageSize.width / 2,
-      ).toBe(true);
+      expect(second?.type === "text" && second.frame.x > result.pageSize.width / 2).toBe(true);
     });
 
     it("refuses a missing layout and a layout that would hide reviewed copy", () => {
@@ -348,8 +342,9 @@ describe("design-only relayout", () => {
     it("refuses two columns when the page carries only one point", () => {
       const source = pageWithLayouts([{ type: "paragraph", text: "只有一段正文" }]);
       const slideId = source.slides[0]!.id;
-      expect(slideLayoutOptions(source, source.slides[0]!).find((option) => option.layout.id === splitLayout.id)?.issue)
-        .toContain("至少需要 2 条正文");
+      expect(
+        slideLayoutOptions(source, source.slides[0]!).find((option) => option.layout.id === splitLayout.id)?.issue,
+      ).toContain("至少需要 2 条正文");
       expect(() =>
         produce(source, (draft) =>
           applyCommand(draft, { type: "apply-slide-layout", slideId, layoutId: splitLayout.id }),

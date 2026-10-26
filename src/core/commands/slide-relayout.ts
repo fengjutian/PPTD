@@ -360,10 +360,7 @@ function targetBodyRegions(
   if (capabilities.columns < 2) return [region(frame)];
   const gap = Math.min(0.03, frame.width * 0.06);
   const width = (frame.width - gap) / 2;
-  return [
-    region({ ...frame, width }),
-    region({ ...frame, x: frame.x + width + gap, width }),
-  ];
+  return [region({ ...frame, width }), region({ ...frame, x: frame.x + width + gap, width })];
 }
 
 /** Plain copy can be forced into columns; structured blocks draw their own page. */
@@ -485,9 +482,7 @@ export function inferRelayoutContext(
   // never persisted; carrying the old image across would paint the wrong
   // template behind the new composition.
   const backgroundImage =
-    !targetLayout || targetLayout.id === slide.layoutId
-      ? classified.generated.find(isLayoutBackground)
-      : undefined;
+    !targetLayout || targetLayout.id === slide.layoutId ? classified.generated.find(isLayoutBackground) : undefined;
   const layout = targetLayout ? layoutKindForTarget(targetLayout) : inferLayout(slide, document, classified.generated);
   const range = { title: backgroundRangeFor(titleColor), body: backgroundRangeFor(bodyColor) };
   const targetColumns = targetLayout?.capabilities?.columns ?? 0;

@@ -25,9 +25,7 @@ const split = {
 
 describe("slide layout menu", () => {
   it("opens from a labelled button when another layout fits the page", () => {
-    const markup = renderToStaticMarkup(
-      <SlideLayoutMenu options={[content, split]} onApply={() => undefined} />,
-    );
+    const markup = renderToStaticMarkup(<SlideLayoutMenu options={[content, split]} onApply={() => undefined} />);
     expect(markup).toContain('aria-label="当前版式：内页（浅色）1；更改版式"');
     expect(markup).toContain('aria-haspopup="menu"');
     expect(markup).toContain('aria-expanded="false"');
@@ -43,8 +41,6 @@ describe("slide layout menu", () => {
       current: false,
       issue: "该页有正文，封面或空白版式会隐藏内容",
     };
-    expect(renderToStaticMarkup(<SlideLayoutMenu options={[content, blocked]} onApply={() => undefined} />)).toBe(
-      "",
-    );
+    expect(renderToStaticMarkup(<SlideLayoutMenu options={[content, blocked]} onApply={() => undefined} />)).toBe("");
   });
 });
