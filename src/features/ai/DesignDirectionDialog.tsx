@@ -154,6 +154,7 @@ export function DesignDirectionDialog({
             onSelect(id, words);
           }}
           renderPages={renderPages}
+          loadingLabel="正在生成整册设计并渲染预览"
         />
       )}
     </>

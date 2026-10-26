@@ -3,6 +3,7 @@ import { colorLuminance, contrastRatio, fillForInk, MINIMUM_CONTRAST, readableTe
 import { mixHex } from "./shape-gradient";
 import { resolveTypeScale } from "./type-scale";
 import type { DeckConcept } from "./deck-concept";
+import type { StyleConstraint } from "./style-profiles";
 
 /**
  * The color roles beyond the four inks a page needs to be readable.
@@ -142,6 +143,10 @@ export interface DesignTokens {
   rule: { hairlinePt: number; accentPt: number };
   grid: { columns: number; margin: number; gutter: number };
   radius: { cardPt: number; badgePt: number };
+  material: {
+    shadow: "none" | "paper" | "raised";
+    imageCrop: "contained" | "editorial" | "full-bleed";
+  };
 }
 
 export type TypeScaleIntent = "compact" | "normal" | "expressive";
@@ -219,12 +224,16 @@ export function deriveDesignTokens(
   pageSize: { width: Emu; height: Emu },
   concept: DeckConcept,
   intent: TypeScaleIntent = "normal",
+  style?: StyleConstraint,
 ): DesignTokens {
   const scale = resolveTypeScale(theme);
   const factors = CONTRAST_FACTORS[concept.typeContrast];
   const intentFactors = INTENT_FACTORS[intent];
   const heightInches = pageSize.height / EMU_PER_INCH;
-  const spaceScale = clamp(heightInches / 7.5, 0.8, 1.25);
+  const spacingFactor = style?.tokens.spacing === "wide" ? 1.18 : style?.tokens.spacing === "tight" ? 0.84 : 1;
+  const spaceScale = clamp(heightInches / 7.5, 0.8, 1.25) * spacingFactor;
+  const line = style?.tokens.line;
+  const radius = style?.tokens.corner === "none" ? 0 : style?.tokens.corner === "rounded" ? 14 : 6;
   return {
     fonts: {
       display: theme?.displayFont ?? theme?.majorFont ?? "Microsoft YaHei",
@@ -256,8 +265,15 @@ export function deriveDesignTokens(
       lg: 0.07 * spaceScale,
       xl: 0.12 * spaceScale,
     },
-    rule: { hairlinePt: 0.75, accentPt: 2.5 },
-    grid: { columns: 12, margin: 0.07, gutter: 0.022 },
-    radius: { cardPt: 8, badgePt: 999 },
+    rule: {
+      hairlinePt: line === "none" ? 0.25 : line === "strong" ? 1.25 : 0.75,
+      accentPt: line === "none" ? 0.75 : line === "strong" ? 3.5 : 1.75,
+    },
+    grid: { columns: 12, margin: 0.07 * spacingFactor, gutter: 0.022 * spacingFactor },
+    radius: { cardPt: radius, badgePt: style?.tokens.corner === "none" ? 0 : 999 },
+    material: {
+      shadow: style?.tokens.shadow ?? "none",
+      imageCrop: style?.tokens.imageCrop ?? "editorial",
+    },
   };
 }

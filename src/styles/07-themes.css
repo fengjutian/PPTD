@@ -1867,11 +1867,17 @@
   justify-items: center;
   gap: 10px;
   color: #5b6a78;
+  background: rgb(242 245 248 / 58%);
+  backdrop-filter: blur(1px);
   font-size: 12px;
 }
 .variant-preview-loading svg {
   width: 20px;
   animation: variant-preview-spin 0.9s linear infinite;
+}
+.variant-preview-loading small {
+  color: #7d8995;
+  font-size: 10px;
 }
 @keyframes variant-preview-spin {
   to {

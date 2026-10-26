@@ -24,6 +24,8 @@ export interface VariantPreviewDialogProps {
   onUse: (id: string) => void;
   /** Renders every page of one variant. */
   renderPages: (id: string) => Promise<string[]>;
+  /** Direction previews still need AI design; batch variants only rasterize. */
+  loadingLabel?: string;
 }
 
 export function VariantPreviewDialog({
@@ -32,6 +34,7 @@ export function VariantPreviewDialog({
   onClose,
   onUse,
   renderPages,
+  loadingLabel = "正在渲染整册",
 }: VariantPreviewDialogProps) {
   const [optionId, setOptionId] = useState(openedOption.id);
   const [pageIndex, setPageIndex] = useState(0);
@@ -152,10 +155,16 @@ export function VariantPreviewDialog({
               )}
             </div>
           ) : (
-            <div className="variant-preview-loading">
-              <LoaderCircle />
-              <span>正在渲染整册，共 {option.pageCount} 页…</span>
-            </div>
+            <>
+              {option.images[0] && <img src={option.images[0]} alt={`${option.name} 已完成的代表页预览`} />}
+              <div className="variant-preview-loading">
+                <LoaderCircle />
+                <span>
+                  {loadingLabel}，共 {option.pageCount} 页…
+                </span>
+                {option.images.length > 0 && <small>代表页已显示，整册完成后自动替换</small>}
+              </div>
+            </>
           )}
           {page && totalPages > 1 && (
             <>

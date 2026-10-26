@@ -24,6 +24,7 @@ import type {
   TextElementStyle,
 } from "../document-model";
 import type { DeckConcept } from "../design/deck-concept";
+import type { StyleConstraint } from "../design/style-profiles";
 import type { AiVisualAssetRole } from "./visual-asset";
 import { type TextRunStyle } from "../document-model";
 
@@ -133,6 +134,8 @@ export type DocumentCommand =
        * keeps the legacy composition path byte-for-byte.
        */
       designConcept?: DeckConcept;
+      /** Ephemeral design-system bounds consumed while compiling editable objects. */
+      styleConstraint?: StyleConstraint;
       /**
        * The direction decision that produced this design. It is written with the
        * design in one transaction, so undo removes both and the content hash is

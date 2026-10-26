@@ -501,6 +501,10 @@ export function useAppRuntime() {
   const [directionRegenerations, setDirectionRegenerations] = useState(0);
   const directionChoiceRef = useRef<((choice: DirectionChoice) => void) | null>(null);
   const directionPreviewRenderersRef = useRef(new Map<string, () => Promise<string[]>>());
+  /** Full previews are expensive AI work. Keep both the in-flight promise and
+   * its result so reopen/double-click/final selection never pay twice. */
+  const directionFullDesignsRef = useRef(new Map<string, Promise<AiPresentationDesign>>());
+  const directionRenderedPagesRef = useRef(new Map<string, Promise<string[]>>());
   const renderDirectionPreview = (id: string): Promise<string[]> => {
     const render = directionPreviewRenderersRef.current.get(id);
     return render ? render() : Promise.reject(new Error("DIRECTION_PREVIEW_MISSING"));
@@ -2579,6 +2583,8 @@ export function useAppRuntime() {
         let regenerations = 0;
         while (regenerations <= 2) {
           directionPreviewRenderersRef.current.clear();
+          directionFullDesignsRef.current.clear();
+          directionRenderedPagesRef.current.clear();
           setDesignProgress({ percent: 16, label: "正在生成四个设计方向" });
           setDesignDetail("为同一份内容准备四种版面骨架");
           let proposals: AiDeckConcept[];
@@ -2654,25 +2660,43 @@ export function useAppRuntime() {
                   pages.map(async (page) => (await renderPresentationForVisualReview(page.document, 640)).slides[0]!),
                 );
                 const id = crypto.randomUUID();
-                directionPreviewRenderersRef.current.set(id, async () => {
-                  const fullDesign = await generatePresentationDesign(sourceDraft, briefs, analysis, {
-                    concept: resolved,
-                    taskId,
-                    themeDirection,
-                    styleConstraint,
+                directionPreviewRenderersRef.current.set(id, () => {
+                  const cachedPages = directionRenderedPagesRef.current.get(id);
+                  if (cachedPages) return cachedPages;
+                  setDesignProgress({ percent: 52, label: `正在生成「${proposal.name}」整册设计` });
+                  setDesignDetail(`AI 正在为 ${sourceDraft.slides.length} 页选择版式、构图与配色；完成后再本地渲染`);
+                  let fullDesign = directionFullDesignsRef.current.get(id);
+                  if (!fullDesign) {
+                    fullDesign = generatePresentationDesign(sourceDraft, briefs, analysis, {
+                      concept: resolved,
+                      taskId,
+                      themeDirection,
+                      styleConstraint,
+                    });
+                    directionFullDesignsRef.current.set(id, fullDesign);
+                  }
+                  const rendered = fullDesign.then((result) => {
+                    setDesignProgress({ percent: 56, label: `正在渲染「${proposal.name}」整册预览` });
+                    setDesignDetail(`AI 设计已返回，正在本机把 ${sourceDraft.slides.length} 页绘制为预览图`);
+                    const preview = createDocument();
+                    applyCommand(preview, {
+                      type: "apply-ai-designed-draft",
+                      title: sourceDraft.title,
+                      slides: sourceDraft.slides,
+                      designs: result.slides,
+                      designConcept: resolved,
+                      ...(preset ? { themePresetId: preset.id } : {}),
+                      visualAssets: buildPreviewAssets(result.slides),
+                      backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+                    });
+                    return renderPresentationPages(preview, 960);
                   });
-                  const preview = createDocument();
-                  applyCommand(preview, {
-                    type: "apply-ai-designed-draft",
-                    title: sourceDraft.title,
-                    slides: sourceDraft.slides,
-                    designs: fullDesign.slides,
-                    designConcept: resolved,
-                    ...(preset ? { themePresetId: preset.id } : {}),
-                    visualAssets: buildPreviewAssets(fullDesign.slides),
-                    backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+                  directionRenderedPagesRef.current.set(id, rendered);
+                  void rendered.catch(() => {
+                    directionRenderedPagesRef.current.delete(id);
+                    directionFullDesignsRef.current.delete(id);
                   });
-                  return renderPresentationPages(preview, 960);
+                  return rendered;
                 });
                 return { id, proposal, concept: resolved, images: rendered, previewIndexes };
               } catch (error) {
@@ -2729,6 +2753,12 @@ export function useAppRuntime() {
             choice.kind === "select"
               ? (candidates.find((candidate) => candidate.id === choice.id) ?? candidates[0]!)
               : candidates[0]!;
+          // If the user opened this direction's full preview, the complete
+          // design already exists. Awaiting an already-resolved promise is
+          // effectively free and lets final generation reuse it.
+          const previewedDesign = directionFullDesignsRef.current.get(chosen.id)
+            ? await directionFullDesignsRef.current.get(chosen.id)
+            : undefined;
           const record: DesignDirectionRecord = {
             id: crypto.randomUUID(),
             createdAt: new Date().toISOString(),
@@ -2753,7 +2783,7 @@ export function useAppRuntime() {
             regenerations,
             promptVersion: DESIGN_DIRECTIONS_PROMPT_VERSION,
           };
-          return { concept: chosen.concept, record };
+          return { concept: chosen.concept, record, design: previewedDesign };
         }
         return { unavailable: true };
       };
@@ -2770,6 +2800,7 @@ export function useAppRuntime() {
         if (gated && "concept" in gated) {
           concept = gated.concept;
           designDirection = gated.record;
+          design = gated.design;
         } else {
           if (gated?.unavailable) {
             // The gate is an enhancement, not a prerequisite. Say so instead of
@@ -2804,14 +2835,16 @@ export function useAppRuntime() {
           }
         }
         if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-        setDesignProgress({ percent: 20, label: "正在生成逐页版式与配色" });
-        setDesignDetail(`共 ${sourceDraft.slides.length} 页，等待模型写出第一页设计`);
-        design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
-          taskId,
-          concept,
-          themeDirection,
-          styleConstraint,
-        });
+        if (!design) {
+          setDesignProgress({ percent: 20, label: "正在生成逐页版式与配色" });
+          setDesignDetail(`共 ${sourceDraft.slides.length} 页，等待模型写出第一页设计`);
+          design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
+            taskId,
+            concept,
+            themeDirection,
+            styleConstraint,
+          });
+        }
         if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
         setDesignProgress({ percent: 70, label: "正在校验 AI 设计结果" });
         setDesignDetail(`已收到 ${sourceDraft.slides.length} 页设计，正在核对页数与配色合法性`);

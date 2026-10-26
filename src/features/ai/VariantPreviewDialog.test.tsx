@@ -49,6 +49,20 @@ describe("VariantPreviewDialog", () => {
     expect(markup).toContain("返回对比");
   });
 
+  it("can disclose that a direction preview still needs AI design", () => {
+    const markup = renderToStaticMarkup(
+      <VariantPreviewDialog
+        options={OPTIONS}
+        option={OPTIONS[0]!}
+        onClose={noop}
+        onUse={noop}
+        renderPages={renderPages}
+        loadingLabel="正在生成整册设计并渲染预览"
+      />,
+    );
+    expect(markup).toContain("正在生成整册设计并渲染预览，共 12 页…");
+  });
+
   it("lists every version so the deck can be compared without closing the preview", () => {
     const markup = renderToStaticMarkup(
       <VariantPreviewDialog

@@ -200,6 +200,19 @@ export function selectRecipe(request: RecipeRequest): RecipeSelectionResult {
   return recipe && recipe.supports(request.facts, request.concept, request.options) ? { recipe } : {};
 }
 
+/** First style recipe that is both part of the direction and legal for this content. */
+export function selectPreferredStyleRecipe(
+  preferred: readonly RecipeId[],
+  request: Omit<RecipeRequest, "requested">,
+): RecipeId | undefined {
+  for (const id of preferred) {
+    if (!request.concept.recipes.includes(id)) continue;
+    const recipe = findRecipe(id);
+    if (recipe?.supports(request.facts, request.concept, request.options)) return id;
+  }
+  return undefined;
+}
+
 /** The recipe the content would choose, when the requested one is refused. */
 function recipeFallback(request: RecipeRequest): RecipeSelectionResult {
   const id = chooseRecipeId(request.facts, request.concept, request.options);
