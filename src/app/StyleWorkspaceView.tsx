@@ -28,10 +28,18 @@ const RECIPE_LABELS: Record<string, string> = {
 const DENSITY_LABELS = { airy: "疏朗", balanced: "均衡", compact: "紧凑" } as const;
 const MEDIUM_LABELS = { photo: "摄影", illustration: "插画", "3d": "3D", texture: "材质" } as const;
 
-function StyleSpecimen({ profile, large = false }: { profile: StyleProfile; large?: boolean }) {
+function StyleSpecimen({
+  profile,
+  large = false,
+  variant = 0,
+}: {
+  profile: StyleProfile;
+  large?: boolean;
+  variant?: 0 | 1 | 2;
+}) {
   return (
     <span
-      className={`style-specimen style-specimen-${profile.specimen.composition}${large ? " large" : ""}`}
+      className={`style-specimen style-specimen-${profile.specimen.composition} style-specimen-variant-${variant}${large ? " large" : ""}`}
       style={
         {
           "--style-bg": profile.specimen.background,
@@ -47,6 +55,14 @@ function StyleSpecimen({ profile, large = false }: { profile: StyleProfile; larg
       <i className="style-specimen-copy" />
       <i className="style-specimen-visual" />
       <i className="style-specimen-rule" />
+      <i className="style-specimen-number">0{variant + 1}</i>
+      <i className="style-specimen-caption" />
+      <i className="style-specimen-metric metric-one" />
+      <i className="style-specimen-metric metric-two" />
+      <i className="style-specimen-metric metric-three" />
+      <i className="style-specimen-dot dot-one" />
+      <i className="style-specimen-dot dot-two" />
+      <i className="style-specimen-dot dot-three" />
     </span>
   );
 }
@@ -96,7 +112,22 @@ export function StyleDetailDrawer({
         </header>
 
         <div className="style-drawer-scroll">
-          <StyleSpecimen profile={profile} large />
+          <section className="style-specimen-showcase" aria-label={`${profile.name}三页样张`}>
+            <div className="style-specimen-main">
+              <StyleSpecimen profile={profile} large variant={0} />
+              <span>主视觉页</span>
+            </div>
+            <div className="style-specimen-secondary">
+              <div>
+                <StyleSpecimen profile={profile} variant={1} />
+                <span>内容结构页</span>
+              </div>
+              <div>
+                <StyleSpecimen profile={profile} variant={2} />
+                <span>数据 / 流程页</span>
+              </div>
+            </div>
+          </section>
 
           {profile.capability && (
             <section className="style-capability-note">

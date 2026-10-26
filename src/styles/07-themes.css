@@ -2587,6 +2587,127 @@
   opacity: 0.9;
 }
 
+.style-specimen-number {
+  right: 4.5%;
+  bottom: 5%;
+  color: var(--style-ink);
+  background: transparent !important;
+  font-size: clamp(5px, 0.55vw, 9px);
+  font-style: normal;
+  font-weight: 700;
+  opacity: 0.42;
+}
+
+.style-specimen-caption {
+  left: 10%;
+  bottom: 9%;
+  width: 10%;
+  height: 2%;
+  opacity: 0.28;
+}
+
+.style-specimen-metric,
+.style-specimen-dot {
+  display: none !important;
+}
+
+.style-specimen-variant-1 .style-specimen-title {
+  top: 16%;
+  width: 34%;
+  height: 6%;
+}
+
+.style-specimen-variant-1 .style-specimen-kicker {
+  top: 9%;
+  width: 9%;
+}
+
+.style-specimen-variant-1 .style-specimen-copy {
+  top: 34%;
+  left: 47%;
+  width: 40%;
+  height: 3%;
+  box-shadow:
+    0 13px 0 color-mix(in srgb, var(--style-ink) 52%, transparent),
+    0 26px 0 color-mix(in srgb, var(--style-ink) 35%, transparent),
+    0 39px 0 color-mix(in srgb, var(--style-ink) 24%, transparent);
+}
+
+.style-specimen-variant-1 .style-specimen-visual {
+  top: 31%;
+  right: auto;
+  left: 10%;
+  width: 29%;
+  height: 48%;
+}
+
+.style-specimen-variant-1 .style-specimen-rule {
+  left: 47%;
+  bottom: 21%;
+  width: 17%;
+}
+
+.style-specimen-variant-2 .style-specimen-title {
+  top: 13%;
+  width: 32%;
+  height: 6%;
+}
+
+.style-specimen-variant-2 .style-specimen-kicker {
+  top: 7%;
+  width: 10%;
+}
+
+.style-specimen-variant-2 .style-specimen-copy,
+.style-specimen-variant-2 .style-specimen-visual,
+.style-specimen-variant-2 .style-specimen-rule {
+  display: none;
+}
+
+.style-specimen-variant-2 .style-specimen-metric {
+  bottom: 18%;
+  display: block !important;
+  width: 20%;
+  border-radius: 2px 2px 0 0;
+  background: var(--style-accent) !important;
+}
+
+.style-specimen-variant-2 .metric-one {
+  left: 12%;
+  height: 29%;
+  opacity: 0.55;
+}
+
+.style-specimen-variant-2 .metric-two {
+  left: 40%;
+  height: 46%;
+  opacity: 0.78;
+}
+
+.style-specimen-variant-2 .metric-three {
+  left: 68%;
+  height: 61%;
+}
+
+.style-specimen-variant-2 .style-specimen-dot {
+  top: 30%;
+  display: block !important;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--style-secondary) !important;
+}
+
+.style-specimen-variant-2 .dot-one {
+  left: 18%;
+}
+.style-specimen-variant-2 .dot-two {
+  left: 46%;
+}
+.style-specimen-variant-2 .dot-three {
+  left: 74%;
+}
+
 .style-specimen-minimal .style-specimen-visual {
   width: 1px;
   opacity: 0.35;
@@ -2630,6 +2751,9 @@
 .style-specimen-paper .style-specimen-visual {
   display: none;
 }
+.style-specimen-paper.style-specimen-variant-1 .style-specimen-visual {
+  display: block;
+}
 .style-specimen-organic .style-specimen-visual {
   border-radius: 52% 48% 38% 62%;
   background: linear-gradient(145deg, var(--style-secondary), var(--style-accent)) !important;
@@ -2658,6 +2782,67 @@
     -14px 16px 0 rgb(123 97 209 / 16%),
     12px -10px 22px rgb(240 138 75 / 22%);
   transform: rotate(-9deg);
+}
+
+/* Page variants win over the composition's cover geometry while retaining its
+   colour, border and material treatment. */
+.style-specimen.style-specimen-variant-1 .style-specimen-title {
+  top: 16%;
+  left: 10%;
+  width: 34%;
+  height: 6%;
+}
+
+.style-specimen.style-specimen-variant-1 .style-specimen-visual {
+  top: 31%;
+  right: auto;
+  left: 10%;
+  width: 29%;
+  height: 48%;
+  transform: none;
+}
+
+.style-specimen.style-specimen-variant-2 .style-specimen-title {
+  top: 13%;
+  left: 10%;
+  width: 32%;
+  height: 6%;
+}
+
+.style-specimen-showcase {
+  display: grid;
+  gap: 10px;
+}
+
+.style-specimen-main,
+.style-specimen-secondary > div {
+  position: relative;
+}
+
+.style-specimen-main > span,
+.style-specimen-secondary > div > span {
+  position: absolute;
+  left: 9px;
+  bottom: 8px;
+  padding: 3px 7px;
+  border: 1px solid rgb(255 255 255 / 72%);
+  border-radius: 999px;
+  color: #2b3540;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 2px 8px rgb(25 34 44 / 8%);
+  font-size: 8px;
+  font-weight: 700;
+  backdrop-filter: blur(4px);
+}
+
+.style-specimen-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.style-specimen-secondary .style-specimen {
+  border-radius: 8px;
 }
 
 .style-card-heading {

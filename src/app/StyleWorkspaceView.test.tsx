@@ -37,6 +37,11 @@ describe("StyleWorkspaceView", () => {
     expect(markup).toContain("图片语言");
     expect(markup).toContain("避免使用");
     expect(markup).toContain("选择此风格");
+    expect(markup).toContain("三页样张");
+    expect(markup).toContain("主视觉页");
+    expect(markup).toContain("内容结构页");
+    expect(markup).toContain("数据 / 流程页");
+    expect((markup.match(/style-specimen-number/g) ?? []).length).toBe(3);
   });
 
   it("discloses partial support and export fallbacks", () => {
