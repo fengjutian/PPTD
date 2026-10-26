@@ -106,7 +106,10 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
   const align = shared(stateElements, (element) => element.style.align);
   const vertical = shared(stateElements, (element) => element.style.verticalAlign ?? "top");
   const bullet = shared(stateElements, (element) => element.style.bullet ?? "none");
-  const characterSpacing = shared(stateElements, (element) => element.style.letterSpacingPt);
+  // A missing value and an explicit zero both render as normal tracking. Treat
+  // them as one value so the control does not announce a mixed selection for a
+  // difference the user cannot see.
+  const characterSpacing = shared(stateElements, (element) => element.style.letterSpacingPt ?? 0);
 
   const fontSize = primary?.style.fontSizePt;
   const indentLevel = primary?.style.indentLevel ?? 0;
@@ -229,11 +232,7 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
     />
   );
 
-  const spacingValue = characterSpacing.mixed
-    ? ""
-    : characterSpacing.value === undefined
-      ? ""
-      : String(characterSpacing.value);
+  const spacingValue = characterSpacing.mixed ? "" : String(characterSpacing.value ?? 0);
   const customSpacing =
     spacingValue !== "" && !CHARACTER_SPACING_OPTIONS.some((option) => Number(option.value) === characterSpacing.value);
   const characterSpacingControl = (
@@ -245,15 +244,12 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
       data-mixed={characterSpacing.mixed || undefined}
       disabled={disabled}
       onChange={(event) => {
-        const value = event.target.value;
-        apply({ letterSpacingPt: value === "" ? undefined : Number(value) });
+        // The empty value is the mixed-selection label, not a command.
+        if (event.target.value === "") return;
+        apply({ letterSpacingPt: Number(event.target.value) });
       }}
     >
-      {characterSpacing.mixed ? (
-        <option value="">多值</option>
-      ) : spacingValue === "" ? (
-        <option value="">默认</option>
-      ) : null}
+      {characterSpacing.mixed && <option value="">多值</option>}
       {customSpacing && <option value={spacingValue}>{spacingValue} pt</option>}
       {CHARACTER_SPACING_OPTIONS.map((option) => (
         <option key={option.value} value={option.value}>

@@ -62,8 +62,7 @@ export const VISUAL_ASSET_STYLE_HINT =
  * 最后给页面贴上一块黑色图片（见 ADR 0110）。重复一次背景要求，让它在
  * 提示词的最后出现。
  */
-export const VISUAL_ASSET_BACKGROUND_RULE =
-  "画面背景必须是白色或浅灰的明亮留白，不要黑色、深色、暗场、夜景或黑底";
+export const VISUAL_ASSET_BACKGROUND_RULE = "画面背景必须是白色或浅灰的明亮留白，不要黑色、深色、暗场、夜景或黑底";
 
 /** 把画面描述里明确要求的深色背景改写成浅色。 */
 const DARK_BACKDROP_CLAUSE =
@@ -78,9 +77,7 @@ const DARK_BACKDROP_ADJECTIVE = /(?:深色|黑色|暗色|暗场|黑底|夜色|�
  * 承载画面的底，而不是用户想看的对象。
  */
 export function lightenBackdropRequest(description: string): string {
-  return description
-    .replace(DARK_BACKDROP_CLAUSE, "背景为浅色留白")
-    .replace(DARK_BACKDROP_ADJECTIVE, "浅色背景");
+  return description.replace(DARK_BACKDROP_CLAUSE, "背景为浅色留白").replace(DARK_BACKDROP_ADJECTIVE, "浅色背景");
 }
 
 /**

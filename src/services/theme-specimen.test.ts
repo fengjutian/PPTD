@@ -63,4 +63,18 @@ describe("theme specimens", () => {
     expect(texts.some((element) => element.text === "稳健、可信、精致")).toBe(true);
     expect(document.slides[0]!.elements.some((element) => element.type === "shape")).toBe(true);
   });
+
+  it("gives paper and instrument covers different composition, not only different colours", () => {
+    const common = { themePresetId: "finance-gold", title: "年度经营判断", subtitle: "管理层汇报" };
+    const paper = buildThemeCoverPreviewDocument({ ...common, conceptPresetId: "paper" });
+    const instrument = buildThemeCoverPreviewDocument({ ...common, conceptPresetId: "instrument" });
+    const paperShapes = paper.slides[0]!.elements.filter((element) => element.type === "shape");
+    const instrumentShapes = instrument.slides[0]!.elements.filter((element) => element.type === "shape");
+    expect(instrumentShapes.length).toBeGreaterThan(paperShapes.length);
+    expect(
+      instrumentShapes.some(
+        (element) => element.frame.height > instrument.pageSize.height * 0.7 && element.frame.width < instrument.pageSize.width * 0.02,
+      ),
+    ).toBe(true);
+  });
 });

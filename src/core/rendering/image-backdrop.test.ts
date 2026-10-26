@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  analyzeImageBackdrop,
-  hasNearBlackBackdrop,
-  NEAR_BLACK_LUMINANCE,
-  NEAR_BLACK_SHARE,
-} from "./image-backdrop";
+import { analyzeImageBackdrop, hasNearBlackBackdrop, NEAR_BLACK_LUMINANCE, NEAR_BLACK_SHARE } from "./image-backdrop";
 
 type Rgb = [number, number, number];
 

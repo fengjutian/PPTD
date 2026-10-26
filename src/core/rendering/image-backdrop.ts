@@ -36,11 +36,7 @@ export interface BackdropSample {
 }
 
 /** Measures the edge band of an RGBA buffer. */
-export function analyzeImageBackdrop(
-  pixels: Uint8ClampedArray,
-  width: number,
-  height: number,
-): BackdropSample {
+export function analyzeImageBackdrop(pixels: Uint8ClampedArray, width: number, height: number): BackdropSample {
   if (width <= 0 || height <= 0) return { nearBlackShare: 0, opaquePixels: 0 };
   const band = Math.max(1, Math.round(Math.min(width, height) * EDGE_BAND));
   let dark = 0;
