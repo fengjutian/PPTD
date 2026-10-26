@@ -157,7 +157,15 @@ pub struct ImportedTextStyle {
     pub line_height: Option<f64>,
     pub paragraph_space_before_pt: Option<f64>,
     pub paragraph_space_after_pt: Option<f64>,
+    pub tab_stops: Vec<ImportedTabStop>,
     pub bullet: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedTabStop {
+    pub position_pt: f64,
+    pub alignment: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -1657,6 +1665,10 @@ fn parse_placeholder_text_style(
             style.paragraph_space_after_pt = Some(value);
             changed = true;
         }
+        if let Some(stops) = parse_tab_stops(paragraph) {
+            style.tab_stops = stops;
+            changed = true;
+        }
         if let Some(props) = descendant(paragraph, "defRPr") {
             let run = parse_run_style(props, theme);
             changed |= apply_run_style(&mut style, run);
@@ -1694,6 +1706,9 @@ fn parse_text_body(
         inherited_style.and_then(|style| style.paragraph_space_before_pt);
     let mut paragraph_space_after_pt =
         inherited_style.and_then(|style| style.paragraph_space_after_pt);
+    let mut tab_stops = inherited_style
+        .map(|style| style.tab_stops.clone())
+        .unwrap_or_default();
     let mut paragraph_align: Option<String> = None;
     let paragraphs: Vec<Node<'_, '_>> = body
         .children()
@@ -1737,6 +1752,9 @@ fn parse_text_body(
                 paragraph_spacing_points(props, "spcBef").or(paragraph_space_before_pt);
             paragraph_space_after_pt =
                 paragraph_spacing_points(props, "spcAft").or(paragraph_space_after_pt);
+            if let Some(parsed) = parse_tab_stops(props) {
+                tab_stops = parsed;
+            }
         }
         for child_node in paragraph.children().filter(Node::is_element) {
             match child_node.tag_name().name() {
@@ -1815,6 +1833,7 @@ fn parse_text_body(
     style.line_height = line_height;
     style.paragraph_space_before_pt = paragraph_space_before_pt;
     style.paragraph_space_after_pt = paragraph_space_after_pt;
+    style.tab_stops = tab_stops;
     if let Some(body_pr) = child(body, "bodyPr") {
         if let Some(anchor) = body_pr.attribute("anchor") {
             style.vertical_align = match anchor {
@@ -1844,6 +1863,33 @@ fn paragraph_spacing_points(node: Node<'_, '_>, name: &str) -> Option<f64> {
         .and_then(|points| points.attribute("val"))
         .and_then(|value| value.parse::<f64>().ok())
         .map(|value| (value / 100.0).clamp(0.0, 200.0))
+}
+
+fn parse_tab_stops(node: Node<'_, '_>) -> Option<Vec<ImportedTabStop>> {
+    let list = descendant(node, "tabLst")?;
+    Some(
+        list.children()
+            .filter(|node| node.has_tag_name("tab"))
+            .filter_map(|tab| {
+                let position_pt = tab
+                    .attribute("pos")?
+                    .parse::<f64>()
+                    .ok()
+                    .map(|value| (value / 12_700.0).clamp(0.01, 2000.0))?;
+                let alignment = match tab.attribute("algn").unwrap_or("l") {
+                    "ctr" => "center",
+                    "r" => "right",
+                    "dec" => "decimal",
+                    _ => "left",
+                };
+                Some(ImportedTabStop {
+                    position_pt,
+                    alignment: alignment.into(),
+                })
+            })
+            .take(32)
+            .collect(),
+    )
 }
 
 fn apply_run_style(style: &mut ImportedTextStyle, run: RunStyle) -> bool {
@@ -1912,6 +1958,7 @@ fn default_text_style(theme: &Option<ImportedTheme>, title: bool) -> ImportedTex
         line_height: None,
         paragraph_space_before_pt: None,
         paragraph_space_after_pt: None,
+        tab_stops: Vec::new(),
         bullet: "none".into(),
     }
 }
@@ -2470,6 +2517,7 @@ mod tests {
                 <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle><a:lvl1pPr algn="ctr">
                     <a:lnSpc><a:spcPct val="140000"/></a:lnSpc>
                     <a:spcBef><a:spcPts val="600"/></a:spcBef><a:spcAft><a:spcPts val="900"/></a:spcAft>
+                    <a:tabLst><a:tab pos="914400" algn="ctr"/><a:tab pos="1828800" algn="dec"/></a:tabLst>
                     <a:buChar char="•"/>
                     <a:defRPr sz="2200" b="1" i="1"><a:solidFill><a:srgbClr val="445566"/></a:solidFill><a:latin typeface="Inherited Sans"/></a:defRPr>
                 </a:lvl1pPr></a:lstStyle></p:txBody>
@@ -2498,6 +2546,10 @@ mod tests {
         assert_eq!(body.style.line_height, Some(1.4));
         assert_eq!(body.style.paragraph_space_before_pt, Some(6.0));
         assert_eq!(body.style.paragraph_space_after_pt, Some(9.0));
+        assert_eq!(body.style.tab_stops.len(), 2);
+        assert_eq!(body.style.tab_stops[0].position_pt, 72.0);
+        assert_eq!(body.style.tab_stops[0].alignment, "center");
+        assert_eq!(body.style.tab_stops[1].alignment, "decimal");
         assert_eq!(body.style.bullet, "dot");
     }
 

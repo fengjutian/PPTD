@@ -447,6 +447,10 @@ describe("PPTX export", () => {
         lineHeight: 1.5,
         paragraphSpaceBeforePt: 6,
         paragraphSpaceAfterPt: 9,
+        tabStops: [
+          { positionPt: 72, alignment: "center" },
+          { positionPt: 144, alignment: "decimal" },
+        ],
       },
     });
     const result = await buildPptx(document);
@@ -461,6 +465,8 @@ describe("PPTX export", () => {
     expect(slideXml).toContain("<a:spcPct");
     expect(slideXml).toContain('<a:spcBef><a:spcPts val="600"/></a:spcBef>');
     expect(slideXml).toContain('<a:spcAft><a:spcPts val="900"/></a:spcAft>');
+    expect(slideXml).toContain('<a:tab pos="914400" algn="ctr"/>');
+    expect(slideXml).toContain('<a:tab pos="1828800" algn="dec"/>');
     expect(result.report.package.valid).toBe(true);
   });
 

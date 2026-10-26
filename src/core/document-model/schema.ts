@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { ELEMENT_NAME_MAX_LENGTH, MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 26 as const;
+export const CURRENT_SCHEMA_VERSION = 27 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -56,6 +56,15 @@ const textElement = base.extend({
     lineHeight: z.number().min(0.8).max(3).optional(),
     paragraphSpaceBeforePt: z.number().min(0).max(200).optional(),
     paragraphSpaceAfterPt: z.number().min(0).max(200).optional(),
+    tabStops: z
+      .array(
+        z.object({
+          positionPt: z.number().positive().max(2000),
+          alignment: z.enum(["left", "center", "right", "decimal"]),
+        }),
+      )
+      .max(32)
+      .optional(),
     italic: z.boolean().optional(),
     underline: z.boolean().optional(),
     strikethrough: z.boolean().optional(),
@@ -720,6 +729,11 @@ const versionTwentyFiveDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentySixDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(26) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTwentyThreeDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(23) })
   .superRefine(validateUniqueIds)
@@ -910,6 +924,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 26 adds optional paragraph spacing. Older text keeps its existing
   // compact flow because the migration does not invent spacing values.
   25: (document) => ({ ...versionTwentyFiveDocumentSchema.parse(document), schemaVersion: 26 }),
+  // Version 27 adds optional native tab stops. Existing tabs keep rendering as
+  // plain text because the migration does not invent layout positions.
+  26: (document) => ({ ...versionTwentySixDocumentSchema.parse(document), schemaVersion: 27 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

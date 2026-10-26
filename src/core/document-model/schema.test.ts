@@ -24,11 +24,18 @@ import versionTwentyTwoFixture from "./__fixtures__/v22-document.json";
 import versionTwentyThreeFixture from "./__fixtures__/v23-document.json";
 import versionTwentyFourFixture from "./__fixtures__/v24-document.json";
 import versionTwentyFiveFixture from "./__fixtures__/v25-document.json";
+import versionTwentySixFixture from "./__fixtures__/v26-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
 describe("presentation document schema", () => {
+  it("migrates version 26 without inventing tab stops", () => {
+    const migrated = parsePresentationDocument(versionTwentySixFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const element = migrated.slides[0]!.elements[0]!;
+    expect(element.type === "text" ? element.style.tabStops : undefined).toBeUndefined();
+  });
   it("migrates version 25 without inventing paragraph spacing", () => {
     const migrated = parsePresentationDocument(versionTwentyFiveFixture);
     expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);

@@ -95,6 +95,12 @@ export type TextVerticalAlign = "top" | "middle" | "bottom";
  */
 export type TextBullet = "none" | "dot" | "number";
 
+export interface TextTabStop {
+  /** Position from the paragraph origin, in points. */
+  positionPt: number;
+  alignment: "left" | "center" | "right" | "decimal";
+}
+
 /** Presentation-only styling of a text run. Never part of the content hash. */
 export interface TextElementStyle {
   fontFamily: string;
@@ -109,6 +115,8 @@ export interface TextElementStyle {
   /** Space before/after each paragraph, in points. */
   paragraphSpaceBeforePt?: number;
   paragraphSpaceAfterPt?: number;
+  /** Native paragraph tab stops shared by the text box in the current model. */
+  tabStops?: TextTabStop[];
   /** Absent means upright. */
   italic?: boolean;
   /** Absent means no underline. A run may override this for its own range. */

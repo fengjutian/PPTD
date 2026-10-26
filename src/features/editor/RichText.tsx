@@ -48,6 +48,9 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
 
   const renderFragment = (fragment: TextFragment, key: number) => {
     const style = resolveFragmentStyle(element.style, fragment.style);
+    const tabWidth =
+      (((element.style.tabStops?.[0]?.positionPt ?? element.style.fontSizePt * 4) * scale * EMU_PER_INCH) / 72);
+    const pieces = fragment.text.split("\t");
     return (
       <span
         key={key}
@@ -57,7 +60,14 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
           textDecoration: decorationOf(style.underline),
         }}
       >
-        {fragment.text}
+        {pieces.length === 1
+          ? fragment.text
+          : pieces.map((piece, pieceIndex) => (
+              <span key={pieceIndex}>
+                {pieceIndex > 0 && <span aria-hidden="true" style={{ display: "inline-block", width: tabWidth }} />}
+                {piece}
+              </span>
+            ))}
       </span>
     );
   };

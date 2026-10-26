@@ -337,6 +337,21 @@ export async function buildPptx(
           ...(element.style.paragraphSpaceAfterPt === undefined
             ? {}
             : { paraSpaceAfter: element.style.paragraphSpaceAfterPt }),
+          ...(element.style.tabStops === undefined
+            ? {}
+            : {
+                tabStops: element.style.tabStops.map((stop) => ({
+                  position: stop.positionPt / 72,
+                  alignment:
+                    stop.alignment === "center"
+                      ? ("ctr" as const)
+                      : stop.alignment === "right"
+                        ? ("r" as const)
+                        : stop.alignment === "decimal"
+                          ? ("dec" as const)
+                          : ("l" as const),
+                })),
+              }),
           // The canvas and the file have to agree on where the text sits in its
           // frame; both read the same vertical alignment now.
           valign: element.style.verticalAlign ?? "top",

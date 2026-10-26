@@ -134,6 +134,7 @@ export interface ImportedTextStyle {
   lineHeight?: number | null;
   paragraphSpaceBeforePt?: number | null;
   paragraphSpaceAfterPt?: number | null;
+  tabStops?: Array<{ positionPt: number; alignment: "left" | "center" | "right" | "decimal" }>;
   bullet: "none" | "dot" | "number";
 }
 
@@ -284,6 +285,9 @@ function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): 
         ...(element.style.paragraphSpaceAfterPt === undefined || element.style.paragraphSpaceAfterPt === null
           ? {}
           : { paragraphSpaceAfterPt: element.style.paragraphSpaceAfterPt }),
+        ...(element.style.tabStops && element.style.tabStops.length > 0
+          ? { tabStops: element.style.tabStops.map((stop) => ({ ...stop })) }
+          : {}),
         bullet: element.style.bullet,
         indentLevel: 0,
       };

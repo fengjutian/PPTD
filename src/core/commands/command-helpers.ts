@@ -538,6 +538,18 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
       throw new Error("INVALID_TEXT_STYLE");
   }
   if (
+    style.tabStops !== undefined &&
+    (style.tabStops.length > 32 ||
+      style.tabStops.some(
+        (stop) =>
+          !Number.isFinite(stop.positionPt) ||
+          stop.positionPt <= 0 ||
+          stop.positionPt > 2000 ||
+          !["left", "center", "right", "decimal"].includes(stop.alignment),
+      ))
+  )
+    throw new Error("INVALID_TEXT_STYLE");
+  if (
     style.letterSpacingPt !== undefined &&
     (!Number.isFinite(style.letterSpacingPt) || style.letterSpacingPt < -2 || style.letterSpacingPt > 20)
   )
