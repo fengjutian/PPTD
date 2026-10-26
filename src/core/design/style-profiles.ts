@@ -397,7 +397,13 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
       note: "3D 主体以生成或导入的渲染图片进入页面；标题、正文、图表和普通形状继续原生可编辑。",
       fallbacks: ["原生 3D 模型 → 高分辨率渲染图片", "复杂空间动效 → 静态构图与普通进入动画"],
     },
-    specimen: { background: "#F5F1EB", ink: "#241E22", accent: "#7B61D1", secondary: "#F08A4B", composition: "three-dimensional" },
+    specimen: {
+      background: "#F5F1EB",
+      ink: "#241E22",
+      accent: "#7B61D1",
+      secondary: "#F08A4B",
+      composition: "three-dimensional",
+    },
   },
 ] as const;
 
