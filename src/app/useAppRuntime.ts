@@ -596,7 +596,11 @@ export function useAppRuntime() {
     onClear: () => selectElement(null),
   });
   const revisionLabel = `内容 ${document.revisions.content} · 设计 ${document.revisions.design}`;
-  const countLabel = useMemo(() => `${activeSlide.elements.length} 个对象`, [activeSlide.elements.length]);
+  const countLabel = useMemo(() => {
+    const total = activeSlide.elements.length;
+    const hidden = activeSlide.elements.filter((element) => !isElementVisible(element)).length;
+    return hidden > 0 ? `${total - hidden} 个对象 · ${hidden} 隐藏` : `${total} 个对象`;
+  }, [activeSlide.elements]);
   const dirty = document.revisions.document !== savedRevision;
   // The close handler is registered once (it must outlive re-renders), so it
   // reads the latest document/path through refs instead of a stale closure.

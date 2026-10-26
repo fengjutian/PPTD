@@ -3,6 +3,7 @@ import type { ContentBlock, Emu, RectEmu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
 import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { railStations } from "./rail-geometry";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type TimelineBlock = Extract<ContentBlock, { type: "timeline" }>;
@@ -122,6 +123,113 @@ export const timelineRail: LayoutRecipe = {
     const textWidth = Math.max(0.2, chrome.content.x + chrome.content.width - textX - 0.02);
     const contentHeight = chrome.contentBottom - contentTop;
     if (contentHeight < 0.25) return conflict("timeline", "时间线页没有足够的内容区");
+
+    // A landscape page reads a history left to right. The vertical rail put five
+    // dates in a column on the left and left the other two thirds of the page
+    // empty; a horizontal axis uses the width the page actually has.
+    if (page.width / page.height >= 1.3) {
+      const stations = railStations(chrome.content, block.items.length, 0.05);
+      const columnWidth = stations[0]?.width ?? chrome.content.width;
+      const diameter = 0.12;
+      const diameterNorm = diameter / pageHeightIn;
+      const labelGap = 0.022;
+      const textGap = 0.012;
+      const labelSizes = block.items.map((item) =>
+        fittedFontSize(
+          item.label,
+          frameFromNormalized({ x: 0, y: 0, width: columnWidth, height: 0.08 }, page),
+          LABEL_SIZE_PT,
+          12,
+          headingFamily,
+          lineHeight,
+        ),
+      );
+      const labelHeights = block.items.map((item, index) =>
+        pointsToNormalized(
+          textHeightPt(item.label, columnWidth * pageWidthIn * 72, labelSizes[index]!, headingFamily, lineHeight),
+          page.height,
+        ),
+      );
+      const textHeightsAt = (size: number) =>
+        block.items.map((item) =>
+          pointsToNormalized(
+            textHeightPt(item.text, columnWidth * pageWidthIn * 72, size, bodyFamily, lineHeight),
+            page.height,
+          ),
+        );
+      let textSize = TEXT_SIZE_PT;
+      let textHeights = textHeightsAt(textSize);
+      const blockHeightAt = () =>
+        Math.max(...labelHeights) + labelGap + diameterNorm + textGap + Math.max(...textHeights);
+      while (textSize > MIN_TEXT_SIZE_PT && blockHeightAt() > contentHeight) {
+        textSize -= 1;
+        textHeights = textHeightsAt(textSize);
+      }
+      const blockHeight = blockHeightAt();
+      if (blockHeight > contentHeight) return conflict("timeline", "时间线条目在内容区里放不下");
+      const groupTop = contentTop + (contentHeight - blockHeight) / 2;
+      const maxLabelHeight = Math.max(...labelHeights);
+      const railY = groupTop + maxLabelHeight + labelGap + diameterNorm / 2;
+      const textTop = railY + diameterNorm / 2 + textGap;
+      elements.push(
+        rectElement(
+          frameFromNormalized(
+            { x: chrome.content.x, y: railY - 0.003, width: chrome.content.width, height: 0.006 },
+            page,
+          ),
+          colors.borderStrong,
+        ),
+      );
+      block.items.forEach((item, index) => {
+        const station = stations[index]!;
+        elements.push(
+          textElement(
+            item.label,
+            frameFromNormalized(
+              {
+                x: station.x,
+                y: railY - diameterNorm / 2 - labelGap - labelHeights[index]!,
+                width: station.width,
+                height: Math.max(0.02, labelHeights[index]!),
+              },
+              page,
+            ),
+            labelSizes[index]!,
+            colors.accent,
+            true,
+            "left",
+            headingFamily,
+            { lineHeight },
+          ),
+        );
+        elements.push(
+          ellipseElement(
+            circleFrame(station.x * pageWidthIn, railY * pageHeightIn - diameter / 2, diameter),
+            colors.accent,
+          ),
+        );
+        elements.push(
+          textElement(
+            item.text,
+            frameFromNormalized(
+              { x: station.x, y: textTop, width: station.width, height: Math.max(0.02, textHeights[index]!) },
+              page,
+            ),
+            textSize,
+            colors.body,
+            false,
+            "left",
+            bodyFamily,
+            { contentRef: "decorative", lineHeight },
+          ),
+        );
+      });
+      return {
+        elements,
+        consumed: { title: true, body: true, items: 0, blockIds: [block.id] },
+        conflicts: [],
+      };
+    }
 
     let textSize = TEXT_SIZE_PT;
     const labelSize = LABEL_SIZE_PT;

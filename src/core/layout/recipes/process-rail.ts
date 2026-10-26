@@ -2,7 +2,8 @@ import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu, RectEmu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";`nimport { railStations } from "./rail-geometry";
+import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { railStations } from "./rail-geometry";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type ProcessBlock = Extract<ContentBlock, { type: "process" }>;

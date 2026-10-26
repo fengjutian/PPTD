@@ -69,6 +69,17 @@ function buttonDisabled(markup: string, label: string): boolean {
   return markup.slice(open, index).includes("disabled");
 }
 
+describe("inspector hidden layer notice", () => {
+  it("explains a hidden selection and offers to show it again", () => {
+    const hidden = shapeElement("rectangle");
+    hidden.hidden = true;
+    const markup = renderView(hidden);
+    expect(markup).toContain("图层已隐藏");
+    expect(markup).toContain("显示图层");
+    expect(renderView(shapeElement("rectangle"))).not.toContain("图层已隐藏");
+  });
+});
+
 describe("inspector panel", () => {
   it("shows the empty state when nothing is selected", () => {
     expect(renderToStaticMarkup(<InspectorPanel />)).toContain("选择画布中的对象");

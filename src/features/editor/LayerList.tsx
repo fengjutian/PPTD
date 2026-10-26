@@ -107,6 +107,7 @@ export const LayerList = memo(function LayerList({
   const [nameDraft, setNameDraft] = useState("");
   const allRows = useMemo(() => layerRows(slide), [slide]);
   const rows = useMemo(() => filterLayerRows(allRows, query), [allRows, query]);
+  const hiddenRows = useMemo(() => allRows.filter((element) => element.hidden === true), [allRows]);
   const filtering = query.trim().length > 0;
   const groupByElement = useMemo(() => {
     const map = new Map<ElementId, SlideGroup>();
@@ -193,6 +194,16 @@ export const LayerList = memo(function LayerList({
     const elementIds = blockOf(elementId);
     const allHidden = elementIds.every((id) => slide.elements.find((element) => element.id === id)?.hidden === true);
     onCommand({ type: "set-elements-hidden", slideId: slide.id, elementIds, hidden: !allHidden });
+  };
+
+  const showAllHidden = () => {
+    if (hiddenRows.length === 0) return;
+    onCommand({
+      type: "set-elements-hidden",
+      slideId: slide.id,
+      elementIds: hiddenRows.map((element) => element.id),
+      hidden: false,
+    });
   };
 
   const startRename = (element: SlideElement) => {
@@ -742,16 +753,17 @@ export const LayerList = memo(function LayerList({
       </div>
 
       {allRows.length > 0 && (
-        <p className="layer-hint">
-          {filtering ? (
-            "搜索中 · 清除搜索后可拖动排序"
+        <div className="layer-hint">
+          <span>{filtering ? "搜索中 · 清除搜索后可拖动排序" : "拖动排序 · Alt+↑↓ 调层级 · Shift 连选"}</span>
+          {hiddenRows.length > 0 ? (
+            <button type="button" className="layer-show-all" onClick={showAllHidden}>
+              <EyeOff />
+              显示全部隐藏图层（{hiddenRows.length}）
+            </button>
           ) : (
-            <>
-              <span>拖动排序 · Alt+↑↓ 调层级 · Shift 连选</span>
-              <span>右键更多操作 · Del 删除</span>
-            </>
+            !filtering && <span>右键更多操作 · Del 删除</span>
           )}
-        </p>
+        </div>
       )}
 
       {menu && (

@@ -159,6 +159,7 @@ describe("layer list", () => {
     expect(markup).toContain("is-hidden");
     expect(markup).toContain('aria-label="显示图层"');
     expect(markup).toContain("已隐藏");
+    expect(markup).toContain("显示全部隐藏图层（1）");
     expect(renderList(slideWith([textElement("b", "可见")]))).toContain('aria-label="隐藏图层"');
   });
 });

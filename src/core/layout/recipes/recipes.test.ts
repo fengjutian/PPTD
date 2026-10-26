@@ -1053,6 +1053,33 @@ describe("timeline-rail recipe", () => {
     expect(texts).toEqual(expect.arrayContaining(["2018", "2025", "公司成立，完成首轮融资"]));
     const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
     expect(nodes).toHaveLength(5);
+    // Side by side on one line: a history reads left to right on a wide page.
+    const centers = nodes.map((node) => node.frame.y + node.frame.height / 2);
+    expect(Math.max(...centers) - Math.min(...centers)).toBeLessThan(page.height * 0.01);
+    const lefts = nodes.map((node) => node.frame.x);
+    expect(Math.max(...lefts) - Math.min(...lefts)).toBeGreaterThan(page.width * 0.55);
+    // Each date sits above its own dot, and its event below.
+    const firstDate = result.elements.find((element) => element.type === "text" && element.text === "2018");
+    expect(firstDate?.type === "text" ? firstDate.frame.y : 0).toBeLessThan(centers[0]!);
+  });
+
+  it("keeps the vertical rail on a page that is not landscape", () => {
+    const tall = { width: inches(7.5), height: inches(7.5) };
+    const ctx = context(timelineContent, {
+      facts: facts({ itemCount: 5, hasTimeline: true, hasRowBlock: true, layout: "cards" }),
+    });
+    ctx.frame.page = tall;
+    ctx.frame.title = { x: inches(0.6), y: inches(0.35), width: inches(6.3), height: inches(0.7) };
+    ctx.frame.content = { x: inches(0.6), y: inches(1.4), width: inches(6.3), height: inches(5.3) };
+    ctx.frame.safe = { x: 0.08, y: 0.05, width: 0.84, height: 0.9 };
+    ctx.chrome = undefined;
+    const result = plan(timelineRail, ctx);
+    const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(5);
+    const centers = nodes.map((node) => node.frame.y + node.frame.height / 2);
+    expect(Math.max(...centers) - Math.min(...centers)).toBeGreaterThan(tall.height * 0.1);
+    const lefts = nodes.map((node) => node.frame.x);
+    expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThan(tall.width * 0.05);
   });
 
   it("refuses seven dates", () => {

@@ -598,6 +598,12 @@
   border-color: #e2e5e9;
   color: #6f747d;
 }
+:root[data-theme="light"] .layer-show-all {
+  color: #a9662c;
+}
+:root[data-theme="light"] .layer-show-all:hover {
+  color: #22252a;
+}
 :root[data-theme="light"] .layer-empty-actions button {
   border-color: #cfd3d9;
   background: #fff;

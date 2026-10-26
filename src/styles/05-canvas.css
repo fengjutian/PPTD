@@ -940,6 +940,27 @@ body.layer-reordering .layer-row {
   flex-direction: column;
   gap: 2px;
 }
+.layer-show-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #d9a091;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.layer-show-all:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+.layer-show-all svg {
+  width: 11px;
+  height: 11px;
+}
 /* 右键菜单：固定定位，盖在面板之上；点击空白处关闭。 */
 .layer-menu-backdrop {
   position: fixed;

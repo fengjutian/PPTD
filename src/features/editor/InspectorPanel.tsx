@@ -16,6 +16,7 @@ import {
   CircleAlert,
   Copy,
   Eraser,
+  EyeOff,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -328,6 +329,23 @@ export function InspectorPanelView({
   return (
     <>
       <div className="property-form">
+        {element.hidden && (
+          <div className="inspector-warning" role="status">
+            <EyeOff />
+            <div>
+              <strong>图层已隐藏</strong>
+              <span>画布、缩略图和导出都不会显示这个对象；图层列表中仍可找到它。</span>
+              <button
+                type="button"
+                onClick={() =>
+                  onCommand({ type: "set-elements-hidden", slideId, elementIds: [element.id], hidden: false })
+                }
+              >
+                显示图层
+              </button>
+            </div>
+          </div>
+        )}
         <PageProperties
           slideId={slideId}
           background={background}
