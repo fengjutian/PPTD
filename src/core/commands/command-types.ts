@@ -259,6 +259,13 @@ export type DocumentCommand =
       clearRuns?: boolean;
     }
   | { type: "clear-text-format"; slideId: SlideId; elementIds: ElementId[] }
+  | {
+      type: "set-text-hyperlink";
+      slideId: SlideId;
+      elementIds: ElementId[];
+      /** `null` removes the link; the text and its fragments stay untouched. */
+      url: string | null;
+    }
   | { type: "fit-text"; slideId: SlideId; elementId: ElementId }
   | {
       type: "set-text-emphasis";

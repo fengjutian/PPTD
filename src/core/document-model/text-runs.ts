@@ -85,6 +85,31 @@ export function applyTextRun(runs: TextRun[] | undefined, start: number, end: nu
 }
 
 /**
+ * Sets or clears the hyperlink of every character while keeping the rest of
+ * each run's style. Gaps between runs become linked (or plain) runs, so a link
+ * set on the whole text box cannot silently drop bold or colour emphasis.
+ */
+export function setTextHyperlink(runs: TextRun[] | undefined, textLength: number, url: string | null): TextRun[] {
+  const sorted = [...(runs ?? [])].sort((left, right) => left.start - right.start || left.end - right.end);
+  const next: TextRun[] = [];
+  let cursor = 0;
+  const push = (start: number, end: number, style: TextRunStyle) => {
+    if (end <= start) return;
+    const withLink: TextRunStyle = { ...style };
+    if (url) withLink.hyperlinkUrl = url;
+    else delete withLink.hyperlinkUrl;
+    next.push({ start, end, ...withLink });
+  };
+  for (const run of sorted) {
+    if (run.start > cursor) push(cursor, Math.min(run.start, textLength), {});
+    push(Math.max(run.start, cursor), Math.min(run.end, textLength), styleOf(run));
+    cursor = Math.max(cursor, run.end);
+  }
+  if (cursor < textLength) push(cursor, textLength, {});
+  return mergeTextRuns(next);
+}
+
+/**
  * Splits the text into the fragments the runs describe. The fragments cover the
  * whole text, and a fragment without a run inherits the style of the element.
  */

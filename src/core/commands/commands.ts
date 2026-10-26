@@ -11,6 +11,7 @@ import {
   TABLE_MAX_COLUMNS,
   TABLE_MAX_ROWS,
   clearedTextStyle,
+  setTextHyperlink,
 } from "../document-model";
 
 import { alignFrames, distributeFrames, unionFrame } from "./arrange";
