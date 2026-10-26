@@ -1,6 +1,7 @@
 import type { CompositionFacts, IntentConflict } from "../../commands/design-intent";
 import type { DeckConcept, RecipeId } from "../../design/deck-concept";
 import type { SlideContent } from "../../document-model";
+import { imageRecipeIds } from "./catalog";
 import { findRecipe } from "./registry";
 import type { LayoutRecipe, RecipePlan, RecipeSelectionOptions } from "./types";
 
@@ -62,7 +63,7 @@ const SHARED_LIST_RECIPES: readonly RecipeId[] = ["editorial-index", "asymmetric
  * layout with a picture placeholder before the recipe runs; a list kept in two
  * places is how a new composition silently lands on a text-only template.
  */
-export const IMAGE_RECIPE_IDS: readonly RecipeId[] = ["image-led", "full-bleed-image", "side-image-text"];
+export const IMAGE_RECIPE_IDS: readonly RecipeId[] = imageRecipeIds();
 
 export function isImageRecipe(id: RecipeId | undefined): boolean {
   return id !== undefined && IMAGE_RECIPE_IDS.includes(id);

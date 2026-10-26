@@ -14,7 +14,9 @@ mod live_deck_tests;
 mod live_image_tests;
 
 use base64::Engine;
+use rusqlite::{params, Connection};
 use serde::Serialize;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -33,10 +35,65 @@ pub struct TokenUsageStats {
     pub total_tokens: u64,
 }
 
-static TOKEN_USAGE: OnceLock<Mutex<TokenUsageStats>> = OnceLock::new();
+#[derive(Default)]
+struct TokenUsageStore {
+    stats: TokenUsageStats,
+    database_path: Option<PathBuf>,
+}
 
-fn token_usage_store() -> &'static Mutex<TokenUsageStats> {
-    TOKEN_USAGE.get_or_init(|| Mutex::new(TokenUsageStats::default()))
+static TOKEN_USAGE: OnceLock<Mutex<TokenUsageStore>> = OnceLock::new();
+
+fn token_usage_store() -> &'static Mutex<TokenUsageStore> {
+    TOKEN_USAGE.get_or_init(|| Mutex::new(TokenUsageStore::default()))
+}
+
+pub fn initialize_token_usage(database_path: &Path) -> Result<(), String> {
+    let connection = Connection::open(database_path)
+        .map_err(|error| format!("TOKEN_USAGE_OPEN_FAILED: {error}"))?;
+    let stats = connection
+        .query_row(
+            "SELECT request_count, reported_request_count, input_tokens, output_tokens, total_tokens
+             FROM token_usage WHERE id = 1",
+            [],
+            |row| {
+                Ok(TokenUsageStats {
+                    request_count: row.get(0)?,
+                    reported_request_count: row.get(1)?,
+                    input_tokens: row.get(2)?,
+                    output_tokens: row.get(3)?,
+                    total_tokens: row.get(4)?,
+                })
+            },
+        )
+        .map_err(|error| format!("TOKEN_USAGE_READ_FAILED: {error}"))?;
+    let mut store = token_usage_store()
+        .lock()
+        .map_err(|_| "TOKEN_USAGE_LOCK_FAILED".to_string())?;
+    store.stats = stats;
+    store.database_path = Some(database_path.to_path_buf());
+    Ok(())
+}
+
+fn persist_token_usage(store: &TokenUsageStore) -> Result<(), String> {
+    let Some(path) = store.database_path.as_deref() else {
+        return Ok(());
+    };
+    let connection = Connection::open(path)
+        .map_err(|error| format!("TOKEN_USAGE_OPEN_FAILED: {error}"))?;
+    connection
+        .execute(
+            "UPDATE token_usage SET request_count = ?1, reported_request_count = ?2,
+             input_tokens = ?3, output_tokens = ?4, total_tokens = ?5 WHERE id = 1",
+            params![
+                store.stats.request_count,
+                store.stats.reported_request_count,
+                store.stats.input_tokens,
+                store.stats.output_tokens,
+                store.stats.total_tokens
+            ],
+        )
+        .map_err(|error| format!("TOKEN_USAGE_WRITE_FAILED: {error}"))?;
+    Ok(())
 }
 
 fn record_token_usage(payload: &serde_json::Value) {
@@ -59,35 +116,43 @@ fn record_token_usage(payload: &serde_json::Value) {
         .and_then(|value| value.get("total_tokens"))
         .and_then(serde_json::Value::as_u64)
         .or_else(|| Some(input? + output?));
-    if let Ok(mut stats) = token_usage_store().lock() {
-        stats.request_count += 1;
+    if let Ok(mut store) = token_usage_store().lock() {
+        store.stats.request_count += 1;
         if let (Some(input), Some(output), Some(total)) = (input, output, total) {
-            stats.reported_request_count += 1;
-            stats.input_tokens += input;
-            stats.output_tokens += output;
-            stats.total_tokens += total;
+            store.stats.reported_request_count += 1;
+            store.stats.input_tokens += input;
+            store.stats.output_tokens += output;
+            store.stats.total_tokens += total;
         }
+        let _ = persist_token_usage(&store);
     }
 }
 
 fn record_unreported_token_usage() {
-    if let Ok(mut stats) = token_usage_store().lock() {
-        stats.request_count += 1;
+    if let Ok(mut store) = token_usage_store().lock() {
+        store.stats.request_count += 1;
+        let _ = persist_token_usage(&store);
     }
 }
 
 pub fn token_usage_stats() -> TokenUsageStats {
     token_usage_store()
         .lock()
-        .map(|stats| *stats)
+        .map(|store| store.stats)
         .unwrap_or_default()
 }
 
-pub fn clear_token_usage_stats() -> TokenUsageStats {
-    if let Ok(mut stats) = token_usage_store().lock() {
-        *stats = TokenUsageStats::default();
+pub fn clear_token_usage_stats() -> Result<TokenUsageStats, String> {
+    let mut store = token_usage_store()
+        .lock()
+        .map_err(|_| "TOKEN_USAGE_LOCK_FAILED".to_string())?;
+    let previous = store.stats;
+    store.stats = TokenUsageStats::default();
+    if let Err(error) = persist_token_usage(&store) {
+        store.stats = previous;
+        return Err(error);
     }
-    token_usage_stats()
+    Ok(store.stats)
 }
 
 /// 厂商无关的对话请求。

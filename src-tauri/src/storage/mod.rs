@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const HISTORY_LIMIT: usize = 20;
 const RECENT_PROJECT_LIMIT: usize = 20;
 const DESIGN_MEMORY_DECK_LIMIT: usize = 50;
@@ -487,7 +487,16 @@ fn migrate(connection: &mut Connection) -> Result<(), String> {
                created_at INTEGER NOT NULL
              );
              CREATE INDEX IF NOT EXISTS design_memory_kind_created_at
-               ON design_memory (kind, created_at DESC);",
+               ON design_memory (kind, created_at DESC);
+             CREATE TABLE IF NOT EXISTS token_usage (
+               id INTEGER PRIMARY KEY CHECK (id = 1),
+               request_count INTEGER NOT NULL DEFAULT 0 CHECK (request_count >= 0),
+               reported_request_count INTEGER NOT NULL DEFAULT 0 CHECK (reported_request_count >= 0),
+               input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+               output_tokens INTEGER NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+               total_tokens INTEGER NOT NULL DEFAULT 0 CHECK (total_tokens >= 0)
+             );
+             INSERT OR IGNORE INTO token_usage (id) VALUES (1);",
         )
         .map_err(|error| format!("DATABASE_MIGRATION_FAILED: {error}"))?;
     transaction
@@ -974,6 +983,24 @@ mod tests {
         };
         assert_eq!(database.load_settings().expect("load"), Some(settings()));
         assert!(database.load_recent_projects().expect("recent").is_empty());
+        let connection = database.lock().expect("lock");
+        let token_usage: (u64, u64, u64, u64, u64) = connection
+            .query_row(
+                "SELECT request_count, reported_request_count, input_tokens, output_tokens, total_tokens
+                 FROM token_usage WHERE id = 1",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("token usage row");
+        assert_eq!(token_usage, (0, 0, 0, 0, 0));
     }
 
     #[test]

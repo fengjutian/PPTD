@@ -22,7 +22,7 @@ pub fn token_usage_stats() -> ai::TokenUsageStats {
 }
 
 #[tauri::command]
-pub fn clear_token_usage_stats() -> ai::TokenUsageStats {
+pub fn clear_token_usage_stats() -> Result<ai::TokenUsageStats, String> {
     ai::clear_token_usage_stats()
 }
 

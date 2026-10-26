@@ -16,6 +16,7 @@ import { sideImageText } from "./side-image-text";
 import { timelineRail } from "./timeline-rail";
 import { weightedSplit } from "./weighted-split";
 import type { LayoutRecipe } from "./types";
+export { RECIPE_CATALOG, recipeCatalogForConcept } from "./catalog";
 
 const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
   "cover-statement": coverStatement,
