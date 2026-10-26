@@ -105,3 +105,7 @@ const inspected = callPptWorkbench(columns.workbench, "layout.inspect", {
 - 四列布局宽度一致、间距一致、无重叠且包含于内容区域。
 - 非法坐标、非法引用、过多列和容量不足以稳定错误返回。
 - 类型检查、ESLint、单元测试和生产构建通过。
+
+## 9. 与低代码布局系统的关系
+
+本任务提供逻辑坐标、几何操作和 AI Workbench 基础，不把增量 `AiLayoutProgram` 定义为最终可视化编辑模型。后续 [TASK-DESIGN-036](0036-low-code-layout-editor.md) 按 [ADR 0114](../../architecture/decisions/0114-declarative-low-code-layout-system.md) 增加可持久化方向的 `LayoutTree`：布局树是声明式意图，布局程序是会话内的受控增量操作，二者不得成为并行事实来源。
