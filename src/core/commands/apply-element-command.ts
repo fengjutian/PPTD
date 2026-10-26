@@ -118,13 +118,7 @@ export function applyElementCommand(
     assertTextRange(element.text, command.start, command.end);
     // Merge rather than replace: the command only names the property the user
     // changed, so an existing colour, underline or link stays on the words.
-    element.runs = mergeTextRunStyle(
-      element.runs,
-      element.text.length,
-      command.start,
-      command.end,
-      command.style,
-    );
+    element.runs = mergeTextRunStyle(element.runs, element.text.length, command.start, command.end, command.style);
     return;
   }
   if (command.type === "clear-text-emphasis") {

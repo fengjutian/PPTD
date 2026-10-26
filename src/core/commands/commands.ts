@@ -13,6 +13,7 @@ import {
   clearedTextStyle,
   hasTextRunStyle,
   isSafeTextHyperlinkUrl,
+  keepTextHyperlinks,
   setTextHyperlink,
   setTextHyperlinkRange,
   textFragments,
@@ -561,7 +562,9 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (targets.length === 0) throw new Error("ELEMENT_NOT_TEXT");
     for (const target of targets) {
       target.style = { ...target.style, ...command.style };
-      if (command.clearRuns) target.runs = undefined;
+      // The format painter replaces character emphasis, but a link is an
+      // action, not a font. Keep it on the words it already addressed.
+      if (command.clearRuns) target.runs = keepTextHyperlinks(target.runs);
     }
     return;
   }
@@ -574,10 +577,11 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // Clearing restores the deck's own type scale instead of a hard-coded size:
     // the theme owns the body and title tokens, and a deck without a theme keeps
     // the factory defaults. Fragment emphasis is character formatting too, so it
-    // goes away with the rest; geometry and copy are untouched.
+    // goes away with the rest; links are actions and stay. Geometry and copy are
+    // untouched.
     for (const target of targets) {
       target.style = clearedTextStyle(target.contentRef, document.theme);
-      target.runs = undefined;
+      target.runs = keepTextHyperlinks(target.runs);
     }
     return;
   }

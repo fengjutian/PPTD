@@ -14,7 +14,7 @@ import type {
   TextElement,
   TextElementStyle,
 } from "../document-model";
-import { emu, stableStringify, type TextRunStyle } from "../document-model";
+import { emu, isSafeTextHyperlinkUrl, stableStringify, type TextRunStyle } from "../document-model";
 
 import { estimateTextLines } from "../rendering/text-fit";
 
@@ -575,6 +575,11 @@ export function assertTextRunStyle(style: TextRunStyle): void {
   if (style.bold !== undefined && typeof style.bold !== "boolean") throw new Error("INVALID_TEXT_EMPHASIS");
   if (style.underline !== undefined && typeof style.underline !== "boolean") throw new Error("INVALID_TEXT_EMPHASIS");
   if (style.color !== undefined && !HEX_COLOR_PATTERN.test(style.color)) throw new Error("INVALID_TEXT_EMPHASIS");
+  // `set-text-emphasis` can carry the shared run style. A direct caller must
+  // not be able to attach a file or script destination around the hyperlink
+  // command's URL rule.
+  if (style.hyperlinkUrl !== undefined && !isSafeTextHyperlinkUrl(style.hyperlinkUrl))
+    throw new Error("INVALID_TEXT_EMPHASIS");
 }
 
 export function isHighSurrogate(code: number): boolean {

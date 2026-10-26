@@ -162,6 +162,19 @@ describe("text hyperlink commands", () => {
       ),
     ).toThrow("TEXT_HYPERLINK_INVALID");
 
+    expect(() =>
+      produce(source, (draft) =>
+        applyCommand(draft, {
+          type: "set-text-emphasis",
+          slideId: slide.id,
+          elementId: title.id,
+          start: 0,
+          end: 2,
+          style: { hyperlinkUrl: "file:///C:/secret" },
+        }),
+      ),
+    ).toThrow("INVALID_TEXT_EMPHASIS");
+
     title.locked = true;
     expect(() =>
       produce(source, (draft) =>
@@ -173,6 +186,29 @@ describe("text hyperlink commands", () => {
         }),
       ),
     ).toThrow("ELEMENT_NOT_TEXT");
+  });
+
+  it("adds emphasis without clearing a link in the same range", () => {
+    const source = createDocument();
+    const title = titleOf(source);
+    title.runs = [{ start: 0, end: 4, hyperlinkUrl: "https://example.com/report" }];
+    const slide = source.slides[0]!;
+
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "set-text-emphasis",
+        slideId: slide.id,
+        elementId: title.id,
+        start: 0,
+        end: 2,
+        style: { bold: true },
+      }),
+    );
+    const next = result.slides[0]!.elements[0]!;
+    expect(next.type === "text" ? next.runs : undefined).toEqual([
+      { start: 0, end: 2, bold: true, hyperlinkUrl: "https://example.com/report" },
+      { start: 2, end: 4, hyperlinkUrl: "https://example.com/report" },
+    ]);
   });
 
   it("clears emphasis without clearing a link in the same range", () => {

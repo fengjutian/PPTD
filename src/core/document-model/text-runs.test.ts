@@ -3,6 +3,7 @@ import {
   applyTextRun,
   clearTextEmphasisRange,
   isSafeTextHyperlinkUrl,
+  keepTextHyperlinks,
   mergeTextRunStyle,
   mergeTextRuns,
   resolveFragmentStyle,
@@ -129,13 +130,9 @@ describe("text runs", () => {
 
   it("merges emphasis without dropping the colour or link on the words", () => {
     expect(
-      mergeTextRunStyle(
-        [{ start: 0, end: 4, color: "#FF6600", hyperlinkUrl: "https://example.com/report" }],
-        4,
-        1,
-        3,
-        { bold: true },
-      ),
+      mergeTextRunStyle([{ start: 0, end: 4, color: "#FF6600", hyperlinkUrl: "https://example.com/report" }], 4, 1, 3, {
+        bold: true,
+      }),
     ).toEqual([
       { start: 0, end: 1, color: "#FF6600", hyperlinkUrl: "https://example.com/report" },
       { start: 1, end: 3, bold: true, color: "#FF6600", hyperlinkUrl: "https://example.com/report" },
@@ -179,6 +176,17 @@ describe("text runs", () => {
         hyperlinkUrl: "https://example.com/report",
       },
     ]);
+  });
+
+  it("keeps only the links when character formatting is cleared", () => {
+    expect(
+      keepTextHyperlinks([
+        { start: 0, end: 2, bold: true, hyperlinkUrl: "https://example.com/a" },
+        { start: 2, end: 4, color: "#FF6600" },
+        { start: 4, end: 6, underline: true, hyperlinkUrl: "https://example.com/a" },
+      ]),
+    ).toEqual([{ start: 0, end: 6, hyperlinkUrl: "https://example.com/a" }]);
+    expect(keepTextHyperlinks([{ start: 0, end: 2, bold: true }])).toBeUndefined();
   });
 
   it("accepts only the documented hyperlink destinations", () => {

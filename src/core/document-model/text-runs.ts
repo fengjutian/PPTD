@@ -205,6 +205,17 @@ export function clearTextEmphasisRange(
   });
 }
 
+/**
+ * Drops emphasis and keeps only the link fragments. Clearing formatting is not
+ * a request to remove links, which are actions rather than character format.
+ */
+export function keepTextHyperlinks(runs: TextRun[] | undefined): TextRun[] | undefined {
+  const links = (runs ?? []).flatMap((run) =>
+    run.hyperlinkUrl ? [{ start: run.start, end: run.end, hyperlinkUrl: run.hyperlinkUrl }] : [],
+  );
+  return links.length > 0 ? mergeTextRuns(links) : undefined;
+}
+
 /** Whether any run still carries presentation that needs to be persisted. */
 export function hasTextRunStyle(runs: TextRun[]): boolean {
   return runs.some(
