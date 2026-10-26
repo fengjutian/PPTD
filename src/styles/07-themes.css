@@ -2819,8 +2819,7 @@
   position: relative;
 }
 
-.style-specimen-main > span,
-.style-specimen-secondary > div > span {
+.style-specimen-label {
   position: absolute;
   left: 9px;
   bottom: 8px;

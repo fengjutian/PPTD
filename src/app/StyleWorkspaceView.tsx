@@ -115,16 +115,16 @@ export function StyleDetailDrawer({
           <section className="style-specimen-showcase" aria-label={`${profile.name}三页样张`}>
             <div className="style-specimen-main">
               <StyleSpecimen profile={profile} large variant={0} />
-              <span>主视觉页</span>
+              <span className="style-specimen-label">主视觉页</span>
             </div>
             <div className="style-specimen-secondary">
               <div>
                 <StyleSpecimen profile={profile} variant={1} />
-                <span>内容结构页</span>
+                <span className="style-specimen-label">内容结构页</span>
               </div>
               <div>
                 <StyleSpecimen profile={profile} variant={2} />
-                <span>数据 / 流程页</span>
+                <span className="style-specimen-label">数据 / 流程页</span>
               </div>
             </div>
           </section>

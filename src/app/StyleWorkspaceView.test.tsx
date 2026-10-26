@@ -42,6 +42,8 @@ describe("StyleWorkspaceView", () => {
     expect(markup).toContain("内容结构页");
     expect(markup).toContain("数据 / 流程页");
     expect((markup.match(/style-specimen-number/g) ?? []).length).toBe(3);
+    expect((markup.match(/style-specimen-label/g) ?? []).length).toBe(3);
+    expect((markup.match(/style-specimen style-specimen-/g) ?? []).length).toBe(3);
   });
 
   it("discloses partial support and export fallbacks", () => {
