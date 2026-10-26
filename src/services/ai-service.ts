@@ -4,6 +4,7 @@ import { applyDeckArtDirection } from "../core/commands/deck-art-direction";
 import { CONCEPT_PRESET_IDS, type DeckConcept } from "../core/design/deck-concept";
 import type { ThemeDirection } from "../core/design/theme-direction";
 import type { StyleConstraint } from "../core/design/style-profiles";
+import { recipeCatalogForConcept } from "../core/layout/recipes/registry";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
 import { bodyFromBlocks, sanitizeBlocks } from "./ai-draft-content";
@@ -566,6 +567,7 @@ export async function generatePresentationDesign(
       template,
       visualGoal,
       concept: options.concept,
+      recipeCatalog: options.concept ? recipeCatalogForConcept(options.concept) : [],
       themeDirection: options.themeDirection,
       styleConstraint: options.styleConstraint,
       model,

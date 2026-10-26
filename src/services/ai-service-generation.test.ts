@@ -198,12 +198,35 @@ describe("多页草稿的分批编排", () => {
       layouts: [],
     };
 
-    await expect(generatePresentationDesign(draft, briefsFromDraft(draft), template)).rejects.toThrow(
+    const concept = {
+      id: "editorial-test",
+      preset: "editorial" as const,
+      name: "编辑测试",
+      idea: "测试配方目录",
+      typeContrast: "strong" as const,
+      imagery: "none" as const,
+      rationale: "测试",
+      motif: "rules" as const,
+      recipes: ["cover-statement", "editorial-index"] as const,
+      rhythm: ["statement", "evidence"] as const,
+      surface: "rules" as const,
+      imageryRoles: ["none"] as const,
+    };
+
+    await expect(generatePresentationDesign(draft, briefsFromDraft(draft), template, { concept })).rejects.toThrow(
       "AI_DESIGN_REQUEST_FAILED",
     );
 
     const call = vi.mocked(invoke).mock.calls.find((item) => item[0] === "generate_presentation_design");
-    expect(call?.[1]).toMatchObject({ request: { streamProgress: true } });
+    expect(call?.[1]).toMatchObject({
+      request: {
+        streamProgress: true,
+        recipeCatalog: [
+          { id: "cover-statement", requiresImage: false },
+          { id: "editorial-index", requiresImage: false },
+        ],
+      },
+    });
   });
 
   it("有素材时把事实清单带给后端，并挂到草稿上", async () => {

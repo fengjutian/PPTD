@@ -1,5 +1,14 @@
-import type { ElementOrigin, PresentationDocument, RectEmu, Slide, SlideElement, TextElement } from "../document-model";
+import type {
+  ElementOrigin,
+  PresentationDocument,
+  RectEmu,
+  Slide,
+  SlideElement,
+  SlideLayoutSpec,
+  TextElement,
+} from "../document-model";
 import { colorLuminance, type BackgroundRange } from "../rendering/contrast";
+import { LAYOUT_CAPACITY } from "./layout-capacity";
 import type { AiLayoutKind, AiSlideDesign, AiTemplateLayout, AiTemplateRegion } from "./template-layouts";
 
 export interface RelayoutContext {
@@ -12,6 +21,13 @@ export interface RelayoutContext {
 export interface RelayoutElements {
   generated: SlideElement[];
   preserved: SlideElement[];
+}
+
+/** One entry of the page-layout picker, with the reason a layout cannot be used. */
+export interface SlideLayoutOption {
+  layout: SlideLayoutSpec;
+  current: boolean;
+  issue?: string;
 }
 
 const DEFAULT_TITLE = { x: 0.08, y: 0.08, width: 0.84, height: 0.12 };
@@ -230,6 +246,130 @@ export function classifyRelayoutElements(slide: Slide): RelayoutElements {
 
 function layoutName(slide: Slide, document: PresentationDocument): string {
   return document.layouts?.find((layout) => layout.id === slide.layoutId)?.name ?? "";
+}
+
+/** The points the page actually carries, used to decide whether two columns fit. */
+function contentItems(slide: Slide): string[] {
+  const bulletItems = (slide.content.blocks ?? []).flatMap((block) =>
+    block.type === "bullet-list" ? block.items : [],
+  );
+  if (bulletItems.length > 0) return bulletItems;
+  return slide.content.body
+    .split(/\n+/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function hasBodyContent(slide: Slide): boolean {
+  return slide.content.body.trim().length > 0 || (slide.content.blocks?.length ?? 0) > 0;
+}
+
+/** Blocks that draw across the page and cannot be split into two body columns. */
+function hasFullWidthBlock(slide: Slide): boolean {
+  return (slide.content.blocks ?? []).some(
+    (block) =>
+      block.type === "timeline" ||
+      block.type === "process" ||
+      block.type === "metric" ||
+      block.type === "chart" ||
+      block.type === "table-data" ||
+      block.type === "quote",
+  );
+}
+
+/**
+ * Why a layout cannot be applied to this page.
+ *
+ * PowerPoint can move placeholders around because it keeps their geometry.
+ * PPTD persists only what a layout means, so changing layout means rebuilding
+ * the composition. A target that has no body placeholder would hide reviewed
+ * copy, and a two-column target cannot carry a single point or a full-width
+ * chart. Those cases are refused instead of producing a page that silently
+ * drops content.
+ */
+export function slideLayoutApplicationIssue(
+  document: PresentationDocument,
+  slide: Slide,
+  layout: SlideLayoutSpec,
+): string | undefined {
+  if (layout.id === slide.layoutId) return undefined;
+  const capabilities = layout.capabilities;
+  if (!capabilities) return "该版式缺少占位信息，无法安全切换";
+  if (!capabilities.hasTitle) return "该版式没有标题占位";
+  if (capabilities.free) {
+    const current = document.layouts?.find((candidate) => candidate.id === slide.layoutId);
+    if (current?.capabilities?.free) return undefined;
+    return hasBodyContent(slide) ? "该页有正文，封面或空白版式会隐藏内容" : undefined;
+  }
+  if (!capabilities.hasBody) return "该版式没有正文占位";
+  if (capabilities.columns >= 2) {
+    if (hasFullWidthBlock(slide)) return "该页含整行内容或引用，不能改用双栏版式";
+    const hasComparison = (slide.content.blocks ?? []).some((block) => block.type === "comparison");
+    if (!hasComparison && contentItems(slide).length < LAYOUT_CAPACITY.splitMinItems) {
+      return `双栏版式至少需要 ${LAYOUT_CAPACITY.splitMinItems} 条正文`;
+    }
+  }
+  return undefined;
+}
+
+/** The layouts the ribbon can offer for this page, including the current one. */
+export function slideLayoutOptions(document: PresentationDocument, slide: Slide): SlideLayoutOption[] {
+  return (document.layouts ?? []).map((layout) => {
+    const current = layout.id === slide.layoutId;
+    const issue = current ? undefined : slideLayoutApplicationIssue(document, slide, layout);
+    return { layout, current, ...(issue ? { issue } : {}) };
+  });
+}
+
+/**
+ * The composition family a target layout asks for.
+ *
+ * Only a free layout is treated as a cover or section: a layout that still
+ * has a body placeholder carries content, even when its name says otherwise.
+ * Keeping the name as a tie-breaker for quote/summary pages preserves the
+ * template's intent without letting a label overrule the content.
+ */
+function layoutKindForTarget(layout: SlideLayoutSpec): AiLayoutKind {
+  const capabilities = layout.capabilities;
+  if (!capabilities) return "title-body";
+  const name = layout.name.toLocaleLowerCase();
+  if (capabilities.free) {
+    return /(章节|section|过渡|分隔)/u.test(name) ? "section" : "cover";
+  }
+  if (capabilities.columns >= 2) return "split";
+  if (/(引用|引言|金句|quote)/u.test(name)) return "quote";
+  if (/(总结|summary)/u.test(name)) return "summary";
+  if (/(卡片|cards)/u.test(name)) return "cards";
+  return "title-body";
+}
+
+function targetBodyRegions(
+  layout: SlideLayoutSpec,
+  frame: AiTemplateRegion["frame"],
+  textColor: string,
+  fontSizePt?: number,
+): AiTemplateRegion[] {
+  const capabilities = layout.capabilities;
+  if (!capabilities || capabilities.free) return [];
+  const region = (bodyFrame: AiTemplateRegion["frame"]): AiTemplateRegion => ({
+    role: "body",
+    frame: bodyFrame,
+    textColor,
+    fontSizePt,
+  });
+  if (capabilities.columns < 2) return [region(frame)];
+  const gap = Math.min(0.03, frame.width * 0.06);
+  const width = (frame.width - gap) / 2;
+  return [
+    region({ ...frame, width }),
+    region({ ...frame, x: frame.x + width + gap, width }),
+  ];
+}
+
+/** Plain copy can be forced into columns; structured blocks draw their own page. */
+function canForceColumns(slide: Slide): boolean {
+  const blocks = slide.content.blocks ?? [];
+  return blocks.length === 0 || blocks.every((block) => block.type === "paragraph" || block.type === "bullet-list");
 }
 
 function inferLayout(slide: Slide, document: PresentationDocument, generated: SlideElement[]): AiLayoutKind {
