@@ -42,7 +42,7 @@ import { deriveDesignTokens, deriveSemanticColors, sameAppearance } from "../des
 
 import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { resolveChartKind } from "../design/data-relation";
-import { compileDesignPlan } from "../layout/design-compiler";
+import { compileDesignPlanWithRetry } from "../layout/design-compiler";
 import type { DesignCompileReport } from "../layout/design-compiler";
 import { consumptionProblem, isImageRecipe, selectRecipe } from "../layout/recipes/plan";
 import type { RecipeContext } from "../layout/recipes/types";
@@ -972,7 +972,7 @@ export function buildDesignedSlide(
     // A refused plan falls through to the legacy branch rather than writing
     // a half-consumed page.
     if (design.designPlan) {
-      const compiled = compileDesignPlan({
+      const compiled = compileDesignPlanWithRetry({
         plan: design.designPlan,
         content: slide.content,
         facts: compositionFacts,

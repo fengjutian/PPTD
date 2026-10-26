@@ -40,7 +40,9 @@ export type DesignCompileDiagnosticCode =
   | "VISUAL_ASSET_REQUIRED"
   | "TEMPLATE_UNAVAILABLE"
   | "RECIPE_CAPACITY_EXCEEDED"
-  | "RECIPE_PLAN_REJECTED";
+  | "RECIPE_PLAN_REJECTED"
+  | "RECIPE_RETRY_APPLIED"
+  | "RECIPE_RETRY_FAILED";
 
 export interface DesignCompileDiagnostic {
   code: DesignCompileDiagnosticCode;
@@ -288,6 +290,74 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
       ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
       selectedRecipe: recipeId,
       diagnostics,
+    },
+  };
+}
+
+/**
+ * Tries one compiler-verified alternative after a refused plan.
+ *
+ * This is deliberately a separate entry point: callers that only want to
+ * inspect the original plan keep using `compileDesignPlan`, while the page
+ * builder opts into one bounded recovery attempt. Content and every other plan
+ * field stay unchanged; only the concrete recipe is replaced.
+ */
+export function compileDesignPlanWithRetry(input: DesignCompileInput): DesignCompileResult {
+  const initial = compileDesignPlan(input);
+  if ("elements" in initial) return initial;
+
+  const alternative = initial.compileReport.diagnostics
+    .flatMap((diagnostic) => diagnostic.suggestedRecipes ?? [])
+    .find((recipe, index, recipes) => recipes.indexOf(recipe) === index);
+  if (!alternative) return initial;
+
+  const retried = compileDesignPlan({
+    ...input,
+    plan: { ...input.plan, recipe: alternative },
+  });
+  const originalDiagnostics = initial.compileReport.diagnostics.map((diagnostic) => ({
+    ...diagnostic,
+    severity: "warning" as const,
+  }));
+  if (!("elements" in retried)) {
+    return {
+      ...initial,
+      compileReport: {
+        ...initial.compileReport,
+        diagnostics: [
+          ...initial.compileReport.diagnostics,
+          {
+            code: "RECIPE_RETRY_FAILED",
+            severity: "error",
+            intent: "designPlan.recipe",
+            message: `替代配方 ${alternative} 仍无法完成页面编译`,
+            requestedRecipe: input.plan.recipe,
+            selectedRecipe: alternative,
+          },
+          ...retried.compileReport.diagnostics,
+        ],
+      },
+    };
+  }
+
+  return {
+    ...retried,
+    compileReport: {
+      outcome: "accepted-with-adjustments",
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      selectedRecipe: alternative,
+      diagnostics: [
+        ...originalDiagnostics,
+        {
+          code: "RECIPE_RETRY_APPLIED",
+          severity: "warning",
+          intent: "designPlan.recipe",
+          message: `原配方无法落地，已自动改用 ${alternative} 并重新编译`,
+          ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+          selectedRecipe: alternative,
+        },
+        ...retried.compileReport.diagnostics,
+      ],
     },
   };
 }

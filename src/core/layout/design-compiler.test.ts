@@ -3,7 +3,7 @@ import { createDocument, inches, type SlideContent } from "../document-model";
 import { defaultConceptForPreset, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
 import { deriveDesignTokens, deriveSemanticColors } from "../design/design-tokens";
 import type { CompositionFacts } from "../commands/design-intent";
-import { compileDesignPlan, planRecipeId } from "./design-compiler";
+import { compileDesignPlan, compileDesignPlanWithRetry, planRecipeId } from "./design-compiler";
 import { planPageChrome } from "./page-chrome";
 import type { RecipeContext } from "./recipes/types";
 
@@ -361,5 +361,45 @@ describe("design plan compiler", () => {
     expect(diagnostic?.code).toBe("RECIPE_CAPACITY_EXCEEDED");
     expect(diagnostic?.suggestedRecipes).toContain("asymmetric-split");
     expect(diagnostic?.suggestedRecipes).not.toContain("process-rail");
+  });
+
+  it("retries one verified alternative and records the recovery", () => {
+    const result = compileDesignPlanWithRetry(
+      input({
+        role: "claim",
+        composition: { primitive: "rail" },
+        density: "normal",
+        templatePolicy: "ignore",
+        recipe: "process-rail",
+      }),
+    );
+    expect("elements" in result).toBe(true);
+    expect(result.compileReport).toMatchObject({
+      outcome: "accepted-with-adjustments",
+      requestedRecipe: "process-rail",
+      selectedRecipe: "asymmetric-split",
+    });
+    expect(result.compileReport.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "RECIPE_RETRY_APPLIED", severity: "warning" }),
+    );
+  });
+
+  it("does not retry when the compiler has no verified alternative", () => {
+    const compileInput = input({
+      role: "process",
+      composition: { primitive: "rail" },
+      density: "normal",
+      templatePolicy: "ignore",
+      recipe: "process-rail",
+    });
+    const result = compileDesignPlanWithRetry({
+      ...compileInput,
+      concept: { ...compileInput.concept, recipes: ["process-rail"] },
+    });
+    expect("conflict" in result).toBe(true);
+    expect(result.compileReport.outcome).toBe("rejected");
+    expect(result.compileReport.diagnostics.some((diagnostic) => diagnostic.code === "RECIPE_RETRY_APPLIED")).toBe(
+      false,
+    );
   });
 });

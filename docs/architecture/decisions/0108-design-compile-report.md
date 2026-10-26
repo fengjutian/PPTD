@@ -33,6 +33,8 @@
 
 拒绝诊断可携带最多三个 `suggestedRecipes`。候选必须同时属于当前设计方向、通过真实配方 `supports()`，并满足当前素材条件；缺少图片时不得建议另一种同样需要图片的配方。界面可以把它们作为重试选项，但不能把“建议存在”记成已成功落地。
 
+页面构建使用 `compileDesignPlanWithRetry`：首次拒绝且存在已验证建议时，只取第一个建议重试一次。重试只替换 `plan.recipe`，内容、模板策略、构图与其他设计字段保持不变；成功记为 `accepted-with-adjustments` 和 `RECIPE_RETRY_APPLIED`，失败保留原拒绝并追加 `RECIPE_RETRY_FAILED`。无建议时不重试，禁止循环试配方掩盖系统性错误。
+
 ## 验证
 
 - 角色自动选配方返回 `accepted` 和 `RECIPE_SELECTED`；
