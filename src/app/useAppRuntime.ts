@@ -230,6 +230,7 @@ import {
 } from "./app-shared";
 import type { AppView, PageMessage, DesignProgress, DirectionChoice, TemplateLayoutRender } from "./app-shared";
 import type { VariantBatchProgress, VariantOptionView } from "./app-shared";
+import { directionPreviewIndexes } from "./direction-preview-selection";
 
 /** The facts the theme ranking reads. Nothing here is invented by the batch. */
 function themeSignalsFromDraft(draft: AiDraft): ThemeContentSignals {
@@ -484,6 +485,11 @@ export function useAppRuntime() {
   const [directionOptions, setDirectionOptions] = useState<DirectionOptionView[]>();
   const [directionRegenerations, setDirectionRegenerations] = useState(0);
   const directionChoiceRef = useRef<((choice: DirectionChoice) => void) | null>(null);
+  const directionPreviewRenderersRef = useRef(new Map<string, () => Promise<string[]>>());
+  const renderDirectionPreview = (id: string): Promise<string[]> => {
+    const render = directionPreviewRenderersRef.current.get(id);
+    return render ? render() : Promise.reject(new Error("DIRECTION_PREVIEW_MISSING"));
+  };
   const [generatingHistoryId, setGeneratingHistoryId] = useState<string>();
   const designCancelRef = useRef(false);
   /** 设计阶段的后端取消任务号。 */
@@ -2542,14 +2548,6 @@ export function useAppRuntime() {
         if (mode !== "preset" || sourceDraft.slides.length === 0) return undefined;
         const gateSettings = await loadSettings().catch(() => defaultSettings());
         if (!gateSettings.designDirectionGate) return undefined;
-        const previewIndexes = (() => {
-          const contentIndex = sourceDraft.slides.findIndex(
-            (slide, index) => index > 0 && slide.body.trim().length >= 60,
-          );
-          const fallback = Math.min(1, sourceDraft.slides.length - 1);
-          const second = contentIndex > 0 ? contentIndex : fallback;
-          return second === 0 ? [0] : [0, second];
-        })();
         // The previews need a document for page numbers and section labels, but
         // not a designed one: a neutral draft document carries the reviewed copy.
         const baseline = createDocument();
@@ -2560,6 +2558,7 @@ export function useAppRuntime() {
         const recommendedPreset = gateSettings.designMemoryEnabled ? await recommendedConceptPreset() : undefined;
         let regenerations = 0;
         while (regenerations <= 2) {
+          directionPreviewRenderersRef.current.clear();
           setDesignProgress({ percent: 16, label: "正在生成四个设计方向" });
           setDesignDetail("为同一份内容准备四种版面骨架");
           let proposals: AiDeckConcept[];
@@ -2584,6 +2583,7 @@ export function useAppRuntime() {
             proposal: AiDeckConcept;
             concept: DeckConcept;
             images: string[];
+            previewIndexes: number[];
           };
           // 四个方向各自有一次模型请求和两次本地渲染。串行执行把等待时间乘以
           // 四，是"设计阶段超时"最直接的原因；这里按方向并行，单个方向失败
@@ -2596,6 +2596,7 @@ export function useAppRuntime() {
                   pageFacts,
                   pageCount: sourceDraft.slides.length,
                 }).concept;
+                const previewIndexes = directionPreviewIndexes(sourceDraft, proposal.preset);
                 const previewDraft = {
                   title: sourceDraft.title,
                   slides: previewIndexes.map((index) => sourceDraft.slides[index]!),
@@ -2612,14 +2613,43 @@ export function useAppRuntime() {
                   concept: resolved,
                   pageIndexes: previewIndexes,
                   designs: previewDesign.slides,
-                  ...(preset ? { commandBase: { themePresetId: preset.id } } : {}),
+                  ...(preset
+                    ? {
+                        commandBase: {
+                          themePresetId: preset.id,
+                          visualAssets: buildPreviewAssets(previewDesign.slides).map((asset) => ({
+                            ...asset,
+                            slideIndex: previewIndexes[asset.slideIndex] ?? asset.slideIndex,
+                          })),
+                        },
+                      }
+                    : {}),
                   title: sourceDraft.title,
                 });
                 // 渲染是本机画布工作，两页之间没有依赖，没有理由排队。
                 const rendered = await Promise.all(
                   pages.map(async (page) => (await renderPresentationForVisualReview(page.document, 640)).slides[0]!),
                 );
-                return { id: crypto.randomUUID(), proposal, concept: resolved, images: rendered };
+                const id = crypto.randomUUID();
+                directionPreviewRenderersRef.current.set(id, async () => {
+                  const fullDesign = await generatePresentationDesign(sourceDraft, briefs, analysis, {
+                    concept: resolved,
+                    taskId,
+                  });
+                  const preview = createDocument();
+                  applyCommand(preview, {
+                    type: "apply-ai-designed-draft",
+                    title: sourceDraft.title,
+                    slides: sourceDraft.slides,
+                    designs: fullDesign.slides,
+                    designConcept: resolved,
+                    ...(preset ? { themePresetId: preset.id } : {}),
+                    visualAssets: buildPreviewAssets(fullDesign.slides),
+                    backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+                  });
+                  return renderPresentationPages(preview, 960);
+                });
+                return { id, proposal, concept: resolved, images: rendered, previewIndexes };
               } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 if (designCancelRef.current || message.includes("CANCELLED")) throw error;
@@ -2654,6 +2684,7 @@ export function useAppRuntime() {
               presetLabel: CONCEPT_PRESET_LABELS[candidate.proposal.preset],
               ...(recommendedPreset === candidate.proposal.preset ? { recommended: true } : {}),
               images: candidate.images,
+              pageCount: sourceDraft.slides.length,
             })),
           );
           setDesignDetail("等待你选择设计方向；已审核内容不会改变");
@@ -2662,6 +2693,7 @@ export function useAppRuntime() {
           });
           directionChoiceRef.current = null;
           setDirectionOptions(undefined);
+          directionPreviewRenderersRef.current.clear();
           if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
           if (choice.kind === "retry") {
             if (regenerations >= 2) return { unavailable: true };
@@ -2685,7 +2717,7 @@ export function useAppRuntime() {
               rationale: candidate.proposal.rationale,
               typeContrast: candidate.proposal.typeContrast,
               imagery: candidate.concept.imagery,
-              previewPages: previewIndexes.map((index) => ({
+              previewPages: candidate.previewIndexes.map((index) => ({
                 index,
                 contentFingerprint: directionContentFingerprint([sourceDraft.slides[index]!]),
               })),
@@ -4319,6 +4351,7 @@ export function useAppRuntime() {
     directionOptions,
     directionRegenerations,
     directionChoiceRef,
+    renderDirectionPreview,
     exportReport,
     setExportReport,
     templateMenu,

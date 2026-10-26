@@ -1464,10 +1464,28 @@
   cursor: pointer;
 }
 .design-direction-card:hover,
-.design-direction-card:focus-visible {
+.design-direction-card:focus-within {
   border-color: var(--ppt-accent, #d35230);
   background: #202227;
   outline: none;
+}
+.design-direction-preview-button {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.design-direction-preview-cue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #b8bdc6;
+  font-size: 11px;
 }
 .design-direction-previews {
   display: grid;
@@ -1518,6 +1536,11 @@
   gap: 4px;
   color: #f0a58f;
   font-size: 12px;
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 .design-direction-actions {
   display: flex;

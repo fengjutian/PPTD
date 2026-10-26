@@ -19,6 +19,7 @@ export function ExportDialogs({ app }: { app: AppRuntime }) {
     directionOptions,
     directionRegenerations,
     directionChoiceRef,
+    renderDirectionPreview,
     exportReport,
     setExportReport,
   } = app;
@@ -140,6 +141,7 @@ export function ExportDialogs({ app }: { app: AppRuntime }) {
             })
           }
           onRetry={() => directionChoiceRef.current?.({ kind: "retry" })}
+          renderPages={renderDirectionPreview}
         />
       )}
       {exportReport && (
