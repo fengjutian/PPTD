@@ -143,7 +143,9 @@ describe("importedDeckToDocument", () => {
     text.style.letterSpacingPt = 0;
 
     const document = importedDeckToDocument(source);
-    const title = document.slides[0]!.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    const title = document.slides[0]!.elements.find(
+      (element) => element.type === "text" && element.contentRef === "title",
+    );
     expect(title?.type === "text" ? title.style.letterSpacingPt : undefined).toBe(0);
   });
 

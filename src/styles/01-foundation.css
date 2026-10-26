@@ -453,7 +453,8 @@ button {
 .text-format-select.font {
   width: 102px;
 }
-.text-format-select.spacing {
+.text-format-select.spacing,
+.text-format-select.character-spacing {
   width: 54px;
 }
 .text-format-select option {
@@ -1195,7 +1196,8 @@ button {
   .text-format-select.font {
     width: 68px;
   }
-  .text-format-select.spacing {
+  .text-format-select.spacing,
+  .text-format-select.character-spacing {
     width: 44px;
   }
   .text-format-size {

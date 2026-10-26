@@ -136,6 +136,7 @@ describe("inspector panel", () => {
     const markup = renderView(textElement());
     expect(markup).toContain("文字外观");
     expect(markup).toContain("字号");
+    expect(markup).toContain("字距");
     expect(markup).toContain("颜色");
     expect(markup).toContain("加粗");
     expect(markup).toContain('value="28.0"');

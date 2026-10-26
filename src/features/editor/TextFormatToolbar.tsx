@@ -229,7 +229,11 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
     />
   );
 
-  const spacingValue = characterSpacing.mixed ? "" : characterSpacing.value === undefined ? "" : String(characterSpacing.value);
+  const spacingValue = characterSpacing.mixed
+    ? ""
+    : characterSpacing.value === undefined
+      ? ""
+      : String(characterSpacing.value);
   const customSpacing =
     spacingValue !== "" && !CHARACTER_SPACING_OPTIONS.some((option) => Number(option.value) === characterSpacing.value);
   const characterSpacingControl = (
@@ -448,6 +452,7 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
             {sizeControl}
             <span className="text-format-divider" />
             {characterControls}
+            {characterSpacingControl}
             {colorControl}
           </div>
           <div className="text-format-row">

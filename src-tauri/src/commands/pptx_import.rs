@@ -2040,7 +2040,10 @@ fn apply_run_style(style: &mut ImportedTextStyle, run: RunStyle) -> bool {
     apply!(italic);
     apply!(underline);
     apply!(strikethrough);
-    apply!(letter_spacing_pt);
+    if let Some(value) = run.letter_spacing_pt {
+        style.letter_spacing_pt = Some(value);
+        changed = true;
+    }
     changed
 }
 

@@ -716,6 +716,17 @@ export function InspectorPanelView({
                 disabled={locked}
                 onCommit={(color) => setTextStyle({ color })}
               />
+              <NumberField
+                label="字距"
+                unit="pt"
+                value={element.style.letterSpacingPt ?? 0}
+                min={-2}
+                max={20}
+                precision={1}
+                step={0.1}
+                disabled={locked}
+                onCommit={(letterSpacingPt) => setTextStyle({ letterSpacingPt })}
+              />
             </div>
             <div className="field-row">
               <button

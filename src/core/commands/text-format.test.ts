@@ -24,14 +24,16 @@ describe("text formatting commands", () => {
         type: "set-text-style-elements",
         slideId: slide.id,
         elementIds: [title.id, shape.id, body.id],
-        style: { italic: true, bullet: "dot", indentLevel: 2 },
+        style: { italic: true, bullet: "dot", indentLevel: 2, letterSpacingPt: 1.5 },
       }),
     );
     const [nextTitle, nextShape, nextBody] = result.slides[0]!.elements;
     expect(nextTitle!.type === "text" ? nextTitle!.style.italic : undefined).toBe(true);
     expect(nextTitle!.type === "text" ? nextTitle!.style.bullet : undefined).toBe("dot");
     expect(nextTitle!.type === "text" ? nextTitle!.style.indentLevel : undefined).toBe(2);
+    expect(nextTitle!.type === "text" ? nextTitle!.style.letterSpacingPt : undefined).toBe(1.5);
     expect(nextBody!.type === "text" ? nextBody!.style.italic : undefined).toBe(true);
+    expect(nextBody!.type === "text" ? nextBody!.style.letterSpacingPt : undefined).toBe(1.5);
     // The shape has no text style; it must not gain one or be rejected.
     expect(nextShape!.type).toBe("shape");
     expect(
@@ -189,6 +191,8 @@ describe("text formatting commands", () => {
       { indentLevel: 2.5 },
       { indentLevel: 9 },
       { lineHeight: 0.5 },
+      { letterSpacingPt: 20.5 },
+      { letterSpacingPt: -2.5 },
     ]) {
       expect(() =>
         produce(source, (draft) =>

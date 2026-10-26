@@ -322,6 +322,8 @@ indentLevel?: number; // 0–8
 
 字号增减使用 Office 字号阶梯（8、9、10、10.5、11、12、14 … 120），定义在 `src/core/document-model/text-style.ts`。画布与 PPTX 导出共享同一份样式语义：导出写成原生 `i`/`u`/`strike`/`anchor`/`lnSpc`/`buChar`/`buAutoNum`/`lvl` 属性，文本仍是可编辑对象。
 
+`letterSpacingPt` 现在可从字体组的常用预设和属性面板的精确 pt 输入修改。PPTX 导入读取 `a:rPr` / `a:defRPr` 的 `spc`（1/100 pt），夹取到 -2–20pt 后写入元素样式；导出继续写回原生 `spc`。该字段作用于整个文本框，逐 run 间距仍不在片段模型中表达。
+
 新增字段使持久化格式升到第 15 版；`14 → 15` 迁移不写入任何默认格式，固定样例见 `src/core/document-model/__fixtures__/v14-document.json`。详见 [0044 字符与段落格式](decisions/0044-text-character-and-paragraph-formatting.md)。
 
 ## 20. 动画效果、阶段与复制（V0.2 已实现）
