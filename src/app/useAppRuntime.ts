@@ -493,6 +493,7 @@ export function useAppRuntime() {
       string,
       {
         presetId: string;
+        styleProfileId: StyleProfileId;
         concept: DeckConcept;
         design: AiPresentationDesign;
         /** The batch's pictures, reused when this version is kept. */
@@ -2491,6 +2492,7 @@ export function useAppRuntime() {
     historyIdOverride?: string,
     prepared?: {
       presetId: string;
+      styleProfileId: StyleProfileId;
       concept: DeckConcept;
       design: AiPresentationDesign;
       visualAssets?: readonly GeneratedVisualAsset[];
@@ -2523,7 +2525,7 @@ export function useAppRuntime() {
     const visualGoal = templateTarget
       ? applyTemplateToGoal(defaultPresentationVisualGoal(), templateTarget)
       : defaultPresentationVisualGoal();
-    let styleProfile = findStyleProfile(styleProfileId);
+    let styleProfile = findStyleProfile(prepared?.styleProfileId ?? styleProfileId);
     let styleConstraint = styleConstraintForProfile(styleProfile);
     let themeDirection = applyStyleProfileToThemeDirection(
       preset ? themeDirectionForPreset(preset) : undefined,
@@ -3411,7 +3413,7 @@ export function useAppRuntime() {
     designStartedAtRef.current = Date.now();
     setDesignElapsed(0);
     setDesignProgress({ percent: 4, label: `正在准备 ${plan.length} 个版本的排版` });
-    setDesignDetail("AI 按内容先挑模板，再用同一套版面骨架逐版排版");
+    setDesignDetail("AI 按内容为每个版本组合主题、风格与版面骨架");
     try {
       const briefs = briefsFromDraft(sourceDraft);
       const pageFacts = compositionFactsFromDraft(sourceDraft);
@@ -3464,6 +3466,8 @@ export function useAppRuntime() {
       const pending: Array<{
         id: string;
         presetId: string;
+        styleProfile: StyleProfile;
+        styleConstraint: StyleConstraint;
         concept: DeckConcept;
         design: AiPresentationDesign;
         name: string;
@@ -3481,17 +3485,29 @@ export function useAppRuntime() {
         }
         const variantConcept = conceptForSkeleton(variantConceptPresetId(concept.preset, index));
         const skeletonLabel = CONCEPT_PRESET_LABELS[variantConcept.preset];
+        const rankedStyles = rankStyleProfiles(themeSignalsFromDraft(sourceDraft), preset.id);
+        const styleChoice = rankedStyles.find((candidate) =>
+          findStyleProfile(candidate.profileId)?.allowedConcepts.includes(variantConcept.preset),
+        );
+        const variantStyle = styleChoice ? findStyleProfile(styleChoice.profileId) : undefined;
+        if (!variantStyle) {
+          failed += 1;
+          continue;
+        }
+        const variantConstraint = styleConstraintForProfile(variantStyle)!;
+        const variantThemeDirection = applyStyleProfileToThemeDirection(themeDirectionForPreset(preset), variantStyle);
         setDesignProgress({
           percent: 8 + Math.round((78 * index) / plan.length),
           label: `正在排第 ${index + 1}/${plan.length} 个版本`,
         });
-        setDesignDetail(`「${preset.name}」· ${skeletonLabel} · ${choice.reason}`);
+        setDesignDetail(`「${variantStyle.name}」· ${skeletonLabel} · ${choice.reason}`);
         try {
           const analysis = presetTemplateAnalysis(preset);
           const design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
             taskId,
             concept: variantConcept,
-            themeDirection: themeDirectionForPreset(preset),
+            themeDirection: variantThemeDirection,
+            styleConstraint: variantConstraint,
           });
           if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
           // The issue count must describe the pages the card draws, so it is
@@ -3504,6 +3520,7 @@ export function useAppRuntime() {
             designs: design.slides,
             designConcept: variantConcept,
             themePresetId: preset.id,
+            styleConstraint: variantConstraint,
             // Same background rhythm the kept version will get, so the card's
             // issue count is measured on the composition the user sees.
             backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
@@ -3511,11 +3528,13 @@ export function useAppRuntime() {
           pending.push({
             id: crypto.randomUUID(),
             presetId: preset.id,
+            styleProfile: variantStyle,
+            styleConstraint: variantConstraint,
             concept: variantConcept,
             design,
-            name: `${preset.name} · ${skeletonLabel}`,
-            description: preset.description,
-            reason: choice.reason,
+            name: `${variantStyle.name} · ${skeletonLabel}`,
+            description: variantStyle.summary,
+            reason: `${styleChoice?.reason ?? choice.reason}；${choice.reason}`,
             issueCount: validatePresentationVisualQuality(candidate, design.slides).issues.length,
           });
         } catch (error) {
@@ -3557,6 +3576,7 @@ export function useAppRuntime() {
               // 真实配图优先；没有图的页退回占位块，构图照样成立。
               commandBase: {
                 themePresetId: entry.presetId,
+                styleConstraint: entry.styleConstraint,
                 visualAssets: assetsByPage ? toDocumentAssets(assetsByPage) : buildPreviewAssets(entry.design.slides),
               },
               title: sourceDraft.title,
@@ -3566,6 +3586,7 @@ export function useAppRuntime() {
             );
             variantDesignsRef.current.set(entry.id, {
               presetId: entry.presetId,
+              styleProfileId: entry.styleProfile.id,
               concept: entry.concept,
               design: entry.design,
               visualAssets: assetsByPage,
@@ -3672,6 +3693,7 @@ export function useAppRuntime() {
       designs: variant.design.slides,
       designConcept: variant.concept,
       themePresetId: variant.presetId,
+      styleConstraint: styleConstraintForProfile(findStyleProfile(variant.styleProfileId)),
       // 与批量生成、与最终保留的那一版使用同一套背景节奏。
       backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
       // 批量生成的真图优先；没有图的页用占位块，而不是留白。
