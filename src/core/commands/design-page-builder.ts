@@ -2790,7 +2790,43 @@ export function buildDesignedSlide(
   // Style material tokens are enforced after either the recipe or legacy path
   // has produced native objects. This makes the style a deterministic compiler
   // input instead of a prompt the model may ignore.
-  if (command.styleConstraint && command.designConcept) applyStyleMaterialTokens(slide.elements);
+  if (command.styleConstraint && command.designConcept) {
+    const tokens = deriveDesignTokens(
+      document.theme,
+      document.pageSize,
+      command.designConcept,
+      design.designPlan?.typeScale,
+      command.styleConstraint,
+    );
+    for (const element of slide.elements) {
+      if (element.type === "shape" && element.shape !== "ellipse") {
+        const widthRatio = element.frame.width / pageWidth;
+        const heightRatio = element.frame.height / pageHeight;
+        const isPanel = widthRatio >= 0.08 && heightRatio >= 0.06 && widthRatio * heightRatio < 0.82;
+        if (isPanel) {
+          element.style.radiusPt = tokens.radius.cardPt;
+          if (tokens.material.shadow === "raised") element.style.shadow = "raised";
+          else if (tokens.material.shadow === "paper") element.style.shadow = "card";
+          else delete element.style.shadow;
+        }
+        if (element.style.strokeWidthPt > 0) element.style.strokeWidthPt = tokens.rule.hairlinePt;
+      } else if (element.type === "line") {
+        element.style.strokeWidthPt = tokens.rule.hairlinePt;
+      } else if (element.type === "image" && element.placement === "content") {
+        if (tokens.radius.cardPt >= 10) element.frameShape = "roundRect";
+        else if (tokens.radius.cardPt === 0) delete element.frameShape;
+        if (element.crop && tokens.material.imageCrop !== "editorial") {
+          const factor = tokens.material.imageCrop === "contained" ? 0.35 : 1;
+          element.crop = {
+            top: element.crop.top * factor,
+            bottom: element.crop.bottom * factor,
+            left: element.crop.left * factor,
+            right: element.crop.right * factor,
+          };
+        }
+      }
+    }
+  }
   // Provenance is what lets a later design-only relayout replace the
   // generated composition without deleting anything the user added.
   for (const element of slide.elements) element.origin = "generated";

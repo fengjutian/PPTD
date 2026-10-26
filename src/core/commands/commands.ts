@@ -11,7 +11,11 @@ import {
   TABLE_MAX_COLUMNS,
   TABLE_MAX_ROWS,
   clearedTextStyle,
+  hasTextRunStyle,
+  isSafeTextHyperlinkUrl,
   setTextHyperlink,
+  setTextHyperlinkRange,
+  textFragments,
 } from "../document-model";
 
 import { alignFrames, distributeFrames, unionFrame } from "./arrange";
@@ -55,6 +59,7 @@ import {
   syncMetricText,
   cloneElement,
   toAiBlocks,
+  assertTextRange,
   assertTextStyle,
   normalizedToEmuRect,
   fitImageIntoBox,
@@ -99,13 +104,29 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       );
       if (!targets || targets.length === 0) return "design";
       const url = command.url?.trim() ?? null;
+      const range = command.range;
+      if (range && command.elementIds.length !== 1) return "design";
       const changed = targets.some((target) => {
-        const runs = target.runs ?? [];
-        if (url === null) return runs.some((run) => run.hyperlinkUrl !== undefined);
-        // A gap means part of the box is still unlinked, so setting the same
-        // URL over a partially linked box is a real edit.
-        const covered = runs.reduce((total, run) => total + (run.end - run.start), 0);
-        return covered < target.text.length || runs.some((run) => run.hyperlinkUrl !== url);
+        // Linking empty copy has nothing to attach to; it is a no-op, not a
+        // reason to create an undo entry. A range on empty copy is invalid and
+        // is left to the command guard below.
+        if (!range && target.text.length === 0) return false;
+        const start = range?.start ?? 0;
+        const end = range?.end ?? target.text.length;
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start < 0 ||
+          end <= start ||
+          end > target.text.length
+        )
+          return true;
+        // Fragments include the plain gaps, so a single linked fragment is not
+        // enough: every character in the range must already carry the URL.
+        const fragments = textFragments(target.text, target.runs).filter(
+          (fragment) => fragment.start < end && fragment.end > start,
+        );
+        return fragments.some((fragment) => fragment.style.hyperlinkUrl !== (url ?? undefined));
       });
       return changed ? "design" : null;
     }
@@ -562,14 +583,29 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   }
   if (command.type === "set-text-hyperlink") {
     const url = command.url?.trim() ?? null;
-    if (url !== null && (url.length > 2048 || !/^(?:https?:\/\/[^\s\x00-\x1f]+|mailto:[^\s\x00-\x1f]+)$/i.test(url))) {
-      throw new Error("TEXT_HYPERLINK_INVALID");
-    }
+    if (url !== null && !isSafeTextHyperlinkUrl(url)) throw new Error("TEXT_HYPERLINK_INVALID");
     const targets = slide.elements.filter(
       (element): element is TextElement =>
         command.elementIds.includes(element.id) && element.type === "text" && !element.locked,
     );
     if (targets.length === 0) throw new Error("ELEMENT_NOT_TEXT");
+    if (command.range) {
+      // A range addresses characters of one text box. Applying the same offsets
+      // to several boxes would link unrelated words.
+      if (command.elementIds.length !== 1 || targets.length !== 1)
+        throw new Error("TEXT_HYPERLINK_RANGE_INVALID");
+      const target = targets[0]!;
+      assertTextRange(target.text, command.range.start, command.range.end, "TEXT_HYPERLINK_RANGE_INVALID");
+      const runs = setTextHyperlinkRange(
+        target.runs,
+        target.text.length,
+        command.range.start,
+        command.range.end,
+        url,
+      );
+      target.runs = hasTextRunStyle(runs) ? runs : undefined;
+      return;
+    }
     // A link is design metadata: the reviewed copy, its hash and every fragment
     // style stay as they are; only the destination attached to each character
     // changes.
@@ -577,15 +613,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       const runs = setTextHyperlink(target.runs, target.text.length, url);
       // Removing the last link should leave a plain element instead of a run
       // that carries no formatting at all.
-      target.runs = runs.some(
-        (run) =>
-          run.bold !== undefined ||
-          run.color !== undefined ||
-          run.underline !== undefined ||
-          run.hyperlinkUrl !== undefined,
-      )
-        ? runs
-        : undefined;
+      target.runs = hasTextRunStyle(runs) ? runs : undefined;
     }
     return;
   }

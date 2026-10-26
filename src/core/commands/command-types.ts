@@ -268,6 +268,11 @@ export type DocumentCommand =
       elementIds: ElementId[];
       /** `null` removes the link; the text and its fragments stay untouched. */
       url: string | null;
+      /**
+       * A character range inside one text element. Omit it to address the whole
+       * text box, which is also what the ribbon button does.
+       */
+      range?: { start: number; end: number };
     }
   | { type: "fit-text"; slideId: SlideId; elementId: ElementId }
   | {

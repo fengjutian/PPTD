@@ -1,5 +1,5 @@
 ﻿import type { Emu, PresentationDocument, Slide, SlideElement } from "../document-model";
-import { BUILTIN_ICONS, hashString, inches, applyTextRun, subtractTextRange } from "../document-model";
+import { BUILTIN_ICONS, hashString, inches, applyTextRun, clearTextEmphasisRange } from "../document-model";
 
 import type { DocumentCommand } from "./command-types";
 export type {
@@ -122,7 +122,9 @@ export function applyElementCommand(
   if (command.type === "clear-text-emphasis") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     assertTextRange(element.text, command.start, command.end);
-    const remaining = subtractTextRange(element.runs, command.start, command.end);
+    // A link is not emphasis. Remove bold/colour/underline only, so clearing
+    // the emphasis of a linked range does not silently delete the destination.
+    const remaining = clearTextEmphasisRange(element.runs, element.text.length, command.start, command.end);
     element.runs = remaining.length > 0 ? remaining : undefined;
     return;
   }

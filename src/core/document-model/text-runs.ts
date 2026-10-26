@@ -17,6 +17,17 @@ export interface TextRunStyle {
   hyperlinkUrl?: string;
 }
 
+const TEXT_HYPERLINK_MAX_LENGTH = 2048;
+const TEXT_HYPERLINK_PATTERN = /^(?:https?:\/\/[^\s\x00-\x1f]+|mailto:[^\s\x00-\x1f]+)$/i;
+
+/**
+ * The command and the editor share one URL rule. Keeping the check next to the
+ * run model prevents the UI from accepting a destination the document rejects.
+ */
+export function isSafeTextHyperlinkUrl(url: string): boolean {
+  return url.length <= TEXT_HYPERLINK_MAX_LENGTH && TEXT_HYPERLINK_PATTERN.test(url);
+}
+
 export interface TextFragment {
   text: string;
   style: TextRunStyle;
@@ -85,28 +96,109 @@ export function applyTextRun(runs: TextRun[] | undefined, start: number, end: nu
 }
 
 /**
+ * Rebuilds the runs inside a range from the styles that already covered them.
+ *
+ * The `transform` sees the existing style of every piece, including the plain
+ * gaps between runs. Returning an empty style drops the piece, which is how
+ * clearing a link or an emphasis leaves no empty run behind. Runs outside the
+ * range are copied untouched.
+ */
+function mapTextRange(
+  runs: TextRun[] | undefined,
+  textLength: number,
+  start: number,
+  end: number,
+  transform: (style: TextRunStyle) => TextRunStyle,
+): TextRun[] {
+  const from = Math.max(0, Math.min(start, textLength));
+  const to = Math.max(from, Math.min(end, textLength));
+  if (to <= from) return (runs ?? []).map((run) => ({ ...run }));
+  const outside = subtractTextRange(runs, from, to);
+  const sorted = [...(runs ?? [])].sort((left, right) => left.start - right.start || left.end - right.end);
+  const inside: TextRun[] = [];
+  let cursor = from;
+  const push = (rangeStart: number, rangeEnd: number, style: TextRunStyle) => {
+    if (rangeEnd <= rangeStart) return;
+    const next = transform(style);
+    if (Object.keys(next).length === 0) return;
+    inside.push({ start: rangeStart, end: rangeEnd, ...next });
+  };
+  for (const run of sorted) {
+    if (run.end <= from) continue;
+    if (run.start >= to) break;
+    // A malformed overlap is clipped to the part that has not been rebuilt yet;
+    // the later run wins, matching how the text is painted.
+    const runStart = Math.max(run.start, cursor, from);
+    const runEnd = Math.min(run.end, to);
+    if (runEnd <= runStart) continue;
+    if (runStart > cursor) push(cursor, runStart, {});
+    push(runStart, runEnd, styleOf(run));
+    cursor = runEnd;
+  }
+  if (cursor < to) push(cursor, to, {});
+  return mergeTextRuns([...outside, ...inside]);
+}
+
+function withHyperlink(style: TextRunStyle, url: string | null): TextRunStyle {
+  const next: TextRunStyle = { ...style };
+  if (url) next.hyperlinkUrl = url;
+  else delete next.hyperlinkUrl;
+  return next;
+}
+
+/**
  * Sets or clears the hyperlink of every character while keeping the rest of
  * each run's style. Gaps between runs become linked (or plain) runs, so a link
  * set on the whole text box cannot silently drop bold or colour emphasis.
  */
 export function setTextHyperlink(runs: TextRun[] | undefined, textLength: number, url: string | null): TextRun[] {
-  const sorted = [...(runs ?? [])].sort((left, right) => left.start - right.start || left.end - right.end);
-  const next: TextRun[] = [];
-  let cursor = 0;
-  const push = (start: number, end: number, style: TextRunStyle) => {
-    if (end <= start) return;
-    const withLink: TextRunStyle = { ...style };
-    if (url) withLink.hyperlinkUrl = url;
-    else delete withLink.hyperlinkUrl;
-    next.push({ start, end, ...withLink });
-  };
-  for (const run of sorted) {
-    if (run.start > cursor) push(cursor, Math.min(run.start, textLength), {});
-    push(Math.max(run.start, cursor), Math.min(run.end, textLength), styleOf(run));
-    cursor = Math.max(cursor, run.end);
-  }
-  if (cursor < textLength) push(cursor, textLength, {});
-  return mergeTextRuns(next);
+  return mapTextRange(runs, textLength, 0, textLength, (style) => withHyperlink(style, url));
+}
+
+/**
+ * Sets or clears a link on one range only. Existing links and emphasis outside
+ * the range stay as they are; inside it, each character keeps its own weight,
+ * colour and underline.
+ */
+export function setTextHyperlinkRange(
+  runs: TextRun[] | undefined,
+  textLength: number,
+  start: number,
+  end: number,
+  url: string | null,
+): TextRun[] {
+  return mapTextRange(runs, textLength, start, end, (style) => withHyperlink(style, url));
+}
+
+/**
+ * Removes character emphasis from a range without removing a link. Emphasis
+ * and links share `TextRun`, but clearing bold is not a request to unlink the
+ * words.
+ */
+export function clearTextEmphasisRange(
+  runs: TextRun[] | undefined,
+  textLength: number,
+  start: number,
+  end: number,
+): TextRun[] {
+  return mapTextRange(runs, textLength, start, end, (style) => {
+    const next: TextRunStyle = { ...style };
+    delete next.bold;
+    delete next.color;
+    delete next.underline;
+    return next;
+  });
+}
+
+/** Whether any run still carries presentation that needs to be persisted. */
+export function hasTextRunStyle(runs: TextRun[]): boolean {
+  return runs.some(
+    (run) =>
+      run.bold !== undefined ||
+      run.color !== undefined ||
+      run.underline !== undefined ||
+      run.hyperlinkUrl !== undefined,
+  );
 }
 
 /**
