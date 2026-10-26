@@ -49,7 +49,7 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
   const renderFragment = (fragment: TextFragment, key: number) => {
     const style = resolveFragmentStyle(element.style, fragment.style);
     const tabWidth =
-      (((element.style.tabStops?.[0]?.positionPt ?? element.style.fontSizePt * 4) * scale * EMU_PER_INCH) / 72);
+      ((element.style.tabStops?.[0]?.positionPt ?? element.style.fontSizePt * 4) * scale * EMU_PER_INCH) / 72;
     const pieces = fragment.text.split("\t");
     return (
       <span

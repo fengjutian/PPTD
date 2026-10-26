@@ -92,6 +92,10 @@ export interface ExportReport {
     passed: boolean;
     issueCount: number;
     hardFailures: number;
+    /** Pages the checker measured (free-composition pages are skipped). */
+    checkedSlides: number;
+    /** Measured pages that actually resolved to a template layout. */
+    layoutCoverage: number;
   };
   /**
    * Independent read-back of the written package. Absent only if the check
@@ -684,6 +688,8 @@ export async function buildPptx(
         passed: fit.passed,
         issueCount: fit.issues.length,
         hardFailures: fit.hardFailures,
+        checkedSlides: fit.checkedSlides,
+        layoutCoverage: fit.layoutCoverage,
       };
     } catch {
       // The export report must not claim template adherence it could not
@@ -691,6 +697,15 @@ export async function buildPptx(
       return undefined;
     }
   })();
+
+  // A page that could not resolve to any of the template's layouts was drawn
+  // freely, and the report used to say nothing about it: the deck looks
+  // template-shaped while some pages quietly left it. The number is already
+  // measured by the fit check, so the export just has to say it out loud.
+  const templateWarnings =
+    templateFit && templateFit.checkedSlides > templateFit.layoutCoverage
+      ? [`${templateFit.checkedSlides - templateFit.layoutCoverage} 页没有匹配的模板版式，已按自由排版导出`]
+      : [];
 
   return {
     bytes,
@@ -717,6 +732,7 @@ export async function buildPptx(
         ...gradientWarnings,
         ...hiddenWarnings,
         ...chartWarnings,
+        ...templateWarnings,
       ],
       issues,
       package: packageValidation,

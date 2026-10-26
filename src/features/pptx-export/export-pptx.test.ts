@@ -77,6 +77,26 @@ describe("PPTX export", () => {
     const result = await buildPptx(document);
     expect(result.report.templateFit).toMatchObject({ checked: true, passed: true });
     expect(result.report.templateFit?.score).toBeGreaterThanOrEqual(90);
+    // Every measured page resolved to the template's own layout.
+    expect(result.report.templateFit?.checkedSlides).toBe(1);
+    expect(result.report.templateFit?.layoutCoverage).toBe(1);
+    expect(result.report.warnings.some((warning) => warning.includes("没有匹配的模板版式"))).toBe(false);
+
+    // The same deck with its layout bindings removed. With two layouts in the
+    // target there is no single-layout fallback, so no page can resolve one:
+    // the report has to say so instead of leaving a silently free-composed page
+    // in a deck that claims template adherence.
+    const detached = templateDocument();
+    const firstLayout = document.templateStyle!.layouts[0]!;
+    detached.templateStyle = {
+      ...document.templateStyle!,
+      layouts: [firstLayout, { ...firstLayout, name: "另一个版式" }],
+    };
+    for (const slide of detached.slides) slide.layoutId = undefined;
+    const second = await buildPptx(detached, { prevalidatedIssues: [] });
+    expect(second.report.templateFit?.checkedSlides).toBe(1);
+    expect(second.report.templateFit?.layoutCoverage).toBe(0);
+    expect(second.report.warnings.some((warning) => warning.includes("没有匹配的模板版式"))).toBe(true);
   });
 
   it("reports editor groups as flattened native objects", async () => {

@@ -42,14 +42,21 @@
 
 代价与限制：
 
-- 只覆盖系列色与网格色。轴标签色仍取 `element.style.textColor`（配方给的是正文墨），没有单独的图表文字令牌。
-- 多系列调色板的第 2、3 色是混出来的，不是设计选定的；真正多系列的版面还需要主题级序列色。
-- `chartPaletteReadable()` 目前只有单测，没有接进导出报告。
+- 轴标签色仍取 `element.style.textColor`。**这不是缺口**：轴标签是画在页面上的墨，不是画在填充上的字，正文墨正是它该用的颜色；浅色页给深墨、深色页给浅墨，页面构建已经按页解析过。
+- 多系列调色板的第 2、3 色优先用主题声明的 `accent2` / `accent3`（已接入 `RecipeContext`），主题没有声明时才由基色混出。
+- 走查只在导出时进行，画布预览不会提前提示"配色看不清"。
+
+## 落地后补记
+
+- **多系列**：`RecipeContext.colors` 增可选 `accent2` / `accent3`，页面构建从预设调色板透传；`chartSeriesColors` 优先用它们。第二条系列因此是"第二个声音"，不是第一条的淡色。
+- **不可读告警**：`chartPaletteReadable()` 已接入导出报告——系列色对页面底色 < 1.3:1 时写入一条 warning，而不是安静地画一张看不清的图。
+- **一次返工**：第一版把 `accent`（深色页上是近白墨色）当基准再提亮，柱子仍是白的；基准必须是品牌色 `accentStrong`。
 
 ## 验证
 
-- `chart-theme.test.ts`：深色页系列色不等于墨色、对底对比度 > 2；浅色页等于 `accentStrong`；网格对底对比度 < 1.4/1.6；请求 5 个系列时仍能填满且互不相同。
+- `chart-theme.test.ts`：深色页系列色不等于墨色、对底对比度 > 2；浅色页等于 `accentStrong`；网格对底对比度 < 1.4/1.6；请求 5 个系列时仍能填满且互不相同；声明 `accent2/3` 时按声明取色；配色与底同色时 `chartPaletteReadable` 返回 false。
 - `design-preview.test.ts`：导出的 `ppt/charts/chartN.xml` 里出现派生色，且**不出现**近白墨色 `F2F6FA`。
+- `export-pptx.test.ts`：系列色等于页面底色时，报告 `warnings` 里出现"对比不足"。
 - 真实渲染（PowerPoint）：深色页柱状图柱子为浅青、网格几乎不可见、数值标签可读。
 
 ## 备选方案
