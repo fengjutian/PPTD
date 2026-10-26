@@ -37,6 +37,76 @@ function StyleSpecimen({
   large?: boolean;
   variant?: 0 | 1 | 2;
 }) {
+  if (large) {
+    return (
+      <span
+        className={`style-specimen style-specimen-${profile.specimen.composition} style-specimen-real style-specimen-variant-${variant} large`}
+        style={
+          {
+            "--style-bg": profile.specimen.background,
+            "--style-ink": profile.specimen.ink,
+            "--style-accent": profile.specimen.accent,
+            "--style-secondary": profile.specimen.secondary,
+          } as React.CSSProperties
+        }
+        aria-label={variant === 0 ? "真实封面样张" : variant === 1 ? "真实内容页样张" : "真实数据页样张"}
+      >
+        <span className="style-real-orb orb-one" />
+        <span className="style-real-orb orb-two" />
+        {variant === 0 && (
+          <span className="style-real-cover">
+            <small>AI PRODUCT REVIEW · 2026</small>
+            <strong>
+              让 AI 设计
+              <br />
+              真正落地
+            </strong>
+            <em>从内容审核到可编辑 PPT 的完整工作流</em>
+            <span className="style-real-glass-card">
+              <b>Design System</b>
+              <span>内容冻结</span>
+              <span>智能构图</span>
+              <span>原生导出</span>
+            </span>
+            <i>01</i>
+          </span>
+        )}
+        {variant === 1 && (
+          <span className="style-real-content">
+            <small>02 · DESIGN PIPELINE</small>
+            <strong>设计约束进入生成链路</strong>
+            <span className="style-real-flow">
+              <b>内容语义</b>
+              <i>→</i>
+              <b>风格约束</b>
+              <i>→</i>
+              <b>页面配方</b>
+            </span>
+            <span className="style-real-note">同一份已审核内容，根据密度、图片语言与构图规则生成不同表达。</span>
+          </span>
+        )}
+        {variant === 2 && (
+          <span className="style-real-data">
+            <small>03 · QUARTERLY IMPACT</small>
+            <strong>生成效率持续提升</strong>
+            <span className="style-real-kpi">
+              <b>3.4×</b>
+              <em>设计提速</em>
+            </span>
+            <span className="style-real-bars" aria-hidden>
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+            <span className="style-real-data-foot">
+              <b>91%</b> 页面保持原生可编辑
+            </span>
+          </span>
+        )}
+      </span>
+    );
+  }
   return (
     <span
       className={`style-specimen style-specimen-${profile.specimen.composition} style-specimen-variant-${variant}${large ? " large" : ""}`}
@@ -119,11 +189,11 @@ export function StyleDetailDrawer({
             </div>
             <div className="style-specimen-secondary">
               <div>
-                <StyleSpecimen profile={profile} variant={1} />
+                <StyleSpecimen profile={profile} large variant={1} />
                 <span className="style-specimen-label">内容结构页</span>
               </div>
               <div>
-                <StyleSpecimen profile={profile} variant={2} />
+                <StyleSpecimen profile={profile} large variant={2} />
                 <span className="style-specimen-label">数据 / 流程页</span>
               </div>
             </div>

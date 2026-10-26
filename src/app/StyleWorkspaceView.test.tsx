@@ -41,7 +41,10 @@ describe("StyleWorkspaceView", () => {
     expect(markup).toContain("主视觉页");
     expect(markup).toContain("内容结构页");
     expect(markup).toContain("数据 / 流程页");
-    expect((markup.match(/style-specimen-number/g) ?? []).length).toBe(3);
+    expect(markup).toContain("让 AI 设计");
+    expect(markup).toContain("设计约束进入生成链路");
+    expect(markup).toContain("生成效率持续提升");
+    expect(markup).toContain("91%");
     expect((markup.match(/style-specimen-label/g) ?? []).length).toBe(3);
     expect((markup.match(/style-specimen style-specimen-/g) ?? []).length).toBe(3);
   });

@@ -91,11 +91,11 @@ PptxGenJS 没有分组 API。本任务先保证编辑期选择组可用；后续
 - `src/store/group-selection.test.ts`：点选展开、Ctrl 切换、框选展开。
 - `src/core/document-model/schema.test.ts`：v16 迁移、v17 样例、缺失成员/重复成员/重复组 id。
 - `src/features/editor/ArrangeToolbar.test.tsx`：组合/取消按钮的启用状态。
-- `src/features/pptx-export/export-pptx.test.ts`：`group-not-exported` 报告。
+- `src/features/pptx-export/export-pptx.test.ts`：原生组合、表格组合回退。
 
 ## 7. 已知边界
 
-- 分组不会导出为 PowerPoint 原生分组；需要原生分组时另立 TASK-GROUP-002。
+- 原生分组已由 TASK-GROUP-002 补齐；表格组合仍按 PowerPoint 的 `noGrp` 限制回退。
 - 组整体缩放/旋转未实现：每个成员仍显示自己的控制柄，缩放单个成员会破坏组构图。
 - 复制/粘贴与复制页面不携带分组，副本是散开的对象。
 - 嵌套组未实现；一个元素只能属于一个组。
@@ -107,3 +107,7 @@ PptxGenJS 没有分组 API。本任务先保证编辑期选择组可用；后续
 - UI：`ArrangeToolbar` 组合/取消组合按钮；store 选择展开。
 - 导出：`group-not-exported` preflight 提示。
 - 验证：`npm run typecheck`、`npm run lint`、`npm run build` 通过；新增测试 13 项（命令 4、store 3、Schema 3、排列组件 2、导出 1）；全量套件 121 个文件、939 项通过。
+
+## 9. 后续交付（TASK-GROUP-002，2026-10-26）
+
+原生分组导出已由 [0031](0031-native-group-export.md) 与 [ADR 0109](../architecture/decisions/0109-native-group-export.md) 实现：可组合成员在导出末尾包进 `<p:grpSp>`，表格等 `noGrp` 成员回退为独立对象并报告。编辑期选择组模型、命令和不变量未变。

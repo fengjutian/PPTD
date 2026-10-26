@@ -65,21 +65,21 @@ holder 必须是 click group 的兄弟节点。把“之后”的 holder 嵌进�
 `ExportReport` 新增：
 
 - `nativeAnimationCount`：实际写入的效果数；
-- `nativeAnimationSkipped`：目标不是可寻址对象而跳过的数量。
+- `nativeAnimationSkipped`：目标不是可寻址对象、对象类型暂不导出动画或效果不支持而跳过的数量。
 
-全部九种效果都可写，因此 `animation-not-exported` 只会留给未来新增、尚未核对节点的效果；当前实际跳过来自图表等没有稳定对象名的目标，由导出补丁计入 skipped 并追加警告。
+全部九种效果都可写，因此 `animation-not-exported` 只会留给未来新增、尚未核对节点的效果；当前实际跳过来自图表等动画尚未验证的目标，由导出补丁计入 skipped 并追加警告。
 
 ## 后果
 
 - 九种对象动画在 PowerPoint 中可播放、可继续编辑，不再是静态画面。
-- 图表动画仍不导出；如果后续 PptxGenJS 暴露图表对象名，或改为直接生成 graphicFrame，可再扩展。
+- 图表动画仍不导出。后续 0109 已给图表补稳定 `objectName` 以便原生分组，但“有名字”不等于动画节点已核对；在 PowerPoint 中逐项验证图表动画前，导出仍显式跳过。
 - 脉冲在 PowerPoint 效果列表中显示为 Grow/Shrink（放大后自动回位），与编辑器的“强调脉冲”语义一致，但名称不完全相同。
 - 动画与切换可以同时存在：切页先播放，页内时间线再按 click group 推进。
 
 ## 验证
 
 - 单元测试：fade 导出包含 `<p:timing>`、`filter="fade"` 和 `bldLst`，报告计数为 1；包含 split/float-in/pulse/disappear 的导出包含 `barn(inVertical)`、`presetID="30"`、`<p:animScale>`、`presetClass="exit"` 和 `visibility=hidden`，计数为 4。
-- 图表动画：目标没有稳定对象名，报告 `nativeAnimationSkipped=1` 并追加“缺少原生目标”警告。
+- 图表动画：即使已有稳定对象名，仍因图表动画未验证而跳过，报告 `nativeAnimationSkipped=1` 并追加“未写入 PPTX”警告。
 - 结构测试：用 PowerPoint COM（`Presentations.Open`、`Timeline.MainSequence.Count`）打开包含四种新增效果的探针文稿，读到 4 个效果（Split、Float、Grow/Shrink、Exit）；此前的五种效果另有探针。另用 PowerPoint 重新保存后，`animScale autoRev`、`barn(inVertical)`、`ppt_y+0.25`、`visibility=hidden` 均保留，未被修复或丢弃。
 - 包结构校验继续在补丁后执行。
 

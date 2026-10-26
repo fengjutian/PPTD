@@ -3024,6 +3024,217 @@
   box-shadow: 0 8px 22px rgb(32 40 50 / 8%);
 }
 
+/* Drawer specimens contain real copy and data so hierarchy and material are
+   judgeable; the gallery cards intentionally keep their quiet skeletons. */
+.style-specimen-real {
+  color: var(--style-ink);
+  isolation: isolate;
+}
+.style-specimen-real::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(135deg, transparent 42%, color-mix(in srgb, var(--style-accent) 18%, transparent));
+  content: "";
+}
+.style-real-orb {
+  position: absolute;
+  z-index: -1;
+  display: block;
+  border-radius: 50%;
+  filter: blur(2px);
+  opacity: 0.34;
+}
+.style-real-orb.orb-one {
+  top: -22%;
+  right: 7%;
+  width: 38%;
+  aspect-ratio: 1;
+  background: var(--style-secondary);
+}
+.style-real-orb.orb-two {
+  right: 29%;
+  bottom: -28%;
+  width: 30%;
+  aspect-ratio: 1;
+  background: var(--style-accent);
+}
+.style-real-cover,
+.style-real-content,
+.style-real-data {
+  position: absolute;
+  inset: 0;
+  display: block;
+  padding: 8% 9%;
+  font-style: normal;
+}
+.style-specimen-real small {
+  display: block;
+  margin-bottom: 4%;
+  color: color-mix(in srgb, var(--style-ink) 62%, transparent);
+  font-size: clamp(7px, 0.66vw, 11px);
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+.style-real-cover > strong {
+  display: block;
+  max-width: 58%;
+  font-size: clamp(22px, 2.35vw, 40px);
+  line-height: 1.03;
+  letter-spacing: -0.04em;
+}
+.style-real-cover > em {
+  display: block;
+  max-width: 49%;
+  margin-top: 4%;
+  color: color-mix(in srgb, var(--style-ink) 67%, transparent);
+  font-size: clamp(8px, 0.82vw, 14px);
+  font-style: normal;
+}
+.style-real-cover > i {
+  position: absolute;
+  right: 4.5%;
+  bottom: 4.5%;
+  background: none;
+  color: var(--style-ink);
+  font-size: 10px;
+  font-style: normal;
+  opacity: 0.45;
+}
+.style-real-glass-card {
+  position: absolute;
+  top: 18%;
+  right: 7%;
+  display: grid;
+  width: 29%;
+  min-height: 62%;
+  padding: 5%;
+  align-content: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, white 72%, var(--style-accent));
+  border-radius: 16px;
+  background: color-mix(in srgb, white 42%, transparent);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--style-ink) 16%, transparent);
+  backdrop-filter: blur(10px);
+}
+.style-real-glass-card b {
+  margin-bottom: 5px;
+  font-size: clamp(9px, 0.9vw, 15px);
+}
+.style-real-glass-card span {
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--style-ink) 18%, transparent);
+  font-size: clamp(7px, 0.64vw, 10px);
+}
+.style-real-content > strong,
+.style-real-data > strong {
+  display: block;
+  max-width: 70%;
+  font-size: clamp(13px, 1.42vw, 24px);
+  line-height: 1.08;
+}
+.style-real-flow {
+  position: absolute;
+  top: 47%;
+  right: 9%;
+  left: 9%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  gap: 4%;
+}
+.style-real-flow b {
+  padding: 9% 4%;
+  border: 1px solid color-mix(in srgb, white 64%, var(--style-accent));
+  border-radius: 10px;
+  background: color-mix(in srgb, white 48%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--style-ink) 10%, transparent);
+  font-size: clamp(7px, 0.68vw, 11px);
+  text-align: center;
+}
+.style-real-flow i {
+  position: static;
+  background: none;
+  color: var(--style-accent);
+  font-size: clamp(11px, 1vw, 18px);
+  font-style: normal;
+}
+.style-real-note {
+  position: absolute;
+  right: 9%;
+  bottom: 9%;
+  left: 9%;
+  color: color-mix(in srgb, var(--style-ink) 66%, transparent);
+  font-size: clamp(6px, 0.58vw, 10px);
+}
+.style-real-kpi {
+  position: absolute;
+  top: 43%;
+  left: 9%;
+  display: grid;
+}
+.style-real-kpi b {
+  color: var(--style-accent);
+  font-size: clamp(22px, 2.4vw, 42px);
+  line-height: 0.9;
+}
+.style-real-kpi em,
+.style-real-data-foot {
+  margin-top: 5px;
+  color: color-mix(in srgb, var(--style-ink) 66%, transparent);
+  font-size: clamp(7px, 0.64vw, 10px);
+  font-style: normal;
+}
+.style-real-bars {
+  position: absolute;
+  right: 9%;
+  bottom: 18%;
+  display: flex;
+  width: 48%;
+  height: 52%;
+  align-items: end;
+  gap: 7%;
+  border-bottom: 1px solid color-mix(in srgb, var(--style-ink) 24%, transparent);
+}
+.style-real-bars i {
+  position: static;
+  flex: 1;
+  height: 35%;
+  border-radius: 4px 4px 0 0;
+  background: var(--style-accent);
+  opacity: 0.42;
+}
+.style-real-bars i:nth-child(2) {
+  height: 54%;
+  opacity: 0.58;
+}
+.style-real-bars i:nth-child(3) {
+  height: 72%;
+  opacity: 0.76;
+}
+.style-real-bars i:nth-child(4) {
+  height: 91%;
+  opacity: 1;
+}
+.style-real-data-foot {
+  position: absolute;
+  bottom: 8%;
+  left: 9%;
+}
+.style-real-data-foot b {
+  color: var(--style-ink);
+}
+.style-specimen-glass.style-specimen-real {
+  background: linear-gradient(125deg, var(--style-bg), var(--style-secondary));
+}
+.style-specimen-three-dimensional.style-specimen-real .style-real-glass-card,
+.style-specimen-three-dimensional.style-specimen-real .style-real-flow b {
+  box-shadow:
+    -7px 8px 0 color-mix(in srgb, var(--style-secondary) 22%, transparent),
+    8px -7px 20px color-mix(in srgb, var(--style-accent) 18%, transparent);
+  transform: rotate(-2deg);
+}
+
 .style-detail-section {
   margin-top: 14px;
   padding: 16px;
