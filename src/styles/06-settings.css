@@ -42,22 +42,46 @@
 .token-usage-grid > div {
   display: grid;
   gap: 8px;
-  padding: 18px;
-  border: 1px solid #35373d;
-  border-radius: 9px;
-  background: #191a1e;
+  min-height: 112px;
+  align-content: space-between;
+  padding: 18px 20px;
+  border: 1px solid #d8e3f2;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #ffffff 0%, #f2f7fd 100%);
+  box-shadow: 0 4px 14px rgb(31 76 139 / 7%);
 }
 .token-usage-grid span {
-  color: #858a93;
+  color: #66758a;
   font-size: 12px;
 }
 .token-usage-grid strong {
-  color: #f1f2f4;
-  font-size: 24px;
+  color: #24599c;
+  font-size: 26px;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .token-usage-help {
   margin: 0 0 16px;
+}
+.token-usage-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid #d6a6aa;
+  border-radius: 7px;
+  color: #a4262c;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.token-usage-clear:hover {
+  border-color: #a4262c;
+  background: #fdf3f4;
+}
+.token-usage-clear svg {
+  width: 14px;
+  height: 14px;
 }
 .settings-section-heading {
   display: flex;

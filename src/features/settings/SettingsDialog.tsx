@@ -677,7 +677,7 @@ export function SettingsWorkspace({
           </p>
           <button
             type="button"
-            className="button-danger"
+            className="token-usage-clear"
             onClick={() => void clearTokenUsageStats().then(setTokenUsage)}
           >
             <Trash2 />
