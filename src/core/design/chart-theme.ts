@@ -26,7 +26,12 @@ export interface ChartPageColors {
 /** One fill per series, in theme order. */
 export function chartSeriesColors(colors: ChartPageColors, seriesCount: number): string[] {
   const dark = (colorLuminance(colors.background) ?? 1) < 0.45;
-  const base = dark ? mixHex(colors.accent, "#FFFFFF", 0.45) : (colors.accentStrong ?? colors.accent);
+  // The base is the *brand* colour, never the accent ink: on a dark page the ink
+  // is already near-white, and lifting it turned every bar white (the first
+  // render of the chart fixture). `accentStrong` stays the brand tone on both
+  // appearances, so it is the one that can be lifted towards white.
+  const brand = colors.accentStrong ?? colors.accent;
+  const base = dark ? mixHex(brand, "#FFFFFF", 0.45) : brand;
   const second = colors.accent2 ?? mixHex(base, colors.background, dark ? 0.3 : 0.25);
   const third = colors.accent3 ?? mixHex(base, colors.background, dark ? 0.5 : 0.45);
   const palette = [base, second, third];

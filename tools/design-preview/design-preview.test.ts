@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { strFromU8, unzipSync } from "fflate";
 import { buildPptx } from "../../src/features/pptx-export/export-pptx";
 import type { ImageElement, TextElement } from "../../src/core/document-model";
 import { lintTaste } from "../../src/core/design/taste-lint";
+import { chartSeriesColors } from "../../src/core/design/chart-theme";
 import { deriveSemanticColors } from "../../src/core/design/design-tokens";
 import { findThemePreset } from "../../src/core/design/theme-presets";
 import { colorLuminance, contrastRatio } from "../../src/core/rendering/contrast";
@@ -167,6 +169,20 @@ describe("ten-page design preview", () => {
 });
 
 describe("dark vocabulary baseline", () => {
+  it("paints the chart series in the brand colour, not in the page ink", async () => {
+    const document = buildVocabularyPreviewDocument();
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    const files = unzipSync(result.bytes);
+    const chartPart = Object.keys(files).find((name) => /^ppt\/charts\/chart\d+\.xml$/.test(name));
+    expect(chartPart).toBeDefined();
+    const xml = strFromU8(files[chartPart!]!).toUpperCase();
+    // The accent ink of a dark page is near-white; the bar must be the brand
+    // colour lifted off the page instead (ADR 0104).
+    const [bar] = chartSeriesColors({ background: "#12233D", accent: "#F2F6FA", accentStrong: "#0F7869" }, 1);
+    expect(xml).toContain(bar!.replace("#", ""));
+    expect(xml).not.toContain("F2F6FA");
+  });
+
   it("derives the roles from the dark page instead of the light preset", () => {
     const document = buildVocabularyPreviewDocument();
     const preset = findThemePreset("editorial-teal")!;
