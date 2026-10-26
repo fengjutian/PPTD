@@ -74,7 +74,11 @@ function rejected(
   >,
   intent: string,
   reason: string,
-  recipes: { requestedRecipe?: RecipeId; selectedRecipe?: RecipeId } = {},
+  recipes: {
+    requestedRecipe?: RecipeId;
+    selectedRecipe?: RecipeId;
+    suggestedRecipes?: readonly RecipeId[];
+  } = {},
 ): DesignCompileResult {
   return {
     conflict: { intent, reason },
@@ -92,6 +96,23 @@ function rejected(
       ],
     },
   };
+}
+
+/**
+ * Returns only alternatives that the current direction can render and the
+ * current content/assets can carry. These are executable options, not model
+ * guesses; callers may safely offer them as a retry menu.
+ */
+function compatibleRecipeAlternatives(
+  input: DesignCompileInput,
+  supports: RecipeSupportOptions,
+  excluded?: RecipeId,
+): RecipeId[] {
+  return input.concept.recipes
+    .filter((id) => id !== excluded)
+    .filter((id) => (input.hasAsset ? true : !isImageRecipe(id)))
+    .filter((id) => findRecipe(id)?.supports(input.facts, input.concept, supports) === true)
+    .slice(0, 3);
 }
 
 /**
@@ -114,6 +135,7 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
   if (!recipeId) {
     return rejected("NO_COMPATIBLE_RECIPE", "designPlan.role", "设计计划没有可用的页面配方", {
       ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      suggestedRecipes: compatibleRecipeAlternatives(input, supports),
     });
   }
   const recipe = findRecipe(recipeId);
@@ -121,6 +143,7 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
     return rejected("UNKNOWN_RECIPE", "designPlan.recipe", `未知配方 ${recipeId}`, {
       ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
       selectedRecipe: recipeId,
+      suggestedRecipes: compatibleRecipeAlternatives(input, supports, recipeId),
     });
   }
   if (!input.concept.recipes.includes(recipeId)) {
@@ -131,6 +154,7 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
       {
         ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
         selectedRecipe: recipeId,
+        suggestedRecipes: compatibleRecipeAlternatives(input, supports, recipeId),
       },
     );
   }
@@ -138,12 +162,14 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
     return rejected("VISUAL_ASSET_REQUIRED", "designPlan.recipe", `配方 ${recipeId} 需要可用的页面图片`, {
       ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
       selectedRecipe: recipeId,
+      suggestedRecipes: compatibleRecipeAlternatives(input, supports, recipeId),
     });
   }
   if (!recipe.supports(input.facts, input.concept, supports)) {
     return rejected("RECIPE_CAPACITY_EXCEEDED", "designPlan.recipe", `内容装不下配方 ${recipeId}`, {
       ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
       selectedRecipe: recipeId,
+      suggestedRecipes: compatibleRecipeAlternatives(input, supports, recipeId),
     });
   }
 
@@ -246,6 +272,7 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
             message: planned.conflict.reason,
             ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
             selectedRecipe: recipeId,
+            suggestedRecipes: compatibleRecipeAlternatives(input, supports, recipeId),
           },
         ],
       },

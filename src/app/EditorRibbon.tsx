@@ -15,7 +15,10 @@ import {
   Grid3x3,
   ImagePlus,
   LayoutDashboard,
+  Layers,
+  Link2,
   Magnet,
+  Maximize2,
   Minus,
   MoveHorizontal,
   MoveVertical,
@@ -23,6 +26,7 @@ import {
   Palette,
   Play,
   Plus,
+  Presentation,
   Redo2,
   Save,
   SaveAll,
@@ -38,12 +42,15 @@ import {
 } from "lucide-react";
 
 import { type AnimationEffect, type SlideAnimation } from "../core/document-model";
+import { isElementVisible } from "../core/document-model";
 
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 
 import { PageSizeControls } from "../features/editor/PageSizeControls";
 import { ShapePicker } from "../features/editor/ShapePicker";
 import { ArrangeToolbar } from "../features/editor/ArrangeToolbar";
+import { SlideBackgroundTools } from "../features/editor/SlideBackgroundTools";
+import { TransitionRibbon } from "../features/editor/TransitionRibbon";
 
 import { ANIMATION_EFFECT_OPTIONS, ANIMATION_PHASE_LABELS } from "../features/editor/animation-options";
 
@@ -75,6 +82,9 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
     activeSlide,
     document,
     selectedElementIds,
+    selectElements,
+    leftTab,
+    setLeftTab,
     copySelection,
     clipboard,
     pasteSelection,
@@ -113,7 +123,37 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
     exportBusy,
     handleExport,
     setExportPreflightOpen,
+    setZoom,
   } = app;
+
+  const selectableElements = activeSlide.elements.filter((element) => !element.locked && isElementVisible(element));
+  const allSelected =
+    selectableElements.length > 0 && selectableElements.every((element) => selectedElementIds.includes(element.id));
+  const hasBackgroundImage = activeSlide.elements.some(
+    (element) => element.type === "image" && element.placement === "slide-background",
+  );
+  const editableTextElements = selectedTextElements.filter((element) => !element.locked);
+  const currentLink = selectedTextElements
+    .flatMap((element) => element.runs ?? [])
+    .find((run) => run.hyperlinkUrl)?.hyperlinkUrl;
+
+  const applyHyperlink = () => {
+    if (editableTextElements.length === 0) return;
+    const input = window.prompt("输入链接地址（http/https 或 mailto），留空移除链接", currentLink ?? "");
+    if (input === null) return;
+    const url = input.trim();
+    if (url && !/^(?:https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(url)) {
+      setTaskStatus("链接必须是 http、https 或 mailto 地址");
+      return;
+    }
+    execute({
+      type: "set-text-hyperlink",
+      slideId: activeSlide.id,
+      elementIds: editableTextElements.map((element) => element.id),
+      url: url || null,
+    });
+    setTaskStatus(url ? "已设置超链接；导出后可在 PowerPoint 中点击" : "已移除超链接");
+  };
 
   return (
     <>

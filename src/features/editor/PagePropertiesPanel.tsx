@@ -1,7 +1,7 @@
 ﻿import { useRef } from "react";
 
 import { ImagePlus, Trash2 } from "lucide-react";
-import { type Emu, type SlideId, type SlideTransition, type SupportedImageMimeType } from "../../core/document-model";
+import { type Emu, type SlideId, type SlideTransition } from "../../core/document-model";
 import type { DocumentCommand } from "../../core/commands";
 
 import { ColorField, TextAreaField } from "./inspector-fields";
@@ -10,6 +10,7 @@ import { emuToUnit, unitLabel, type LengthUnit } from "./inspector-geometry";
 import { TransitionControls } from "./TransitionControls";
 
 import { InspectorSection } from "./InspectorPanels";
+import { BACKGROUND_IMAGE_TYPES, readSlideBackground } from "./slide-background";
 
 interface PagePropertiesProps {
   slideId: SlideId;
@@ -37,20 +38,6 @@ export function PageProperties({
   onCommand,
 }: PagePropertiesProps) {
   const imageInput = useRef<HTMLInputElement>(null);
-  const chooseBackground = (file: File | undefined) => {
-    if (!file || !(["image/png", "image/jpeg", "image/webp"] as string[]).includes(file.type)) return;
-    const reader = new FileReader();
-    reader.addEventListener("load", () => {
-      if (typeof reader.result === "string")
-        onCommand({
-          type: "set-slide-background-image",
-          slideId,
-          dataUrl: reader.result,
-          mimeType: file.type as SupportedImageMimeType,
-        });
-    });
-    reader.readAsDataURL(file);
-  };
   return (
     <>
       <InspectorSection title="页面">
@@ -72,10 +59,10 @@ export function PageProperties({
           <input
             ref={imageInput}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept={BACKGROUND_IMAGE_TYPES.join(",")}
             hidden
             onChange={(event) => {
-              chooseBackground(event.currentTarget.files?.[0]);
+              readSlideBackground(event.currentTarget.files?.[0], slideId, onCommand);
               event.currentTarget.value = "";
             }}
           />

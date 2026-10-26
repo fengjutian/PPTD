@@ -329,6 +329,8 @@ describe("design plan compiler", () => {
     const result = compileDesignPlan({ ...compileInput, concept, hasAsset: false });
     expect(result.compileReport).toMatchObject({ outcome: "rejected", selectedRecipe: "side-image-text" });
     expect(result.compileReport.diagnostics.at(-1)?.code).toBe("VISUAL_ASSET_REQUIRED");
+    expect(result.compileReport.diagnostics.at(-1)?.suggestedRecipes).not.toContain("side-image-text");
+    expect(result.compileReport.diagnostics.at(-1)?.suggestedRecipes?.length).toBeGreaterThan(0);
   });
 
   it("rejects a recipe outside the selected direction's renderable set", () => {
@@ -343,5 +345,21 @@ describe("design plan compiler", () => {
     const result = compileDesignPlan({ ...compileInput, concept: restricted });
     expect(result.compileReport.outcome).toBe("rejected");
     expect(result.compileReport.diagnostics.at(-1)?.code).toBe("RECIPE_NOT_ALLOWED_BY_DIRECTION");
+  });
+
+  it("offers only executable alternatives for a capacity conflict", () => {
+    const result = compileDesignPlan(
+      input({
+        role: "claim",
+        composition: { primitive: "rail" },
+        density: "normal",
+        templatePolicy: "ignore",
+        recipe: "process-rail",
+      }),
+    );
+    const diagnostic = result.compileReport.diagnostics.at(-1);
+    expect(diagnostic?.code).toBe("RECIPE_CAPACITY_EXCEEDED");
+    expect(diagnostic?.suggestedRecipes).toContain("asymmetric-split");
+    expect(diagnostic?.suggestedRecipes).not.toContain("process-rail");
   });
 });

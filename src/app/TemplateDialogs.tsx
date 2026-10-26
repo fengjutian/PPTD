@@ -446,7 +446,12 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                               <strong>
                                 第 {item.slideIndex + 1} 页 · {diagnostic.message}
                               </strong>
-                              <p>{diagnostic.code}</p>
+                              <p>
+                                {diagnostic.code}
+                                {diagnostic.suggestedRecipes && diagnostic.suggestedRecipes.length > 0
+                                  ? ` · 可改用：${diagnostic.suggestedRecipes.join("、")}`
+                                  : ""}
+                              </p>
                             </div>
                           </li>
                         )),
