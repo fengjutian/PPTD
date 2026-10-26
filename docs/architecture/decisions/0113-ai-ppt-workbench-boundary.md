@@ -42,7 +42,9 @@ Application transaction boundary
 - 布局域：区域读取、检查、内缩、分列、分行、堆叠和校验。
 - 文档设计域：文档/页面/对象检查，对象放置、对齐、分布、锁定、层级、文本样式，以及命令计划检查和清空。
 
-文档设计工具只累积现有 `DocumentCommand` 的设计子集，不直接修改 `PresentationDocument`。`preparePptWorkbenchCommit` 会比较工作台创建时的 document/content/design revision 与当前 revision；任何一项变化都会返回 `REVISION_CONFLICT`。它提供可供 AI Adapter 接入的工具契约，但尚未把现有 AI 请求流程改造成完整的多轮工具调用循环。
+文档设计工具只累积现有 `DocumentCommand` 的设计子集，不直接修改 `PresentationDocument`。`preparePptWorkbenchCommit` 会比较工作台创建时的 document/content/design revision 与当前 revision；任何一项变化都会返回 `REVISION_CONFLICT`。
+
+现有设计生成请求已经使用 Provider 无关的多轮协议：Rust 每轮只返回单个 `tool-call` 或 `final`，前端 Workbench 执行调用并将结构化结果追加到下一轮。循环具有最大轮数、工具白名单、输入数量和体积限制。设计生成没有文档快照，只暴露 `layout.*`；文档设计工具只能在编辑工作台具有只读快照和 revision 基线时暴露。
 
 ## 后果
 

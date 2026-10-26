@@ -499,6 +499,8 @@ const designCoordinateSystem: PageCoordinateSystem = {
   footer: layoutRect(100, 930, 800, 40),
 };
 
+const designWorkbenchTools = PPT_WORKBENCH_TOOLS.filter((tool) => tool.name.startsWith("layout."));
+
 /**
  * Asks the model for the deck-level design direction.
  *
@@ -611,13 +613,17 @@ export async function generatePresentationDesign(
   if (!created.ok) throw new Error(`AI_WORKBENCH_INIT_FAILED:${created.issues[0]?.code ?? "UNKNOWN"}`);
   const loop = await runPptWorkbenchLoop({
     workbench: created.workbench,
-    tools: PPT_WORKBENCH_TOOLS,
+    tools: designWorkbenchTools,
     transport: async ({ tools, transcript }) => {
       const response = await invoke<unknown>("generate_presentation_design", {
         request: { ...request, workbenchTools: tools, workbenchTranscript: transcript },
       });
       const turn = workbenchTurnSchema.safeParse(response);
-      if (turn.success) return turn.data;
+      if (turn.success) {
+        return turn.data.kind === "tool-call"
+          ? { kind: "tool-call" as const, name: turn.data.name, input: turn.data.input ?? {} }
+          : { kind: "final" as const, output: turn.data.output };
+      }
       // Mixed-version desktop upgrades can briefly pair a new frontend with an
       // older backend. A valid legacy design is an immediate final turn.
       if (aiPresentationDesignSchema.safeParse(response).success) return { kind: "final" as const, output: response };
