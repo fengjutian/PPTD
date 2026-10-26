@@ -157,6 +157,27 @@ describe("text formatting commands", () => {
     expect(paintedElement.type === "text" ? paintedElement.runs : undefined).toBeUndefined();
   });
 
+  it("keeps a link when the format painter replaces fragment emphasis", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const element = textElement(source);
+    element.runs = [{ start: 0, end: 2, bold: true, hyperlinkUrl: "https://example.com/report" }];
+
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "set-text-style-elements",
+        slideId: slide.id,
+        elementIds: [element.id],
+        style: { italic: true },
+        clearRuns: true,
+      }),
+    );
+    const next = result.slides[0]!.elements[0]!;
+    expect(next.type === "text" ? next.runs : undefined).toEqual([
+      { start: 0, end: 2, hyperlinkUrl: "https://example.com/report" },
+    ]);
+  });
+
   it("rejects formatting the schema or the exporter could not round-trip", () => {
     const source = createDocument();
     const slide = source.slides[0]!;

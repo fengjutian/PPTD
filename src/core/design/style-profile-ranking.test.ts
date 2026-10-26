@@ -5,7 +5,7 @@ describe("style profile ranking", () => {
   it("recommends a business data style for a structured annual report", () => {
     const [choice] = rankStyleProfiles(
       { title: "年度经营报告", bodyText: "收入 利润 风险", slideCount: 6, chartCount: 3, tableCount: 2 },
-      "finance-gold",
+      "consulting-navy",
     );
     expect(choice?.profileId).toBe("corporate");
     expect(choice?.reason).toContain("经营与数据");

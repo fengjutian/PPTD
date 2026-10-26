@@ -29,7 +29,7 @@ export function rankStyleProfiles(
   const averageCopy = (signals.bodyText?.length ?? 0) / pages;
 
   return STYLE_PROFILES.map((profile, index) => {
-    let score = profile.themePresetId === preferredThemePresetId ? 30 : 0;
+    let score = profile.themePresetId === preferredThemePresetId ? 50 : 0;
     const subject = STYLE_SUBJECT_RULES.find((rule) => rule.ids.includes(profile.id) && rule.pattern.test(text));
     if (subject) score += 24 - subject.ids.indexOf(profile.id) * 3;
     if (structured >= 3 && profile.density === "compact") score += 10;

@@ -185,7 +185,10 @@ describe("text runs", () => {
         { start: 2, end: 4, color: "#FF6600" },
         { start: 4, end: 6, underline: true, hyperlinkUrl: "https://example.com/a" },
       ]),
-    ).toEqual([{ start: 0, end: 6, hyperlinkUrl: "https://example.com/a" }]);
+    ).toEqual([
+      { start: 0, end: 2, hyperlinkUrl: "https://example.com/a" },
+      { start: 4, end: 6, hyperlinkUrl: "https://example.com/a" },
+    ]);
     expect(keepTextHyperlinks([{ start: 0, end: 2, bold: true }])).toBeUndefined();
   });
 

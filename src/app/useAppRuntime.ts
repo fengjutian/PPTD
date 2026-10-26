@@ -189,6 +189,7 @@ import {
   type ThemeContentSignals,
   type ThemePresetChoice,
 } from "../core/design/theme-preset-ranking";
+import { rankStyleProfiles } from "../core/design/style-profile-ranking";
 import { defaultPresentationVisualGoal, type VisualReview } from "../services/visual-alignment";
 import {
   documentContentFingerprint,
@@ -2432,6 +2433,15 @@ export function useAppRuntime() {
     [aiDraft, aiTopic],
   );
   const recommendedThemePreset = findThemePreset(recommendedTheme.presetId) ?? defaultThemePreset();
+  const recommendedStyle = useMemo(
+    () =>
+      rankStyleProfiles(
+        aiDraft ? themeSignalsFromDraft(aiDraft) : { title: aiTopic.trim() },
+        recommendedThemePreset.id,
+      )[0]!,
+    [aiDraft, aiTopic, recommendedThemePreset.id],
+  );
+  const recommendedStyleProfile = findStyleProfile(recommendedStyle.profileId) ?? STYLE_PROFILES[0]!;
 
   // 设计进度不再靠定时器"爬"：计时器只负责已用时，百分比由真实阶段和
   // 流式页数决定。任务结束时归零，下一次生成从头计时。
@@ -2450,7 +2460,8 @@ export function useAppRuntime() {
     if (!aiDraft) return;
     // Make the recommendation an actual default selection. The user can still
     // choose an uploaded template or another preset before generation.
-    setThemePresetId((current) => current || recommendedThemePreset.id);
+    setStyleProfileId(recommendedStyleProfile.id);
+    setThemePresetId(recommendedStyleProfile.themePresetId);
     setSelectedTemplate(undefined);
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
@@ -3762,6 +3773,11 @@ export function useAppRuntime() {
     }
     setThemePreviewPresetId("");
     setThemePresetId(presetId);
+    const matchedStyle = rankStyleProfiles(
+      aiDraft ? themeSignalsFromDraft(aiDraft) : { title: aiTopic.trim() },
+      presetId,
+    )[0];
+    if (matchedStyle) setStyleProfileId(matchedStyle.profileId);
     setSelectedTemplate(undefined);
     setTemplatePreview(undefined);
     setTemplateAnalysis(undefined);
@@ -4000,6 +4016,12 @@ export function useAppRuntime() {
   );
   const pickerThemePreset = selectedThemePreset ?? recommendedThemePreset;
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
+  const pickerStyleProfile = findStyleProfile(styleProfileId) ?? recommendedStyleProfile;
+  const pickerStyleReason =
+    rankStyleProfiles(
+      aiDraft ? themeSignalsFromDraft(aiDraft) : { title: aiTopic.trim() },
+      pickerThemePreset.id,
+    ).find((choice) => choice.profileId === pickerStyleProfile.id)?.reason ?? recommendedStyle.reason;
   // 抽屉里展示的主题：生成中查看的是被点击的主题（预览），其余时候就是已选主题。
   const drawerThemePreset =
     (themePreviewPresetId ? findThemePreset(themePreviewPresetId) : undefined) ?? selectedThemePreset;
@@ -4455,6 +4477,8 @@ export function useAppRuntime() {
     setTemplatePickerOpen,
     recommendedThemePreset,
     recommendedThemeReason: recommendedTheme.reason,
+    pickerStyleProfile,
+    pickerStyleReason,
     designDetail,
     designElapsed,
     pickerThemePreset,

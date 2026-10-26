@@ -18,6 +18,8 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
     themePresetId,
     recommendedThemePreset,
     recommendedThemeReason,
+    pickerStyleProfile,
+    pickerStyleReason,
     handleSelectThemePreset,
     templateLibrary,
     selectedTemplate,
@@ -130,6 +132,7 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                 {themePresetId
                   ? `内置 · ${findThemePreset(themePresetId)?.name ?? "主题"}${themePresetId === recommendedThemePreset.id ? "（AI 推荐）" : ""}`
                   : "已上传 PPT"}
+                {themePresetId && ` · 风格：${pickerStyleProfile.name}（自动匹配）`}
               </span>
             </div>
             <div className="template-picker-batch">
@@ -318,6 +321,12 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                       <p>
                         <strong>AI 为什么推荐：</strong>
                         {recommendedThemeReason}
+                      </p>
+                    )}
+                    {pickerStyleReason && (
+                      <p>
+                        <strong>AI 自动风格：</strong>
+                        {pickerStyleProfile.name}。{pickerStyleReason}
                       </p>
                     )}
                     <p>

@@ -233,6 +233,22 @@ describe("text hyperlink commands", () => {
     ]);
   });
 
+  it("keeps links when the character format is cleared", () => {
+    const source = createDocument();
+    const title = titleOf(source);
+    title.runs = [{ start: 0, end: 4, bold: true, hyperlinkUrl: "https://example.com/report" }];
+    const slide = source.slides[0]!;
+
+    const result = produce(source, (draft) =>
+      applyCommand(draft, { type: "clear-text-format", slideId: slide.id, elementIds: [title.id] }),
+    );
+    const next = result.slides[0]!.elements[0]!;
+    expect(next.type === "text" ? next.runs : undefined).toEqual([
+      { start: 0, end: 4, hyperlinkUrl: "https://example.com/report" },
+    ]);
+    expect(next.type === "text" ? next.text : undefined).toBe(title.text);
+  });
+
   it("knows when a range link would not change anything", () => {
     const source = createDocument();
     const slide = source.slides[0]!;
