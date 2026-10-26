@@ -230,5 +230,70 @@ describe("design plan compiler", () => {
       }),
     );
     expect("conflict" in result).toBe(true);
+    expect(result.compileReport).toMatchObject({
+      outcome: "rejected",
+      requestedRecipe: "process-rail",
+      selectedRecipe: "process-rail",
+    });
+    expect(result.compileReport.diagnostics.at(-1)?.code).toBe("RECIPE_CAPACITY_EXCEEDED");
+  });
+
+  it("reports the recipe selected from role and content facts", () => {
+    const result = compileDesignPlan(
+      input({
+        role: "claim",
+        composition: { primitive: "stack" },
+        density: "normal",
+        templatePolicy: "use",
+      }),
+    );
+    expect(result.compileReport).toMatchObject({
+      outcome: "accepted",
+      selectedRecipe: "asymmetric-split",
+    });
+    expect(result.compileReport.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "RECIPE_SELECTED", intent: "designPlan.role" }),
+    );
+  });
+
+  it("reports a direction-owned recipe substitution instead of hiding it", () => {
+    const paper = resolveDeckConcept({
+      concept: defaultConceptForPreset("paper"),
+      pageFacts: [facts],
+      pageCount: 1,
+      id: "compiler-paper-report",
+    }).concept;
+    const compileInput = input({
+      role: "claim",
+      composition: { primitive: "stack" },
+      density: "normal",
+      templatePolicy: "ignore",
+      recipe: "editorial-index",
+    });
+    const result = compileDesignPlan({ ...compileInput, concept: paper, hasTemplate: false, hasArtwork: false });
+    expect(result.compileReport).toMatchObject({
+      outcome: "accepted-with-adjustments",
+      requestedRecipe: "editorial-index",
+      selectedRecipe: "paper-column",
+    });
+    expect(result.compileReport.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "DIRECTION_RECIPE_SUBSTITUTED", severity: "warning" }),
+    );
+  });
+
+  it("records template takeover as an accepted compiler decision", () => {
+    const result = compileDesignPlan(
+      input({
+        role: "claim",
+        composition: { primitive: "split" },
+        density: "normal",
+        templatePolicy: "takeover",
+        recipe: "asymmetric-split",
+      }),
+    );
+    expect(result.compileReport.outcome).toBe("accepted");
+    expect(result.compileReport.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "TEMPLATE_BODY_TAKEN_OVER", intent: "designPlan.templatePolicy" }),
+    );
   });
 });

@@ -28,8 +28,59 @@ export interface DesignCompileInput {
   assetRole?: "hero" | "side" | "band";
 }
 
-function conflict(intent: string, reason: string): { conflict: IntentConflict } {
-  return { conflict: { intent, reason } };
+export type DesignCompileOutcome = "accepted" | "accepted-with-adjustments" | "rejected";
+
+export type DesignCompileDiagnosticCode =
+  | "RECIPE_SELECTED"
+  | "DIRECTION_RECIPE_SUBSTITUTED"
+  | "TEMPLATE_BODY_TAKEN_OVER"
+  | "NO_COMPATIBLE_RECIPE"
+  | "UNKNOWN_RECIPE"
+  | "RECIPE_CAPACITY_EXCEEDED"
+  | "RECIPE_PLAN_REJECTED";
+
+export interface DesignCompileDiagnostic {
+  code: DesignCompileDiagnosticCode;
+  severity: "info" | "warning" | "error";
+  intent: string;
+  message: string;
+  requestedRecipe?: RecipeId;
+  selectedRecipe?: RecipeId;
+}
+
+export interface DesignCompileReport {
+  outcome: DesignCompileOutcome;
+  requestedRecipe?: RecipeId;
+  selectedRecipe?: RecipeId;
+  diagnostics: readonly DesignCompileDiagnostic[];
+}
+
+export type DesignCompileResult =
+  | (RecipePlan & { compileReport: DesignCompileReport })
+  | { conflict: IntentConflict; compileReport: DesignCompileReport };
+
+function rejected(
+  code: Extract<DesignCompileDiagnosticCode, "NO_COMPATIBLE_RECIPE" | "UNKNOWN_RECIPE" | "RECIPE_CAPACITY_EXCEEDED">,
+  intent: string,
+  reason: string,
+  recipes: { requestedRecipe?: RecipeId; selectedRecipe?: RecipeId } = {},
+): DesignCompileResult {
+  return {
+    conflict: { intent, reason },
+    compileReport: {
+      outcome: "rejected",
+      ...recipes,
+      diagnostics: [
+        {
+          code,
+          severity: "error",
+          intent,
+          message: reason,
+          ...recipes,
+        },
+      ],
+    },
+  };
 }
 
 /**
@@ -40,7 +91,7 @@ function conflict(intent: string, reason: string): { conflict: IntentConflict } 
  * content surface over the template's body artwork while leaving the header,
  * Logo and footer in place.
  */
-export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { conflict: IntentConflict } {
+export function compileDesignPlan(input: DesignCompileInput): DesignCompileResult {
   const supports: RecipeSupportOptions = {
     hasArtwork: input.hasArtwork,
     hasAsset: input.hasAsset,
@@ -49,11 +100,44 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
     ...(input.assetRole ? { assetRole: input.assetRole } : {}),
   };
   const recipeId = planRecipe(input.plan, input.facts, { concept: input.concept, options: supports });
-  if (!recipeId) return conflict("designPlan.role", "设计计划没有可用的页面配方");
+  if (!recipeId) {
+    return rejected("NO_COMPATIBLE_RECIPE", "designPlan.role", "设计计划没有可用的页面配方", {
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+    });
+  }
   const recipe = findRecipe(recipeId);
-  if (!recipe) return conflict("designPlan.recipe", `未知配方 ${recipeId}`);
+  if (!recipe) {
+    return rejected("UNKNOWN_RECIPE", "designPlan.recipe", `未知配方 ${recipeId}`, {
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      selectedRecipe: recipeId,
+    });
+  }
   if (!recipe.supports(input.facts, input.concept, supports)) {
-    return conflict("designPlan.recipe", `内容装不下配方 ${recipeId}`);
+    return rejected("RECIPE_CAPACITY_EXCEEDED", "designPlan.recipe", `内容装不下配方 ${recipeId}`, {
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      selectedRecipe: recipeId,
+    });
+  }
+
+  const diagnostics: DesignCompileDiagnostic[] = [];
+  if (input.plan.recipe && input.plan.recipe !== recipeId) {
+    diagnostics.push({
+      code: "DIRECTION_RECIPE_SUBSTITUTED",
+      severity: "warning",
+      intent: "designPlan.recipe",
+      message: `设计方向将配方 ${input.plan.recipe} 替换为 ${recipeId}`,
+      requestedRecipe: input.plan.recipe,
+      selectedRecipe: recipeId,
+    });
+  } else {
+    diagnostics.push({
+      code: "RECIPE_SELECTED",
+      severity: "info",
+      intent: input.plan.recipe ? "designPlan.recipe" : "designPlan.role",
+      message: input.plan.recipe ? `采用指定配方 ${recipeId}` : `根据页面角色与内容选择配方 ${recipeId}`,
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      selectedRecipe: recipeId,
+    });
   }
 
   let chrome = input.chrome;
@@ -62,6 +146,13 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
   const leading: RecipePlan["elements"] = [];
 
   if (input.plan.templatePolicy === "takeover" && input.hasTemplate) {
+    diagnostics.push({
+      code: "TEMPLATE_BODY_TAKEN_OVER",
+      severity: "info",
+      intent: "designPlan.templatePolicy",
+      message: "保留模板页眉、Logo 与页脚，并由设计配方接管正文区域",
+      selectedRecipe: recipeId,
+    });
     const surface = takeoverSurface(input.chrome, input.frame.safe);
     leading.push(rectElement(frameFromNormalized(surface, input.frame.page), input.colors.background));
     const inset = 0.05;
@@ -102,10 +193,38 @@ export function compileDesignPlan(input: DesignCompileInput): RecipePlan | { con
     ...(input.templateImage ? { templateImage: input.templateImage } : {}),
     hasArtwork: input.hasArtwork,
   });
-  if (!("elements" in planned)) return planned;
+  if (!("elements" in planned)) {
+    return {
+      ...planned,
+      compileReport: {
+        outcome: "rejected",
+        ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+        selectedRecipe: recipeId,
+        diagnostics: [
+          ...diagnostics,
+          {
+            code: "RECIPE_PLAN_REJECTED",
+            severity: "error",
+            intent: planned.conflict.intent,
+            message: planned.conflict.reason,
+            ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+            selectedRecipe: recipeId,
+          },
+        ],
+      },
+    };
+  }
   return {
     ...planned,
     elements: [...leading, ...planned.elements],
+    compileReport: {
+      outcome: diagnostics.some((diagnostic) => diagnostic.severity === "warning")
+        ? "accepted-with-adjustments"
+        : "accepted",
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      selectedRecipe: recipeId,
+      diagnostics,
+    },
   };
 }
 
