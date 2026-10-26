@@ -413,3 +413,9 @@ interface SlideTransition {
 `TextElementStyle.paragraphSpaceBeforePt` 和 `paragraphSpaceAfterPt` 是设计态 point 值，作用于文本框内的每个换行段落。它们不进入内容哈希；格式命令修改时只增加 design/document revision。PPTX 导入从 slide、layout、master 的段落属性继承，导出写回原生段落间距。
 
 当前文本内容仍是单一字符串，所以整个文本框共享同一组段落值；逐段不同样式和制表位不在该模型中伪实现。新增可选字段使持久化格式升到第 26 版；`25 → 26` 迁移不添加默认间距，固定样例见 `v25-document.json`。详见 [0105 原生段前与段后间距](decisions/0105-paragraph-spacing.md)。
+
+## 25. 文本制表位
+
+`TextElementStyle.tabStops` 保存文本框级制表位，每项由 point 位置和左/中/右/小数点对齐组成。PPTX 导入、领域模型和原生导出执行显式单位换算；画布只提供几何近似，不把浏览器排版结果声明为 PowerPoint 像素等价。
+
+新增可选字段使持久化格式升到第 27 版；`26 → 27` 迁移不添加默认制表位，固定样例见 `v26-document.json`。详见 [0106 原生文本制表位](decisions/0106-native-tab-stops.md)。
