@@ -1,0 +1,422 @@
+.quality-workspace {
+  color: #e8eaf0;
+  background: #111216;
+}
+.quality-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #363941;
+  border-radius: 999px;
+  color: #b6bac4;
+  background: #202127;
+  font-size: 11px;
+  font-weight: 650;
+}
+.quality-status svg {
+  width: 15px;
+  height: 15px;
+}
+.quality-status.passed {
+  color: #8bc59a;
+  border-color: rgb(90 164 108 / 45%);
+  background: rgb(65 135 82 / 12%);
+}
+.quality-status.warning {
+  color: #efb36b;
+  border-color: rgb(216 137 43 / 45%);
+  background: rgb(216 137 43 / 10%);
+}
+.quality-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 30px;
+  border-bottom: 1px solid #292b31;
+  background: #17181b;
+}
+.quality-tabs button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  color: #8d919b;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.quality-tabs button::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  background: transparent;
+}
+.quality-tabs button.active {
+  color: #eef1f7;
+}
+.quality-tabs button.active::after {
+  background: var(--ppt-accent);
+}
+.quality-tabs button span {
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: #efb36b;
+  background: rgb(216 137 43 / 16%);
+  font-size: 9px;
+}
+.quality-scroll {
+  padding: 24px 30px 40px;
+}
+.quality-panel-stack {
+  display: grid;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.quality-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.quality-metrics article,
+.quality-card,
+.quality-layout-grid article,
+.quality-specimen-grid article {
+  border: 1px solid #30323a;
+  border-radius: 10px;
+  background: #1a1b20;
+}
+.quality-metrics article {
+  display: grid;
+  gap: 5px;
+  min-height: 112px;
+  padding: 17px 18px;
+}
+.quality-metrics small {
+  color: #8f939d;
+  font-size: 10px;
+}
+.quality-metrics strong {
+  font-size: 26px;
+  line-height: 1;
+}
+.quality-metrics span {
+  align-self: end;
+  color: #737781;
+  font-size: 10px;
+}
+.quality-metrics .metric-warning strong {
+  color: #efb36b;
+}
+.quality-card {
+  padding: 20px;
+}
+.quality-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+.quality-card h2 svg {
+  width: 16px;
+  color: var(--ppt-accent);
+}
+.quality-overview-grid,
+.quality-audit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+.quality-card dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+.quality-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 0;
+  border-bottom: 1px solid #2c2e35;
+}
+.quality-card dl div:last-child {
+  border-bottom: 0;
+}
+.quality-card dt {
+  color: #8d919a;
+  font-size: 11px;
+}
+.quality-card dd {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: right;
+}
+.quality-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 330px;
+  color: #8b8f99;
+  text-align: center;
+}
+.quality-empty svg {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 14px;
+  color: #555a65;
+}
+.quality-empty strong {
+  color: #dadde5;
+  font-size: 14px;
+}
+.quality-empty p {
+  max-width: 440px;
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.quality-issue-list {
+  display: grid;
+  gap: 9px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.quality-issue-list article {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  gap: 14px;
+  padding: 15px 17px;
+  border: 1px solid rgb(216 137 43 / 30%);
+  border-radius: 9px;
+  background: rgb(216 137 43 / 7%);
+}
+.quality-page-badge {
+  align-self: start;
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: #efb36b;
+  background: rgb(216 137 43 / 14%);
+  font-size: 10px;
+  text-align: center;
+}
+.quality-issue-list strong {
+  font-size: 12px;
+}
+.quality-issue-list p {
+  margin: 4px 0;
+  color: #aeb1ba;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.quality-issue-list small {
+  color: #777b85;
+  font-size: 9px;
+}
+.quality-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+.quality-layout-grid article {
+  padding: 16px;
+}
+.quality-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.quality-card-heading svg {
+  width: 20px;
+  color: var(--ppt-accent);
+}
+.quality-card-heading div {
+  display: grid;
+  gap: 3px;
+}
+.quality-card-heading strong {
+  font-size: 12px;
+}
+.quality-card-heading span {
+  color: #777b85;
+  font-size: 9px;
+}
+.quality-capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 15px;
+}
+.quality-capability-list span,
+.quality-specimen-modes span {
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+.quality-capability-list .supported {
+  color: #8bc59a;
+  background: rgb(72 139 89 / 14%);
+}
+.quality-capability-list .unsupported {
+  color: #737782;
+  background: #25262c;
+  text-decoration: line-through;
+}
+.quality-capability-list .neutral {
+  color: #aeb2bd;
+  background: #292b32;
+}
+.quality-muted {
+  margin: 14px 0 0;
+  color: #777b85;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.quality-component-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+}
+.quality-component-grid div {
+  display: grid;
+  gap: 7px;
+  padding: 11px;
+  border-radius: 7px;
+  background: #23242a;
+}
+.quality-component-grid span {
+  color: #868a94;
+  font-size: 9px;
+}
+.quality-component-grid strong {
+  font-size: 18px;
+}
+.quality-audit-grid ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #c5c8d0;
+  font-size: 11px;
+  line-height: 1.8;
+}
+.quality-callout {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid rgb(72 115 181 / 40%);
+  border-radius: 10px;
+  background: rgb(72 115 181 / 10%);
+}
+.quality-callout > svg {
+  width: 22px;
+  color: #79a4e8;
+}
+.quality-callout strong {
+  font-size: 12px;
+}
+.quality-callout p {
+  margin: 4px 0 0;
+  color: #9297a2;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.quality-callout > span {
+  padding: 5px 8px;
+  border-radius: 5px;
+  color: #a9c6f2;
+  background: rgb(72 115 181 / 16%);
+  font-size: 9px;
+}
+.quality-specimen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.quality-specimen-grid article {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+.quality-specimen-grid article > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.quality-specimen-grid strong {
+  font-size: 12px;
+}
+.quality-specimen-grid small {
+  color: #656a75;
+  font-size: 8px;
+}
+.quality-specimen-grid p {
+  min-height: 32px;
+  margin: 0;
+  color: #9498a2;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.quality-specimen-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.quality-specimen-modes span {
+  color: #aeb4bf;
+  background: #272930;
+}
+.quality-specimen-grid footer {
+  padding-top: 10px;
+  border-top: 1px solid #292b31;
+  color: #717681;
+  font-size: 9px;
+}
+@media (max-width: 980px) {
+  .quality-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .quality-component-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+:root[data-theme="light"] .quality-workspace {
+  color: #18243a;
+  background: #f5f6f8;
+}
+:root[data-theme="light"] .quality-tabs {
+  border-color: #dfe3e9;
+  background: #fff;
+}
+:root[data-theme="light"] .quality-tabs button.active {
+  color: #1e2b43;
+}
+:root[data-theme="light"] .quality-metrics article,
+:root[data-theme="light"] .quality-card,
+:root[data-theme="light"] .quality-layout-grid article,
+:root[data-theme="light"] .quality-specimen-grid article {
+  border-color: #dfe3e9;
+  background: #fff;
+}
+:root[data-theme="light"] .quality-card dl div,
+:root[data-theme="light"] .quality-specimen-grid footer {
+  border-color: #e7e9ee;
+}
+:root[data-theme="light"] .quality-component-grid div {
+  background: #f2f4f7;
+}
+:root[data-theme="light"] .quality-empty strong {
+  color: #26344c;
+}

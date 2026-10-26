@@ -1,4 +1,4 @@
-import { Layers3, LayoutDashboard, Palette, Settings, Sparkles } from "lucide-react";
+import { Layers3, LayoutDashboard, Palette, Settings, ShieldCheck, Sparkles } from "lucide-react";
 
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 
@@ -16,6 +16,7 @@ import { AiWorkspaceView } from "./AiWorkspaceView";
 import { ThemeWorkspaceView } from "./ThemeWorkspaceView";
 import { StyleWorkspaceView } from "./StyleWorkspaceView";
 import { DialogStack } from "./DialogStack";
+import { QualityWorkspaceView } from "./QualityWorkspaceView";
 
 export function AppView({ app }: { app: AppRuntime }) {
   const {
@@ -106,6 +107,15 @@ export function AppView({ app }: { app: AppRuntime }) {
           <Palette />
           <span>{t("shell.theme")}</span>
         </button>
+        <button
+          className={activeView === "quality" ? "active" : ""}
+          aria-current={activeView === "quality" ? "page" : undefined}
+          title={t("shell.qualityTitle")}
+          onClick={() => changeActiveView("quality")}
+        >
+          <ShieldCheck />
+          <span>{t("shell.quality")}</span>
+        </button>
         <div className="nav-spacer" />
         <button
           className={activeView === "settings" ? "active" : ""}
@@ -145,6 +155,8 @@ export function AppView({ app }: { app: AppRuntime }) {
       <StyleWorkspaceView app={app} />
 
       <ThemeWorkspaceView app={app} />
+
+      <QualityWorkspaceView app={app} />
 
       {activeView === "settings" && (
         <main className="feature-workspace settings-workspace">
