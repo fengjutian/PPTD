@@ -7,7 +7,7 @@ import { colorLuminance } from "../rendering/contrast";
 import { frameFromNormalized } from "./recipes/measure";
 import { rectElement } from "./recipes/elements";
 import { findRecipe } from "./recipes/registry";
-import { directionOwnsRequest, supportedDirectionRecipe } from "./recipes/plan";
+import { directionOwnsRequest, isImageRecipe, supportedDirectionRecipe } from "./recipes/plan";
 import type { NormalizedFrame, RecipeContext, RecipePlan, RecipeSupportOptions } from "./recipes/types";
 import type { PageChrome } from "./page-chrome";
 
@@ -36,6 +36,9 @@ export type DesignCompileDiagnosticCode =
   | "TEMPLATE_BODY_TAKEN_OVER"
   | "NO_COMPATIBLE_RECIPE"
   | "UNKNOWN_RECIPE"
+  | "RECIPE_NOT_ALLOWED_BY_DIRECTION"
+  | "VISUAL_ASSET_REQUIRED"
+  | "TEMPLATE_UNAVAILABLE"
   | "RECIPE_CAPACITY_EXCEEDED"
   | "RECIPE_PLAN_REJECTED";
 
@@ -46,6 +49,7 @@ export interface DesignCompileDiagnostic {
   message: string;
   requestedRecipe?: RecipeId;
   selectedRecipe?: RecipeId;
+  suggestedRecipes?: readonly RecipeId[];
 }
 
 export interface DesignCompileReport {
@@ -60,7 +64,14 @@ export type DesignCompileResult =
   | { conflict: IntentConflict; compileReport: DesignCompileReport };
 
 function rejected(
-  code: Extract<DesignCompileDiagnosticCode, "NO_COMPATIBLE_RECIPE" | "UNKNOWN_RECIPE" | "RECIPE_CAPACITY_EXCEEDED">,
+  code: Extract<
+    DesignCompileDiagnosticCode,
+    | "NO_COMPATIBLE_RECIPE"
+    | "UNKNOWN_RECIPE"
+    | "RECIPE_NOT_ALLOWED_BY_DIRECTION"
+    | "VISUAL_ASSET_REQUIRED"
+    | "RECIPE_CAPACITY_EXCEEDED"
+  >,
   intent: string,
   reason: string,
   recipes: { requestedRecipe?: RecipeId; selectedRecipe?: RecipeId } = {},
@@ -112,6 +123,23 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
       selectedRecipe: recipeId,
     });
   }
+  if (!input.concept.recipes.includes(recipeId)) {
+    return rejected(
+      "RECIPE_NOT_ALLOWED_BY_DIRECTION",
+      "designPlan.recipe",
+      `配方 ${recipeId} 不在设计方向 ${input.concept.preset} 的允许集合内`,
+      {
+        ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+        selectedRecipe: recipeId,
+      },
+    );
+  }
+  if (isImageRecipe(recipeId) && !input.hasAsset) {
+    return rejected("VISUAL_ASSET_REQUIRED", "designPlan.recipe", `配方 ${recipeId} 需要可用的页面图片`, {
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      selectedRecipe: recipeId,
+    });
+  }
   if (!recipe.supports(input.facts, input.concept, supports)) {
     return rejected("RECIPE_CAPACITY_EXCEEDED", "designPlan.recipe", `内容装不下配方 ${recipeId}`, {
       ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
@@ -120,6 +148,15 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
   }
 
   const diagnostics: DesignCompileDiagnostic[] = [];
+  if (input.plan.templatePolicy !== "ignore" && !input.hasTemplate) {
+    diagnostics.push({
+      code: "TEMPLATE_UNAVAILABLE",
+      severity: "warning",
+      intent: "designPlan.templatePolicy",
+      message: `页面要求 ${input.plan.templatePolicy === "takeover" ? "接管" : "使用"}模板，但当前没有模板；已按设计方向直接构建页面`,
+      selectedRecipe: recipeId,
+    });
+  }
   if (input.plan.recipe && input.plan.recipe !== recipeId) {
     diagnostics.push({
       code: "DIRECTION_RECIPE_SUBSTITUTED",

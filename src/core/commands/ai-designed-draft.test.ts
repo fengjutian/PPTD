@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDocument } from "../document-model";
+import { defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
 import type { DocumentCommand } from "./commands";
 import { inspectAiDesignedDraftCompilation } from "./ai-designed-draft";
 
@@ -13,6 +14,23 @@ const command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }> = {
       speakerNotes: "",
     },
   ],
+  designConcept: resolveDeckConcept({
+    concept: defaultEditorialConcept(),
+    pageFacts: [
+      {
+        itemCount: 4,
+        shortItems: true,
+        longestItemLength: 6,
+        bodyLength: 24,
+        hasQuote: false,
+        hasComparison: false,
+        hasRowBlock: false,
+        layout: "title-body",
+      },
+    ],
+    pageCount: 1,
+    id: "compile-report-test",
+  }).concept,
   designs: [
     {
       layout: "title-body",

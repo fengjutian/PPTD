@@ -296,4 +296,52 @@ describe("design plan compiler", () => {
       expect.objectContaining({ code: "TEMPLATE_BODY_TAKEN_OVER", intent: "designPlan.templatePolicy" }),
     );
   });
+
+  it("reports a missing template as a visible degradation", () => {
+    const compileInput = input({
+      role: "claim",
+      composition: { primitive: "stack" },
+      density: "normal",
+      templatePolicy: "use",
+      recipe: "asymmetric-split",
+    });
+    const result = compileDesignPlan({ ...compileInput, hasTemplate: false, hasArtwork: false });
+    expect(result.compileReport.outcome).toBe("accepted-with-adjustments");
+    expect(result.compileReport.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "TEMPLATE_UNAVAILABLE", severity: "warning" }),
+    );
+  });
+
+  it("distinguishes a missing image from generic capacity failure", () => {
+    const concept = resolveDeckConcept({
+      concept: { ...defaultEditorialConcept(), imagery: "side" },
+      pageFacts: [facts],
+      pageCount: 1,
+      id: "compiler-image-capability",
+    }).concept;
+    const compileInput = input({
+      role: "claim",
+      composition: { primitive: "split" },
+      density: "normal",
+      templatePolicy: "ignore",
+      recipe: "side-image-text",
+    });
+    const result = compileDesignPlan({ ...compileInput, concept, hasAsset: false });
+    expect(result.compileReport).toMatchObject({ outcome: "rejected", selectedRecipe: "side-image-text" });
+    expect(result.compileReport.diagnostics.at(-1)?.code).toBe("VISUAL_ASSET_REQUIRED");
+  });
+
+  it("rejects a recipe outside the selected direction's renderable set", () => {
+    const compileInput = input({
+      role: "process",
+      composition: { primitive: "rail" },
+      density: "normal",
+      templatePolicy: "ignore",
+      recipe: "process-rail",
+    });
+    const restricted = { ...compileInput.concept, recipes: ["asymmetric-split" as const] };
+    const result = compileDesignPlan({ ...compileInput, concept: restricted });
+    expect(result.compileReport.outcome).toBe("rejected");
+    expect(result.compileReport.diagnostics.at(-1)?.code).toBe("RECIPE_NOT_ALLOWED_BY_DIRECTION");
+  });
 });
