@@ -15,6 +15,18 @@ export function frameFromNormalized(rect: NormalizedFrame, page: { width: Emu; h
   };
 }
 
+/**
+ * The run properties a headline is measured with.
+ *
+ * A recipe fits its title before it owns the element, so it reads the tracking
+ * from the tokens here and the bold weight from the role: every title the
+ * recipes draw is bold. Without the tracking the plan measures a narrower line
+ * than the export writes, and the title wraps a word later in the file.
+ */
+export function headingMetrics(letterSpacingPt: number): TextRunMetrics {
+  return { bold: true, ...(letterSpacingPt === 0 ? {} : { letterSpacingPt }) };
+}
+
 /** The height of a block in points, using the renderer's own line breaking. */
 export function textHeightPt(
   text: string,
@@ -22,8 +34,9 @@ export function textHeightPt(
   fontSizePt: number,
   fontFamily: string | undefined,
   lineHeight: number,
+  metrics?: TextRunMetrics,
 ): number {
-  return estimateTextLines(text, widthPt, fontSizePt, fontFamily) * fontSizePt * lineHeight;
+  return estimateTextLines(text, widthPt, fontSizePt, fontFamily, metrics) * fontSizePt * lineHeight;
 }
 
 /** Whether the text fits its frame at this size. */
@@ -33,10 +46,11 @@ export function textFits(
   fontSizePt: number,
   fontFamily: string | undefined,
   lineHeight: number,
+  metrics?: TextRunMetrics,
 ): boolean {
   const widthPt = frame.width / EMU_PER_PT;
   const heightPt = frame.height / EMU_PER_PT;
-  return textHeightPt(text, widthPt, fontSizePt, fontFamily, lineHeight) <= heightPt * 0.98;
+  return textHeightPt(text, widthPt, fontSizePt, fontFamily, lineHeight, metrics) <= heightPt * 0.98;
 }
 
 /**
@@ -52,8 +66,9 @@ export function fittedFontSize(
   minimumPt: number,
   fontFamily: string | undefined,
   lineHeight: number,
+  metrics?: TextRunMetrics,
 ): number {
-  return fittedFontSizeInRange(text, frame, preferredPt, minimumPt, preferredPt, fontFamily, lineHeight);
+  return fittedFontSizeInRange(text, frame, preferredPt, minimumPt, preferredPt, fontFamily, lineHeight, metrics);
 }
 
 /**
@@ -78,18 +93,19 @@ export function fittedFontSizeInRange(
   maximumPt: number,
   fontFamily: string | undefined,
   lineHeight: number,
+  metrics?: TextRunMetrics,
 ): number {
   const minimum = Math.max(1, Math.round(minimumPt));
   const maximum = Math.max(minimum, Math.round(maximumPt));
   const preferred = Math.min(maximum, Math.max(minimum, Math.round(preferredPt)));
-  if (textFits(text, frame, preferred, fontFamily, lineHeight)) {
+  if (textFits(text, frame, preferred, fontFamily, lineHeight, metrics)) {
     for (let size = preferred + 1; size <= maximum; size += 1) {
-      if (!textFits(text, frame, size, fontFamily, lineHeight)) return size - 1;
+      if (!textFits(text, frame, size, fontFamily, lineHeight, metrics)) return size - 1;
     }
     return maximum;
   }
   for (let size = preferred - 1; size >= minimum; size -= 1) {
-    if (textFits(text, frame, size, fontFamily, lineHeight)) return size;
+    if (textFits(text, frame, size, fontFamily, lineHeight, metrics)) return size;
   }
   return minimum;
 }
@@ -147,8 +163,9 @@ export function fittedFontSizeWithoutOrphan(
   lineHeight: number,
   minimumLastLineChars = 3,
   maximumDropPt = Number.POSITIVE_INFINITY,
+  metrics?: TextRunMetrics,
 ): number {
-  const fitted = fittedFontSize(text, frame, preferredPt, minimumPt, fontFamily, lineHeight);
+  const fitted = fittedFontSize(text, frame, preferredPt, minimumPt, fontFamily, lineHeight, metrics);
   const widthPt = frame.width / EMU_PER_PT;
   // A display headline may be worth a point or two to balance; a body title is
   // not worth a third of its size, so a caller can bound the search and leave
@@ -156,7 +173,7 @@ export function fittedFontSizeWithoutOrphan(
   const floor = Math.max(minimumPt, Math.round(fitted - maximumDropPt));
   let size = fitted;
   while (size > floor) {
-    if (!endsInOrphan(text, widthPt, size, fontFamily, minimumLastLineChars)) return size;
+    if (!endsInOrphan(text, widthPt, size, fontFamily, minimumLastLineChars, metrics)) return size;
     size -= 1;
   }
   return size;

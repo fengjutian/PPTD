@@ -3,7 +3,7 @@ import type { ContentBlock } from "../../document-model";
 import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, anyEndsInOrphan, frameFromNormalized, textFits } from "./measure";
+import { anyEndsInOrphan, fittedFontSize, frameFromNormalized, headingMetrics, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type ComparisonBlock = Extract<ContentBlock, { type: "comparison" }>;
@@ -63,8 +63,17 @@ export const weightedSplit: LayoutRecipe = {
     const colors = ctx.colors;
 
     const titleFrame = frameFromNormalized(chrome.title, page);
-    const titleSize = fittedFontSize(title, titleFrame, ctx.tokens.type.titlePt, 18, headingFamily, lineHeight);
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
+    const titleSize = fittedFontSize(
+      title,
+      titleFrame,
+      ctx.tokens.type.titlePt,
+      18,
+      headingFamily,
+      lineHeight,
+      titleMetrics,
+    );
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "加权对比页标题放不下");
     }
     const elements: RecipePlan["elements"] = [

@@ -4,7 +4,7 @@ import { parseMetricValue } from "../../document-model";
 import { chartSeriesColors } from "../../design/chart-theme";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSizeInRange, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { fittedFontSizeInRange, frameFromNormalized, headingMetrics, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type MetricBlock = Extract<ContentBlock, { type: "metric" }>;
@@ -50,6 +50,7 @@ export const dataStory: LayoutRecipe = {
     const lineHeight = ctx.tokens.type.lineHeight;
     const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const titleFrame = frameFromNormalized(chrome.title, page);
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
     const titleSize = fittedFontSizeInRange(
       title,
       titleFrame,
@@ -58,8 +59,9 @@ export const dataStory: LayoutRecipe = {
       Math.max(ctx.tokens.type.titlePt, 36),
       headingFamily,
       lineHeight,
+      titleMetrics,
     );
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "指标页标题放不下");
     }
 

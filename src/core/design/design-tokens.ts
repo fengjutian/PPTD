@@ -138,6 +138,16 @@ export interface DesignTokens {
     lineHeight: number;
     /** Leading for headlines; tighter than `lineHeight`. */
     titleLineHeight: number;
+    /**
+     * Tracking the theme applies to headlines, in points.
+     *
+     * The presets write 0.4pt here and the element carries it into the export;
+     * a recipe that fits a title without it measures a narrower line than the
+     * file will have, and the title wraps one word later in PowerPoint.
+     */
+    titleTrackingPt: number;
+    /** Tracking of running copy, in points. */
+    bodyTrackingPt: number;
   };
   space: { xs: number; sm: number; md: number; lg: number; xl: number };
   rule: { hairlinePt: number; accentPt: number };
@@ -257,6 +267,8 @@ export function deriveDesignTokens(
        * with descenders on the line above.
        */
       titleLineHeight: clamp((theme?.textStyles?.body?.lineHeight ?? 1.25) * 0.88, 1.08, 1.2),
+      titleTrackingPt: theme?.textStyles?.title?.letterSpacingPt ?? 0,
+      bodyTrackingPt: theme?.textStyles?.body?.letterSpacingPt ?? 0,
     },
     space: {
       xs: 0.012 * spaceScale,

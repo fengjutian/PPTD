@@ -4,7 +4,7 @@ import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { fittedFontSize, frameFromNormalized, headingMetrics, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan, NormalizedFrame } from "./types";
 
 const TITLE_WIDTH = 0.29;
@@ -65,8 +65,9 @@ export const asymmetricSplit: LayoutRecipe = {
     });
     const titleFrame = frameFromNormalized(titleFrameNormalized, page);
     const preferredTitle = ctx.focal === "title" ? Math.round(ctx.tokens.type.titlePt * 1.1) : ctx.tokens.type.titlePt;
-    const titleSize = fittedFontSize(title, titleFrame, preferredTitle, 18, headingFamily, lineHeight);
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
+    const titleSize = fittedFontSize(title, titleFrame, preferredTitle, 18, headingFamily, lineHeight, titleMetrics);
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "标题在左栏放不下");
     }
 

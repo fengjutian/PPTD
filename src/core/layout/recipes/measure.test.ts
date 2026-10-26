@@ -8,6 +8,7 @@ import {
   fittedFontSizeInRange,
   fittedFontSizeWithoutOrphan,
   frameFromNormalized,
+  headingMetrics,
   rectsOverlap,
   ruleHeight,
   textFits,
@@ -89,5 +90,20 @@ describe("recipe measurement", () => {
     expect(endsInOrphan("规模最大，贡献绝大多数收入与利润", 260, 16, "Microsoft YaHei")).toBe(false);
     // One line never counts as an orphan, however short it is.
     expect(endsInOrphan("利润率行业领先", 256, 16, "Microsoft YaHei")).toBe(false);
+  });
+
+  it("fits a headline with the tracking the theme will apply", () => {
+    // Ten full-width characters at 20pt are exactly the 200pt frame. The theme
+    // adds 1pt of tracking per glyph, so the file needs 210pt and wraps: the
+    // recipe has to pick 19pt up front instead of letting the export shrink it.
+    const headline = "一二三四五六七八九十";
+    const frame = { x: emu(0), y: emu(0), width: emu(200 * 12_700), height: emu(26 * 12_700) };
+    const plain = fittedFontSize(headline, frame, 20, 14, "Microsoft YaHei", 1.2);
+    const tracked = fittedFontSize(headline, frame, 20, 14, "Microsoft YaHei", 1.2, headingMetrics(1));
+    expect(plain).toBe(20);
+    expect(tracked).toBeLessThan(plain);
+    // The headline metrics the recipes use always ask for the bold face.
+    expect(headingMetrics(0)).toEqual({ bold: true });
+    expect(headingMetrics(0.4)).toEqual({ bold: true, letterSpacingPt: 0.4 });
   });
 });

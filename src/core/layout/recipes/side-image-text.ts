@@ -4,7 +4,14 @@ import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import {
+  fittedFontSize,
+  fittedFontSizeWithoutOrphan,
+  frameFromNormalized,
+  headingMetrics,
+  textFits,
+  textHeightPt,
+} from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 /** The picture plate, as a share of the content width. */
@@ -110,6 +117,7 @@ export const sideImageText: LayoutRecipe = {
     // The orphan guard is bounded for a content title: two or three points to
     // balance the last line, never the drop that used to shrink a claim page
     // just because one character dangled.
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
     const titleSize = fittedFontSizeWithoutOrphan(
       title,
       titleProbe,
@@ -119,8 +127,9 @@ export const sideImageText: LayoutRecipe = {
       lineHeight,
       3,
       isCover ? Number.POSITIVE_INFINITY : 3,
+      titleMetrics,
     );
-    if (!textFits(title, titleProbe, titleSize, displayFamily, lineHeight)) {
+    if (!textFits(title, titleProbe, titleSize, displayFamily, lineHeight, titleMetrics)) {
       return conflict("title", "对开图文页的标题在标题轴内放不下");
     }
     const titleHeight = pointsToNormalized(

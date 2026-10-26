@@ -8,6 +8,7 @@ import {
   fittedFontSize,
   fittedFontSizeInRange,
   frameFromNormalized,
+  headingMetrics,
   ruleHeight,
   textFits,
   textHeightPt,
@@ -81,6 +82,7 @@ export const paperColumn: LayoutRecipe = {
     const titleLineHeight = ctx.tokens.type.titleLineHeight;
     // Fitted against the body leading (conservative), rendered with the tighter
     // headline leading, so the column page keeps the same type size it had.
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
     const titleSize = fittedFontSizeInRange(
       title,
       titleFrame,
@@ -89,8 +91,9 @@ export const paperColumn: LayoutRecipe = {
       titleCap,
       headingFamily,
       ctx.tokens.type.lineHeight,
+      titleMetrics,
     );
-    if (!textFits(title, titleFrame, titleSize, headingFamily, ctx.tokens.type.lineHeight)) {
+    if (!textFits(title, titleFrame, titleSize, headingFamily, ctx.tokens.type.lineHeight, titleMetrics)) {
       return conflict("title", "标题在专栏宽度内放不下");
     }
 

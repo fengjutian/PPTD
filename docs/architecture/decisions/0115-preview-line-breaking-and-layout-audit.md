@@ -71,17 +71,20 @@ ADR 0114 把测量、编译和诊断写进了布局系统，但生成结果仍�
 代价与限制：
 
 - 缩字会让"容量不足"看起来比"被裁切"温和。因此容量问题必须由 `text-overflow` 诊断与审计继续暴露，不能靠肉眼。
-- 测量器仍然**不带字重与字距**：`letterSpacingPt`（主题给标题加的 tracking）只作用于导出，粗体在实际字体里也更宽。预览与文件在这两处仍可能差 1–3%，需要后续给测量器补字重与字距参数。
+- 测量器现在带**字重与字距**（`widthEm(text, family, bold)` + `letterSpacingPt`）。预览、审计、重排、文件，以及配方的标题拟合都用同一组参数：`deriveDesignTokens` 暴露 `titleTrackingPt` / `bodyTrackingPt`，配方通过 `headingMetrics()` 把它传给 `fittedFontSize`，所以规划阶段就知道标题会被字距撑宽。正文里的**行内粗体片段**仍按元素级的粗体判断（`runs` 里的局部加粗不参与断行），这是留着的一个近似。
 - 编辑画布仍按 CSS 断行并裁掉超框的行，只是现在会画一圈警告边；把画布改成"缩小/溢出可见"仍会牵扯相邻元素的交互，属于下一步。
 - 缩字只发生在预览与导出（`normAutofit`），不会回写文档字号；文档里保留设计意图的字号，容量冲突靠诊断暴露。
 - 审计只判断"框放不放得下"，不判断可读性（行长、字号带）——那属于味觉 lint。
 
 ## 验证
 
-- `text-fit.test.ts`：整块放得下时保持字号；断行数与 `estimateTextLines` 一致；超框时缩字后逐字保留（含多段落）；下落 55% 仍放不下时报 `overflow`。
+- `text-fit.test.ts`：整块放得下时保持字号；断行数与 `estimateTextLines` 一致；超框时缩字后逐字保留（含多段落）；下落 55% 仍放不下时报 `overflow`；15 个全角字在 300pt 框内会因 1pt 字距断成两行；注册测量器后粗体按粗体宽度断行。
+- `measure.test.ts`：10 个全角字在 200pt 框内，主题加 1pt 字距后标题从 20pt 退到 19pt（规划阶段就算准）；`headingMetrics` 总是带粗体，0 字距时不写该字段。
 - `layout-audit.test.ts`：超框、越界、文本重叠、孤字各报一条；放得下的文字与隐藏对象不误报；同带宽左右对齐的两段文字不互报。
 - `VariantPreviewDialog.test.tsx`：问题页列表渲染成「第 2–3、6 页」；未审计的版本不显示结论。
 - `SlideScene.test.tsx`：放不下的文字带 `text-overflow`，放得下的不带。
+- `text-refit.test.ts`：带 1pt 字距、正好卡在框宽上的标题会被缩字（无字距时不动）。
+- `text-metrics-canvas.test.ts`：粗体走 700 字面，且缓存按字重区分。
 - `presentation-renderer`：文字绘制改为调用 `fitTextToFrame` 并用同一 em 宽度断行；`icon` 元素进入渲染循环。
 - 类型检查与 ESLint 覆盖新增模块。
 

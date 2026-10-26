@@ -2,7 +2,7 @@ import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu, RectEmu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { fittedFontSize, frameFromNormalized, headingMetrics, textFits, textHeightPt } from "./measure";
 import { railStations } from "./rail-geometry";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
@@ -68,8 +68,17 @@ export const processRail: LayoutRecipe = {
     const colors = ctx.colors;
 
     const titleFrame = frameFromNormalized(chrome.title, page);
-    const titleSize = fittedFontSize(title, titleFrame, ctx.tokens.type.titlePt, 18, headingFamily, lineHeight);
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
+    const titleSize = fittedFontSize(
+      title,
+      titleFrame,
+      ctx.tokens.type.titlePt,
+      18,
+      headingFamily,
+      lineHeight,
+      titleMetrics,
+    );
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "流程页标题放不下");
     }
     const elements: RecipePlan["elements"] = [

@@ -2,7 +2,14 @@ import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, fittedFontSizeInRange, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import {
+  fittedFontSize,
+  fittedFontSizeInRange,
+  frameFromNormalized,
+  headingMetrics,
+  textFits,
+  textHeightPt,
+} from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type QuoteBlock = Extract<ContentBlock, { type: "quote" }>;
@@ -55,6 +62,7 @@ export const quoteField: LayoutRecipe = {
     const colors = ctx.colors;
 
     const titleFrame = frameFromNormalized(chrome.title, page);
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
     const titleSize = fittedFontSize(
       title,
       titleFrame,
@@ -62,8 +70,9 @@ export const quoteField: LayoutRecipe = {
       16,
       headingFamily,
       lineHeight,
+      titleMetrics,
     );
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "引文页标题放不下");
     }
     const elements: RecipePlan["elements"] = [

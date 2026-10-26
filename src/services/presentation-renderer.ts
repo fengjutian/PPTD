@@ -746,7 +746,7 @@ function drawText(
     element.style.letterSpacingPt === undefined || element.style.letterSpacingPt === 0
       ? 0
       : (element.style.letterSpacingPt * fontSize) / element.style.fontSizePt;
-  if (trackingPx !== 0 && "letterSpacing" in context) context.letterSpacing = `${trackingPx}px`;
+  if ("letterSpacing" in context) context.letterSpacing = trackingPx === 0 ? "0px" : `${trackingPx}px`;
   // Widths in em and the limit in em: the same numbers the fit above used, so
   // the two cannot disagree about where a line ends.
   const widthEm = Math.max(1, width / fontSize);

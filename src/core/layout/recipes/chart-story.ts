@@ -3,7 +3,7 @@ import type { ChartElement, ContentBlock, Emu } from "../../document-model";
 import { chartSeriesColors } from "../../design/chart-theme";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { fittedFontSize, frameFromNormalized, headingMetrics, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type ChartBlock = Extract<ContentBlock, { type: "chart" }>;
@@ -40,8 +40,17 @@ export const chartStory: LayoutRecipe = {
     const lineHeight = ctx.tokens.type.lineHeight;
     const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const titleFrame = frameFromNormalized(chrome.title, page);
-    const titleSize = fittedFontSize(title, titleFrame, ctx.tokens.type.titlePt, 18, headingFamily, lineHeight);
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
+    const titleSize = fittedFontSize(
+      title,
+      titleFrame,
+      ctx.tokens.type.titlePt,
+      18,
+      headingFamily,
+      lineHeight,
+      titleMetrics,
+    );
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "图表页标题放不下");
     }
     const elements: RecipePlan["elements"] = [

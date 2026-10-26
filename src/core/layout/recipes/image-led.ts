@@ -4,7 +4,7 @@ import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, textFits } from "./measure";
+import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, headingMetrics, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 const PICTURE_X = 0.52;
@@ -82,6 +82,7 @@ export const imageLed: LayoutRecipe = {
     // The orphan guard is bounded for a content title: two or three points to
     // balance the last line, never the drop that used to shrink a claim page
     // just because one character dangled.
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
     const titleSize = fittedFontSizeWithoutOrphan(
       title,
       titleFrame,
@@ -91,8 +92,9 @@ export const imageLed: LayoutRecipe = {
       lineHeight,
       3,
       isCover ? Number.POSITIVE_INFINITY : 3,
+      titleMetrics,
     );
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "图文页标题在图片旁放不下");
     }
 

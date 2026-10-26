@@ -4,7 +4,7 @@ import type { Emu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, ruleHeight, textFits, textHeightPt } from "./measure";
+import { fittedFontSize, frameFromNormalized, headingMetrics, ruleHeight, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 /** The most air a row may take before the list stops reading as one block. */
@@ -52,8 +52,17 @@ export const editorialIndex: LayoutRecipe = {
     const titleLineHeight = ctx.tokens.type.titleLineHeight;
     const colors = ctx.colors;
     const titleFrame = frameFromNormalized(chrome.title, page);
-    const titleSize = fittedFontSize(title, titleFrame, ctx.tokens.type.titlePt, 18, headingFamily, lineHeight);
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
+    const titleSize = fittedFontSize(
+      title,
+      titleFrame,
+      ctx.tokens.type.titlePt,
+      18,
+      headingFamily,
+      lineHeight,
+      titleMetrics,
+    );
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "标题在标题轴内放不下");
     }
 

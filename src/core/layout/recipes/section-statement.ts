@@ -2,7 +2,14 @@ import type { IntentConflict } from "../../commands/design-intent";
 import type { Emu } from "../../document-model";
 import { accentPanelGradient } from "../../design/shape-gradient";
 import { rectElement, textElement } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import {
+  fittedFontSize,
+  fittedFontSizeWithoutOrphan,
+  frameFromNormalized,
+  headingMetrics,
+  textFits,
+  textHeightPt,
+} from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 const PANEL = { x: 0, y: 0, width: 0.32, height: 1 };
@@ -41,8 +48,21 @@ export const sectionStatement: LayoutRecipe = {
     const colors = ctx.colors;
 
     const titleFrame = frameFromNormalized(TITLE, page);
-    const titleSize = fittedFontSize(title, titleFrame, 40, 28, headingFamily, lineHeight);
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    // A section title is display type: it may give up to three points to avoid
+    // a stranded last character, but never its size to a narrow frame.
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
+    const titleSize = fittedFontSizeWithoutOrphan(
+      title,
+      titleFrame,
+      40,
+      28,
+      headingFamily,
+      lineHeight,
+      3,
+      3,
+      titleMetrics,
+    );
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "章节标题放不下");
     }
 

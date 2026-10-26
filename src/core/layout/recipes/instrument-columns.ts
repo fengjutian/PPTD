@@ -10,6 +10,7 @@ import {
   fittedFontSize,
   fittedFontSizeInRange,
   frameFromNormalized,
+  headingMetrics,
   ruleHeight,
   textFits,
   textHeightPt,
@@ -94,6 +95,7 @@ export const instrumentColumns: LayoutRecipe = {
     const titleFrame = frameFromNormalized(chrome.title, page);
     // The direction is dramatic, so the title is allowed past the deck's own
     // title size when the frame can still carry it.
+    const titleMetrics = headingMetrics(ctx.tokens.type.titleTrackingPt);
     const titleSize = fittedFontSizeInRange(
       title,
       titleFrame,
@@ -102,8 +104,9 @@ export const instrumentColumns: LayoutRecipe = {
       ctx.tokens.type.titlePt + 8,
       headingFamily,
       lineHeight,
+      titleMetrics,
     );
-    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
+    if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight, titleMetrics)) {
       return conflict("title", "标题在标题轴内放不下");
     }
 
