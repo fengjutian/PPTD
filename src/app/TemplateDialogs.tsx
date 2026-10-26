@@ -420,6 +420,41 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                 <X />
               </button>
             </div>
+            {designQualityReport.compileReport && designQualityReport.compileReport.plannedSlides > 0 && (
+              <div className="design-quality-template">
+                <h3>设计编译</h3>
+                <p>
+                  已按计划编译 {designQualityReport.compileReport.plannedSlides} 页：直接采用{" "}
+                  {designQualityReport.compileReport.acceptedSlides} 页，调整{" "}
+                  {designQualityReport.compileReport.adjustedSlides} 页，拒绝{" "}
+                  {designQualityReport.compileReport.rejectedSlides} 页。
+                </p>
+                {designQualityReport.compileReport.slides.some((item) =>
+                  item.report.diagnostics.some((diagnostic) => diagnostic.severity !== "info"),
+                ) && (
+                  <ul className="export-report-list">
+                    {designQualityReport.compileReport.slides.flatMap((item) =>
+                      item.report.diagnostics
+                        .filter((diagnostic) => diagnostic.severity !== "info")
+                        .map((diagnostic) => (
+                          <li
+                            key={`${item.slideIndex}-${diagnostic.code}-${diagnostic.intent}`}
+                            className={diagnostic.severity === "error" ? "error" : "warning"}
+                          >
+                            <CircleAlert />
+                            <div>
+                              <strong>
+                                第 {item.slideIndex + 1} 页 · {diagnostic.message}
+                              </strong>
+                              <p>{diagnostic.code}</p>
+                            </div>
+                          </li>
+                        )),
+                    )}
+                  </ul>
+                )}
+              </div>
+            )}
             {designQualityReport.visualReviewCoverage &&
               designQualityReport.visualReviewCoverage.reviewed < designQualityReport.visualReviewCoverage.total && (
                 <p className="design-quality-warning">

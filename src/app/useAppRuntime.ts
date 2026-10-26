@@ -19,10 +19,12 @@ import {
   buildDirectionPreviewPages,
   directionContentFingerprint,
   importedDeckToDocument,
+  inspectAiDesignedDraftCompilation,
   type AiSlideDesign,
   type AiVisualAssetData,
   type DocumentCommand,
   type ImportReport,
+  type DesignDraftCompileReport,
 } from "../core/commands";
 import {
   CONCEPT_PRESET_LABELS,
@@ -505,6 +507,8 @@ export function useAppRuntime() {
     concept?: DeckConcept;
     themeDirection?: ThemeDirection;
     themeDirectionAudit?: ThemeDirectionAudit;
+    /** 设计计划实际采用、替换或拒绝了哪些配方。 */
+    compileReport?: DesignDraftCompileReport;
     issues: PresentationQualityIssue[];
     notes: string[];
     /** 视觉评审留下的结构化结论，用于在报告里逐条展示模型建议。 */
@@ -3069,6 +3073,10 @@ export function useAppRuntime() {
         concept,
         themeDirection,
         themeDirectionAudit: auditThemeDirection(themeDirection, concept),
+        compileReport: inspectAiDesignedDraftCompilation(document, {
+          ...generationCommand,
+          designs: stage.designs,
+        }),
         issues: [
           ...new Map(
             stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),

@@ -43,6 +43,7 @@ import { deriveDesignTokens, deriveSemanticColors, sameAppearance } from "../des
 import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { resolveChartKind } from "../design/data-relation";
 import { compileDesignPlan } from "../layout/design-compiler";
+import type { DesignCompileReport } from "../layout/design-compiler";
 import { consumptionProblem, isImageRecipe, selectRecipe } from "../layout/recipes/plan";
 import type { RecipeContext } from "../layout/recipes/types";
 import { planPageChrome } from "../layout/page-chrome";
@@ -66,6 +67,7 @@ export function createDesignContext(
   document: PresentationDocument,
   command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }>,
 ) {
+  const compileReports: Array<{ slideIndex: number; report: DesignCompileReport }> = [];
   const templateTheme = readTemplateTheme(command.templateTheme);
   // A template keeps its own placeholders, ink and type sizes. A preset may
   // still supply the palette, but it must not strip the template's region
@@ -358,6 +360,7 @@ export function createDesignContext(
     deckPlan,
     layoutIntents,
     chosenLayouts,
+    compileReports,
   };
 }
 
@@ -985,6 +988,7 @@ export function buildDesignedSlide(
         hasAsset: hasActualAsset,
         ...(hasActualAsset && assetPlan.role ? { assetRole: assetPlan.role } : {}),
       });
+      context.compileReports.push({ slideIndex: index, report: compiled.compileReport });
       if (!("elements" in compiled)) return undefined;
       const problem = consumptionProblem(compiled, slide.content);
       if (problem) throw new Error(`AI_DESIGN_CONTENT_LOSS: ${problem}`);

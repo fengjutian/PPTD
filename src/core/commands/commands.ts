@@ -36,6 +36,11 @@ import { HEX_COLOR_PATTERN, imageFrame } from "./ai-draft-helpers";
 import { applyDocumentCommand } from "./apply-document-command";
 import { applyElementCommand } from "./apply-element-command";
 export { directionContentFingerprint } from "./ai-draft-helpers";
+export {
+  inspectAiDesignedDraftCompilation,
+  type DesignDraftCompileReport,
+  type SlideDesignCompileReport,
+} from "./ai-designed-draft";
 export { toAiBlocks } from "./command-helpers";
 
 import {

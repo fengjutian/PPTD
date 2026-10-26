@@ -6,6 +6,35 @@ import { CONCEPT_PRESET_IDS } from "../design/deck-concept";
 import type { DocumentCommand } from "./commands";
 import { directionContentFingerprint } from "./ai-draft-helpers";
 import { buildDesignedSlide, createDesignContext } from "./design-page-builder";
+import type { DesignCompileOutcome, DesignCompileReport } from "../layout/design-compiler";
+
+export interface SlideDesignCompileReport {
+  slideIndex: number;
+  report: DesignCompileReport;
+}
+
+export interface DesignDraftCompileReport {
+  outcome: DesignCompileOutcome;
+  plannedSlides: number;
+  acceptedSlides: number;
+  adjustedSlides: number;
+  rejectedSlides: number;
+  slides: readonly SlideDesignCompileReport[];
+}
+
+function summarizeCompileReports(slides: readonly SlideDesignCompileReport[]): DesignDraftCompileReport {
+  const adjustedSlides = slides.filter((item) => item.report.outcome === "accepted-with-adjustments").length;
+  const rejectedSlides = slides.filter((item) => item.report.outcome === "rejected").length;
+  const acceptedSlides = slides.length - adjustedSlides - rejectedSlides;
+  return {
+    outcome: rejectedSlides > 0 ? "rejected" : adjustedSlides > 0 ? "accepted-with-adjustments" : "accepted",
+    plannedSlides: slides.length,
+    acceptedSlides,
+    adjustedSlides,
+    rejectedSlides,
+    slides: slides.map((item) => ({ slideIndex: item.slideIndex, report: item.report })),
+  };
+}
 
 /**
  * Applies an AI-designed draft: every page is replaced by the composition the
@@ -15,7 +44,7 @@ import { buildDesignedSlide, createDesignContext } from "./design-page-builder";
 export function applyAiDesignedDraft(
   document: PresentationDocument,
   command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }>,
-): void {
+): DesignDraftCompileReport {
   if (
     !command.title.trim() ||
     command.slides.length < 1 ||
@@ -46,5 +75,17 @@ export function applyAiDesignedDraft(
   // Applying a reviewed draft is a confirmation act: keep the confirmed copy
   // so a later edit can be compared with what the user actually approved.
   captureContentVersion(document);
-  return;
+  return summarizeCompileReports(context.compileReports);
+}
+
+/**
+ * Compiles a command against an isolated snapshot and returns only its design
+ * diagnostics. The inspected document is never exposed, so reporting cannot
+ * mutate the project, its revisions or the undo stack.
+ */
+export function inspectAiDesignedDraftCompilation(
+  document: PresentationDocument,
+  command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }>,
+): DesignDraftCompileReport {
+  return applyAiDesignedDraft(structuredClone(document), structuredClone(command));
 }
