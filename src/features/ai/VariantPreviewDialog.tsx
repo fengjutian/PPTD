@@ -214,19 +214,21 @@ export function VariantPreviewDialog({
 
         <div className="variant-preview-meta">
           <span>{option.description}</span>
-          <span className={`variant-gallery-issues ${option.issueCount > 0 ? "warning" : "ok"}`}>
-            {option.issueCount > 0 ? (
-              <>
-                <CircleAlert size={12} />
-                {option.issueCount} 处排版待调整
-              </>
-            ) : (
-              <>
-                <Check size={12} />
-                排版检查通过
-              </>
-            )}
-          </span>
+          {option.issueCount !== undefined && (
+            <span className={`variant-gallery-issues ${option.issueCount > 0 ? "warning" : "ok"}`}>
+              {option.issueCount > 0 ? (
+                <>
+                  <CircleAlert size={12} />
+                  {option.issueCount} 处排版待调整
+                </>
+              ) : (
+                <>
+                  <Check size={12} />
+                  排版检查通过
+                </>
+              )}
+            </span>
+          )}
         </div>
 
         <div className="upload-dialog-actions">

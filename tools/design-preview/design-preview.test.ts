@@ -8,6 +8,8 @@ import { deriveSemanticColors } from "../../src/core/design/design-tokens";
 import { findThemePreset } from "../../src/core/design/theme-presets";
 import { colorLuminance, contrastRatio } from "../../src/core/rendering/contrast";
 import { rectsOverlap } from "../../src/core/layout/recipes/measure";
+import { auditSlideLayout } from "../../src/core/layout/layout-audit";
+import { refitDocumentText } from "../../src/core/layout/text-refit";
 import { buildDesignPreviewDocument, buildVocabularyPreviewDocument, previewPage, previewSlides } from "./fixture";
 
 /**
@@ -96,6 +98,29 @@ describe("ten-page design preview", () => {
       expect(slide.content.title).toBe(previewSlides[index]!.title);
     });
     expect(previewPage.width).toBe(10);
+  });
+
+  it("carries the copy of every built-in page inside its frame", () => {
+    // The recipes fit what they place, and the refit that runs after a design
+    // must therefore have nothing to repair. A recipe that starts overflowing
+    // its own frame fails here instead of relying on the file's autofit.
+    for (const conceptPresetId of ["editorial", "documentary", "paper", "instrument"] as const) {
+      const document = buildDesignPreviewDocument({ conceptPresetId });
+      const report = auditSlideLayout(document);
+      expect(
+        report.issues.map((issue) => `${conceptPresetId}:第 ${issue.slideIndex + 1} 页:${issue.kind}`),
+        `${conceptPresetId} 的版面问题`,
+      ).toEqual([]);
+      const refit = refitDocumentText(document);
+      expect(refit.adjustments, `${conceptPresetId} 的自动重排`).toEqual([]);
+      expect(refit.conflicts, `${conceptPresetId} 的容量冲突`).toEqual([]);
+    }
+  });
+
+  it("carries the vocabulary pages inside their frames too", () => {
+    const document = buildVocabularyPreviewDocument();
+    expect(auditSlideLayout(document).issues).toEqual([]);
+    expect(refitDocumentText(document).adjustments).toEqual([]);
   });
 
   it("gives every direction different geometry, not just colours", () => {

@@ -758,9 +758,13 @@ function drawText(
   context.textBaseline = "top";
   context.textAlign = "left";
   lines.slice(0, maxLines).forEach((lineCharacters, lineIndex) => {
-    const total =
-      lineCharacters.reduce((sum, styled) => sum + measureTextWidthEm(styled.character, element.style.fontFamily), 0) *
-      fontSize;
+    // The alignment is measured with the advances the canvas actually paints:
+    // the breaks come from the shared table above, but a line that is centred
+    // must be centred on the glyphs the reader sees.
+    const total = lineCharacters.reduce((sum, styled) => {
+      context.font = fontFor(styled.bold);
+      return sum + context.measureText(styled.character).width;
+    }, 0);
     let x =
       element.style.align === "center" ? (width - total) / 2 : element.style.align === "right" ? width - total : 0;
     const y = lineIndex * lineHeight;
@@ -796,9 +800,12 @@ function drawText(
 function drawIcon(context: CanvasRenderingContext2D, element: IconElement, width: number, height: number): void {
   const definition = BUILTIN_ICONS[element.name];
   if (!definition) return;
+  // The icon sits on a 24×24 grid. Scaling by the shorter side keeps it round in
+  // a frame that is not square instead of stretching the drawing to the frame.
+  const side = Math.min(width, height);
   context.save();
-  // The icon is drawn on a 24×24 grid and stretched over its frame.
-  context.scale(width / 24, height / 24);
+  context.translate((width - side) / 2, (height - side) / 2);
+  context.scale(side / 24, side / 24);
   context.strokeStyle = element.style.color;
   context.lineWidth = element.style.strokeWidth ?? 2;
   context.lineCap = "round";

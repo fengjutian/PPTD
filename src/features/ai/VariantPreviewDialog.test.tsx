@@ -92,4 +92,29 @@ describe("VariantPreviewDialog", () => {
     );
     expect(markup).toContain("2 处排版待调整");
   });
+
+  it("says nothing about a layout check it has not run", () => {
+    // A design direction is rendered on demand, so there is no deck to audit
+    // yet. It used to carry a hard-coded zero and announce a pass.
+    const unmeasured: VariantOptionView = {
+      id: "direction-0",
+      presetId: "editorial",
+      name: "编辑部",
+      description: "冷静、克制、以文字为主。",
+      reason: "题材匹配「研究报告」",
+      images: [],
+      pageCount: 6,
+    };
+    const markup = renderToStaticMarkup(
+      <VariantPreviewDialog
+        options={[unmeasured]}
+        option={unmeasured}
+        onClose={noop}
+        onUse={noop}
+        renderPages={renderPages}
+      />,
+    );
+    expect(markup).not.toContain("排版检查通过");
+    expect(markup).not.toContain("排版待调整");
+  });
 });

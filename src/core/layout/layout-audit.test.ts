@@ -80,13 +80,20 @@ describe("layout audit", () => {
   it("reports two texts that claim the same space", () => {
     const frame: RectEmu = { x: inches(1), y: inches(1), width: inches(3), height: inches(0.5) };
     const report = auditSlideLayout(
-      page([
-        text({ text: "第一段", frame, fontSizePt: 18 }),
-        text({ text: "第二段", frame, fontSizePt: 18 }),
-      ]),
+      page([text({ text: "第一段", frame, fontSizePt: 18 }), text({ text: "第二段", frame, fontSizePt: 18 })]),
     );
     expect(report.issues.map((issue) => issue.kind)).toContain("text-overlap");
     expect(report.issues.find((issue) => issue.kind === "text-overlap")!.elementIds).toHaveLength(2);
+  });
+
+  it("lets a left label and a right page number share the footer band", () => {
+    // Same frame, opposite alignment: the boxes overlap but the ink does not,
+    // and a page like that is correct.
+    const frame: RectEmu = { x: inches(1), y: inches(6.9), width: inches(8), height: inches(0.22) };
+    const left = text({ text: "第二部分 门店效率", frame, fontSizePt: 10 });
+    const right = text({ text: "03 / 10", frame, fontSizePt: 10 });
+    const report = auditSlideLayout(page([left, { ...right, style: { ...right.style, align: "right" } }]));
+    expect(report.issues).toEqual([]);
   });
 
   it("does not judge an object the editor hid", () => {

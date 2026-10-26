@@ -62,4 +62,13 @@ describe("VariantGalleryDialog", () => {
     expect(markup).toContain("整册配图只生成一套");
     expect(markup).toContain("选定后只保留这一版");
   });
+
+  it("does not announce a layout check for a card that has not been laid out", () => {
+    const unpublished: VariantOptionView[] = [{ ...OPTIONS[0]!, id: "direction-0", issueCount: undefined }];
+    const markup = renderToStaticMarkup(
+      <VariantGalleryDialog options={unpublished} onSelect={noop} onDiscard={noop} renderPages={renderPages} />,
+    );
+    expect(markup).not.toContain("排版检查通过");
+    expect(markup).not.toContain("排版待调整");
+  });
 });

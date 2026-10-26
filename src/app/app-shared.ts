@@ -117,7 +117,14 @@ export interface VariantOptionView {
   images: string[];
   /** Pages in the designed deck, so the full preview can say how much it will render. */
   pageCount: number;
-  issueCount: number;
+  /**
+   * Layout problems found by the deterministic audit.
+   *
+   * Absent means the deck has not been laid out yet (an AI design direction is
+   * rendered on demand), and the card must not claim it passed a check that
+   * never ran.
+   */
+  issueCount?: number;
 }
 
 /** How far the variant batch has got; `failed` counts attempts that produced no card. */

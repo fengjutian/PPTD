@@ -165,6 +165,63 @@ export function fitTextToFrame(text: string, options: TextFrameFitOptions): Text
 }
 
 /**
+ * The region a text actually paints, in EMU.
+ *
+ * A frame is a container, not ink: a right-aligned page number and a
+ * left-aligned section label can share the same footer band without a single
+ * glyph ever meeting. Collision checks that compare frames report those two as
+ * overlapping, which is how a correct page gets flagged (and, in the quality
+ * gate, rejected). This box follows the alignment and the measured line widths,
+ * so two texts collide only where the reader would see them collide.
+ */
+export interface TextInkBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** EMU per point, matching the rest of the document model. */
+const EMU_PER_POINT = 12_700;
+
+export function textInkBox(element: TextElement): TextInkBox {
+  const fontSizePt = Math.max(0.01, element.style.fontSizePt);
+  const lineHeight = element.style.lineHeight ?? 1.25;
+  const frameWidthPt = element.frame.width / EMU_PER_POINT;
+  const frameHeightPt = element.frame.height / EMU_PER_POINT;
+  const lines =
+    breakIntoLines(element.text, {
+      widthEm: Math.max(1, frameWidthPt / fontSizePt),
+      widthOf: (character) => measureTextWidthEm(character, element.style.fontFamily),
+    }) ?? [];
+  const widestEm = lines.reduce(
+    (widest, line) =>
+      Math.max(
+        widest,
+        [...line].reduce((sum, character) => sum + measureTextWidthEm(character, element.style.fontFamily), 0),
+      ),
+    0,
+  );
+  const inkWidthPt = Math.min(frameWidthPt, widestEm * fontSizePt);
+  const inkHeightPt = Math.min(frameHeightPt, Math.max(1, lines.length) * fontSizePt * lineHeight);
+  const align = element.style.align ?? "left";
+  const verticalAlign = element.style.verticalAlign ?? "top";
+  const xPt = align === "center" ? (frameWidthPt - inkWidthPt) / 2 : align === "right" ? frameWidthPt - inkWidthPt : 0;
+  const yPt =
+    verticalAlign === "middle"
+      ? (frameHeightPt - inkHeightPt) / 2
+      : verticalAlign === "bottom"
+        ? frameHeightPt - inkHeightPt
+        : 0;
+  return {
+    x: element.frame.x + Math.round(xPt * EMU_PER_POINT),
+    y: element.frame.y + Math.round(yPt * EMU_PER_POINT),
+    width: Math.max(0, Math.round(inkWidthPt * EMU_PER_POINT)),
+    height: Math.max(0, Math.round(inkHeightPt * EMU_PER_POINT)),
+  };
+}
+
+/**
  * Whether the text is taller than the frame it sits in.
  *
  * The thresholds match the ones the quality gate uses, so a page that reports
@@ -175,8 +232,10 @@ export function textLikelyOverflows(element: TextElement): boolean {
   const widthPt = element.frame.width / 12_700;
   const heightPt = element.frame.height / 12_700;
   // An explicit leading changes how tall the block is. Counting it here lets the
-  // refit pass catch a text style that no longer fits its frame; the default
-  // stays at the renderer's 1.2 for documents that never set one.
+  // refit pass catch a text style that no longer fits its frame. A document
+  // that never set one is measured with the single spacing the export writes
+  // (1.2); the preview draws such a text with its own 1.25 default, and the
+  // 8% allowance below is what keeps the two from disagreeing about a page.
   const lineHeight = element.style.lineHeight ?? 1.2;
   return (
     estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) *

@@ -56,7 +56,9 @@ export function DesignDirectionDialog({
     reason: option.rationale,
     images: option.images,
     pageCount: option.pageCount,
-    issueCount: 0,
+    // A direction is rendered on demand, so there is no laid-out deck to audit
+    // yet. Leaving the count out keeps the preview from claiming a check it
+    // never ran.
   }));
   const previewOption = previewOptions.find((option) => option.id === previewId);
   return (

@@ -1,7 +1,7 @@
 import type { AiSlideDesign, AiNormalizedRect } from "../core/commands/commands";
 import type { PresentationDocument, RectEmu, Slide, TextElement } from "../core/document-model";
 import { contrastRatio } from "../core/rendering/contrast";
-import { estimateTextLines, textLikelyOverflows } from "../core/rendering/text-fit";
+import { estimateTextLines, textInkBox, textLikelyOverflows } from "../core/rendering/text-fit";
 
 export type PresentationQualityIssueKind =
   | "out-of-bounds"
@@ -149,12 +149,17 @@ export function validatePresentationVisualQuality(
       for (let rightIndex = leftIndex + 1; rightIndex < texts.length; rightIndex += 1) {
         const left = texts[leftIndex]!;
         const right = texts[rightIndex]!;
-        if (
-          intersects(
-            normalized(left.frame, document.pageSize.width, document.pageSize.height),
-            normalized(right.frame, document.pageSize.width, document.pageSize.height),
-          )
-        )
+        // Frames share bands on purpose (a left section label and a right page
+        // number); the gate judges the ink the reader sees.
+        const leftInk = textInkBox(left);
+        const rightInk = textInkBox(right);
+        const overlapWidth =
+          Math.min(leftInk.x + leftInk.width, rightInk.x + rightInk.width) - Math.max(leftInk.x, rightInk.x);
+        const overlapHeight =
+          Math.min(leftInk.y + leftInk.height, rightInk.y + rightInk.height) - Math.max(leftInk.y, rightInk.y);
+        const overlapArea = overlapWidth > 0 && overlapHeight > 0 ? overlapWidth * overlapHeight : 0;
+        const smaller = Math.min(leftInk.width * leftInk.height, rightInk.width * rightInk.height);
+        if (smaller > 0 && overlapArea > smaller * 0.12)
           issues.push({
             slideIndex,
             elementIds: [left.id, right.id],

@@ -1,5 +1,5 @@
 import { isElementVisible, type PresentationDocument, type TextElement } from "../document-model";
-import { estimateTextLines } from "../rendering/text-fit";
+import { estimateTextLines, textInkBox } from "../rendering/text-fit";
 
 /**
  * A deterministic read of the geometry a designed page ended up with.
@@ -7,9 +7,9 @@ import { estimateTextLines } from "../rendering/text-fit";
  * The visual review looks at a picture and can miss a text that lost its last
  * line, while the generation gate only knows the checks it was written with.
  * This audit answers the three questions a reader can answer by looking at the
- * page — does the copy fit its frame, does every object stay on the page, do two
- * texts claim the same space — so the preview can report a number it can stand
- * behind instead of announcing a pass it never verified.
+ * page — does the copy fit its frame, does a text stay on the page, do two texts
+ * claim the same space — so the preview can report a number it can stand behind
+ * instead of announcing a pass it never verified.
  *
  * It reads the document only: no AI, no pixels, no repair. Rendering already
  * shrinks a text that does not fit, the same way the exported `normAutofit`
@@ -79,34 +79,39 @@ export function auditSlideLayout(document: PresentationDocument): LayoutAuditRep
           message: `文本需要约 ${Math.round(neededPt)}pt 高度，文本框只有 ${Math.round(heightPt)}pt`,
         });
       }
-    }
-
-    for (const element of visible) {
+      // Only text is judged against the page edge: a picture or a band that
+      // bleeds past it is a composition technique, while a text box that leaves
+      // the page loses characters in the file.
       const frame = element.frame;
       if (
-        frame.x < 0 ||
-        frame.y < 0 ||
-        frame.width <= 0 ||
-        frame.height <= 0 ||
-        frame.x + frame.width > pageWidth * 1.0005 ||
-        frame.y + frame.height > pageHeight * 1.0005
+        frame.x < -pageWidth * 0.002 ||
+        frame.y < -pageHeight * 0.002 ||
+        frame.x + frame.width > pageWidth * 1.002 ||
+        frame.y + frame.height > pageHeight * 1.002
       ) {
         issues.push({
           slideIndex,
           elementIds: [element.id],
           kind: "out-of-bounds",
-          message: "对象超出页面边界，导出后会被裁切",
+          message: "文本框越过页面边界，导出后会被裁切",
         });
       }
     }
 
+    // Ink boxes are measured once per page: the pairwise loop below would
+    // otherwise re-break every text once per neighbour.
+    const inks = texts.map((element) => textInkBox(element));
     for (let leftIndex = 0; leftIndex < texts.length; leftIndex += 1) {
       for (let rightIndex = leftIndex + 1; rightIndex < texts.length; rightIndex += 1) {
         const left = texts[leftIndex]!;
         const right = texts[rightIndex]!;
-        const smaller = Math.min(left.frame.width * left.frame.height, right.frame.width * right.frame.height);
+        // Two frames may share a band (a left section label and a right page
+        // number); the ink is what the reader sees, so that is what collides.
+        const leftInk = inks[leftIndex]!;
+        const rightInk = inks[rightIndex]!;
+        const smaller = Math.min(leftInk.width * leftInk.height, rightInk.width * rightInk.height);
         if (smaller <= 0) continue;
-        if (intersectionArea(left.frame, right.frame) > smaller * OVERLAP_SHARE) {
+        if (intersectionArea(leftInk, rightInk) > smaller * OVERLAP_SHARE) {
           issues.push({
             slideIndex,
             elementIds: [left.id, right.id],

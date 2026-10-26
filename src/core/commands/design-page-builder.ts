@@ -49,6 +49,7 @@ import { consumptionProblem, isImageRecipe, selectPreferredStyleRecipe, selectRe
 import { RECIPE_CATALOG } from "../layout/recipes/registry";
 import type { RecipeContext } from "../layout/recipes/types";
 import { planPageChrome } from "../layout/page-chrome";
+import { refitSlideText } from "../layout/text-refit";
 import { coverCrop } from "../rendering/image-fit";
 import type { CompositionFacts } from "./design-intent";
 import {
@@ -2866,6 +2867,12 @@ export function buildDesignedSlide(
       }
     }
   }
+  // A page is assembled from independent decisions — a recipe, a template
+  // frame, a style constraint, a repair that enlarged the title — and any of
+  // them can leave a text a few percent taller than its frame. The canvas
+  // clips such a text and PowerPoint shrinks it; the page should carry copy
+  // that fits instead. The refit is design-only: it never rewrites the words.
+  refitSlideText(slide, pageHeight);
   // Provenance is what lets a later design-only relayout replace the
   // generated composition without deleting anything the user added.
   for (const element of slide.elements) element.origin = "generated";
