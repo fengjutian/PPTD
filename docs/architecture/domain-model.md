@@ -387,7 +387,7 @@ Level A 映射：
 - 主题色/字体写入 `document.theme`；演讲备注写入 `content.speakerNotes`。
 - 导入页 `content.status = "review"`，保证导出预检提示未审核；导入后是未保存的新项目，必须另存为 `.pptd`。
 
-不支持的对象（图表、组合、SmartArt、OLE、媒体、动画、切换）不进入文档，只进入 `ImportReport`；合并单元格、超过 8 列/30 行的表格降级或截断并报告。母版/版式只用于补齐占位符几何，不做视觉重建。详见 [0052 PPTX Level A 内容导入](decisions/0052-pptx-level-a-import.md)。
+无法表示的对象进入 `ImportReport`。当前已支持基础图表、展平组合、四类页面切换和文本片段的 http/https/mailto 外部链接；SmartArt、OLE、媒体、对象动画、内部跳页及形状级链接仍不进入文档。合并单元格和超过 12 列/50 行的表格按当前兼容边界保留、降级或截断并报告。母版/版式用于补齐占位符几何与基础文本样式，但不完整重建装饰对象。详见 [0052 PPTX Level A 内容导入](decisions/0052-pptx-level-a-import.md)。
 
 ## 23. 页面切换（V0.2 已实现）
 

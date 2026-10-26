@@ -11,6 +11,16 @@ const ELEMENT_STYLE: TextElementStyle = {
 };
 
 describe("text runs", () => {
+  it("keeps different hyperlink destinations as separate editable fragments", () => {
+    const fragments = textFragments("AB", [
+      { start: 0, end: 1, hyperlinkUrl: "https://example.com/a" },
+      { start: 1, end: 2, hyperlinkUrl: "mailto:team@example.com" },
+    ]);
+    expect(fragments.map((fragment) => fragment.style.hyperlinkUrl)).toEqual([
+      "https://example.com/a",
+      "mailto:team@example.com",
+    ]);
+  });
   it("returns the whole text as one fragment when nothing is emphasised", () => {
     expect(textFragments("覆盖机构", undefined)).toEqual([{ text: "覆盖机构", style: {}, start: 0, end: 4 }]);
   });

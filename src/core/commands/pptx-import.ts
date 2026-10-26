@@ -42,6 +42,11 @@ export interface ImportedSlide {
   title?: string;
   body?: string;
   background?: string | null;
+  transition?: {
+    kind: "fade" | "push" | "wipe" | "split";
+    speed: "fast" | "medium" | "slow";
+    direction?: "left" | "right" | "up" | "down" | null;
+  } | null;
   speakerNotes: string;
   elements: ImportedElement[];
   /** Indexes into `elements` for each imported selection group. */
@@ -144,6 +149,7 @@ export interface ImportedRun {
   bold: boolean;
   color: string;
   underline: boolean;
+  hyperlinkUrl?: string | null;
 }
 
 export interface ImportedCrop {
@@ -384,6 +390,15 @@ function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): 
     content,
     elements,
     ...(groups.length > 0 ? { groups } : {}),
+    ...(slide.transition
+      ? {
+          transition: {
+            kind: slide.transition.kind,
+            speed: slide.transition.speed,
+            ...(slide.transition.direction ? { direction: slide.transition.direction } : {}),
+          },
+        }
+      : {}),
     layoutId: undefined,
   };
 }
@@ -412,7 +427,16 @@ function runOf(run: ImportedRun): TextRun | undefined {
     ...(run.bold ? { bold: true } : {}),
     ...(run.color ? { color: run.color } : {}),
     ...(run.underline ? { underline: true } : {}),
+    ...(isSafeExternalHyperlink(run.hyperlinkUrl) ? { hyperlinkUrl: run.hyperlinkUrl } : {}),
   };
+}
+
+function isSafeExternalHyperlink(value: string | null | undefined): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= 2048 &&
+    /^(?:https?:\/\/[^\s\x00-\x1f]+|mailto:[^\s\x00-\x1f]+)$/i.test(value)
+  );
 }
 
 function cropOf(crop: ImportedCrop): ImageCrop {

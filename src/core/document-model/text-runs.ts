@@ -14,6 +14,7 @@ export interface TextRunStyle {
   bold?: boolean;
   color?: string;
   underline?: boolean;
+  hyperlinkUrl?: string;
 }
 
 export interface TextFragment {
@@ -27,7 +28,12 @@ export interface TextFragment {
 
 function sameStyle(left: TextRunStyle | null, right: TextRunStyle | null): boolean {
   if (left === null || right === null) return left === right;
-  return left.bold === right.bold && left.color === right.color && left.underline === right.underline;
+  return (
+    left.bold === right.bold &&
+    left.color === right.color &&
+    left.underline === right.underline &&
+    left.hyperlinkUrl === right.hyperlinkUrl
+  );
 }
 
 function styleOf(run: TextRun): TextRunStyle {
@@ -35,6 +41,7 @@ function styleOf(run: TextRun): TextRunStyle {
   if (run.bold !== undefined) style.bold = run.bold;
   if (run.color !== undefined) style.color = run.color;
   if (run.underline !== undefined) style.underline = run.underline;
+  if (run.hyperlinkUrl !== undefined) style.hyperlinkUrl = run.hyperlinkUrl;
   return style;
 }
 

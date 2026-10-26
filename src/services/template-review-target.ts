@@ -38,7 +38,8 @@ export type TemplateFitCode =
   | "template-palette"
   | "template-font"
   | "template-align"
-  | "template-line-spacing";
+  | "template-line-spacing"
+  | "template-image-region";
 
 export interface TemplateFitIssue {
   slideIndex: number;
@@ -521,6 +522,26 @@ export function checkTemplateFit(
     if (!title && bodies.length === 0) continue;
     checkedSlides += 1;
     if (resolved.layoutName) layoutCoverage += 1;
+    // A page whose picture had no placeholder to land in was not laid out by
+    // the template, whatever its title axis says: the picture is sitting on top
+    // of body geometry.
+    const layoutCapabilities =
+      resolved.layoutName === undefined
+        ? undefined
+        : document.layouts?.find((layout) => layout.name === resolved.layoutName)?.capabilities;
+    const pictured = slide.elements.filter(
+      (element) => element.type === "image" && (element.placement ?? "content") === "content",
+    );
+    if (layoutCapabilities && !layoutCapabilities.hasImage && pictured.length > 0) {
+      issues.push({
+        slideIndex,
+        code: "template-image-region",
+        severity: "warning",
+        message: `该页有 ${pictured.length} 张图片，但模板版式「${resolved.layoutName}」没有图片占位`,
+        suggestion: "换用带图片占位的版式，或把这一页改成不带图片的构图",
+        elementIds: pictured.map((element) => element.id),
+      });
+    }
     const grid = resolved.grid;
     if (title && title.type === "text") {
       const box = rectOf(title.frame, pageWidth, pageHeight);

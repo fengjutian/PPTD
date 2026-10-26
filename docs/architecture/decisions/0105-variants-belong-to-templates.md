@@ -50,9 +50,20 @@
 - 警告只覆盖"没有落到版式"的页，不区分具体是哪种页面类型排不出来。
 - 模板能承接哪些页面类型仍是隐式的（由区域签名推断），没有面向用户的清单。
 
+## 落地补记（版式能力持久化）
+
+"模板能承接哪些页面类型仍是隐式的"这一条在第二轮补上了，方式是持久化**能力摘要**而不是区域本身：
+
+- `SlideLayoutSpec.capabilities = { hasTitle, hasBody, hasImage, columns, free }`（Schema 29），在导入生成版式时由 `layoutCapabilities(regions)` 从占位区推导。
+- 只存摘要的理由：区域描述的是模板的**一次渲染**，占位区坐标会随版式缩放变化；"这版式能不能放图"不会。
+- 新增适配检查 `template-image-region`：某页有内容图片、而它落到的版式没有图片占位时给出警告——图片是压在正文几何上的，这一页其实没被模板排过。
+- 能力也随 `document.layouts` 一起可被设计提示词读取，这是"模型只在模板声明的变体内选择"的前置；选择闸门本身仍未实现。
+
 ## 验证
 
 - `export-pptx.test.ts`：模板版式全覆盖时 `checkedSlides === layoutCoverage === 1` 且无警告；把版式绑定去掉、目标里放两个版式（没有单版式兜底）后，`layoutCoverage === 0` 且报告出现"没有匹配的模板版式"。
+- `layout-capabilities.test.ts`：标题+正文、双栏、自由版式、有无图位四种推导。
+- `template-review-target.test.ts`：有图页落在无图位的版式上出现 `template-image-region`；版式声明了图位则不出现。
 - 全量测试与构建通过。
 
 ## 备选方案

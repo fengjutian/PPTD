@@ -136,10 +136,19 @@ pub struct ImportedSlide {
     pub title: Option<String>,
     pub body: Option<String>,
     pub background: Option<String>,
+    pub transition: Option<ImportedTransition>,
     pub speaker_notes: String,
     pub elements: Vec<ImportedElement>,
     /// Indexes into `elements` for each imported selection group.
     pub groups: Vec<Vec<usize>>,
+}
+
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedTransition {
+    pub kind: String,
+    pub speed: String,
+    pub direction: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -176,6 +185,8 @@ pub struct ImportedRun {
     pub bold: bool,
     pub color: String,
     pub underline: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hyperlink_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Default, Clone, Copy)]
@@ -630,6 +641,50 @@ fn relationship_attr<'a>(node: Node<'a, 'a>, name: &str) -> Option<&'a str> {
     node.attributes()
         .find(|attribute| attribute.name() == name && attribute.namespace() == Some(REL_NS))
         .map(|attribute| attribute.value())
+}
+
+fn safe_external_hyperlink(rel: &Rel) -> Option<String> {
+    if !rel.external
+        || rel.target.len() > 2048
+        || rel
+            .target
+            .chars()
+            .any(|value| value.is_control() || value.is_whitespace())
+    {
+        return None;
+    }
+    let lower = rel.target.to_ascii_lowercase();
+    let value = lower
+        .strip_prefix("http://")
+        .or_else(|| lower.strip_prefix("https://"))
+        .or_else(|| lower.strip_prefix("mailto:"));
+    value
+        .is_some_and(|remainder| !remainder.is_empty())
+        .then(|| rel.target.clone())
+}
+
+fn report_unsupported_hyperlinks(
+    slide_index: usize,
+    shape: Node<'_, '_>,
+    rels: &HashMap<String, Rel>,
+    report: &mut DeckReport,
+) {
+    for link in shape
+        .descendants()
+        .filter(|node| node.has_tag_name("hlinkClick"))
+    {
+        let supported = relationship_attr(link, "id")
+            .and_then(|id| rels.get(id))
+            .and_then(safe_external_hyperlink)
+            .is_some();
+        if !supported {
+            report.unsupported(
+                slide_index,
+                "hyperlink",
+                "仅导入 http、https 和 mailto 文本链接；内部跳页、文件链接或不安全协议已忽略",
+            );
+        }
+    }
 }
 
 fn attribute_any<'a>(node: Node<'a, 'a>, name: &str) -> Option<&'a str> {
@@ -1195,6 +1250,55 @@ fn collect_placeholder_text_styles(
     }
 }
 
+fn parse_transition(xml: &str) -> Option<Result<ImportedTransition, String>> {
+    let document = Document::parse(xml).ok()?;
+    let root = document.root_element();
+    let transition = child(root, "transition")?;
+    let speed = match transition.attribute("spd").unwrap_or("med") {
+        "fast" => "fast",
+        "slow" => "slow",
+        _ => "medium",
+    };
+    let effect = transition.children().find(Node::is_element)?;
+    let side = |value: Option<&str>| match value.unwrap_or("l") {
+        "r" => "right",
+        "u" => "up",
+        "d" => "down",
+        _ => "left",
+    };
+    let parsed = match effect.tag_name().name() {
+        "fade" => ImportedTransition {
+            kind: "fade".into(),
+            speed: speed.into(),
+            direction: None,
+        },
+        "push" | "wipe" => ImportedTransition {
+            kind: effect.tag_name().name().into(),
+            speed: speed.into(),
+            direction: Some(side(effect.attribute("dir")).into()),
+        },
+        "split" => {
+            let horizontal = effect.attribute("orient") == Some("horz");
+            let outward = effect.attribute("dir") != Some("in");
+            ImportedTransition {
+                kind: "split".into(),
+                speed: speed.into(),
+                direction: Some(
+                    match (horizontal, outward) {
+                        (true, true) => "up",
+                        (true, false) => "down",
+                        (false, true) => "left",
+                        (false, false) => "right",
+                    }
+                    .into(),
+                ),
+            }
+        }
+        other => return Some(Err(other.to_string())),
+    };
+    Some(Ok(parsed))
+}
+
 // The parser needs the archive, the shared report, the media cache, the theme
 // and the cancellation session. Bundling them in a temporary struct would only
 // move the same borrows behind a name, so the explicit parameters are clearer.
@@ -1220,6 +1324,7 @@ fn parse_slide(
         })
         .unwrap_or_default();
     let slide_background = parse_background(xml, &slide_theme).or(layout.background);
+    let transition = parse_transition(xml);
 
     let mut slide = ImportedSlide {
         index,
@@ -1227,6 +1332,13 @@ fn parse_slide(
             Ok(color) => Some(color),
             Err(()) => {
                 report.unsupported(index, "background", "渐变、图片或效果背景未重建");
+                None
+            }
+        }),
+        transition: transition.and_then(|transition| match transition {
+            Ok(transition) => Some(transition),
+            Err(kind) => {
+                report.unsupported(index, "transition", &format!("页面切换 {kind} 尚未支持"));
                 None
             }
         }),
@@ -1268,6 +1380,7 @@ fn parse_slide(
                     &layout.frames,
                     &layout.text_styles,
                     &slide_theme,
+                    &rels,
                     report,
                 ) {
                     push_element(&mut slide, element, report);
@@ -1392,6 +1505,7 @@ impl GroupParser<'_> {
                     self.layout_frames,
                     self.layout_text_styles,
                     self.theme,
+                    self.rels,
                     report,
                 ),
                 "pic" => parse_picture(
@@ -1472,8 +1586,10 @@ fn parse_shape(
     layout_frames: &HashMap<PlaceholderKey, ImportedFrame>,
     layout_text_styles: &HashMap<PlaceholderKey, ImportedTextStyle>,
     theme: &Option<ImportedTheme>,
+    rels: &HashMap<String, Rel>,
     report: &mut DeckReport,
 ) -> Option<ImportedElement> {
+    report_unsupported_hyperlinks(index, shape, rels, report);
     let key = placeholder(shape);
     let frame = parse_frame(shape)
         .or_else(|| key.as_ref().and_then(|key| layout_frames.get(key).copied()))
@@ -1503,6 +1619,7 @@ fn parse_shape(
         theme,
         key.as_ref().map(is_title_placeholder).unwrap_or(false),
         key.as_ref().and_then(|key| layout_text_styles.get(key)),
+        Some(rels),
     );
     if let Some(text) = text {
         return Some(ImportedElement::Text {
@@ -1693,6 +1810,7 @@ fn parse_text_body(
     theme: &Option<ImportedTheme>,
     is_title: bool,
     inherited_style: Option<&ImportedTextStyle>,
+    rels: Option<&HashMap<String, Rel>>,
 ) -> Option<TextBody> {
     let body = descendant(shape, "txBody")?;
     let mut text = String::new();
@@ -1768,6 +1886,11 @@ fn parse_text_body(
                     let end = text.encode_utf16().count();
                     let run_style =
                         child(child_node, "rPr").map(|props| parse_run_style(props, theme));
+                    let hyperlink_url = child(child_node, "rPr")
+                        .and_then(|props| child(props, "hlinkClick"))
+                        .and_then(|link| relationship_attr(link, "id"))
+                        .and_then(|id| rels.and_then(|relations| relations.get(id)))
+                        .and_then(safe_external_hyperlink);
                     let current = style.get_or_insert_with(|| {
                         inherited_style
                             .cloned()
@@ -1802,13 +1925,16 @@ fn parse_text_body(
                         if let Some(value) = run_style.font_family {
                             current.font_family = value;
                         }
-                        if (bold || explicit_color || underline) && runs.len() < 200 {
+                        if (bold || explicit_color || underline || hyperlink_url.is_some())
+                            && runs.len() < 200
+                        {
                             runs.push(ImportedRun {
                                 start,
                                 end,
                                 bold,
                                 color: run_color,
                                 underline,
+                                hyperlink_url,
                             });
                         }
                     }
@@ -2449,7 +2575,7 @@ fn notes_for_slide(
         if key.ph_type != "body" {
             continue;
         }
-        if let Some(body) = parse_text_body(shape, &None, false, None) {
+        if let Some(body) = parse_text_body(shape, &None, false, None, None) {
             if !body.text.trim().is_empty() {
                 if !text.is_empty() {
                     text.push('\n');
@@ -2464,6 +2590,37 @@ fn notes_for_slide(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_supported_slide_transitions_and_reports_unknown_effects() {
+        let push = r#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+            <p:transition spd="slow"><p:push dir="r"/></p:transition>
+        </p:sld>"#;
+        let split = r#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+            <p:transition spd="fast"><p:split orient="horz" dir="out"/></p:transition>
+        </p:sld>"#;
+        let morph = r#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+            <p:transition><p:morph/></p:transition>
+        </p:sld>"#;
+
+        assert_eq!(
+            parse_transition(push),
+            Some(Ok(ImportedTransition {
+                kind: "push".into(),
+                speed: "slow".into(),
+                direction: Some("right".into()),
+            }))
+        );
+        assert_eq!(
+            parse_transition(split),
+            Some(Ok(ImportedTransition {
+                kind: "split".into(),
+                speed: "fast".into(),
+                direction: Some("up".into()),
+            }))
+        );
+        assert_eq!(parse_transition(morph), Some(Err("morph".into())));
+    }
 
     #[test]
     fn reads_solid_and_theme_backgrounds_and_rejects_unrepresentable_backgrounds() {
@@ -2533,7 +2690,7 @@ mod tests {
             </p:sp>"#,
         )
         .expect("slide");
-        let body = parse_text_body(slide.root_element(), &None, false, Some(&inherited))
+        let body = parse_text_body(slide.root_element(), &None, false, Some(&inherited), None)
             .expect("text body");
 
         assert_eq!(body.style.font_family, "Inherited Sans");
@@ -3051,6 +3208,7 @@ mod tests {
             &HashMap::new(),
             &HashMap::new(),
             &Option::<ImportedTheme>::None,
+            &HashMap::new(),
             &mut report,
         )
         .expect("shape");
@@ -3162,12 +3320,64 @@ mod tests {
             </p:sp>
         "#;
         let document = Document::parse(xml).expect("xml");
-        let body = parse_text_body(document.root_element(), &None, false, None).expect("text");
+        let body =
+            parse_text_body(document.root_element(), &None, false, None, None).expect("text");
         assert_eq!(body.text, "标题\n第二行");
         assert_eq!(body.style.align, "center");
         assert_eq!(body.style.font_size_pt, 24.0);
         assert!(body.style.bold);
         assert_eq!(body.runs[0].start, 0);
         assert_eq!(body.runs[0].end, 2);
+    }
+
+    #[test]
+    fn imports_only_safe_external_text_hyperlinks() {
+        let xml = r#"
+            <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <p:txBody><a:bodyPr/><a:lstStyle/><a:p>
+                <a:r><a:rPr><a:hlinkClick r:id="rId1"/></a:rPr><a:t>Web</a:t></a:r>
+                <a:r><a:rPr><a:hlinkClick r:id="rId2"/></a:rPr><a:t>File</a:t></a:r>
+              </a:p></p:txBody>
+            </p:sp>
+        "#;
+        let document = Document::parse(xml).expect("xml");
+        let relations = HashMap::from([
+            (
+                "rId1".to_string(),
+                Rel {
+                    target: "https://example.com/report".to_string(),
+                    external: true,
+                    kind: "hyperlink".to_string(),
+                },
+            ),
+            (
+                "rId2".to_string(),
+                Rel {
+                    target: "file:///C:/secret.txt".to_string(),
+                    external: true,
+                    kind: "hyperlink".to_string(),
+                },
+            ),
+        ]);
+        let body = parse_text_body(
+            document.root_element(),
+            &None,
+            false,
+            None,
+            Some(&relations),
+        )
+        .expect("text");
+        assert_eq!(body.runs.len(), 1);
+        assert_eq!(
+            body.runs[0].hyperlink_url.as_deref(),
+            Some("https://example.com/report")
+        );
+
+        let mut report = DeckReport::default();
+        report_unsupported_hyperlinks(0, document.root_element(), &relations, &mut report);
+        assert_eq!(report.unsupported.len(), 1);
+        assert_eq!(report.unsupported[0].kind, "hyperlink");
     }
 }

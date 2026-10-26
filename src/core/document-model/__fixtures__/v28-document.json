@@ -1,0 +1,39 @@
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "schemaVersion": 28,
+  "title": "V28 fixture",
+  "pageSize": { "width": 12191695, "height": 6858000 },
+  "revisions": { "document": 1, "content": 0, "design": 1 },
+  "layouts": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "name": "标题与内容",
+      "backgroundColor": "#F7F5F0"
+    }
+  ],
+  "slides": [
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "layoutId": "44444444-4444-4444-8444-444444444444",
+      "background": "#F7F5F0",
+      "content": { "title": "Fixture", "body": "", "speakerNotes": "", "status": "draft" },
+      "elements": [
+        {
+          "id": "33333333-3333-4333-8333-333333333333",
+          "type": "text",
+          "frame": { "x": 685800, "y": 594360, "width": 6858000, "height": 731520 },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "text": "标题",
+          "style": {
+            "fontFamily": "Microsoft YaHei",
+            "fontSizePt": 28,
+            "color": "#17181c",
+            "bold": true,
+            "align": "left"
+          }
+        }
+      ]
+    }
+  ]
+}

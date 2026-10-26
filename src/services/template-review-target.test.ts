@@ -139,6 +139,47 @@ describe("template review target", () => {
     expect(buildTemplateReviewTarget(analysis({ layouts: [] }))).toBeUndefined();
   });
 
+  it("warns when a page's picture has no placeholder in its layout", () => {
+    const target = buildTemplateReviewTarget(analysis())!;
+    const build = (hasImage: boolean) => {
+      const document = withBody();
+      const layout = {
+        id: crypto.randomUUID(),
+        name: "内页",
+        capabilities: {
+          hasTitle: true,
+          hasBody: true,
+          hasImage,
+          columns: 1,
+          free: false,
+        },
+      };
+      document.layouts = [layout];
+      const slide = document.slides[0]!;
+      slide.layoutId = layout.id;
+      slide.elements.push({
+        id: crypto.randomUUID() as ElementId,
+        type: "image",
+        placement: "content",
+        frame: { x: x(0.6), y: y(0.3), width: x(0.35), height: y(0.5) },
+        rotationMilliDegree: 0,
+        locked: false,
+        source: { kind: "embedded", dataUrl: "data:image/png;base64,AA==", mimeType: "image/png" },
+        altText: "配图",
+      });
+      return document;
+    };
+
+    // A picture on a layout with no picture placeholder is on top of body
+    // geometry: the page was not laid out by the template.
+    const withoutPlaceholder = checkTemplateFit(build(false), target);
+    expect(withoutPlaceholder.issues.some((issue) => issue.code === "template-image-region")).toBe(true);
+
+    expect(checkTemplateFit(build(true), target).issues.some((issue) => issue.code === "template-image-region")).toBe(
+      false,
+    );
+  });
+
   it("passes a page whose title and body sit on the template grid", () => {
     const target = buildTemplateReviewTarget(analysis())!;
     const report = checkTemplateFit(withBody(), target);

@@ -269,6 +269,8 @@ export interface TextRun {
   bold?: boolean;
   color?: string;
   underline?: boolean;
+  /** External link preserved for this fragment. Only http(s) and mailto are accepted. */
+  hyperlinkUrl?: string;
 }
 
 /**
@@ -411,6 +413,25 @@ export interface SlideLayoutSpec {
   id: string;
   name: string;
   backgroundColor?: string;
+  /**
+   * What the layout's placeholders can hold.
+   *
+   * The regions themselves describe one rendering of the template and are not
+   * persisted; their meaning for composition is. A page that needs a picture
+   * cannot use a layout without a picture placeholder, and the check needs that
+   * fact at export time, long after the analysis is gone.
+   */
+  capabilities?: SlideLayoutCapabilities;
+}
+
+export interface SlideLayoutCapabilities {
+  hasTitle: boolean;
+  hasBody: boolean;
+  hasImage: boolean;
+  /** Body columns the layout offers: a comparison page needs two. */
+  columns: number;
+  /** No body placeholder: a cover, a section divider, or a full-bleed plate. */
+  free: boolean;
 }
 
 export type SupportedImageMimeType = "image/png" | "image/jpeg" | "image/webp";

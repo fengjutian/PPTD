@@ -1075,4 +1075,20 @@ describe("PPTX export", () => {
     expect(result.report.nativeObjectCount).toBe(2);
     expect(result.report.warnings.some((warning) => warning.includes("隐藏对象"))).toBe(true);
   });
+
+  it("exports a text-run hyperlink as an external editable relationship", async () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    if (element.type !== "text") throw new Error("TEXT_EXPECTED");
+    element.text = "Open report";
+    element.runs = [{ start: 0, end: 11, hyperlinkUrl: "https://example.com/report?id=7" }];
+
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    const entries = unzipSync(result.bytes);
+    const slideXml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    const relsXml = strFromU8(entries["ppt/slides/_rels/slide1.xml.rels"]!);
+    expect(slideXml).toContain("<a:hlinkClick");
+    expect(relsXml).toContain('TargetMode="External"');
+    expect(relsXml).toContain("https://example.com/report?id=7");
+  });
 });

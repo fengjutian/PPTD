@@ -11,7 +11,7 @@ describe("type scale band", () => {
     for (const preset of THEME_PRESETS) {
       const theme = findThemePreset(preset.id)?.theme;
       const concept = resolveDeckConcept({
-        concept: defaultConceptForPreset(preset.id),
+        concept: defaultConceptForPreset((preset as { concept?: string }).concept as never ?? (preset.id as never)),
         pageFacts: [],
         pageCount: 0,
         id: "band-check",

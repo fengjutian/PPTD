@@ -152,6 +152,13 @@ describe("importedDeckToDocument", () => {
     expect(document.slides[0]!.background).toBe("#102030");
   });
 
+  it("maps a supported native slide transition", () => {
+    const source = deck();
+    source.slides[0]!.transition = { kind: "wipe", speed: "slow", direction: "down" };
+    const document = importedDeckToDocument(source);
+    expect(document.slides[0]!.transition).toEqual({ kind: "wipe", speed: "slow", direction: "down" });
+  });
+
   it("clamps impossible crop values instead of producing an invalid image", () => {
     const source = deck();
     source.slides[0]!.elements = source.slides[0]!.elements.map((element) =>

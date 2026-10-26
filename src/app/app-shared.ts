@@ -75,6 +75,7 @@ export const templateFitLabels: Record<TemplateFitCode, string> = {
   "template-font": "字体偏离模板",
   "template-align": "段落对齐偏离模板",
   "template-line-spacing": "行距偏离模板",
+  "template-image-region": "模板版式没有图片占位",
 };
 /** The narrowest and the widest the property panel may be dragged to. */
 export const INSPECTOR_MIN_WIDTH = 220;

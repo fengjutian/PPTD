@@ -21,6 +21,7 @@ import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
 import { layoutFlow } from "../rendering/flow";
 import type { AiElementRepair, AiNormalizedRect, AiTemplateDecoration, TemplateLayoutIntent } from "./template-layouts";
 import {
+  layoutCapabilities,
   planTemplateLayouts,
   templateColumnRegions,
   templateContentRegion,
@@ -486,6 +487,9 @@ export function buildDesignedSlide(
         id: crypto.randomUUID(),
         name: recipe.name?.trim() || `模板版式 ${recipe.index + 1}`,
         ...(backgroundColor ? { backgroundColor } : {}),
+        // What this layout can hold, so a later check knows whether a page's
+        // picture had a placeholder to land in.
+        capabilities: layoutCapabilities(recipe.regions),
       };
       layoutSpecs.set(recipe.index, spec);
       layouts.push(spec);

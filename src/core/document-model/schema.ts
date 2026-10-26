@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { ELEMENT_NAME_MAX_LENGTH, MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 28 as const;
+export const CURRENT_SCHEMA_VERSION = 30 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -80,6 +80,11 @@ const textElement = base.extend({
         bold: z.boolean().optional(),
         color: hexColor.optional(),
         underline: z.boolean().optional(),
+        hyperlinkUrl: z
+          .string()
+          .max(2048)
+          .regex(/^(?:https?:\/\/[^\s\x00-\x1f]+|mailto:[^\s\x00-\x1f]+)$/i, "TEXT_RUN_HYPERLINK_SCHEME")
+          .optional(),
       }),
     )
     .max(200)
@@ -275,6 +280,15 @@ const slideLayoutSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(200),
   backgroundColor: hexColor.optional(),
+  capabilities: z
+    .object({
+      hasTitle: z.boolean(),
+      hasBody: z.boolean(),
+      hasImage: z.boolean(),
+      columns: z.number().int().min(1).max(4),
+      free: z.boolean(),
+    })
+    .optional(),
 });
 
 const contentBlockSchema = z.discriminatedUnion("type", [
@@ -730,6 +744,16 @@ const versionTwentyFiveDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentyEightDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(28) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
+const versionTwentyNineDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(29) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTwentySevenDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(27) })
   .superRefine(validateUniqueIds)
@@ -935,6 +959,11 @@ const migrations: Readonly<Record<number, Migration>> = {
   26: (document) => ({ ...versionTwentySixDocumentSchema.parse(document), schemaVersion: 27 }),
   // 28 adds the optional picture tone; a document without one is unchanged.
   27: (document) => ({ ...versionTwentySevenDocumentSchema.parse(document), schemaVersion: 28 }),
+  // 29 adds the optional layout capabilities; a layout without them is unchanged.
+  28: (document) => ({ ...versionTwentyEightDocumentSchema.parse(document), schemaVersion: 29 }),
+  // 30 preserves safe external links on text fragments. Older documents have
+  // no links, so migration must not infer a destination from visible text.
+  29: (document) => ({ ...versionTwentyNineDocumentSchema.parse(document), schemaVersion: 30 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

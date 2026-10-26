@@ -119,7 +119,8 @@ export function CroppedImage({ element, className, alt }: CroppedImageProps) {
 
 const toneFilterId = (elementId: string) => `tone-${elementId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
-const channel = (value: string, offset: number) => (Number.parseInt(value.slice(1 + offset, 3 + offset), 16) / 255).toFixed(4);
+const channel = (value: string, offset: number) =>
+  (Number.parseInt(value.slice(1 + offset, 3 + offset), 16) / 255).toFixed(4);
 
 /**
  * The canvas half of the exported `a:duotone`.

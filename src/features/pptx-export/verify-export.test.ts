@@ -75,10 +75,7 @@ describe("export read-back parity", () => {
       // and one carrying an effect (a tone) writes `<a:blip>…</a:blip>`. A
       // damage pass that only knew the first form would silently stop testing
       // anything once pictures can be toned (ADR 0102).
-      xml.replace(
-        /<a:blip\b[^>]*r:embed="[^"]*"[^>]*\/>|<a:blip\b[^>]*r:embed="[^"]*"[^>]*>[\s\S]*?<\/a:blip>/g,
-        "",
-      ),
+      xml.replace(/<a:blip\b[^>]*r:embed="[^"]*"[^>]*\/>|<a:blip\b[^>]*r:embed="[^"]*"[^>]*>[\s\S]*?<\/a:blip>/g, ""),
     );
     const report = verifyExportedPptx(damaged, document);
     expect(report.passed).toBe(false);

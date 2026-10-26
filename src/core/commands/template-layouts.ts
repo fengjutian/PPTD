@@ -8,6 +8,7 @@
  * layout actually declares.
  */
 
+import type { SlideLayoutCapabilities } from "../document-model";
 import type { BackgroundRange } from "../rendering/contrast";
 import type { PageDesignPlan } from "../design/design-plan";
 import type { RecipeId } from "../design/deck-concept";
@@ -389,4 +390,23 @@ export function planTemplateLayouts(input: {
     }
     return chosen;
   });
+}
+
+/**
+ * What a layout can hold, read from its placeholders.
+ *
+ * The regions themselves are not persisted — they describe one rendering of the
+ * template — but what they mean for composition is: a page that needs a picture
+ * cannot use a layout that has no picture placeholder. Persisting the summary
+ * is what lets the export say so (FR-V3 的前置).
+ */
+export function layoutCapabilities(regions: readonly AiTemplateRegion[]): SlideLayoutCapabilities {
+  const bodies = regions.filter((region) => region.role === "body").length;
+  return {
+    hasTitle: regions.some((region) => region.role === "title"),
+    hasBody: bodies > 0,
+    hasImage: regions.some((region) => region.role === "image"),
+    columns: bodies >= 2 ? 2 : 1,
+    free: bodies === 0,
+  };
 }
