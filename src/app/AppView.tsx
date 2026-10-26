@@ -58,6 +58,7 @@ export function AppView({ app }: { app: AppRuntime }) {
     revisionLabel,
     missingImageCount,
     dirty,
+    saving,
     setZoom,
     fitToWindow,
     zoom,
@@ -243,7 +244,18 @@ export function AppView({ app }: { app: AppRuntime }) {
                 ⚠ {missingImageCount} 张图片资源缺失
               </span>
             )}
-            <span className={`saved-dot ${dirty ? "dirty" : ""}`}>● {dirty ? "未保存" : "已保存"}</span>
+            <span
+              className={`saved-dot ${saving || dirty ? "dirty" : ""}`}
+              title={
+                saving
+                  ? "正在把当前项目写入项目文件"
+                  : dirty
+                    ? "幻灯片内容或设计已经改变，尚未写入项目文件；选择生成风格本身不会触发此状态"
+                    : "当前项目修改已经写入项目文件"
+              }
+            >
+              ● {saving ? "正在保存…" : dirty ? "项目有未保存更改" : "已保存"}
+            </span>
             <span className="zoom-controls">
               <button
                 type="button"

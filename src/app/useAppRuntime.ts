@@ -3907,7 +3907,7 @@ export function useAppRuntime() {
       // Browser previews without storage keep the choice for this session.
     }
     setTaskStatus(
-      `已选择「${profile.name}」，并匹配主题「${findThemePreset(profile.themePresetId)?.name ?? profile.themePresetId}」`,
+      `设计偏好已更新：已选择「${profile.name}」，并匹配主题「${findThemePreset(profile.themePresetId)?.name ?? profile.themePresetId}」；不会修改当前 PPT`,
     );
   };
   const templateTargetPreview = useMemo(

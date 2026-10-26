@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受（V0.2）
+已接受（V0.2）。导出展平部分由 [0109 原生分组导出](0109-native-group-export.md) 取代；编辑期选择组模型不变。
 
 ## 背景
 
@@ -41,7 +41,9 @@ store 的 `selectElement`、`toggleElement`、`selectElements` 把任一成员�
 
 ### 导出展平并如实报告
 
-PptxGenJS 没有分组 API，V0.2 不写 `<p:grpSp>`。成员仍导出为原生可编辑对象，只是 PowerPoint 中不再成组。
+> 后续：[0109](0109-native-group-export.md) 已实现原生 `<p:grpSp>` 导出。本节保留当时的选择记录。
+
+PptxGenJS 没有分组 API，本版不写 `<p:grpSp>`。成员仍导出为原生可编辑对象，只是 PowerPoint 中不再成组。
 
 导出 preflight 新增 `group-not-exported`，逐页说明；不把“编辑期分组”说成“原生分组”。
 
