@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDocument, emu, type TextElement } from "../document-model";
 import { setTextMeasurer } from "./text-metrics";
-import { estimateTextLines, fitTextToFrame, textInkBox, textLikelyOverflows } from "./text-fit";
+import { estimateTextLines, fitTextToFrame, textInkBox, textLikelyOverflows, textOverflowsFrame } from "./text-fit";
 
 describe("text fit estimation", () => {
   it("measures a CJK glyph as a full em", () => {
@@ -109,6 +109,30 @@ describe("fitting a text block to its frame", () => {
     try {
       expect(estimateTextLines("AAAA", 40, 10, "Arial")).toBe(1);
       expect(estimateTextLines("AAAA", 40, 10, "Arial", { bold: true })).toBe(2);
+    } finally {
+      setTextMeasurer(undefined);
+    }
+  });
+
+  it("counts an inline bold run as bold when it decides whether the copy fits", () => {
+    // Mixing weights is common (one emphasized word); the fit has to assume the
+    // wider face, or the renderer produces a line the fit never counted.
+    setTextMeasurer({ widthEm: (text, _family, bold) => [...text].length * (bold ? 1.1 : 0.5) });
+    try {
+      const document = createDocument();
+      const base = document.slides[0]!.elements[0]!;
+      if (base.type !== "text") throw new Error("expected a text element");
+      const element: TextElement = {
+        ...base,
+        text: "AAAA BBBB",
+        frame: { x: emu(0), y: emu(0), width: emu(80 * 12_700), height: emu(12 * 12_700) },
+        style: { ...base.style, bold: false, fontSizePt: 10, lineHeight: 1.2 },
+      };
+      // Regular advance: 4.4em + 2.5em = 6.9em = 69pt, one line in an 80pt frame.
+      expect(textOverflowsFrame(element)).toBe(false);
+      // One bold word: the fit has to assume 9.9em = 99pt, which needs two lines.
+      element.runs = [{ start: 0, end: 4, bold: true }];
+      expect(textOverflowsFrame(element)).toBe(true);
     } finally {
       setTextMeasurer(undefined);
     }

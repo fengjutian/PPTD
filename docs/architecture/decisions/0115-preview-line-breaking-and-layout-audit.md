@@ -71,7 +71,8 @@ ADR 0114 把测量、编译和诊断写进了布局系统，但生成结果仍�
 代价与限制：
 
 - 缩字会让"容量不足"看起来比"被裁切"温和。因此容量问题必须由 `text-overflow` 诊断与审计继续暴露，不能靠肉眼。
-- 测量器现在带**字重与字距**（`widthEm(text, family, bold)` + `letterSpacingPt`）。预览、审计、重排、文件，以及配方的标题拟合都用同一组参数：`deriveDesignTokens` 暴露 `titleTrackingPt` / `bodyTrackingPt`，配方通过 `headingMetrics()` 把它传给 `fittedFontSize`，所以规划阶段就知道标题会被字距撑宽。正文里的**行内粗体片段**仍按元素级的粗体判断（`runs` 里的局部加粗不参与断行），这是留着的一个近似。
+- 测量器现在带**字重与字距**（`widthEm(text, family, bold)` + `letterSpacingPt`）。预览、审计、重排、文件，以及配方与旧版构图的拟合都用同一组参数：`deriveDesignTokens` 暴露 `titleTrackingPt` / `bodyTrackingPt`，配方通过 `headingMetrics()` 传给 `fittedFontSize`；旧版 `text()` 直接从主题 token 取字距，并在创建元素时就写进样式，不再"先按无字距拟合、事后再补"。
+- 剩下的近似是**行内粗体**：`runs` 里只要有加粗片段，整段就按粗体测量（上界）。这让一段混排最多小一号，但绝不会出现渲染器多出一行、拟合却没数到的情况；精确的逐字宽度需要断行器携带片段索引，留作后续。
 - 编辑画布仍按 CSS 断行并裁掉超框的行，只是现在会画一圈警告边；把画布改成"缩小/溢出可见"仍会牵扯相邻元素的交互，属于下一步。
 - 缩字只发生在预览与导出（`normAutofit`），不会回写文档字号；文档里保留设计意图的字号，容量冲突靠诊断暴露。
 - 审计只判断"框放不放得下"，不判断可读性（行长、字号带）——那属于味觉 lint。

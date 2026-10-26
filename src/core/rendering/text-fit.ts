@@ -316,10 +316,20 @@ export function textOverflowsFrame(element: TextElement, tolerance = 1.001): boo
   );
 }
 
-/** The run properties of an element that change its advance. */
+/**
+ * The run properties of an element that change its advance.
+ *
+ * An inline bold run counts as bold for the whole measurement. That is an upper
+ * bound rather than the exact sum: a paragraph with one emphasized word measured
+ * as if every word were bold wraps a little earlier, which costs a point of size
+ * in the worst case but can never leave the renderer with a line the fit did not
+ * count. Exact per-character advances are a follow-up that needs the breaker to
+ * carry run indices.
+ */
 export function runMetricsOf(element: TextElement): TextRunMetrics {
+  const inlineBold = element.runs?.some((run) => run.bold === true) === true;
   return {
-    ...(element.style.bold ? { bold: true } : {}),
+    ...(element.style.bold || inlineBold ? { bold: true } : {}),
     ...(element.style.letterSpacingPt === undefined ? {} : { letterSpacingPt: element.style.letterSpacingPt }),
   };
 }

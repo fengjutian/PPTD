@@ -733,7 +733,7 @@ function drawText(
     fontSize: nominal,
     lineHeight: lineHeightRatio,
     fontFamily: element.style.fontFamily,
-    bold: element.style.bold,
+    bold: metrics.bold,
     letterSpacingPt: element.style.letterSpacingPt,
   });
   const fontSize = fit.fontSize;

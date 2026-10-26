@@ -17,7 +17,7 @@ import {
   readableTextColor,
   readableTextColorOnRange,
 } from "../rendering/contrast";
-import { estimateTextLines, textLikelyOverflows } from "../rendering/text-fit";
+import { estimateTextLines, textLikelyOverflows, type TextRunMetrics } from "../rendering/text-fit";
 import { layoutFlow } from "../rendering/flow";
 import type { AiElementRepair, AiNormalizedRect, AiTemplateDecoration, TemplateLayoutIntent } from "./template-layouts";
 import {
@@ -142,13 +142,14 @@ export function createDesignContext(
     minimumPt = 12,
     lineHeightRatio = 1.2,
     maximumPt = preferredPt,
+    metrics?: TextRunMetrics,
   ): number => {
     const widthPt = box.width / 12_700;
     const heightPt = box.height / 12_700;
     // The same line estimator the quality gate uses decides whether a size
     // fits, so a page that passes generation cannot be reported as overflow.
     const fits = (size: number) =>
-      estimateTextLines(value, widthPt, size, majorFont) * size * lineHeightRatio <= heightPt;
+      estimateTextLines(value, widthPt, size, majorFont, metrics) * size * lineHeightRatio <= heightPt;
     const minimum = Math.max(1, Math.round(minimumPt));
     const maximum = Math.max(minimum, Math.round(maximumPt));
     const preferred = Math.min(maximum, Math.max(minimum, Math.round(preferredPt)));
@@ -184,7 +185,23 @@ export function createDesignContext(
     // being a wall. Bold copy over 24 characters is almost always a title, so
     // it gets a ceiling instead of growing until the frame is full.
     const longBoldCap = bold ? (value.length > 36 ? 30 : value.length > 24 ? 34 : undefined) : undefined;
-    const fitted = Math.min(fittedFontSize(value, box, fontSizePt, minimumPt), longBoldCap ?? Infinity);
+    // The theme's tracking is part of the type, not a decoration applied later:
+    // it widens the line the fit is measuring, so the size has to see it. The
+    // element carries it from here on, and the export writes it as charSpacing.
+    const trackingPt =
+      contentRef === "title"
+        ? document.theme?.textStyles?.title?.letterSpacingPt
+        : contentRef === "body"
+          ? document.theme?.textStyles?.body?.letterSpacingPt
+          : undefined;
+    const runMetrics: TextRunMetrics = {
+      ...(bold ? { bold: true } : {}),
+      ...(trackingPt === undefined || trackingPt === 0 ? {} : { letterSpacingPt: trackingPt }),
+    };
+    const fitted = Math.min(
+      fittedFontSize(value, box, fontSizePt, minimumPt, 1.2, fontSizePt, runMetrics),
+      longBoldCap ?? Infinity,
+    );
     const range = typeof background === "number" ? { darkest: background, lightest: background } : background;
     const palette = ink(range ? range.darkest : 1);
     const large = isLargeText(fitted, bold);
@@ -207,7 +224,14 @@ export function createDesignContext(
       locked: false,
       text: value,
       ...(runs && runs.length > 0 ? { runs } : {}),
-      style: { fontFamily: majorFont, fontSizePt: fitted, color: resolved, bold, align },
+      style: {
+        fontFamily: majorFont,
+        fontSizePt: fitted,
+        color: resolved,
+        bold,
+        align,
+        ...(trackingPt === undefined || trackingPt === 0 ? {} : { letterSpacingPt: trackingPt }),
+      },
     };
   };
   const shape = (
