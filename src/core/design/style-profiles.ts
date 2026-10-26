@@ -1,4 +1,4 @@
-import type { ConceptPresetId, RecipeId } from "./deck-concept";
+import { CONCEPT_PRESET_IDS, type ConceptPresetId, type RecipeId } from "./deck-concept";
 import type { ThemeDirection } from "./theme-direction";
 
 export type StyleProfileId =
@@ -429,6 +429,24 @@ export function findStyleProfile(id: string | undefined): StyleProfile | undefin
   return STYLE_PROFILES.find((profile) => profile.id === id);
 }
 
+/**
+ * Gives each renderable direction its own visual language. The selected style
+ * occupies its natural skeleton; the other slots use deterministic alternatives
+ * so the comparison is style-versus-style rather than one palette four times.
+ */
+export function styleProfilesForDirections(selected: StyleProfile | undefined): ReadonlyMap<ConceptPresetId, StyleProfile> {
+  const result = new Map<ConceptPresetId, StyleProfile>();
+  if (selected) result.set(selected.preferredConcept, selected);
+  for (const concept of CONCEPT_PRESET_IDS) {
+    if (result.has(concept)) continue;
+    const profile = STYLE_PROFILES.find(
+      (candidate) => candidate.preferredConcept === concept && candidate.id !== selected?.id,
+    );
+    if (profile) result.set(concept, profile);
+  }
+  return result;
+}
+
 /** Turns the catalog entry into the narrow contract shared by AI and code. */
 export function styleConstraintForProfile(profile: StyleProfile | undefined): StyleConstraint | undefined {
   if (!profile) return undefined;
@@ -442,7 +460,12 @@ export function styleConstraintForProfile(profile: StyleProfile | undefined): St
     tokens: {
       spacing: profile.density === "airy" ? "wide" : profile.density === "compact" ? "tight" : "regular",
       corner: ["glass", "organic", "three-dimensional"].includes(composition) ? "rounded" : "subtle",
-      shadow: composition === "glass" || composition === "three-dimensional" ? "raised" : "none",
+      shadow:
+        composition === "glass" || composition === "three-dimensional"
+          ? "raised"
+          : composition === "paper" || composition === "luxury"
+            ? "paper"
+            : "none",
       line: ["minimal", "paper", "luxury"].includes(composition) ? "fine" : "strong",
       imageCrop: profile.preferredConcept === "documentary" ? "full-bleed" : composition === "editorial" ? "editorial" : "contained",
     },

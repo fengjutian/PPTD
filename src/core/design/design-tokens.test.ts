@@ -5,6 +5,7 @@ import { defaultEditorialConcept, resolveDeckConcept } from "./deck-concept";
 import { deriveDesignTokens, deriveSemanticColors, sameAppearance } from "./design-tokens";
 import { colorLuminance, contrastRatio } from "../rendering/contrast";
 import type { CompositionFacts } from "../commands/design-intent";
+import { findStyleProfile, styleConstraintForProfile } from "./style-profiles";
 
 function concept(typeContrast: "calm" | "strong" | "dramatic") {
   const facts: CompositionFacts = {
@@ -89,6 +90,29 @@ describe("design tokens", () => {
     expect(tokens.type.titlePt).toBe(30);
     expect(tokens.type.bodyPt).toBe(18);
     expect(tokens.type.lineHeight).toBe(1.25);
+  });
+
+  it("turns style constraints into deterministic geometry and material tokens", () => {
+    const glass = deriveDesignTokens(
+      findThemePreset("tech-blue")!.theme,
+      page,
+      concept("strong"),
+      undefined,
+      styleConstraintForProfile(findStyleProfile("glassmorphism")),
+    );
+    const paper = deriveDesignTokens(
+      findThemePreset("paper-ink")!.theme,
+      page,
+      concept("strong"),
+      undefined,
+      styleConstraintForProfile(findStyleProfile("zen")),
+    );
+
+    expect(glass.radius.cardPt).toBe(14);
+    expect(glass.material).toEqual({ shadow: "raised", imageCrop: "contained" });
+    expect(paper.material.shadow).toBe("paper");
+    expect(paper.rule.hairlinePt).toBeLessThanOrEqual(0.75);
+    expect(paper.grid.gutter).toBeGreaterThan(0);
   });
 });
 

@@ -5,6 +5,7 @@ import {
   applyStyleProfileToThemeDirection,
   findStyleProfile,
   styleConstraintForProfile,
+  styleProfilesForDirections,
   STYLE_PROFILES,
 } from "./style-profiles";
 import { themeDirectionForPreset } from "./theme-direction";
@@ -63,5 +64,14 @@ describe("style profiles", () => {
     expect(constraint.density).toBe("balanced");
     expect(constraint.tokens).toMatchObject({ spacing: "regular", corner: "rounded", shadow: "raised" });
     expect(constraint.capability?.status).toBe("partial");
+  });
+
+  it("assigns a distinct style to each direction while keeping the selected style", () => {
+    const selected = findStyleProfile("glassmorphism")!;
+    const directions = styleProfilesForDirections(selected);
+
+    expect(directions.get("editorial")?.id).toBe("glassmorphism");
+    expect([...directions.values()].map((profile) => profile.id)).toHaveLength(4);
+    expect(new Set([...directions.values()].map((profile) => profile.id)).size).toBe(4);
   });
 });

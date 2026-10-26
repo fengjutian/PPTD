@@ -1,7 +1,7 @@
 import type { ConceptPresetId } from "../core/design/deck-concept";
 import type { AiDraft } from "../services/ai-service";
 
-/** Cover plus the page that best exposes one direction's unique skeleton. */
+/** Two content pages that expose the direction; a shared cover hides differences. */
 export function directionPreviewIndexes(draft: AiDraft, preset: ConceptPresetId): number[] {
   if (draft.slides.length <= 1) return [0];
   const candidates = draft.slides.map((slide, index) => ({ slide, index })).filter(({ index }) => index > 0);
@@ -24,6 +24,8 @@ export function directionPreviewIndexes(draft: AiDraft, preset: ConceptPresetId)
       return items.length >= 3 && items.length <= 6;
     })?.index;
   })();
-  const contentFallback = candidates.find(({ slide }) => slide.body.trim().length >= 60)?.index;
-  return [0, index ?? contentFallback ?? 1];
+  const contentFallback = candidates.find(({ slide }) => slide.body.trim().length >= 60)?.index ?? 1;
+  const primary = index ?? contentFallback;
+  const secondary = candidates.find((candidate) => candidate.index !== primary)?.index;
+  return secondary === undefined ? [primary] : [primary, secondary];
 }

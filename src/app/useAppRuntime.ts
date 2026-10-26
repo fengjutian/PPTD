@@ -168,14 +168,17 @@ import { useEditorStore } from "../store/editor-store";
 import { useDiagnostics } from "./use-diagnostics";
 import { useClipboard } from "./use-clipboard";
 import { useAnimationPreview } from "./use-animation-preview";
-import { defaultThemePreset, findThemePreset } from "../core/design/theme-presets";
+import { defaultThemePreset, findThemePreset, type ThemePreset } from "../core/design/theme-presets";
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
 import { themePresetMetadata } from "../core/design/theme-preset-metadata";
 import {
   applyStyleProfileToThemeDirection,
   findStyleProfile,
   styleConstraintForProfile,
+  styleProfilesForDirections,
   STYLE_PROFILES,
+  type StyleConstraint,
+  type StyleProfile,
   type StyleProfileId,
 } from "../core/design/style-profiles";
 
@@ -2488,14 +2491,14 @@ export function useAppRuntime() {
       findThemePreset(recommendedPresetFor(sourceDraft.title.trim(), sourceDraft).presetId) ?? defaultThemePreset();
     const preparedPreset = prepared ? findThemePreset(prepared.presetId) : undefined;
     if (prepared && !preparedPreset) return;
-    const preset = preparedPreset
+    let preset = preparedPreset
       ? preparedPreset
       : mode === "preset"
         ? (findThemePreset(
             draftOverride ? sourceRecommendedThemePreset.id : themePresetId || sourceRecommendedThemePreset.id,
           ) ?? defaultThemePreset())
         : undefined;
-    const analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
+    let analysis: TemplateAnalysis = preset ? presetTemplateAnalysis(preset) : templateAnalysis!;
     // The uploaded template already drives generation. Compile the same
     // analysis into a measurable target so the review prompt, the acceptance
     // gate, the repair plan and the report judge the deck against it too.
@@ -2503,9 +2506,9 @@ export function useAppRuntime() {
     const visualGoal = templateTarget
       ? applyTemplateToGoal(defaultPresentationVisualGoal(), templateTarget)
       : defaultPresentationVisualGoal();
-    const styleProfile = findStyleProfile(styleProfileId);
-    const styleConstraint = styleConstraintForProfile(styleProfile);
-    const themeDirection = applyStyleProfileToThemeDirection(
+    let styleProfile = findStyleProfile(styleProfileId);
+    let styleConstraint = styleConstraintForProfile(styleProfile);
+    let themeDirection = applyStyleProfileToThemeDirection(
       preset ? themeDirectionForPreset(preset) : undefined,
       styleProfile,
     );
@@ -2591,8 +2594,6 @@ export function useAppRuntime() {
           try {
             proposals = await generateDeckDirections(sourceDraft, briefs, analysis, {
               taskId,
-              themeDirection,
-              styleConstraint,
               recentLooks,
               preferences: preferences.map(({ text, scope }) => ({ text, scope })),
             });
@@ -2611,15 +2612,36 @@ export function useAppRuntime() {
             concept: DeckConcept;
             images: string[];
             previewIndexes: number[];
+            styleProfile: StyleProfile;
+            themePreset: ThemePreset;
+            analysis: TemplateAnalysis;
+            styleConstraint: StyleConstraint;
+            themeDirection: ThemeDirection;
           };
+          const directionStyles = styleProfilesForDirections(styleProfile);
           // 四个方向各自有一次模型请求和两次本地渲染。串行执行把等待时间乘以
           // 四，是"设计阶段超时"最直接的原因；这里按方向并行，单个方向失败
           // 仍然只丢弃它自己，不影响其余三个。
           const previews = await Promise.all(
             proposals.map(async (proposal): Promise<DirectionCandidate | undefined> => {
               try {
+                const directionStyle = directionStyles.get(proposal.preset);
+                if (!directionStyle) throw new Error("DIRECTION_STYLE_MISSING");
+                const directionPreset = findThemePreset(directionStyle.themePresetId);
+                if (!directionPreset) throw new Error("DIRECTION_THEME_MISSING");
+                const directionAnalysis = presetTemplateAnalysis(directionPreset);
+                const directionConstraint = styleConstraintForProfile(directionStyle)!;
+                const directionTheme = applyStyleProfileToThemeDirection(
+                  themeDirectionForPreset(directionPreset),
+                  directionStyle,
+                )!;
+                const styledProposal: AiDeckConcept = {
+                  ...proposal,
+                  name: directionStyle.name,
+                  idea: directionStyle.summary,
+                };
                 const resolved = resolveDeckConcept({
-                  concept: proposal,
+                  concept: styledProposal,
                   pageFacts,
                   pageCount: sourceDraft.slides.length,
                 }).concept;
@@ -2630,11 +2652,11 @@ export function useAppRuntime() {
                   presentationBrief: sourceDraft.presentationBrief,
                 };
                 const previewBriefs = previewIndexes.map((index) => briefs[index]!);
-                const previewDesign = await generatePresentationDesign(previewDraft, previewBriefs, analysis, {
+                const previewDesign = await generatePresentationDesign(previewDraft, previewBriefs, directionAnalysis, {
                   concept: resolved,
                   taskId,
-                  themeDirection,
-                  styleConstraint,
+                  themeDirection: directionTheme,
+                  styleConstraint: directionConstraint,
                 });
                 if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
                 const pages = buildDirectionPreviewPages({
@@ -2642,17 +2664,14 @@ export function useAppRuntime() {
                   concept: resolved,
                   pageIndexes: previewIndexes,
                   designs: previewDesign.slides,
-                  ...(preset
-                    ? {
-                        commandBase: {
-                          themePresetId: preset.id,
-                          visualAssets: buildPreviewAssets(previewDesign.slides).map((asset) => ({
-                            ...asset,
-                            slideIndex: previewIndexes[asset.slideIndex] ?? asset.slideIndex,
-                          })),
-                        },
-                      }
-                    : {}),
+                  commandBase: {
+                    themePresetId: directionPreset.id,
+                    styleConstraint: directionConstraint,
+                    visualAssets: buildPreviewAssets(previewDesign.slides).map((asset) => ({
+                      ...asset,
+                      slideIndex: previewIndexes[asset.slideIndex] ?? asset.slideIndex,
+                    })),
+                  },
                   title: sourceDraft.title,
                 });
                 // 渲染是本机画布工作，两页之间没有依赖，没有理由排队。
@@ -2667,11 +2686,11 @@ export function useAppRuntime() {
                   setDesignDetail(`AI 正在为 ${sourceDraft.slides.length} 页选择版式、构图与配色；完成后再本地渲染`);
                   let fullDesign = directionFullDesignsRef.current.get(id);
                   if (!fullDesign) {
-                    fullDesign = generatePresentationDesign(sourceDraft, briefs, analysis, {
+                    fullDesign = generatePresentationDesign(sourceDraft, briefs, directionAnalysis, {
                       concept: resolved,
                       taskId,
-                      themeDirection,
-                      styleConstraint,
+                      themeDirection: directionTheme,
+                      styleConstraint: directionConstraint,
                     });
                     directionFullDesignsRef.current.set(id, fullDesign);
                   }
@@ -2685,7 +2704,8 @@ export function useAppRuntime() {
                       slides: sourceDraft.slides,
                       designs: result.slides,
                       designConcept: resolved,
-                      ...(preset ? { themePresetId: preset.id } : {}),
+                      themePresetId: directionPreset.id,
+                      styleConstraint: directionConstraint,
                       visualAssets: buildPreviewAssets(result.slides),
                       backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
                     });
@@ -2698,7 +2718,18 @@ export function useAppRuntime() {
                   });
                   return rendered;
                 });
-                return { id, proposal, concept: resolved, images: rendered, previewIndexes };
+                return {
+                  id,
+                  proposal: styledProposal,
+                  concept: resolved,
+                  images: rendered,
+                  previewIndexes,
+                  styleProfile: directionStyle,
+                  themePreset: directionPreset,
+                  analysis: directionAnalysis,
+                  styleConstraint: directionConstraint,
+                  themeDirection: directionTheme,
+                };
               } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 if (designCancelRef.current || message.includes("CANCELLED")) throw error;
@@ -2783,7 +2814,7 @@ export function useAppRuntime() {
             regenerations,
             promptVersion: DESIGN_DIRECTIONS_PROMPT_VERSION,
           };
-          return { concept: chosen.concept, record, design: previewedDesign };
+          return { concept: chosen.concept, record, design: previewedDesign, direction: chosen };
         }
         return { unavailable: true };
       };
@@ -2801,6 +2832,18 @@ export function useAppRuntime() {
           concept = gated.concept;
           designDirection = gated.record;
           design = gated.design;
+          preset = gated.direction.themePreset;
+          analysis = gated.direction.analysis;
+          styleProfile = gated.direction.styleProfile;
+          styleConstraint = gated.direction.styleConstraint;
+          themeDirection = gated.direction.themeDirection;
+          setStyleProfileId(styleProfile.id);
+          setThemePresetId(preset.id);
+          try {
+            window.localStorage.setItem("pptd.style-profile", styleProfile.id);
+          } catch {
+            // The generated document still keeps the chosen style for this run.
+          }
         } else {
           if (gated?.unavailable) {
             // The gate is an enhancement, not a prerequisite. Say so instead of
@@ -2951,6 +2994,7 @@ export function useAppRuntime() {
         slides: sourceDraft.slides,
         designs: design.slides,
         designConcept: concept,
+        ...(styleConstraint ? { styleConstraint } : {}),
         ...(designDirection ? { designDirection } : {}),
         pageSize: hasTemplateSize
           ? { width: emu(analysis.slideWidthEmu!), height: emu(analysis.slideHeightEmu!) }

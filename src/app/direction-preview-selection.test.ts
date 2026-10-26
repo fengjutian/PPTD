@@ -60,10 +60,10 @@ const draft: AiDraft = {
 
 describe("direction preview page selection", () => {
   it("uses different evidence pages for the four skeletons", () => {
-    expect(directionPreviewIndexes(draft, "editorial")).toEqual([0, 1]);
-    expect(directionPreviewIndexes(draft, "documentary")).toEqual([0, 2]);
-    expect(directionPreviewIndexes(draft, "instrument")).toEqual([0, 3]);
-    expect(directionPreviewIndexes(draft, "paper")).toEqual([0, 4]);
+    expect(directionPreviewIndexes(draft, "editorial")).toEqual([1, 2]);
+    expect(directionPreviewIndexes(draft, "documentary")).toEqual([2, 1]);
+    expect(directionPreviewIndexes(draft, "instrument")).toEqual([3, 1]);
+    expect(directionPreviewIndexes(draft, "paper")).toEqual([4, 1]);
   });
 
   it("falls back to the first content page for a sparse deck", () => {
@@ -72,6 +72,6 @@ describe("direction preview page selection", () => {
       presentationBrief: draft.presentationBrief,
       slides: [draft.slides[0]!, { ...draft.slides[1]!, title: "正文", body: "一句话" }],
     };
-    expect(directionPreviewIndexes(sparse, "documentary")).toEqual([0, 1]);
+    expect(directionPreviewIndexes(sparse, "documentary")).toEqual([1]);
   });
 });

@@ -44,7 +44,7 @@ import { surfaceSafeRegion, surfaceShowsRule } from "../design/surface-profile";
 import { resolveChartKind } from "../design/data-relation";
 import { compileDesignPlanWithRetry } from "../layout/design-compiler";
 import type { DesignCompileReport } from "../layout/design-compiler";
-import { consumptionProblem, isImageRecipe, selectRecipe } from "../layout/recipes/plan";
+import { consumptionProblem, isImageRecipe, selectPreferredStyleRecipe, selectRecipe } from "../layout/recipes/plan";
 import type { RecipeContext } from "../layout/recipes/types";
 import { planPageChrome } from "../layout/page-chrome";
 import { coverCrop } from "../rendering/image-fit";
@@ -219,7 +219,19 @@ export function createDesignContext(
     rotationMilliDegree: 0,
     locked: false,
     shape: kind,
-    style: { fill, stroke, strokeWidthPt, radiusPt: kind === "ellipse" ? 999 : 8 },
+    style: {
+      fill,
+      stroke,
+      strokeWidthPt,
+      radiusPt:
+        kind === "ellipse"
+          ? 999
+          : command.styleConstraint?.tokens.corner === "none"
+            ? 0
+            : command.styleConstraint?.tokens.corner === "rounded"
+              ? 14
+              : 6,
+    },
   });
   const points = (body: string) =>
     body
@@ -900,7 +912,13 @@ export function buildDesignedSlide(
     const templateImage = recipe ? templateImageRegion(recipe)?.frame : undefined;
     const pageIndex = command.pageContext?.index ?? index;
     const pageTotal = command.pageContext?.total ?? command.slides.length;
-    const tokens = deriveDesignTokens(document.theme, document.pageSize, concept, design.designPlan?.typeScale);
+    const tokens = deriveDesignTokens(
+      document.theme,
+      document.pageSize,
+      concept,
+      design.designPlan?.typeScale,
+      command.styleConstraint,
+    );
     // The template artwork is the background the recipe actually paints on.
     // A dark artwork needs the title ink as the accent, otherwise the
     // numbers and rules disappear into the picture.
@@ -994,17 +1012,25 @@ export function buildDesignedSlide(
       if (problem) throw new Error(`AI_DESIGN_CONTENT_LOSS: ${problem}`);
       return compiled;
     }
+    const recipeOptions = {
+      hasArtwork: keepsArtwork,
+      hasAsset: hasActualAsset,
+      hasTemplate,
+      ...(templateImage ? { hasTemplateImage: true } : {}),
+      ...(hasActualAsset && assetPlan.role ? { assetRole: assetPlan.role } : {}),
+    };
+    const styleRecipe = command.styleConstraint
+      ? selectPreferredStyleRecipe(command.styleConstraint.preferredRecipes, {
+          facts: compositionFacts,
+          concept,
+          options: recipeOptions,
+        })
+      : undefined;
     const selection = selectRecipe({
       facts: compositionFacts,
       concept,
-      requested: design.recipe,
-      options: {
-        hasArtwork: keepsArtwork,
-        hasAsset: hasActualAsset,
-        hasTemplate,
-        ...(templateImage ? { hasTemplateImage: true } : {}),
-        ...(hasActualAsset && assetPlan.role ? { assetRole: assetPlan.role } : {}),
-      },
+      requested: styleRecipe ?? design.recipe,
+      options: recipeOptions,
     });
     if (!selection.recipe) return undefined;
     const plan = selection.recipe.plan({
@@ -2728,6 +2754,46 @@ export function buildDesignedSlide(
       ),
       origin: "generated",
     });
+  }
+  // Style material tokens are enforced after either the recipe or legacy path
+  // has produced native objects. This makes the style a deterministic compiler
+  // input instead of a prompt the model may ignore.
+  if (command.styleConstraint && command.designConcept) {
+    const tokens = deriveDesignTokens(
+      document.theme,
+      document.pageSize,
+      command.designConcept,
+      design.designPlan?.typeScale,
+      command.styleConstraint,
+    );
+    for (const element of slide.elements) {
+      if (element.type === "shape" && element.shape !== "ellipse") {
+        const widthRatio = element.frame.width / pageWidth;
+        const heightRatio = element.frame.height / pageHeight;
+        const isPanel = widthRatio >= 0.08 && heightRatio >= 0.06 && widthRatio * heightRatio < 0.82;
+        if (isPanel) {
+          element.style.radiusPt = tokens.radius.cardPt;
+          if (tokens.material.shadow === "raised") element.style.shadow = "raised";
+          else if (tokens.material.shadow === "paper") element.style.shadow = "card";
+          else delete element.style.shadow;
+        }
+        if (element.style.strokeWidthPt > 0) element.style.strokeWidthPt = tokens.rule.hairlinePt;
+      } else if (element.type === "line") {
+        element.style.strokeWidthPt = tokens.rule.hairlinePt;
+      } else if (element.type === "image" && element.placement === "content") {
+        if (tokens.radius.cardPt >= 10) element.frameShape = "roundRect";
+        else if (tokens.radius.cardPt === 0) delete element.frameShape;
+        if (element.crop && tokens.material.imageCrop !== "editorial") {
+          const factor = tokens.material.imageCrop === "contained" ? 0.35 : 1;
+          element.crop = {
+            top: element.crop.top * factor,
+            bottom: element.crop.bottom * factor,
+            left: element.crop.left * factor,
+            right: element.crop.right * factor,
+          };
+        }
+      }
+    }
   }
   // Provenance is what lets a later design-only relayout replace the
   // generated composition without deleting anything the user added.
