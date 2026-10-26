@@ -280,7 +280,7 @@ describe("design-only relayout", () => {
     }
 
     it("rebuilds the composition from a target layout without touching content or the layout list", () => {
-      const source = pageWithLayouts([{ type: "bullet-list", items: ["第一项", "第二项"] }]);
+      const source = structuredClone(pageWithLayouts([{ type: "bullet-list", items: ["第一项", "第二项"] }]));
       const slide = source.slides[0]!;
       const slideId = slide.id;
       const contentBefore = JSON.stringify(slide.content);
@@ -309,14 +309,17 @@ describe("design-only relayout", () => {
           (element) => element.type === "text" && element.text === "手工备注" && element.origin === "user",
         ),
       ).toBe(true);
-      const bodyTexts = resultSlide.elements.filter(
-        (element) => element.type === "text" && element.contentRef === "body",
+      const first = resultSlide.elements.find(
+        (element) => element.type === "text" && element.text === "第一项",
+      );
+      const second = resultSlide.elements.find(
+        (element) => element.type === "text" && element.text === "第二项",
       );
       // A 双栏 target has to actually draw two columns, not only rewrite layoutId.
-      expect(bodyTexts.some((element) => element.frame.x < result.pageSize.width / 2)).toBe(true);
-      expect(bodyTexts.some((element) => element.frame.x + element.frame.width > result.pageSize.width / 2)).toBe(
-        true,
-      );
+      expect(first?.type === "text" && first.frame.x < result.pageSize.width / 2).toBe(true);
+      expect(
+        second?.type === "text" && second.frame.x > result.pageSize.width / 2,
+      ).toBe(true);
     });
 
     it("refuses a missing layout and a layout that would hide reviewed copy", () => {
