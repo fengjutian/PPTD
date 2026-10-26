@@ -228,7 +228,14 @@ function repairStrandedLines(slide: Slide, record: (adjustment: TextRefitAdjustm
   }
   const strands = (members: readonly TextElement[], size: number): number =>
     members.filter((element) =>
-      endsInOrphan(\n        element.text,\n        element.frame.width / EMU_PER_PT,\n        size,\n        element.style.fontFamily,\n        3,\n        runMetricsOf(element),\n      ),
+      endsInOrphan(
+        element.text,
+        element.frame.width / EMU_PER_PT,
+        size,
+        element.style.fontFamily,
+        3,
+        runMetricsOf(element),
+      ),
     ).length;
   for (const [designedPt, members] of groups) {
     const current = strands(members, designedPt);

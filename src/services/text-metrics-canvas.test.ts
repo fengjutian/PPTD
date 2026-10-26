@@ -30,7 +30,19 @@ describe("canvas text measurer", () => {
     const context = fakeCanvas();
     const measurer = createCanvasTextMeasurer();
     expect(measurer?.widthEm("AAAA", "Arial")).toBe(2);
-    expect(context.font).toBe('100px "Arial"');
+    expect(context.font).toBe('400 100px "Arial"');
+  });
+
+  it("measures a bold run with the bold face", () => {
+    // A title is set in 700 weight; measuring it with the regular advance made
+    // the file wrap a word later than the picture the reviewer approved.
+    const context = fakeCanvas();
+    const measurer = createCanvasTextMeasurer();
+    measurer?.widthEm("标题", "Arial", true);
+    expect(context.font).toBe('700 100px "Arial"');
+    // The cache is keyed by weight, so the regular face is still measured as one.
+    measurer?.widthEm("标题", "Arial", false);
+    expect(context.font).toBe('400 100px "Arial"');
   });
 
   it("escapes a font family that would break the font shorthand", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDocument, emu, type TextElement } from "../document-model";
+import { setTextMeasurer } from "./text-metrics";
 import { estimateTextLines, fitTextToFrame, textInkBox, textLikelyOverflows } from "./text-fit";
 
 describe("text fit estimation", () => {
@@ -80,6 +81,37 @@ describe("fitting a text block to its frame", () => {
     expect(fit.overflow).toBe(false);
     expect(fit.lines).toHaveLength(3);
     expect(fit.lines.join("")).toBe(text.replace(/\n/g, ""));
+  });
+
+  it("counts the tracking the export writes between glyphs", () => {
+    // Fifteen full-width glyphs at 20pt are 300pt: exactly the frame. One point
+    // of tracking per glyph is 15pt the file will use and the measure used to
+    // ignore, which is how a tracked title wrapped in PowerPoint but not in the
+    // preview.
+    const text = "一二三四五六七八九十一二三四五";
+    expect(estimateTextLines(text, 300, 20)).toBe(1);
+    expect(estimateTextLines(text, 300, 20, undefined, { letterSpacingPt: 1 })).toBe(2);
+    const fit = fitTextToFrame(text, {
+      width: 300,
+      height: 25,
+      fontSize: 20,
+      lineHeight: 1.25,
+      letterSpacingPt: 1,
+    });
+    expect(fit.shrunk).toBe(true);
+    expect(fit.fontSize).toBeLessThan(20);
+    expect(fit.lines.join("")).toBe(text);
+  });
+
+  it("measures a bold run with the bold advance the measurer reports", () => {
+    // No canvas here, so the test registers a measurer that models the weight.
+    setTextMeasurer({ widthEm: (text, _family, bold) => [...text].length * (bold ? 1.1 : 0.5) });
+    try {
+      expect(estimateTextLines("AAAA", 40, 10, "Arial")).toBe(1);
+      expect(estimateTextLines("AAAA", 40, 10, "Arial", { bold: true })).toBe(2);
+    } finally {
+      setTextMeasurer(undefined);
+    }
   });
 
   it("reports a conflict when even the smallest size cannot hold the copy", () => {

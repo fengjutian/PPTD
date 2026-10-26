@@ -4,6 +4,7 @@ import { applyCommand } from "../commands/commands";
 import {
   createDocument,
   createSlide,
+  emu,
   inches,
   type Emu,
   type PresentationDocument,
@@ -23,6 +24,8 @@ function textPage(overrides: {
   fontSizePt: number;
   lineHeight?: number;
   verticalAlign?: "top" | "middle" | "bottom";
+  letterSpacingPt?: number;
+  bold?: boolean;
 }): { slide: Slide; element: TextElement } {
   const slide = createSlide(2);
   const base = slide.elements[0]!;
@@ -36,6 +39,8 @@ function textPage(overrides: {
       fontSizePt: overrides.fontSizePt,
       ...(overrides.lineHeight === undefined ? {} : { lineHeight: overrides.lineHeight }),
       ...(overrides.verticalAlign === undefined ? {} : { verticalAlign: overrides.verticalAlign }),
+      ...(overrides.letterSpacingPt === undefined ? {} : { letterSpacingPt: overrides.letterSpacingPt }),
+      ...(overrides.bold === undefined ? {} : { bold: overrides.bold }),
     },
   };
   slide.elements = [element];
@@ -131,6 +136,37 @@ describe("text refit", () => {
     const report = refitSlideText(slide, pageHeight);
     expect(report.adjustments.map((adjustment) => adjustment.kind)).toEqual(["shrank-type"]);
     expect(element.frame).toEqual(before);
+  });
+
+  it("counts the tracking the exported file will apply", () => {
+    // Fifteen full-width glyphs at 20pt are exactly 300pt wide. The design gives
+    // the title 1pt of tracking per glyph, so the file needs 315pt: the text
+    // wraps where the untracked measure said it fit, and the refit has to see
+    // that before PowerPoint does.
+    const copy = "一二三四五六七八九十一二三四五";
+    const frame: RectEmu = {
+      x: inches(1),
+      y: inches(1),
+      width: emu(300 * 12_700),
+      height: emu(Math.round(20 * 1.25 * 12_700)),
+    };
+    // Centred, so the refit cannot grow the frame and only the type can give way.
+    const plain = textPage({ text: copy, frame, fontSizePt: 20, lineHeight: 1.25, verticalAlign: "middle" });
+    expect(refitSlideText(plain.slide, pageHeight).adjustments).toEqual([]);
+
+    const tracked = textPage({
+      text: copy,
+      frame,
+      fontSizePt: 20,
+      lineHeight: 1.25,
+      verticalAlign: "middle",
+      letterSpacingPt: 1,
+    });
+    const report = refitSlideText(tracked.slide, pageHeight);
+    expect(report.adjustments.map((adjustment) => adjustment.kind)).toEqual(["shrank-type"]);
+    expect(tracked.element.style.fontSizePt).toBeLessThan(20);
+    // The copy is untouched; only the size gives way.
+    expect(tracked.element.text).toBe(copy);
   });
 
   it("reports a page whose copy cannot fit even at the floor", () => {

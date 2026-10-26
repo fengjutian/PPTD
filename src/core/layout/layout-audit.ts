@@ -1,5 +1,5 @@
 import { isElementVisible, type PresentationDocument, type TextElement } from "../document-model";
-import { estimateTextLines, textInkBox, textLines } from "../rendering/text-fit";
+import { estimateTextLines, runMetricsOf, textInkBox, textLines } from "../rendering/text-fit";
 
 /**
  * A deterministic read of the geometry a designed page ended up with.
@@ -52,7 +52,13 @@ function intersectionArea(left: Frame, right: Frame): number {
 /** The height the copy needs, measured the way the renderer breaks it. */
 function textHeightPt(element: TextElement): number {
   const widthPt = element.frame.width / 12_700;
-  const lines = estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily);
+  const lines = estimateTextLines(
+    element.text,
+    widthPt,
+    element.style.fontSizePt,
+    element.style.fontFamily,
+    runMetricsOf(element),
+  );
   // The renderer defaults to 1.25 when a style never set a leading.
   return lines * element.style.fontSizePt * (element.style.lineHeight ?? 1.25);
 }
@@ -102,7 +108,13 @@ export function auditSlideLayout(document: PresentationDocument): LayoutAuditRep
       // A paragraph whose last line holds one or two characters is inside its
       // box and still reads as unfinished ("…贡献有 / 限"). The recipes and the
       // refit avoid it; what is left is reported so the page is not called done.
-      const lines = textLines(element.text, frame.width / 12_700, element.style.fontSizePt, element.style.fontFamily);
+      const lines = textLines(
+        element.text,
+        frame.width / 12_700,
+        element.style.fontSizePt,
+        element.style.fontFamily,
+        runMetricsOf(element),
+      );
       if (lines.length > 1) {
         const tail = (lines[lines.length - 1] ?? "").replace(/\s/g, "");
         if (tail.length > 0 && tail.length < MINIMUM_LAST_LINE_CHARS) {

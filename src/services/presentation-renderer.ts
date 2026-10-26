@@ -21,7 +21,7 @@ import { chartPlotArea, chartValueY, niceChartDomain } from "../core/rendering/c
 import { isLargeText } from "../core/rendering/contrast";
 import { gradientLinePoints, rgba as gradientRgba } from "../core/design/shape-gradient";
 import { cropGeometry } from "../core/rendering/image-crop";
-import { fitTextToFrame, measureTextWidthEm } from "../core/rendering/text-fit";
+import { fitTextToFrame, measureCharacterEm, runMetricsOf } from "../core/rendering/text-fit";
 import { resolveImageUrl } from "./image-url-service";
 
 export interface PresentationRender {
@@ -726,16 +726,27 @@ function drawText(
 ): void {
   const nominal = (element.style.fontSizePt * scale * 914_400) / 72;
   const lineHeightRatio = element.style.lineHeight ?? 1.25;
+  const metrics = runMetricsOf(element);
   const fit = fitTextToFrame(element.text, {
     width,
     height,
     fontSize: nominal,
     lineHeight: lineHeightRatio,
     fontFamily: element.style.fontFamily,
+    bold: element.style.bold,
+    letterSpacingPt: element.style.letterSpacingPt,
   });
   const fontSize = fit.fontSize;
   const fontFor = (bold: boolean) => `${bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
   const characters = styledCharacters(element);
+  // Tracking the export writes as `charSpacing`. Chromium applies it between
+  // glyphs, and `measureText` includes it, so the picture keeps the spacing the
+  // file has instead of setting the title tighter than PowerPoint will.
+  const trackingPx =
+    element.style.letterSpacingPt === undefined || element.style.letterSpacingPt === 0
+      ? 0
+      : (element.style.letterSpacingPt * fontSize) / element.style.fontSizePt;
+  if (trackingPx !== 0 && "letterSpacing" in context) context.letterSpacing = `${trackingPx}px`;
   // Widths in em and the limit in em: the same numbers the fit above used, so
   // the two cannot disagree about where a line ends.
   const widthEm = Math.max(1, width / fontSize);
@@ -744,7 +755,12 @@ function drawText(
     const atoms = paragraph.map((styled) => ({
       value: styled,
       text: styled.character,
-      width: measureTextWidthEm(styled.character, element.style.fontFamily),
+      width: measureCharacterEm(
+        styled.character,
+        fontSize,
+        { bold: styled.bold, ...metrics },
+        element.style.fontFamily,
+      ),
     }));
     if (atoms.length === 0) continue;
     for (const line of breakAtoms(atoms, widthEm)) lines.push(line.map((atom) => atom.value));

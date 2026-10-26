@@ -56,7 +56,12 @@ export function measureTextWidthEm(text: string, fontFamily?: string, bold = fal
  * applies it, and leaving it out of the measure made a tracked title break a
  * word later in the file than in the picture.
  */
-export function measureCharacterEm(character: string, fontSizePt: number, metrics?: TextRunMetrics, fontFamily?: string): number {
+export function measureCharacterEm(
+  character: string,
+  fontSizePt: number,
+  metrics?: TextRunMetrics,
+  fontFamily?: string,
+): number {
   const base = measureTextWidthEm(character, fontFamily, metrics?.bold === true);
   const tracking = metrics?.letterSpacingPt;
   if (tracking === undefined || tracking === 0) return base;
