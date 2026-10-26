@@ -16,6 +16,16 @@ use content_lexicon::TitleLexicon;
 /// 流式生成进度的事件名。前端据此把"正在写第几页"显示出来。
 const GENERATION_PROGRESS_EVENT: &str = "ai-generation-progress";
 
+#[tauri::command]
+pub fn token_usage_stats() -> ai::TokenUsageStats {
+    ai::token_usage_stats()
+}
+
+#[tauri::command]
+pub fn clear_token_usage_stats() -> ai::TokenUsageStats {
+    ai::clear_token_usage_stats()
+}
+
 /// 一次生成请求的进度汇报器。
 struct ProgressReporter<'a> {
     app: &'a tauri::AppHandle,

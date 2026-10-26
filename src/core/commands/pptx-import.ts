@@ -137,6 +137,7 @@ export interface ImportedTextStyle {
   align: "left" | "center" | "right";
   verticalAlign: TextVerticalAlign;
   lineHeight?: number | null;
+  letterSpacingPt?: number | null;
   paragraphSpaceBeforePt?: number | null;
   paragraphSpaceAfterPt?: number | null;
   tabStops?: Array<{ positionPt: number; alignment: "left" | "center" | "right" | "decimal" }>;
@@ -285,6 +286,9 @@ function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): 
         strikethrough: element.style.strikethrough,
         verticalAlign: element.style.verticalAlign,
         ...(element.style.lineHeight ? { lineHeight: element.style.lineHeight } : {}),
+        ...(element.style.letterSpacingPt === undefined || element.style.letterSpacingPt === null
+          ? {}
+          : { letterSpacingPt: element.style.letterSpacingPt }),
         ...(element.style.paragraphSpaceBeforePt === undefined || element.style.paragraphSpaceBeforePt === null
           ? {}
           : { paragraphSpaceBeforePt: element.style.paragraphSpaceBeforePt }),

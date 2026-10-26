@@ -48,6 +48,7 @@ function deck(overrides: Partial<ImportedDeck> = {}): ImportedDeck {
               strikethrough: false,
               align: "left",
               verticalAlign: "top",
+              letterSpacingPt: 0.8,
               bullet: "none",
             },
             runs: [{ start: 0, end: 4, bold: true, color: "#3366CC", underline: false }],

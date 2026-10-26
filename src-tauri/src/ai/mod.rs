@@ -15,12 +15,80 @@ mod live_image_tests;
 
 use base64::Engine;
 use serde::Serialize;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 pub use cancel::{CancelRegistry, CancelToken};
 use stream::SseParser;
 
 const CREDENTIAL_SERVICE: &str = "com.pptd.desktop";
+
+#[derive(Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenUsageStats {
+    pub request_count: u64,
+    pub reported_request_count: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+}
+
+static TOKEN_USAGE: OnceLock<Mutex<TokenUsageStats>> = OnceLock::new();
+
+fn token_usage_store() -> &'static Mutex<TokenUsageStats> {
+    TOKEN_USAGE.get_or_init(|| Mutex::new(TokenUsageStats::default()))
+}
+
+fn record_token_usage(payload: &serde_json::Value) {
+    let usage = payload.get("usage");
+    let input = usage
+        .and_then(|value| {
+            value
+                .get("prompt_tokens")
+                .or_else(|| value.get("input_tokens"))
+        })
+        .and_then(serde_json::Value::as_u64);
+    let output = usage
+        .and_then(|value| {
+            value
+                .get("completion_tokens")
+                .or_else(|| value.get("output_tokens"))
+        })
+        .and_then(serde_json::Value::as_u64);
+    let total = usage
+        .and_then(|value| value.get("total_tokens"))
+        .and_then(serde_json::Value::as_u64)
+        .or_else(|| Some(input? + output?));
+    if let Ok(mut stats) = token_usage_store().lock() {
+        stats.request_count += 1;
+        if let (Some(input), Some(output), Some(total)) = (input, output, total) {
+            stats.reported_request_count += 1;
+            stats.input_tokens += input;
+            stats.output_tokens += output;
+            stats.total_tokens += total;
+        }
+    }
+}
+
+fn record_unreported_token_usage() {
+    if let Ok(mut stats) = token_usage_store().lock() {
+        stats.request_count += 1;
+    }
+}
+
+pub fn token_usage_stats() -> TokenUsageStats {
+    token_usage_store()
+        .lock()
+        .map(|stats| *stats)
+        .unwrap_or_default()
+}
+
+pub fn clear_token_usage_stats() -> TokenUsageStats {
+    if let Ok(mut stats) = token_usage_store().lock() {
+        *stats = TokenUsageStats::default();
+    }
+    token_usage_stats()
+}
 
 /// 厂商无关的对话请求。
 ///
@@ -367,6 +435,7 @@ pub async fn chat(
         };
         match outcome {
             Ok(payload) => {
+                record_token_usage(&payload);
                 return provider
                     .parse_response(payload)
                     .map_err(|error| match error {
@@ -532,6 +601,7 @@ pub async fn chat_stream(
     if content.trim().is_empty() {
         return Err(format!("{STREAM_FAILED_ERROR}: no content in stream"));
     }
+    record_unreported_token_usage();
     Ok(content)
 }
 
@@ -558,12 +628,13 @@ pub async fn vision_chat(
         };
         match outcome {
             Ok(response) => {
+                record_token_usage(&response);
                 return provider
                     .parse_response(response)
                     .map_err(|error| match error {
                         PayloadError::Empty => "AI_EMPTY_RESPONSE".to_string(),
                         PayloadError::Invalid(detail) => format!("AI_RESPONSE_INVALID: {detail}"),
-                    })
+                    });
             }
             Err(ProviderFailure::Status(status, _))
                 if status == 429 || status == 529 || (500..=599).contains(&status) =>

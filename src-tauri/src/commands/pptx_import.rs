@@ -164,6 +164,7 @@ pub struct ImportedTextStyle {
     pub align: String,
     pub vertical_align: String,
     pub line_height: Option<f64>,
+    pub letter_spacing_pt: Option<f64>,
     pub paragraph_space_before_pt: Option<f64>,
     pub paragraph_space_after_pt: Option<f64>,
     pub tab_stops: Vec<ImportedTabStop>,
@@ -1925,6 +1926,9 @@ fn parse_text_body(
                         if let Some(value) = run_style.font_family {
                             current.font_family = value;
                         }
+                        if let Some(value) = run_style.letter_spacing_pt {
+                            current.letter_spacing_pt = Some(value);
+                        }
                         if (bold || explicit_color || underline || hyperlink_url.is_some())
                             && runs.len() < 200
                         {
@@ -1981,6 +1985,7 @@ struct RunStyle {
     italic: Option<bool>,
     underline: Option<bool>,
     strikethrough: Option<bool>,
+    letter_spacing_pt: Option<f64>,
 }
 
 fn paragraph_spacing_points(node: Node<'_, '_>, name: &str) -> Option<f64> {
@@ -2035,6 +2040,7 @@ fn apply_run_style(style: &mut ImportedTextStyle, run: RunStyle) -> bool {
     apply!(italic);
     apply!(underline);
     apply!(strikethrough);
+    apply!(letter_spacing_pt);
     changed
 }
 
@@ -2052,6 +2058,12 @@ fn parse_run_style(props: Node<'_, '_>, theme: &Option<ImportedTheme>) -> RunSty
         italic: props.attribute("i").map(|value| value == "1"),
         underline: props.attribute("u").map(|value| value != "none"),
         strikethrough: props.attribute("strike").map(|value| value != "noStrike"),
+        // DrawingML stores character tracking in hundredths of a point. The
+        // editor model uses points and deliberately keeps PowerPoint's range.
+        letter_spacing_pt: props
+            .attribute("spc")
+            .and_then(|value| value.parse::<f64>().ok())
+            .map(|value| (value / 100.0).clamp(-2.0, 20.0)),
     }
 }
 
@@ -2082,6 +2094,7 @@ fn default_text_style(theme: &Option<ImportedTheme>, title: bool) -> ImportedTex
         align: "left".into(),
         vertical_align: "top".into(),
         line_height: None,
+        letter_spacing_pt: None,
         paragraph_space_before_pt: None,
         paragraph_space_after_pt: None,
         tab_stops: Vec::new(),
@@ -2676,7 +2689,7 @@ mod tests {
                     <a:spcBef><a:spcPts val="600"/></a:spcBef><a:spcAft><a:spcPts val="900"/></a:spcAft>
                     <a:tabLst><a:tab pos="914400" algn="ctr"/><a:tab pos="1828800" algn="dec"/></a:tabLst>
                     <a:buChar char="•"/>
-                    <a:defRPr sz="2200" b="1" i="1"><a:solidFill><a:srgbClr val="445566"/></a:solidFill><a:latin typeface="Inherited Sans"/></a:defRPr>
+                    <a:defRPr sz="2200" b="1" i="1" spc="80"><a:solidFill><a:srgbClr val="445566"/></a:solidFill><a:latin typeface="Inherited Sans"/></a:defRPr>
                 </a:lvl1pPr></a:lstStyle></p:txBody>
             </p:sp>"#,
         )
@@ -2701,6 +2714,7 @@ mod tests {
         assert_eq!(body.style.align, "center");
         assert_eq!(body.style.vertical_align, "middle");
         assert_eq!(body.style.line_height, Some(1.4));
+        assert_eq!(body.style.letter_spacing_pt, Some(0.8));
         assert_eq!(body.style.paragraph_space_before_pt, Some(6.0));
         assert_eq!(body.style.paragraph_space_after_pt, Some(9.0));
         assert_eq!(body.style.tab_stops.len(), 2);

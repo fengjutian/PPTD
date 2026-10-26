@@ -9,6 +9,7 @@ describe("SettingsWorkspace 语言", () => {
     );
     expect(markup).toContain("Language");
     expect(markup).toContain("Log");
+    expect(markup).toContain("Token usage");
     expect(markup).toContain("Model service");
     expect(markup).toContain("AI model service");
     expect(markup).toContain("MiniMax (China)");

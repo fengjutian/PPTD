@@ -33,6 +33,32 @@
   border-radius: 8px;
   background: #191a1e;
 }
+.token-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.token-usage-grid > div {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #35373d;
+  border-radius: 9px;
+  background: #191a1e;
+}
+.token-usage-grid span {
+  color: #858a93;
+  font-size: 12px;
+}
+.token-usage-grid strong {
+  color: #f1f2f4;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.token-usage-help {
+  margin: 0 0 16px;
+}
 .settings-section-heading {
   display: flex;
   align-items: flex-start;
@@ -394,6 +420,9 @@
   color: #858a93;
 }
 @media (max-width: 900px) {
+  .token-usage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .font-options,
   .language-options {
     grid-template-columns: 1fr;

@@ -1,10 +1,16 @@
-import { Check, KeyRound, Languages, Palette, PlugZap, ScrollText, Trash2, Type } from "lucide-react";
+import { Check, Coins, KeyRound, Languages, Palette, PlugZap, ScrollText, Trash2, Type } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { LogViewer } from "../diagnostics/LogPanel";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { CONCEPT_PRESET_LABELS, type ConceptPresetId } from "../../core/design/deck-concept";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
 import type { AppLogRecord } from "../../services/app-log";
+import {
+  clearTokenUsageStats,
+  emptyTokenUsageStats,
+  loadTokenUsageStats,
+  type TokenUsageStats,
+} from "../../services/token-usage";
 import {
   clearDesignMemory,
   designMemorySummary,
@@ -169,7 +175,7 @@ export function SettingsWorkspace({
   logLocation,
   onLogRefresh = () => undefined,
 }: SettingsWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<"model" | "appearance" | "font" | "language" | "log">("model");
+  const [activeTab, setActiveTab] = useState<"model" | "appearance" | "font" | "language" | "log" | "tokens">("model");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [apiKey, setApiKey] = useState("");
   const [configured, setConfigured] = useState(false);
@@ -177,6 +183,7 @@ export function SettingsWorkspace({
   const [testState, setTestState] = useState<{ kind: "success" | "error"; message: string }>();
   const [installedFonts, setInstalledFonts] = useState<Record<string, boolean>>({});
   const [memory, setMemory] = useState<DesignMemorySummary>();
+  const [tokenUsage, setTokenUsage] = useState<TokenUsageStats>(emptyTokenUsageStats);
   const [memoryDetails, setMemoryDetails] = useState<{ looks: DesignLook[]; preferences: DesignPreference[] }>({
     looks: [],
     preferences: [],
@@ -349,6 +356,19 @@ export function SettingsWorkspace({
         >
           <ScrollText />
           {t("settings.tabs.log")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "tokens"}
+          className={activeTab === "tokens" ? "active" : ""}
+          onClick={() => {
+            setActiveTab("tokens");
+            void loadTokenUsageStats().then(setTokenUsage);
+          }}
+        >
+          <Coins />
+          {t("settings.tabs.tokens")}
         </button>
       </div>
       {activeTab === "model" && (
@@ -622,7 +642,50 @@ export function SettingsWorkspace({
           />
         </section>
       )}
-      {activeTab !== "log" && (
+      {activeTab === "tokens" && (
+        <section className="settings-card" role="tabpanel">
+          <div className="settings-section-heading">
+            <Coins />
+            <div>
+              <h2>{t("settings.tokens.title")}</h2>
+              <p>{t("settings.tokens.description")}</p>
+            </div>
+          </div>
+          <div className="token-usage-grid">
+            <div>
+              <span>{t("settings.tokens.total")}</span>
+              <strong>{tokenUsage.totalTokens.toLocaleString()}</strong>
+            </div>
+            <div>
+              <span>{t("settings.tokens.input")}</span>
+              <strong>{tokenUsage.inputTokens.toLocaleString()}</strong>
+            </div>
+            <div>
+              <span>{t("settings.tokens.output")}</span>
+              <strong>{tokenUsage.outputTokens.toLocaleString()}</strong>
+            </div>
+            <div>
+              <span>{t("settings.tokens.requests")}</span>
+              <strong>{tokenUsage.requestCount.toLocaleString()}</strong>
+            </div>
+          </div>
+          <p className="field-help token-usage-help">
+            {t("settings.tokens.coverage", {
+              reported: String(tokenUsage.reportedRequestCount),
+              total: String(tokenUsage.requestCount),
+            })}
+          </p>
+          <button
+            type="button"
+            className="button-danger"
+            onClick={() => void clearTokenUsageStats().then(setTokenUsage)}
+          >
+            <Trash2 />
+            {t("settings.tokens.clear")}
+          </button>
+        </section>
+      )}
+      {activeTab !== "log" && activeTab !== "tokens" && (
         <div className="settings-actions">
           <button type="button" className="primary-action" disabled={busy || !settings.aiModel.trim()} onClick={save}>
             {busy ? t("settings.actions.saving") : t("settings.actions.save")}
