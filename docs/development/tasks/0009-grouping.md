@@ -105,7 +105,7 @@ PptxGenJS 没有分组 API。本任务先保证编辑期选择组可用；后续
 - 模型：`SlideGroup`、`Slide.groups`；Schema v17 与固定样例。
 - 命令：`group-elements`、`ungroup-elements`、删除/重排/复制页的分组清理。
 - UI：`ArrangeToolbar` 组合/取消组合按钮；store 选择展开。
-- 导出：`group-not-exported` preflight 提示。
+- 导出：当时用 `group-not-exported` preflight 提示；该行为已由 [0031](0031-native-group-export.md) 取代。
 - 验证：`npm run typecheck`、`npm run lint`、`npm run build` 通过；新增测试 13 项（命令 4、store 3、Schema 3、排列组件 2、导出 1）；全量套件 121 个文件、939 项通过。
 
 ## 9. 后续交付（TASK-GROUP-002，2026-10-26）

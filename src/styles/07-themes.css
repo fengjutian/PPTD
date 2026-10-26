@@ -2844,6 +2844,70 @@
   border-radius: 8px;
 }
 
+/* Secondary specimens are half the width of the hero specimen. They need a
+   dedicated miniature layout; viewport-based type scales otherwise collide. */
+.style-specimen-secondary .style-specimen-real small {
+  margin-bottom: 6px;
+  font-size: 6px;
+  letter-spacing: 0.1em;
+}
+
+.style-specimen-secondary .style-real-content,
+.style-specimen-secondary .style-real-data {
+  padding: 9% 9% 12%;
+}
+
+.style-specimen-secondary .style-real-content > strong,
+.style-specimen-secondary .style-real-data > strong {
+  max-width: 88%;
+  font-size: 13px;
+  line-height: 1.05;
+}
+
+.style-specimen-secondary .style-real-flow {
+  top: 52%;
+  gap: 3px;
+}
+
+.style-specimen-secondary .style-real-flow b {
+  min-width: 0;
+  padding: 7px 2px;
+  border-radius: 6px;
+  font-size: 6px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.style-specimen-secondary .style-real-flow i {
+  font-size: 9px;
+}
+
+.style-specimen-secondary .style-real-note,
+.style-specimen-secondary .style-real-data-foot {
+  display: none;
+}
+
+.style-specimen-secondary .style-real-kpi {
+  top: auto;
+  bottom: 17%;
+}
+
+.style-specimen-secondary .style-real-kpi b {
+  font-size: 23px;
+}
+
+.style-specimen-secondary .style-real-kpi em {
+  font-size: 6px;
+}
+
+.style-specimen-secondary .style-real-bars {
+  right: 8%;
+  bottom: 17%;
+  width: 45%;
+  height: 48%;
+  gap: 5%;
+}
+
 .style-card-heading {
   display: flex;
   align-items: center;
