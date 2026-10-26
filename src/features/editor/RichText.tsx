@@ -4,70 +4,149 @@ import {
   resolveFragmentStyle,
   textFragments,
   type TextElement,
-  type TextFragment,
+  type TextRunStyle,
 } from "../../core/document-model";
+import { breakAtoms, type MeasurableAtom } from "../../core/rendering/cjk-linebreak";
+import { measureCharacterEm, runMetricsOf } from "../../core/rendering/text-fit";
 
 /**
- * One drawn line of a marked text box.
+ * One character of the text with the style it is drawn in.
  *
- * A marker belongs to the whole box, so the text is split on its line breaks
- * and every line gets the same marker. The split never changes the element's
- * text: the markers are drawn next to the copy, not written into it.
+ * The canvas has to draw fragments, not paragraphs: a line that carries an
+ * emphasised word is one line with two spans, the way the export writes two
+ * runs. Keeping the style per character is also what lets the measured line
+ * breaking below split a styled run at a line boundary.
  */
-function splitIntoLines(fragments: TextFragment[]): TextFragment[][] {
-  const lines: TextFragment[][] = [[]];
-  for (const fragment of fragments) {
-    const segments = fragment.text.split("\n");
-    segments.forEach((segment, index) => {
-      if (index > 0) lines.push([]);
-      if (segment) lines[lines.length - 1]!.push({ ...fragment, text: segment });
-    });
+interface StyledCharacter {
+  character: string;
+  style: TextRunStyle;
+  bold: boolean;
+  color: string;
+  underline: boolean;
+}
+
+/** The characters of the element, with the style of the fragment they belong to. */
+function styledCharacters(element: TextElement): StyledCharacter[] {
+  const characters: StyledCharacter[] = [];
+  for (const fragment of textFragments(element.text, element.runs)) {
+    const style = resolveFragmentStyle(element.style, fragment.style);
+    for (const character of fragment.text) {
+      characters.push({
+        character,
+        style: fragment.style,
+        bold: style.bold,
+        color: style.color,
+        underline: style.underline,
+      });
+    }
   }
-  return lines;
+  return characters;
+}
+
+/** The paragraphs of a text, split at the line breaks the author wrote. */
+function splitParagraphs(characters: StyledCharacter[]): StyledCharacter[][] {
+  const paragraphs: StyledCharacter[][] = [[]];
+  for (const character of characters) {
+    if (character.character === "\n") {
+      paragraphs.push([]);
+      continue;
+    }
+    paragraphs[paragraphs.length - 1]!.push(character);
+  }
+  return paragraphs;
 }
 
 /**
  * The canvas view of a text element.
  *
- * The styled fragments of the element are drawn with their own weight and
- * colour, the same way the export writes them as separate runs. The fragments
- * are read from the text of the element, so the canvas cannot show an
- * emphasis the content does not carry.
+ * The lines are the ones the layout measured, not the ones the browser would
+ * choose: the canvas, the preview and the file break a paragraph at the same
+ * character. Drawing the browser's wrapping instead meant a title fit on one
+ * line in the editor and on two in the exported page — the layout engine had
+ * counted a break the canvas never showed.
+ *
+ * A line is rendered with `white-space: pre` so the browser cannot wrap it a
+ * second time; a measured line that does not fit overflows its box, which is
+ * what the dashed overflow edge on the frame is for.
  */
 export function RichText({ element, scale }: { element: TextElement; scale: number }) {
-  const fragments = useMemo(() => textFragments(element.text, element.runs), [element.text, element.runs]);
   const verticalAlign = element.style.verticalAlign ?? "top";
   const bullet = element.style.bullet ?? "none";
   const indentLevel = element.style.indentLevel ?? 0;
   const struck = element.style.strikethrough ?? false;
+  const trackingPt = element.style.letterSpacingPt;
+
+  const paragraphs = useMemo(() => {
+    const characters = styledCharacters(element);
+    if (characters.length === 0) return [];
+    const metrics = runMetricsOf(element);
+    const widthEm = Math.max(1, element.frame.width / 12_700 / Math.max(0.01, element.style.fontSizePt));
+    return splitParagraphs(characters).map((paragraph) => {
+      if (paragraph.length === 0) return [[]];
+      const atoms: MeasurableAtom<StyledCharacter>[] = paragraph.map((character) => ({
+        value: character,
+        text: character.character,
+        // The same advance the layout counted, tracking and weight included.
+        width: measureCharacterEm(character.character, element.style.fontSizePt, metrics, element.style.fontFamily),
+      }));
+      return breakAtoms(atoms, widthEm).map((line) => line.map((atom) => atom.value));
+    });
+  }, [element, trackingPt]);
 
   const decorationOf = (underline: boolean): string | undefined => {
     const decoration = [underline ? "underline" : "", struck ? "line-through" : ""].filter(Boolean).join(" ");
     return decoration || undefined;
   };
 
-  const renderFragment = (fragment: TextFragment, key: number) => {
-    const style = resolveFragmentStyle(element.style, fragment.style);
-    const tabWidth =
-      ((element.style.tabStops?.[0]?.positionPt ?? element.style.fontSizePt * 4) * scale * EMU_PER_INCH) / 72;
-    const pieces = fragment.text.split("\t");
-    return (
-      <span
-        key={key}
-        style={{
-          fontWeight: style.bold ? 700 : 400,
-          color: style.color,
-          textDecoration: decorationOf(style.underline),
-        }}
-      >
-        {pieces.length === 1
-          ? fragment.text
+  const tabWidth =
+    ((element.style.tabStops?.[0]?.positionPt ?? element.style.fontSizePt * 4) * scale * EMU_PER_INCH) / 72;
+
+  /** One line, grouped into spans of one style each. */
+  const renderLine = (line: StyledCharacter[], key: number): React.ReactNode => {
+    const groups: StyledCharacter[][] = [];
+    for (const character of line) {
+      const last = groups[groups.length - 1];
+      const same =
+        last?.[0] !== undefined &&
+        last[0].bold === character.bold &&
+        last[0].color === character.color &&
+        last[0].underline === character.underline &&
+        last[0].style.hyperlinkUrl === character.style.hyperlinkUrl;
+      if (!same) groups.push([character]);
+      else last.push(character);
+    }
+    const renderGroup = (group: StyledCharacter[], groupIndex: number, pre: boolean) => {
+      const first = group[0]!;
+      const content = group.map((character) => character.character).join("");
+      const pieces = content.split("\t");
+      const body =
+        pieces.length === 1
+          ? content
           : pieces.map((piece, pieceIndex) => (
               <span key={pieceIndex}>
                 {pieceIndex > 0 && <span aria-hidden="true" style={{ display: "inline-block", width: tabWidth }} />}
                 {piece}
               </span>
-            ))}
+            ));
+      return (
+        <span
+          key={groupIndex}
+          style={{
+            fontWeight: first.bold ? 700 : 400,
+            color: first.color,
+            textDecoration: decorationOf(first.underline),
+            ...(pre ? { whiteSpace: "pre" as const } : {}),
+          }}
+        >
+          {body}
+        </span>
+      );
+    };
+    // A single style needs no wrapper: the span carries the no-wrap rule itself.
+    if (groups.length === 1) return renderGroup(groups[0]!, 0, true);
+    return (
+      <span key={key} style={{ whiteSpace: "pre" }}>
+        {groups.map((group, groupIndex) => renderGroup(group, groupIndex, false))}
       </span>
     );
   };
@@ -79,10 +158,7 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
     fontWeight: element.style.bold ? 700 : 400,
     fontStyle: element.style.italic ? "italic" : undefined,
     textAlign: element.style.align,
-    letterSpacing:
-      element.style.letterSpacingPt === undefined
-        ? undefined
-        : (element.style.letterSpacingPt * scale * EMU_PER_INCH) / 72,
+    letterSpacing: trackingPt === undefined ? undefined : (trackingPt * scale * EMU_PER_INCH) / 72,
     lineHeight: element.style.lineHeight,
     height: "100%",
     boxSizing: "border-box",
@@ -92,51 +168,42 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
     paddingLeft: indentLevel > 0 ? `${indentLevel * 1.4}em` : undefined,
   };
 
-  // Plain paragraphs keep the one-flow layout the renderer has always used.
-  // Markers need per-line boxes, so only then is the text split. The inner div
-  // is what makes the fragments one paragraph: making the fragments themselves
-  // flex items would stack every styled run on its own line.
-  if (bullet === "none") {
-    const hasParagraphSpacing =
-      element.style.paragraphSpaceBeforePt !== undefined || element.style.paragraphSpaceAfterPt !== undefined;
-    return (
-      <div style={boxStyle}>
-        {hasParagraphSpacing ? (
-          splitIntoLines(fragments).map((line, lineIndex) => (
-            <div
-              key={lineIndex}
-              style={{
-                width: "100%",
-                paddingTop:
-                  element.style.paragraphSpaceBeforePt === undefined
-                    ? undefined
-                    : (element.style.paragraphSpaceBeforePt * scale * EMU_PER_INCH) / 72,
-                paddingBottom:
-                  element.style.paragraphSpaceAfterPt === undefined
-                    ? undefined
-                    : (element.style.paragraphSpaceAfterPt * scale * EMU_PER_INCH) / 72,
-              }}
-            >
-              {line.map(renderFragment)}
-            </div>
-          ))
-        ) : (
-          <div style={{ width: "100%" }}>{fragments.map(renderFragment)}</div>
-        )}
-      </div>
-    );
-  }
+  const paragraphStyle = (): React.CSSProperties => ({
+    width: "100%",
+    paddingTop:
+      element.style.paragraphSpaceBeforePt === undefined
+        ? undefined
+        : (element.style.paragraphSpaceBeforePt * scale * EMU_PER_INCH) / 72,
+    paddingBottom:
+      element.style.paragraphSpaceAfterPt === undefined
+        ? undefined
+        : (element.style.paragraphSpaceAfterPt * scale * EMU_PER_INCH) / 72,
+  });
 
   return (
     <div style={boxStyle}>
-      {splitIntoLines(fragments).map((line, lineIndex) => (
-        <div key={lineIndex} style={{ display: "flex", gap: "0.45em", width: "100%" }}>
-          <span style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>
-            {bullet === "number" ? `${lineIndex + 1}.` : "•"}
-          </span>
-          <span style={{ flex: "1 1 auto", minWidth: 0, textAlign: element.style.align }}>
-            {line.map(renderFragment)}
-          </span>
+      {paragraphs.map((lines, paragraphIndex) => (
+        <div key={paragraphIndex} style={paragraphStyle()}>
+          {lines.map((line, lineIndex) => {
+            if (line.length === 0 && lines.length > 1) return null;
+            if (bullet === "none") {
+              return (
+                <div key={lineIndex} data-line={lineIndex} style={{ width: "100%" }}>
+                  {renderLine(line, lineIndex)}
+                </div>
+              );
+            }
+            return (
+              <div key={lineIndex} data-line={lineIndex} style={{ display: "flex", gap: "0.45em", width: "100%" }}>
+                <span style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>
+                  {lineIndex === 0 ? (bullet === "number" ? `${paragraphIndex + 1}.` : "•") : ""}
+                </span>
+                <span style={{ flex: "1 1 auto", minWidth: 0, textAlign: element.style.align }}>
+                  {renderLine(line, lineIndex)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

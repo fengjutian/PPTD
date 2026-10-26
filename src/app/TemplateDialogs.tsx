@@ -418,40 +418,37 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
             {compileMetrics && compileMetrics.plannedSlides > 0 && (
               <div className="design-quality-template">
                 <h3>设计编译</h3>
-                <DesignCompileMetrics
-                  metrics={compileMetrics}
-                  promptVersion={designQualityReport.promptVersion}
-                />
+                <DesignCompileMetrics metrics={compileMetrics} promptVersion={designQualityReport.promptVersion} />
                 {compileReport &&
                   compileReport.slides.some((item) =>
                     item.report.diagnostics.some((diagnostic) => diagnostic.severity !== "info"),
                   ) && (
                     <ul className="export-report-list">
                       {compileReport.slides.flatMap((item) =>
-                      item.report.diagnostics
-                        .filter((diagnostic) => diagnostic.severity !== "info")
-                        .map((diagnostic) => (
-                          <li
-                            key={`${item.slideIndex}-${diagnostic.code}-${diagnostic.intent}`}
-                            className={diagnostic.severity === "error" ? "error" : "warning"}
-                          >
-                            <CircleAlert />
-                            <div>
-                              <strong>
-                                第 {item.slideIndex + 1} 页 · {diagnostic.message}
-                              </strong>
-                              <p>
-                                {diagnostic.code}
-                                {diagnostic.suggestedRecipes && diagnostic.suggestedRecipes.length > 0
-                                  ? ` · 可改用：${diagnostic.suggestedRecipes.join("、")}`
-                                  : ""}
-                              </p>
-                            </div>
-                          </li>
-                        )),
-                    )}
-                  </ul>
-                )}
+                        item.report.diagnostics
+                          .filter((diagnostic) => diagnostic.severity !== "info")
+                          .map((diagnostic) => (
+                            <li
+                              key={`${item.slideIndex}-${diagnostic.code}-${diagnostic.intent}`}
+                              className={diagnostic.severity === "error" ? "error" : "warning"}
+                            >
+                              <CircleAlert />
+                              <div>
+                                <strong>
+                                  第 {item.slideIndex + 1} 页 · {diagnostic.message}
+                                </strong>
+                                <p>
+                                  {diagnostic.code}
+                                  {diagnostic.suggestedRecipes && diagnostic.suggestedRecipes.length > 0
+                                    ? ` · 可改用：${diagnostic.suggestedRecipes.join("、")}`
+                                    : ""}
+                                </p>
+                              </div>
+                            </li>
+                          )),
+                      )}
+                    </ul>
+                  )}
               </div>
             )}
             {designQualityReport.visualReviewCoverage &&

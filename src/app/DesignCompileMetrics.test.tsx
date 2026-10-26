@@ -15,7 +15,6 @@ const metrics: DesignMetrics = {
   recipes: [
     { recipe: "editorial-index", pages: 4 },
     { recipe: "asymmetric-split", pages: 2 },
-    { recipe: "data-story", pages: 1 },
   ],
   diagnostics: [
     { code: "RECIPE_CAPACITY_EXCEEDED", severity: "error", pages: 2 },

@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { RECIPE_CATALOG } from "../core/layout/recipes/catalog";
-import {
-  DESIGN_PROMPT_VERSION,
-  aiPresentationDesignSchema,
-  pageDesignPlanSchema,
-} from "./ai-service";
+import { DESIGN_PROMPT_VERSION, aiPresentationDesignSchema, pageDesignPlanSchema } from "./ai-service";
 
 /**
  * The plan fields that have a real consumer in the compiler or command layer.

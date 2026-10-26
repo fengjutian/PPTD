@@ -1,8 +1,5 @@
 import type { DesignDraftCompileReport } from "../commands/ai-designed-draft";
-import type {
-  DesignCompileDiagnosticCode,
-  DesignCompileOutcome,
-} from "../layout/design-compiler";
+import type { DesignCompileDiagnosticCode, DesignCompileOutcome } from "../layout/design-compiler";
 import type { RecipeId } from "./deck-concept";
 
 /** How often one concrete recipe was selected in a deck. */
@@ -71,10 +68,7 @@ function higherSeverity(
  * hand in a partially built report in tests. Deriving from the page list keeps
  * the summary internally consistent and prevents "planned 8, accepted 9".
  */
-export function summarizeDesignMetrics(
-  report: DesignDraftCompileReport,
-  totalSlides: number,
-): DesignMetrics {
+export function summarizeDesignMetrics(report: DesignDraftCompileReport, totalSlides: number): DesignMetrics {
   const total = Math.max(0, Math.trunc(totalSlides));
   const decisions: DesignPageDecision[] = report.slides
     .map(({ slideIndex, report: page }) => {
@@ -98,7 +92,10 @@ export function summarizeDesignMetrics(
 
   const recipeCounts = new Map<RecipeId, number>();
   for (const decision of decisions) {
-    if (decision.selectedRecipe === undefined) continue;
+    // A refused plan falls back to the legacy branch; naming a recipe in the
+    // report does not mean that recipe drew the page. Only pages the compiler
+    // actually accepted belong in the usage histogram.
+    if (decision.outcome === "rejected" || decision.selectedRecipe === undefined) continue;
     recipeCounts.set(decision.selectedRecipe, (recipeCounts.get(decision.selectedRecipe) ?? 0) + 1);
   }
   const recipes = [...recipeCounts.entries()]
@@ -134,7 +131,7 @@ export function summarizeDesignMetrics(
     accepted,
     adjusted,
     rejected,
-    substituted: decisions.filter((decision) => decision.substituted).length,
+    substituted: decisions.filter((decision) => decision.outcome !== "rejected" && decision.substituted).length,
     recipes,
     diagnostics,
     decisions,

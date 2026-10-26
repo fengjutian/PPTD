@@ -1,8 +1,6 @@
 import { RECIPE_CATALOG } from "../core/layout/recipes/catalog";
 import type { RecipeId } from "../core/design/deck-concept";
-import type {
-  DesignCompileOutcome,
-} from "../core/layout/design-compiler";
+import type { DesignCompileOutcome } from "../core/layout/design-compiler";
 import type { DesignMetrics } from "../core/design/design-metrics";
 
 const OUTCOME_LABELS: Record<DesignCompileOutcome, string> = {
@@ -33,13 +31,7 @@ function decisionFlow(decision: DesignMetrics["decisions"][number]): string {
  * and copied without exposing the deck's copy. It never reads the document or
  * the compiler, and therefore cannot change either.
  */
-export function DesignCompileMetrics({
-  metrics,
-  promptVersion,
-}: {
-  metrics: DesignMetrics;
-  promptVersion?: string;
-}) {
+export function DesignCompileMetrics({ metrics, promptVersion }: { metrics: DesignMetrics; promptVersion?: string }) {
   return (
     <section className="design-compile-metrics" aria-label="设计编译度量">
       <div className="design-compile-metrics-row">

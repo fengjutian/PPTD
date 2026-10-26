@@ -73,7 +73,7 @@ ADR 0114 把测量、编译和诊断写进了布局系统，但生成结果仍�
 - 缩字会让"容量不足"看起来比"被裁切"温和。因此容量问题必须由 `text-overflow` 诊断与审计继续暴露，不能靠肉眼。
 - 测量器现在带**字重与字距**（`widthEm(text, family, bold)` + `letterSpacingPt`）。预览、审计、重排、文件，以及配方与旧版构图的拟合都用同一组参数：`deriveDesignTokens` 暴露 `titleTrackingPt` / `bodyTrackingPt`，配方通过 `headingMetrics()` 传给 `fittedFontSize`；旧版 `text()` 直接从主题 token 取字距，并在创建元素时就写进样式，不再"先按无字距拟合、事后再补"。
 - 剩下的近似是**行内粗体**：`runs` 里只要有加粗片段，整段就按粗体测量（上界）。这让一段混排最多小一号，但绝不会出现渲染器多出一行、拟合却没数到的情况；精确的逐字宽度需要断行器携带片段索引，留作后续。
-- 编辑画布仍按 CSS 断行并裁掉超框的行，只是现在会画一圈警告边；把画布改成"缩小/溢出可见"仍会牵扯相邻元素的交互，属于下一步。
+- 编辑画布现在也按**测量出的行**绘制（`RichText` 用同一个断行器，每行是一个 `white-space: pre` 的盒子），所以画布、缩略图、预览和文件在同一处换行；浏览器不再有机会自行重排。超框的行仍被 `.slide-element.text > div` 的 `max-height` 裁掉，但外框会画警告边——把画布改成"溢出可见"牵扯相邻元素的交互，属于下一步。
 - 缩字只发生在预览与导出（`normAutofit`），不会回写文档字号；文档里保留设计意图的字号，容量冲突靠诊断暴露。
 - 审计只判断"框放不放得下"，不判断可读性（行长、字号带）——那属于味觉 lint。
 
@@ -84,6 +84,7 @@ ADR 0114 把测量、编译和诊断写进了布局系统，但生成结果仍�
 - `layout-audit.test.ts`：超框、越界、文本重叠、孤字各报一条；放得下的文字与隐藏对象不误报；同带宽左右对齐的两段文字不互报。
 - `VariantPreviewDialog.test.tsx`：问题页列表渲染成「第 2–3、6 页」；未审计的版本不显示结论。
 - `SlideScene.test.tsx`：放不下的文字带 `text-overflow`，放得下的不带。
+- `RichText.test.tsx`：画布渲染出的行数等于 `estimateTextLines`（同一段文案、同一框宽），每行都带 `white-space: pre`；片段样式、标记、垂直对齐不变。
 - `text-refit.test.ts`：带 1pt 字距、正好卡在框宽上的标题会被缩字（无字距时不动）。
 - `text-metrics-canvas.test.ts`：粗体走 700 字面，且缓存按字重区分。
 - `presentation-renderer`：文字绘制改为调用 `fitTextToFrame` 并用同一 em 宽度断行；`icon` 元素进入渲染循环。

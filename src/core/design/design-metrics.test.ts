@@ -77,10 +77,9 @@ describe("summarizeDesignMetrics", () => {
     expect(metrics.adjusted).toBe(2);
     expect(metrics.rejected).toBe(1);
     expect(metrics.substituted).toBe(2);
-    expect(metrics.recipes).toEqual([
-      { recipe: "editorial-index", pages: 3 },
-      { recipe: "data-story", pages: 1 },
-    ]);
+    // The rejected page names data-story in its report, but the compiler fell
+    // back to the legacy branch; it did not draw that recipe.
+    expect(metrics.recipes).toEqual([{ recipe: "editorial-index", pages: 3 }]);
     expect(metrics.diagnostics).toEqual([
       { code: "RECIPE_CAPACITY_EXCEEDED", severity: "error", pages: 2 },
       { code: "DIRECTION_RECIPE_SUBSTITUTED", severity: "warning", pages: 1 },
@@ -154,9 +153,31 @@ describe("summarizeDesignMetrics", () => {
 
     const metrics = summarizeDesignMetrics(report, 1);
 
-    expect(metrics.diagnostics).toEqual([
-      { code: "TEMPLATE_UNAVAILABLE", severity: "error", pages: 1 },
-    ]);
+    expect(metrics.diagnostics).toEqual([{ code: "TEMPLATE_UNAVAILABLE", severity: "error", pages: 1 }]);
+  });
+
+  it("keeps a rejected page visible without inventing a selected recipe", () => {
+    const report: DesignDraftCompileReport = {
+      outcome: "rejected",
+      plannedSlides: 2,
+      acceptedSlides: 0,
+      adjustedSlides: 0,
+      rejectedSlides: 2,
+      slides: [
+        page(0, "rejected", { requestedRecipe: "comparison" }),
+        page(1, "rejected", { requestedRecipe: "process-rail", selectedRecipe: "process-rail" }),
+      ],
+    };
+
+    const metrics = summarizeDesignMetrics(report, 2);
+
+    expect(metrics.accepted).toBe(0);
+    expect(metrics.adjusted).toBe(0);
+    expect(metrics.rejected).toBe(2);
+    expect(metrics.decisions[0]?.selectedRecipe).toBeUndefined();
+    expect(metrics.decisions[1]?.selectedRecipe).toBe("process-rail");
+    // Even a named recipe is not "used" when the page was refused.
+    expect(metrics.recipes).toEqual([]);
   });
 
   it("clamps coverage when a report carries more planned pages than the deck", () => {

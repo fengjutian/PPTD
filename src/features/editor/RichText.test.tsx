@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createDocument, type TextElement } from "../../core/document-model";
+import { createDocument, emu, type TextElement } from "../../core/document-model";
+import { estimateTextLines, runMetricsOf } from "../../core/rendering/text-fit";
 import { RichText } from "./RichText";
 
 function textElement(text: string, runs?: TextElement["runs"]): TextElement {
@@ -21,9 +22,9 @@ describe("rich text", () => {
     expect(markup).toContain("：12万");
     // The emphasised fragment carries the weight, the rest does not.
     expect((markup.match(/font-weight:700/g) ?? []).length).toBe(1);
-    // Both fragments live in one paragraph box; the vertical-alignment flex
-    // wrapper must not turn every styled run into its own line.
-    expect(markup).toContain('<div style="width:100%"><span');
+    // Both fragments live in one line box; the vertical-alignment wrapper must
+    // not turn every styled run into its own line.
+    expect((markup.match(/data-line=/g) ?? []).length).toBe(1);
   });
 
   it("draws a text without fragments in one piece", () => {
@@ -68,5 +69,26 @@ describe("rich text", () => {
     expect(markup).toContain("1.");
     expect(markup).toContain("2.");
     expect(markup).toContain("justify-content:center");
+  });
+
+  it("breaks the copy where the layout counted the lines", () => {
+    // The canvas used to let the browser wrap; a headline that the engine
+    // measured as two lines could show as one on the canvas and as three in the
+    // file. Each measured line is now its own no-wrap box.
+    const element = textElement("搜索与广告业务规模大、利润率高，是 Alphabet 当前的现金牛，但增速持续放缓");
+    element.style = { ...element.style, fontSizePt: 18, lineHeight: 1.25 };
+    element.frame = { ...element.frame, width: emu(4 * 914_400), height: emu(2.4 * 914_400) };
+    const expected = estimateTextLines(
+      element.text,
+      element.frame.width / 12_700,
+      element.style.fontSizePt,
+      element.style.fontFamily,
+      runMetricsOf(element),
+    );
+    expect(expected).toBeGreaterThan(1);
+    const markup = renderToStaticMarkup(<RichText element={element} scale={1} />);
+    expect((markup.match(/data-line=/g) ?? []).length).toBe(expected);
+    // Every line is locked against the browser wrapping it a second time.
+    expect((markup.match(/white-space:pre/g) ?? []).length).toBe(expected);
   });
 });
