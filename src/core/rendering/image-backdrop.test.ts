@@ -72,12 +72,10 @@ describe("配图背景测量", () => {
   });
 
   it("阈值两侧行为正确", () => {
-    // 0.08 是“近黑”的边界：略高于它的深灰仍是页面可以承载的背景。
-    const below = Math.round(255 * NEAR_BLACK_LUMINANCE);
+    // 0.08 的相对亮度约等于 #505050：更深的灰算黑底，中灰已是页面能承载的背景。
+    expect(NEAR_BLACK_LUMINANCE).toBeCloseTo(0.08, 5);
     expect(hasNearBlackBackdrop(analyzeImageBackdrop(frame(16, 16, [0, 0, 0]), 16, 16))).toBe(true);
-    expect(hasNearBlackBackdrop(analyzeImageBackdrop(frame(16, 16, [below, below, below]), 16, 16))).toBe(true);
-    expect(hasNearBlackBackdrop(analyzeImageBackdrop(frame(16, 16, [below + 40, below + 40, below + 40]), 16, 16))).toBe(
-      false,
-    );
+    expect(hasNearBlackBackdrop(analyzeImageBackdrop(frame(16, 16, [72, 72, 72]), 16, 16))).toBe(true);
+    expect(hasNearBlackBackdrop(analyzeImageBackdrop(frame(16, 16, [128, 128, 128]), 16, 16))).toBe(false);
   });
 });

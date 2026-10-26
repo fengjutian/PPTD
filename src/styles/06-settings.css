@@ -183,15 +183,15 @@
   align-items: center;
   gap: 7px;
   padding: 9px 12px;
-  border: 1px solid #6b3940;
+  border: 1px solid #d6a6aa;
   border-radius: 7px;
-  color: #ee9199;
-  background: #2a2022;
+  color: #a4262c;
+  background: #fff;
   cursor: pointer;
 }
 .button-danger:hover:not(:disabled) {
-  border-color: #a94f59;
-  background: #352326;
+  border-color: #a4262c;
+  background: #fdf3f4;
 }
 .button-danger svg {
   width: 15px;

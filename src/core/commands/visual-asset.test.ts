@@ -208,4 +208,26 @@ describe("配图提示词", () => {
   it("没有画面描述时用主题兜底", () => {
     expect(buildVisualAssetPrompt(undefined, "季度业务回顾")).toContain("季度业务回顾");
   });
+
+  it("把画面描述里的深色背景要求改写成浅色", () => {
+    // 实测失败样张的描述就是“背景为深色科技感的渐变”，模型照着画了一块黑底。
+    const prompt = buildVisualAssetPrompt("抽象的几何线条构成的发光标志，背景为深色科技感的渐变", "年度报告");
+    expect(prompt).not.toContain("深色科技感");
+    expect(prompt).toContain("背景为浅色留白");
+    expect(prompt).toContain("发光标志");
+  });
+
+  it("结尾重复一次背景约束，避免模型只听画面描述", () => {
+    const prompt = buildVisualAssetPrompt("三个立方体，黑色背景", "年度报告");
+    expect(prompt).toContain(VISUAL_ASSET_BACKGROUND_RULE);
+    expect(prompt.indexOf(VISUAL_ASSET_BACKGROUND_RULE)).toBeGreaterThan(prompt.indexOf("三个立方体"));
+    expect(prompt).not.toContain("黑色背景");
+  });
+
+  it("不改写画面主体里的深色描述", () => {
+    // 要改的是承载画面的底，不是用户想看的对象。
+    const prompt = buildVisualAssetPrompt("一台深色工业设备，浅色车间背景", "制造业回顾");
+    expect(prompt).toContain("深色工业设备");
+    expect(prompt).toContain("浅色车间背景");
+  });
 });

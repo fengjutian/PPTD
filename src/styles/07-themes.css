@@ -2185,16 +2185,17 @@
   align-items: center;
   gap: 5px;
   padding: 5px 9px;
-  border: 1px solid var(--panel-border, #2c2e33);
+  border: 1px solid #d6a6aa;
   border-radius: 7px;
-  background: #1b1d21;
-  color: #cfd2d7;
+  background: #fff;
+  color: #a4262c;
   font-size: 11px;
   cursor: pointer;
 }
 .settings-memory button:hover:not(:disabled) {
-  border-color: var(--ppt-accent, #d35230);
-  color: #f0a58f;
+  border-color: #a4262c;
+  color: #a4262c;
+  background: #fdf3f4;
 }
 .settings-memory button:disabled {
   opacity: 0.5;

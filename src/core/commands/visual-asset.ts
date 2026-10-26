@@ -52,18 +52,48 @@ export function isVisualAssetRole(value: unknown): value is AiVisualAssetRole {
 
 /** 素材层的默认描述前缀，让不同页面的图看起来像同一套。 */
 export const VISUAL_ASSET_STYLE_HINT =
-  "财经杂志编辑摄影或高质量材质特写，低饱和、自然光、留白充足，与页面主色协调；不要霓虹灯、不要 Logo、不要图标、不要 UI 元素，画面中不要出现任何文字、字母或数字";
+  "财经杂志编辑摄影或高质量材质特写，低饱和、自然光、浅色留白背景，与页面主色协调；不要霓虹灯、不要 Logo、不要图标、不要 UI 元素、不要黑色或深色背景，画面中不要出现任何文字、字母或数字";
+
+/**
+ * 图片背景的硬约束。
+ *
+ * 这一句放在画面描述之后而不是只写进风格前缀：实测图像模型会优先服从
+ * “背景为深色科技感的渐变”这类画面描述，把一条自然光的风格前缀整个忽略，
+ * 最后给页面贴上一块黑色图片（见 ADR 0110）。重复一次背景要求，让它在
+ * 提示词的最后出现。
+ */
+export const VISUAL_ASSET_BACKGROUND_RULE =
+  "画面背景必须是白色或浅灰的明亮留白，不要黑色、深色、暗场、夜景或黑底";
+
+/** 把画面描述里明确要求的深色背景改写成浅色。 */
+const DARK_BACKDROP_CLAUSE =
+  /(?:背景|底色|底图)(?:为|是|采用|使用|以)?(?:深色|黑色|暗色|暗场|黑底|夜色|夜景)[^，。；,;]{0,12}/g;
+const DARK_BACKDROP_ADJECTIVE = /(?:深色|黑色|暗色|暗场|黑底|夜色|夜景)(?:的)?(?:背景|底色|底图)/g;
+
+/**
+ * 去掉画面描述里的黑底要求。
+ *
+ * 提示词不能同时说“背景为深色”和“背景必须浅色”，否则模型只会挑一半听。
+ * 这里只改背景措辞，画面主体（“发光线条”“深色设备”）保持原样：要改的是
+ * 承载画面的底，而不是用户想看的对象。
+ */
+export function lightenBackdropRequest(description: string): string {
+  return description
+    .replace(DARK_BACKDROP_CLAUSE, "背景为浅色留白")
+    .replace(DARK_BACKDROP_ADJECTIVE, "浅色背景");
+}
 
 /**
  * 一页的配图提示词。
  *
- * 提示词由两部分组成：整册共用的风格前缀，和这一页自己的画面描述。
- * 风格前缀让整套演示的图看起来像同一本素材，而不是东一张西一张。
+ * 提示词由三部分组成：整册共用的风格前缀、这一页自己的画面描述，以及
+ * 结尾的背景硬约束。风格前缀让整套演示的图看起来像同一本素材；背景约束
+ * 保证任何一张图都不会把页面变成一块黑色。
  */
 export function buildVisualAssetPrompt(description: string | undefined, topic: string): string {
   const trimmed = (description ?? "").trim();
-  const scene = trimmed || `与「${topic}」主题相关的抽象概念画面`;
-  return `${VISUAL_ASSET_STYLE_HINT}。${scene}`;
+  const scene = lightenBackdropRequest(trimmed || `与「${topic}」主题相关的抽象概念画面`).replace(/[。．.]+$/u, "");
+  return `${VISUAL_ASSET_STYLE_HINT}。${scene}。${VISUAL_ASSET_BACKGROUND_RULE}。`;
 }
 
 /**
