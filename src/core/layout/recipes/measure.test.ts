@@ -3,6 +3,7 @@ import { emu, inches } from "../../document-model";
 import { breakIntoLines } from "../../rendering/cjk-linebreak";
 import { measureTextWidthEm } from "../../rendering/text-fit";
 import {
+  endsInOrphan,
   fittedFontSize,
   fittedFontSizeInRange,
   fittedFontSizeWithoutOrphan,
@@ -78,5 +79,15 @@ describe("recipe measurement", () => {
       widthOf: (character) => measureTextWidthEm(character, "Microsoft YaHei"),
     });
     expect((lines[lines.length - 1] ?? "").length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("recognises a stranded last line", () => {
+    // 16 full-width characters at 16pt need 256pt. In a 250pt column fifteen
+    // fit the first line and the last one sits alone under it.
+    expect(endsInOrphan("规模最大，贡献绝大多数收入与利润", 250, 16, "Microsoft YaHei")).toBe(true);
+    // Wide enough for all sixteen and the break has no tail at all.
+    expect(endsInOrphan("规模最大，贡献绝大多数收入与利润", 260, 16, "Microsoft YaHei")).toBe(false);
+    // One line never counts as an orphan, however short it is.
+    expect(endsInOrphan("利润率行业领先", 256, 16, "Microsoft YaHei")).toBe(false);
   });
 });

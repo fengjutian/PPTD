@@ -181,7 +181,12 @@ import {
   type StyleProfileId,
 } from "../core/design/style-profiles";
 
-import { planThemePresetVariants, rankThemePresets, type ThemeContentSignals, type ThemePresetChoice } from "../core/design/theme-preset-ranking";
+import {
+  planThemePresetVariants,
+  rankThemePresets,
+  type ThemeContentSignals,
+  type ThemePresetChoice,
+} from "../core/design/theme-preset-ranking";
 import { rankStyleProfiles } from "../core/design/style-profile-ranking";
 import { defaultPresentationVisualGoal, type VisualReview } from "../services/visual-alignment";
 import {
@@ -3400,6 +3405,7 @@ export function useAppRuntime() {
         description: string;
         reason: string;
         issueCount: number;
+        issuePages: number[];
       }> = [];
       let failed = 0;
       let completed = 0;
@@ -3456,6 +3462,7 @@ export function useAppRuntime() {
         // off the page or two texts on top of each other. A hard-coded zero made
         // that line claim "排版检查通过" for pages it had never measured.
         const layoutAudit = auditSlideLayout(candidate);
+        const issuePages = [...new Set(layoutAudit.issues.map((issue) => issue.slideIndex))].sort((a, b) => a - b);
         pending.push({
           id: crypto.randomUUID(),
           presetId: preset.id,
@@ -3467,6 +3474,7 @@ export function useAppRuntime() {
           description: variantConcept.idea,
           reason: `${variantConcept.rationale}；${styleChoice?.reason ?? choice.reason}`,
           issueCount: layoutAudit.issues.length,
+          issuePages,
         });
       };
       const worker = async () => {
@@ -3536,6 +3544,7 @@ export function useAppRuntime() {
               images: rendered.filter((image): image is string => image !== undefined),
               pageCount: sourceDraft.slides.length,
               issueCount: entry.issueCount,
+              issuePages: entry.issuePages,
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -3992,10 +4001,9 @@ export function useAppRuntime() {
   const pickerThemeGuidance = themePresetGuidance(pickerThemePreset.id);
   const pickerStyleProfile = findStyleProfile(styleProfileId) ?? recommendedStyleProfile;
   const pickerStyleReason =
-    rankStyleProfiles(
-      aiDraft ? themeSignalsFromDraft(aiDraft) : { title: aiTopic.trim() },
-      pickerThemePreset.id,
-    ).find((choice) => choice.profileId === pickerStyleProfile.id)?.reason ?? recommendedStyle.reason;
+    rankStyleProfiles(aiDraft ? themeSignalsFromDraft(aiDraft) : { title: aiTopic.trim() }, pickerThemePreset.id).find(
+      (choice) => choice.profileId === pickerStyleProfile.id,
+    )?.reason ?? recommendedStyle.reason;
   // 抽屉里展示的主题：生成中查看的是被点击的主题（预览），其余时候就是已选主题。
   const drawerThemePreset =
     (themePreviewPresetId ? findThemePreset(themePreviewPresetId) : undefined) ?? selectedThemePreset;

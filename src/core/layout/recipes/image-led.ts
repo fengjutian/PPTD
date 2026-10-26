@@ -79,15 +79,18 @@ export const imageLed: LayoutRecipe = {
     // Fitted against the body leading (conservative), rendered with the tighter
     // headline leading: the copy block gets shorter without the size growing
     // into an extra line the frame cannot hold.
-    // A cover headline gets the orphan guard; a content title keeps the plain
-    // fit so a long claim page is not shrunk for one dangling character.
-    const titleSize = (isCover ? fittedFontSizeWithoutOrphan : fittedFontSize)(
+    // The orphan guard is bounded for a content title: two or three points to
+    // balance the last line, never the drop that used to shrink a claim page
+    // just because one character dangled.
+    const titleSize = fittedFontSizeWithoutOrphan(
       title,
       titleFrame,
       isCover ? Math.max(ctx.tokens.type.displayPt, 40) : ctx.tokens.type.titlePt,
       18,
       headingFamily,
       lineHeight,
+      3,
+      isCover ? Number.POSITIVE_INFINITY : 3,
     );
     if (!textFits(title, titleFrame, titleSize, headingFamily, lineHeight)) {
       return conflict("title", "图文页标题在图片旁放不下");

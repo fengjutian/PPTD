@@ -84,6 +84,32 @@ describe("slide scene", () => {
     expect(markup).toContain("background:#101820");
   });
 
+  it("marks a text whose copy does not fit its frame", () => {
+    // The canvas clips the last line silently; the dashed edge is what tells the
+    // reader that the box, not the copy, is wrong.
+    const slide = slideWithText();
+    const element = slide.elements[0]!;
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.text = "搜索与广告业务规模大、利润率高，是 Alphabet 当前的现金牛，但增速持续放缓";
+    element.style = { ...element.style, fontSizePt: 18, lineHeight: 1.25 };
+    // A one-line-tall frame holding three lines of copy.
+    element.frame = { x: emu(914_400), y: emu(914_400), width: emu(4_572_000), height: emu(228_600) };
+    const overflowing = renderToStaticMarkup(
+      <SlideElementFrame element={element} scale={sceneScale(240, PAGE_WIDTH)}>
+        <span />
+      </SlideElementFrame>,
+    );
+    expect(overflowing).toContain("text-overflow");
+    // A frame that holds the copy carries no warning.
+    element.frame = { x: emu(914_400), y: emu(914_400), width: emu(4_572_000), height: emu(3_810_000) };
+    const fitting = renderToStaticMarkup(
+      <SlideElementFrame element={element} scale={sceneScale(240, PAGE_WIDTH)}>
+        <span />
+      </SlideElementFrame>,
+    );
+    expect(fitting).not.toContain("text-overflow");
+  });
+
   it("leaves a hidden element out of a page preview", () => {
     const slide = slideWithText();
     slide.elements[0]!.hidden = true;

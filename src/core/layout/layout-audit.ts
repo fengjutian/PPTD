@@ -1,21 +1,22 @@
 import { isElementVisible, type PresentationDocument, type TextElement } from "../document-model";
-import { estimateTextLines, textInkBox } from "../rendering/text-fit";
+import { estimateTextLines, textInkBox, textLines } from "../rendering/text-fit";
 
 /**
  * A deterministic read of the geometry a designed page ended up with.
  *
  * The visual review looks at a picture and can miss a text that lost its last
  * line, while the generation gate only knows the checks it was written with.
- * This audit answers the three questions a reader can answer by looking at the
- * page — does the copy fit its frame, does a text stay on the page, do two texts
- * claim the same space — so the preview can report a number it can stand behind
- * instead of announcing a pass it never verified.
+ * This audit answers the questions a reader can answer by looking at the page —
+ * does the copy fit its frame, does a text stay on the page, do two texts claim
+ * the same space, does a paragraph end on a stranded line — so the preview can
+ * report a number it can stand behind instead of announcing a pass it never
+ * verified.
  *
  * It reads the document only: no AI, no pixels, no repair. Rendering already
  * shrinks a text that does not fit, the same way the exported `normAutofit`
  * does, so an overflow here is a layout problem to surface, not copy to cut.
  */
-export type LayoutAuditKind = "text-overflow" | "out-of-bounds" | "text-overlap";
+export type LayoutAuditKind = "text-overflow" | "out-of-bounds" | "text-overlap" | "text-orphan";
 
 export interface LayoutAuditIssue {
   slideIndex: number;
@@ -32,6 +33,8 @@ export interface LayoutAuditReport {
 const OVERFLOW_TOLERANCE = 1.02;
 /** The share of the smaller frame two texts must share to count as a collision. */
 const OVERLAP_SHARE = 0.12;
+/** A last line shorter than this reads as a stranded word rather than a line. */
+const MINIMUM_LAST_LINE_CHARS = 3;
 
 interface Frame {
   x: number;
@@ -95,6 +98,21 @@ export function auditSlideLayout(document: PresentationDocument): LayoutAuditRep
           kind: "out-of-bounds",
           message: "文本框越过页面边界，导出后会被裁切",
         });
+      }
+      // A paragraph whose last line holds one or two characters is inside its
+      // box and still reads as unfinished ("…贡献有 / 限"). The recipes and the
+      // refit avoid it; what is left is reported so the page is not called done.
+      const lines = textLines(element.text, frame.width / 12_700, element.style.fontSizePt, element.style.fontFamily);
+      if (lines.length > 1) {
+        const tail = (lines[lines.length - 1] ?? "").replace(/\s/g, "");
+        if (tail.length > 0 && tail.length < MINIMUM_LAST_LINE_CHARS) {
+          issues.push({
+            slideIndex,
+            elementIds: [element.id],
+            kind: "text-orphan",
+            message: `末行只剩 ${tail.length} 个字符「${tail}」，应回退字号或加宽内容区`,
+          });
+        }
       }
     }
 

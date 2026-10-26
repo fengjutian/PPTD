@@ -1620,6 +1620,16 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+/*
+ * The canvas is where an overflowing text gets fixed, so it has to show one:
+ * a dashed amber edge means the copy needs more height than the box has. The
+ * preview and the file shrink such a text; the editor cannot, and used to cut
+ * the last line without saying anything. Thumbnails and previews stay clean.
+ */
+.slide-canvas .slide-element.text.text-overflow > div {
+  outline: 1px dashed #c98a2e;
+  outline-offset: 3px;
+}
 .slide-element.shape .shape-fill {
   width: 100%;
   height: 100%;

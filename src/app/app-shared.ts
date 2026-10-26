@@ -125,6 +125,8 @@ export interface VariantOptionView {
    * never ran.
    */
   issueCount?: number;
+  /** Zero-based pages that carry at least one audited problem. */
+  issuePages?: number[];
 }
 
 /** How far the variant batch has got; `failed` counts attempts that produced no card. */

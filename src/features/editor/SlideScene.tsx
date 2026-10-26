@@ -1,5 +1,6 @@
-import { type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from "react";
+import { useMemo, type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from "react";
 import { visibleElements, type ImageFrameShape, type Slide, type SlideElement } from "../../core/document-model";
+import { textOverflowsFrame } from "../../core/rendering/text-fit";
 import { ChartView } from "./ChartView";
 import { CroppedImage } from "./CroppedImage";
 import { LineView } from "./LineView";
@@ -62,15 +63,23 @@ function pictureClip(shape: ImageFrameShape | undefined, width: number, height: 
  *
  * The frame is placed in pixels of the surface it is drawn on, so the same
  * element keeps the same place on the canvas and in the thumbnail.
+ *
+ * A text whose copy needs more height than its frame carries `text-overflow`:
+ * the canvas draws a dashed edge around it instead of letting the box quietly
+ * cut the last line. The preview and the file shrink such a text, so the editor
+ * is the one place where the problem has to be visible to be fixed.
  */
 export function SlideElementFrame({ element, scale, children, className, style, ...rest }: SlideElementFrameProps) {
   const width = element.frame.width * scale;
   const height = element.frame.height * scale;
   const clip = element.type === "image" ? pictureClip(element.frameShape, width, height) : undefined;
+  // The measurement is size independent (points), so it only has to run when the
+  // element itself changes — not on every pan, zoom or selection of the canvas.
+  const overflows = useMemo(() => element.type === "text" && textOverflowsFrame(element), [element]);
   return (
     <div
       {...rest}
-      className={`slide-element ${element.type}${className ? ` ${className}` : ""}`}
+      className={`slide-element ${element.type}${overflows ? " text-overflow" : ""}${className ? ` ${className}` : ""}`}
       style={{
         left: element.frame.x * scale,
         top: element.frame.y * scale,

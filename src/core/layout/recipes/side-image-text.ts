@@ -107,13 +107,18 @@ export const sideImageText: LayoutRecipe = {
       { x: chrome.title.x, y: chrome.title.y, width: titleWidth, height: chrome.title.height },
       page,
     );
-    const titleSize = (isCover ? fittedFontSizeWithoutOrphan : fittedFontSize)(
+    // The orphan guard is bounded for a content title: two or three points to
+    // balance the last line, never the drop that used to shrink a claim page
+    // just because one character dangled.
+    const titleSize = fittedFontSizeWithoutOrphan(
       title,
       titleProbe,
       isCover ? Math.max(ctx.tokens.type.displayPt, 40) : ctx.tokens.type.titlePt,
       18,
       displayFamily,
       lineHeight,
+      3,
+      isCover ? Number.POSITIVE_INFINITY : 3,
     );
     if (!textFits(title, titleProbe, titleSize, displayFamily, lineHeight)) {
       return conflict("title", "对开图文页的标题在标题轴内放不下");

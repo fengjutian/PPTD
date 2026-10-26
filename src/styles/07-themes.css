@@ -1740,6 +1740,12 @@
 .variant-gallery-issues.warning {
   color: #a8671c;
 }
+/* The pages behind the count: the reader opens a page, not a number. */
+.variant-gallery-issue-pages {
+  padding-left: 2px;
+  color: #8a6a3d;
+  font-size: 9px;
+}
 .variant-gallery-pick {
   align-self: flex-start;
   display: inline-flex;

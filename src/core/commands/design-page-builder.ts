@@ -49,6 +49,7 @@ import { consumptionProblem, isImageRecipe, selectPreferredStyleRecipe, selectRe
 import { RECIPE_CATALOG } from "../layout/recipes/registry";
 import type { RecipeContext } from "../layout/recipes/types";
 import { planPageChrome } from "../layout/page-chrome";
+import { anyEndsInOrphan, endsInOrphan } from "../layout/recipes/measure";
 import { refitSlideText } from "../layout/text-refit";
 import { coverCrop } from "../rendering/image-fit";
 import type { CompositionFacts } from "./design-intent";
@@ -1315,14 +1316,28 @@ export function buildDesignedSlide(
       (longest, column) => (itemText(column.items).length > itemText(longest.items).length ? column : longest),
       columns[0]!,
     );
-    const itemSize = fittedFontSize(
-      itemText(longestColumn.items),
-      frame(contentBox.x, contentBox.y, copyWidth, availableHeight),
-      CONTENT_REGION.comparisonItemFontSizePt,
-      CONTENT_REGION.comparisonMinimumItemFontSizePt,
-      1.25,
-      CONTENT_REGION.comparisonItemFontSizePt,
-    );
+    const preferredItemSize = CONTENT_REGION.comparisonItemFontSizePt;
+    const copyWidthPt = copyWidth * pageWidthIn * 72;
+    // A point that ends on a single character ("…贡献绝大多数收入与利 / 润") is
+    // the defect this branch produces: the size fits the height, so nothing
+    // flags it. One or two points smaller almost always pulls the last glyph
+    // up; below that the paragraph is left alone rather than shrinking the
+    // whole panel into small print.
+    const endsInStrand = (size: number) =>
+      columns.some((column) => endsInOrphan(itemText(column.items), copyWidthPt, size, majorFont));
+    const itemSize = (() => {
+      let size = fittedFontSize(
+        itemText(longestColumn.items),
+        frame(contentBox.x, contentBox.y, copyWidth, availableHeight),
+        preferredItemSize,
+        CONTENT_REGION.comparisonMinimumItemFontSizePt,
+        1.25,
+        preferredItemSize,
+      );
+      const orphanFloor = Math.max(CONTENT_REGION.comparisonMinimumItemFontSizePt, preferredItemSize - 3);
+      while (size > orphanFloor && endsInStrand(size)) size -= 1;
+      return size;
+    })();
     const copyHeight = Math.max(
       ...columns.map((column) => blockHeight(itemText(column.items), copyWidth, itemSize, bodyLeading)),
     );
@@ -2177,15 +2192,35 @@ export function buildDesignedSlide(
       ),
     );
     const cleanItems = items.map(cleanPoint).filter((item) => item.length > 0);
+    // The hard-coded pair below assumes a page-wide margin (0.08–0.92). A
+    // surface that indents its content — the instrument rail, the paper column —
+    // used to get panels starting left of its own axis, and the rail cut
+    // through the left panel. The pair is derived from the content box unless
+    // the box is still the editorial span the constants were written for.
+    const columnPair = (): Array<{ x: number; y: number; width: number; height: number }> => {
+      const editorialSpan =
+        Math.abs(contentBox.x - 0.08) <= 0.015 && Math.abs(contentBox.x + contentBox.width - 0.92) <= 0.015;
+      if (editorialSpan) {
+        return [
+          { x: 0.08, y: contentBox.y, width: 0.36, height: contentBox.height },
+          { x: 0.57, y: contentBox.y, width: 0.35, height: contentBox.height },
+        ];
+      }
+      // The old pair left 0.13 of the page between the columns; keep that share
+      // of the span so the pair reads the same, only narrower.
+      const gutter = contentBox.width * 0.155;
+      const columnWidth = (contentBox.width - gutter) / 2;
+      return [
+        { x: contentBox.x, y: contentBox.y, width: columnWidth, height: contentBox.height },
+        { x: contentBox.x + columnWidth + gutter, y: contentBox.y, width: columnWidth, height: contentBox.height },
+      ];
+    };
     const slots: Array<{ x: number; y: number; width: number; height: number }> = hasSafeColumns
       ? [
           { x: leftRecipe!.x, y: leftRecipe!.y, width: leftRecipe!.width, height: leftRecipe!.height },
           { x: rightRecipe!.x, y: rightRecipe!.y, width: rightRecipe!.width, height: rightRecipe!.height },
         ]
-      : [
-          { x: 0.08, y: contentBox.y, width: 0.36, height: contentBox.height },
-          { x: 0.57, y: contentBox.y, width: 0.35, height: contentBox.height },
-        ];
+      : columnPair();
     const padding = 0.045;
     // The marker owns a gutter of its own, and wrapped lines start at the
     // copy column instead of running back under the bullet. Concatenating
@@ -2245,15 +2280,37 @@ export function buildDesignedSlide(
       measure(cleanItems.slice(0, cut), slots[0]!, 12),
       measure(cleanItems.slice(cut), slots[1]!, 12),
     ] as const;
+    type ColumnCandidate = ReturnType<typeof bestCut>;
+    const orphanAt = (candidate: NonNullable<ColumnCandidate>, size: number) =>
+      anyEndsInOrphan(cleanItems.slice(0, candidate.at), copyWidth(slots[0]!) * pageWidthIn * 72, size, majorFont) ||
+      anyEndsInOrphan(cleanItems.slice(candidate.at), copyWidth(slots[1]!) * pageWidthIn * 72, size, majorFont);
+    const orphanFloor = Math.max(12, maximumSize - 3);
+    let chosen:
+      { at: number; size: number; left: ReturnType<typeof measure>; right: ReturnType<typeof measure> } | undefined;
+    // A size that fits but leaves an orphan is kept only in case nothing better
+    // exists; a size that does not fit is kept only as the last resort at 12pt.
+    let orphaned: typeof chosen;
+    let smallest: typeof chosen;
     for (let size = maximumSize; size >= 12; size -= 1) {
       const candidate = bestCut(size);
       if (!candidate) break;
-      if (candidate.needed <= available || size === 12) {
-        cut = candidate.at;
-        columnSize = size;
-        measured = [candidate.left, candidate.right] as const;
+      const option = { at: candidate.at, size, left: candidate.left, right: candidate.right };
+      if (candidate.needed > available) {
+        if (size === 12) smallest = option;
+        continue;
+      }
+      if (size <= orphanFloor || !orphanAt(candidate, size)) {
+        chosen = option;
         break;
       }
+      orphaned ??= option;
+      if (size === 12) smallest = option;
+    }
+    const picked = chosen ?? orphaned ?? smallest;
+    if (picked) {
+      cut = picked.at;
+      columnSize = picked.size;
+      measured = [picked.left, picked.right] as const;
     }
     // The panels share one top edge and are each as tall as the copy they
     // carry. Forcing a short column to the height of a long one left the

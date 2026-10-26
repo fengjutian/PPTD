@@ -4,6 +4,36 @@ import { Check, ChevronLeft, ChevronRight, CircleAlert, Eye, LoaderCircle, X } f
 import type { VariantOptionView } from "../../app/app-shared";
 
 /**
+ * "2、3、5–7" for the pages the audit flagged.
+ *
+ * A count alone sends the reader hunting through the thumbnails; the pages are
+ * what they need to open. Consecutive pages collapse into a range because a
+ * defect usually repeats across the pages of one composition.
+ */
+function formatPageList(indexes: readonly number[] | undefined): string {
+  if (!indexes || indexes.length === 0) return "";
+  const sorted = [...new Set(indexes)].filter((index) => Number.isInteger(index) && index >= 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return "";
+  const parts: string[] = [];
+  let start = sorted[0]!;
+  let previous = start;
+  const flush = () => {
+    parts.push(start === previous ? `${start + 1}` : `${start + 1}–${previous + 1}`);
+  };
+  for (const index of sorted.slice(1)) {
+    if (index === previous + 1) {
+      previous = index;
+      continue;
+    }
+    flush();
+    start = index;
+    previous = index;
+  }
+  flush();
+  return parts.join("、");
+}
+
+/**
  * Enlarged, page-by-page preview of one generated variant.
  *
  * A gallery card can only fit the cover and the first text page, but choosing a
@@ -49,6 +79,7 @@ export function VariantPreviewDialog({
   const totalPages = pages && pages.length > 0 ? pages.length : Math.max(1, option.pageCount);
   const currentPage = Math.min(pageIndex, totalPages - 1);
   const page = pages?.[currentPage];
+  const pageList = formatPageList(option.issuePages);
 
   useEffect(() => {
     if (pagesById[optionId] || failedIds[optionId] || pendingRef.current.has(optionId)) return;
@@ -220,6 +251,7 @@ export function VariantPreviewDialog({
                 <>
                   <CircleAlert size={12} />
                   {option.issueCount} 处排版待调整
+                  {pageList && <small className="variant-gallery-issue-pages">第 {pageList} 页</small>}
                 </>
               ) : (
                 <>

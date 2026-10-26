@@ -93,6 +93,23 @@ describe("VariantPreviewDialog", () => {
     expect(markup).toContain("2 处排版待调整");
   });
 
+  it("names the pages that need adjusting instead of only counting them", () => {
+    // A count sends the reader hunting through the thumbnails; the pages are
+    // what they need to open.
+    const flagged: VariantOptionView = { ...OPTIONS[1]!, issueCount: 4, issuePages: [1, 2, 5] };
+    const markup = renderToStaticMarkup(
+      <VariantPreviewDialog
+        options={[flagged]}
+        option={flagged}
+        onClose={noop}
+        onUse={noop}
+        renderPages={renderPages}
+      />,
+    );
+    expect(markup).toContain("4 处排版待调整");
+    expect(markup).toContain("第 2–3、6 页");
+  });
+
   it("says nothing about a layout check it has not run", () => {
     // A design direction is rendered on demand, so there is no deck to audit
     // yet. It used to carry a hard-coded zero and announce a pass.

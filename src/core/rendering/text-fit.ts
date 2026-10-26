@@ -36,6 +36,20 @@ export function measureTextWidthEm(text: string, fontFamily?: string): number {
 }
 
 /**
+ * The lines a text breaks into in a frame of this width.
+ *
+ * The one place the line contents are produced: the count, the stranded-last-line
+ * checks and the ink box all read it, so they cannot disagree about where a
+ * paragraph breaks.
+ */
+export function textLines(text: string, widthPt: number, fontSizePt: number, fontFamily?: string): readonly string[] {
+  return breakIntoLines(text, {
+    widthEm: Math.max(1, widthPt / Math.max(0.01, fontSizePt)),
+    widthOf: (character) => measureTextWidthEm(character, fontFamily),
+  });
+}
+
+/**
  * How many lines a text needs in a frame.
  *
  * The line breaking is the one the renderer uses, so the layout engine, the
@@ -44,11 +58,7 @@ export function measureTextWidthEm(text: string, fontFamily?: string): number {
  * renderer wherever a Latin word or a piece of punctuation decides a break.
  */
 export function estimateTextLines(text: string, widthPt: number, fontSizePt: number, fontFamily?: string): number {
-  const widthEm = Math.max(1, widthPt / fontSizePt);
-  return breakIntoLines(text, {
-    widthEm,
-    widthOf: (character) => measureTextWidthEm(character, fontFamily),
-  }).length;
+  return textLines(text, widthPt, fontSizePt, fontFamily).length;
 }
 
 /**
@@ -222,6 +232,32 @@ export function textInkBox(element: TextElement): TextInkBox {
 }
 
 /**
+ * Whether the copy needs more height than the frame offers.
+ *
+ * `tolerance` is the share of an overflow the caller is willing to wave through:
+ * the gate allows 8% (a page that is a hair over still exports without losing a
+ * line), while the editor and the audit compare almost exactly, because there
+ * the question is "does the reader see text leave its box".
+ */
+export function textOverflowsFrame(element: TextElement, tolerance = 1.001): boolean {
+  const widthPt = element.frame.width / 12_700;
+  const heightPt = element.frame.height / 12_700;
+  if (heightPt <= 0 || !element.text.trim()) return false;
+  // An explicit leading changes how tall the block is. Counting it here lets the
+  // refit pass catch a text style that no longer fits its frame. A document
+  // that never set one is measured with the single spacing the export writes
+  // (1.2); the preview draws such a text with its own 1.25 default, and the
+  // gate's allowance is what keeps the two from disagreeing about a page.
+  const lineHeight = element.style.lineHeight ?? 1.2;
+  return (
+    estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) *
+      element.style.fontSizePt *
+      lineHeight >
+    heightPt * tolerance
+  );
+}
+
+/**
  * Whether the text is taller than the frame it sits in.
  *
  * The thresholds match the ones the quality gate uses, so a page that reports
@@ -229,18 +265,5 @@ export function textInkBox(element: TextElement): TextInkBox {
  * disappears.
  */
 export function textLikelyOverflows(element: TextElement): boolean {
-  const widthPt = element.frame.width / 12_700;
-  const heightPt = element.frame.height / 12_700;
-  // An explicit leading changes how tall the block is. Counting it here lets the
-  // refit pass catch a text style that no longer fits its frame. A document
-  // that never set one is measured with the single spacing the export writes
-  // (1.2); the preview draws such a text with its own 1.25 default, and the
-  // 8% allowance below is what keeps the two from disagreeing about a page.
-  const lineHeight = element.style.lineHeight ?? 1.2;
-  return (
-    estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) *
-      element.style.fontSizePt *
-      lineHeight >
-    heightPt * 1.08
-  );
+  return textOverflowsFrame(element, 1.08);
 }

@@ -3,7 +3,7 @@ import type { ContentBlock, Emu } from "../../document-model";
 import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { fittedFontSize, anyEndsInOrphan, frameFromNormalized, textFits, textHeightPt } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type ComparisonBlock = Extract<ContentBlock, { type: "comparison" }>;
@@ -18,6 +18,11 @@ const MAX_GAP_PT = 42;
 const MARKER_GUTTER = 0.022;
 /** The inset that keeps the column label off the edge of its accent field. */
 const HEADER_PADDING = 0.018;
+/**
+ * How far below the preferred size a list may shrink to avoid a stranded last
+ * line. More than this and the page reads as one that changed size by accident.
+ */
+const ORPHAN_ALLOWANCE_PT = 3;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -144,6 +149,15 @@ export const comparison: LayoutRecipe = {
         fontFamily: bodyFamily,
       });
 
+    // A column that ends on a single character ("…贡献有 / 限") reads as a
+    // mistake. Both columns share one size, so the fix is a point or two for the
+    // whole list, not a different size for the one item that broke badly.
+    const copyWidthPt = copyWidth * pageWidthIn * 72;
+    const orphanAt = (size: number) =>
+      size > ITEM_SIZE_PT - ORPHAN_ALLOWANCE_PT &&
+      (anyEndsInOrphan(leftItems, copyWidthPt, size, bodyFamily) ||
+        anyEndsInOrphan(rightItems, copyWidthPt, size, bodyFamily));
+
     let itemSize = ITEM_SIZE_PT;
     let leftFlow = flowFor(leftItems, itemSize);
     let rightFlow = flowFor(rightItems, itemSize);
@@ -151,7 +165,8 @@ export const comparison: LayoutRecipe = {
       itemSize > MIN_ITEM_SIZE_PT &&
       (leftFlow.overflow ||
         rightFlow.overflow ||
-        Math.max(leftFlow.totalHeightPt, rightFlow.totalHeightPt) > copyArea * pageHeightIn * 72)
+        Math.max(leftFlow.totalHeightPt, rightFlow.totalHeightPt) > copyArea * pageHeightIn * 72 ||
+        orphanAt(itemSize))
     ) {
       itemSize -= 1;
       leftFlow = flowFor(leftItems, itemSize);

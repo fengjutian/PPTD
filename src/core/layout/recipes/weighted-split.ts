@@ -3,7 +3,7 @@ import type { ContentBlock } from "../../document-model";
 import { layoutFlow } from "../../rendering/flow";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits } from "./measure";
+import { fittedFontSize, anyEndsInOrphan, frameFromNormalized, textFits } from "./measure";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type ComparisonBlock = Extract<ContentBlock, { type: "comparison" }>;
@@ -16,6 +16,8 @@ const SECONDARY_SIZE_PT = 16;
 const MIN_ITEM_SIZE_PT = 14;
 const MIN_GAP_PT = 10;
 const MAX_GAP_PT = 42;
+/** How far a column may shrink to avoid a stranded last line. */
+const ORPHAN_ALLOWANCE_PT = 3;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -112,20 +114,31 @@ export const weightedSplit: LayoutRecipe = {
     const copyArea = Math.max(0.15, contentHeight - headerHeight);
 
     const buildColumn = (items: string[], width: number, primary: boolean) => {
-      const size = primary ? ITEM_SIZE_PT : SECONDARY_SIZE_PT;
+      const preferred = primary ? ITEM_SIZE_PT : SECONDARY_SIZE_PT;
       const copyWidth = width - 0.022;
-      const flow = layoutFlow({
-        items,
-        widthPt: copyWidth * pageWidthIn * 72,
-        availableHeightPt: copyArea * pageHeightIn * 72,
-        preferredFontSizePt: size,
-        minimumFontSizePt: MIN_ITEM_SIZE_PT,
-        minimumGapPt: MIN_GAP_PT,
-        maximumGapPt: MAX_GAP_PT,
-        verticalAlign: "center",
-        lineHeightRatio: lineHeight,
-        fontFamily: bodyFamily,
-      });
+      const copyWidthPt = copyWidth * pageWidthIn * 72;
+      const flowAt = (size: number) =>
+        layoutFlow({
+          items,
+          widthPt: copyWidthPt,
+          availableHeightPt: copyArea * pageHeightIn * 72,
+          preferredFontSizePt: size,
+          minimumFontSizePt: size,
+          minimumGapPt: MIN_GAP_PT,
+          maximumGapPt: MAX_GAP_PT,
+          verticalAlign: "center",
+          lineHeightRatio: lineHeight,
+          fontFamily: bodyFamily,
+        });
+      // The column shares one size across its points; a stranded last line is
+      // fixed for the whole column, never for the one point that broke badly.
+      const orphanFloor = Math.max(MIN_ITEM_SIZE_PT, preferred - ORPHAN_ALLOWANCE_PT);
+      let size = preferred;
+      let flow = flowAt(size);
+      while (size > orphanFloor && anyEndsInOrphan(items, copyWidthPt, size, bodyFamily)) {
+        size -= 1;
+        flow = flowAt(size);
+      }
       return { items, width, primary, copyWidth, flow };
     };
     const columns = [

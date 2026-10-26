@@ -1,7 +1,5 @@
 import type { Emu, RectEmu } from "../../document-model";
-import { estimateTextLines } from "../../rendering/text-fit";
-import { breakIntoLines } from "../../rendering/cjk-linebreak";
-import { measureTextWidthEm } from "../../rendering/text-fit";
+import { estimateTextLines, textLines } from "../../rendering/text-fit";
 import type { NormalizedFrame } from "./types";
 
 /** One point in EMU. */
@@ -97,6 +95,39 @@ export function fittedFontSizeInRange(
 }
 
 /**
+ * Whether the block would leave a stranded last line at this size.
+ *
+ * A last line of one or two characters ("…贡献有 / 限") is the most common
+ * typographic defect in a generated column: nothing is clipped, every glyph is
+ * inside its box, and the page still reads as unfinished. Columns that share one
+ * type size ask this before committing to it, so the whole list shrinks by a
+ * point instead of one item being set smaller than its neighbours.
+ */
+export function endsInOrphan(
+  text: string,
+  widthPt: number,
+  fontSizePt: number,
+  fontFamily: string | undefined,
+  minimumLastLineChars = 3,
+): boolean {
+  const lines = textLines(text, widthPt, fontSizePt, fontFamily);
+  if (lines.length <= 1) return false;
+  const lastLine = (lines[lines.length - 1] ?? "").replace(/\s/g, "");
+  return lastLine.length < minimumLastLineChars;
+}
+
+/** Whether any of the items would end on a stranded line at this size. */
+export function anyEndsInOrphan(
+  items: readonly string[],
+  widthPt: number,
+  fontSizePt: number,
+  fontFamily: string | undefined,
+  minimumLastLineChars = 3,
+): boolean {
+  return items.some((item) => endsInOrphan(item, widthPt, fontSizePt, fontFamily, minimumLastLineChars));
+}
+
+/**
  * The largest size that does not leave an orphan on the last line.
  *
  * A two-line headline whose second line holds a single character reads as a
@@ -113,18 +144,17 @@ export function fittedFontSizeWithoutOrphan(
   fontFamily: string | undefined,
   lineHeight: number,
   minimumLastLineChars = 3,
+  maximumDropPt = Number.POSITIVE_INFINITY,
 ): number {
-  let size = fittedFontSize(text, frame, preferredPt, minimumPt, fontFamily, lineHeight);
+  const fitted = fittedFontSize(text, frame, preferredPt, minimumPt, fontFamily, lineHeight);
   const widthPt = frame.width / EMU_PER_PT;
-  const linesAt = (candidate: number): string[] =>
-    breakIntoLines(text, {
-      widthEm: Math.max(1, widthPt / candidate),
-      widthOf: (character) => measureTextWidthEm(character, fontFamily),
-    });
-  while (size > minimumPt) {
-    const lines = linesAt(size);
-    const lastLine = (lines[lines.length - 1] ?? "").replace(/\s/g, "");
-    if (lines.length <= 1 || lastLine.length >= minimumLastLineChars) return size;
+  // A display headline may be worth a point or two to balance; a body title is
+  // not worth a third of its size, so a caller can bound the search and leave
+  // the narrow frame to the layout audit instead.
+  const floor = Math.max(minimumPt, Math.round(fitted - maximumDropPt));
+  let size = fitted;
+  while (size > floor) {
+    if (!endsInOrphan(text, widthPt, size, fontFamily, minimumLastLineChars)) return size;
     size -= 1;
   }
   return size;

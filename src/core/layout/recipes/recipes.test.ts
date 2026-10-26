@@ -22,7 +22,7 @@ import { editorialIndex } from "./editorial-index";
 import { fullBleedImage } from "./full-bleed-image";
 import { imageLed } from "./image-led";
 import { instrumentColumns } from "./instrument-columns";
-import { frameFromNormalized, rectsOverlap } from "./measure";
+import { frameFromNormalized, endsInOrphan, rectsOverlap } from "./measure";
 import { paperColumn } from "./paper-column";
 import { processRail } from "./process-rail";
 import { quoteField } from "./quote-field";
@@ -1248,5 +1248,44 @@ describe("instrument-columns recipe", () => {
     const ctx = context(long, { facts: facts({ itemCount: 2, longestItemLength: 34 }) });
     ctx.concept = directionConcept("instrument");
     expect(instrumentColumns.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(false);
+  });
+
+  it("does not strand a character in a narrow four-column board", () => {
+    const items = [
+      "搜索广告在 Google Services 中占比最高",
+      "YouTube 广告保持稳定增长",
+      "Google Cloud 营收增速持续领先集团整体",
+      "Other Bets 仍处投入阶段，对整体盈利贡献有限",
+    ];
+    const pageContent = prosePage("四条增长线索", items);
+    const ctx = context(pageContent, { facts: facts({ itemCount: 4, longestItemLength: 26 }) });
+    ctx.concept = directionConcept("instrument");
+    // The instrument surface indents its content behind the rail; four columns
+    // of about 2in are narrow enough that the preferred size strands a tail.
+    ctx.frame.content = { x: inches(2.93), y: inches(2.55), width: inches(8.5), height: inches(4.1) };
+    ctx.chrome = undefined;
+    const result = plan(instrumentColumns, ctx);
+    const copy = result.elements.filter(
+      (element): element is TextElement => element.type === "text" && items.includes(element.text),
+    );
+    expect(copy).toHaveLength(4);
+    for (const element of copy) {
+      expect(
+        endsInOrphan(element.text, element.frame.width / 12_700, element.style.fontSizePt, element.style.fontFamily),
+        `${element.text}（${element.style.fontSizePt}pt）`,
+      ).toBe(false);
+    }
+    // One point larger — the size the board would take if it only measured
+    // height — strands a character. That is what this fixture is here for.
+    expect(
+      copy.some((element) =>
+        endsInOrphan(
+          element.text,
+          element.frame.width / 12_700,
+          element.style.fontSizePt + 1,
+          element.style.fontFamily,
+        ),
+      ),
+    ).toBe(true);
   });
 });

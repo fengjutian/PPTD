@@ -1,4 +1,5 @@
 import { isElementVisible, type Emu, type PresentationDocument, type Slide, type TextElement } from "../document-model";
+import { endsInOrphan } from "./recipes/measure";
 import { estimateTextLines, fitTextToFrame } from "../rendering/text-fit";
 
 /**
@@ -48,6 +49,12 @@ const MINIMUM_SCALE = 0.7;
 const MINIMUM_PT = 8;
 /** The page edge a refit must leave free, as a share of the page height. */
 const PAGE_BOTTOM_MARGIN = 0.02;
+/** How many points a size group may give up to avoid a stranded last line. */
+const STRAND_ALLOWANCE_PT = 2;
+/** The share a group of short runs (values, labels) may give up instead. */
+const STRAND_SHORT_RUN_PORTION = 0.25;
+/** The share a group of paragraphs may give up when only a big step balances it. */
+const STRAND_PARAGRAPH_PORTION = 0.25;
 /**
  * How much a frame may grow before shrinking the type is the better repair.
  *
@@ -103,13 +110,17 @@ function neededHeightPt(element: TextElement, fontSizePt: number): number {
  * the thing that fits. `pageHeight` is the page it will be drawn on.
  */
 export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
-  const adjustments: TextRefitAdjustment[] = [];
+  // One adjustment per element: the overflow pass may shrink a text that the
+  // strand pass then steps down again, and the report should describe the page
+  // as it ends up, not every intermediate decision.
+  const byElement = new Map<string, TextRefitAdjustment>();
+  const record = (adjustment: TextRefitAdjustment) => byElement.set(adjustment.elementId, adjustment);
   const conflicts: TextRefitConflict[] = [];
   // A page laid out on a template placeholder carries the template's geometry
   // as a contract: growing or shrinking its frames would silently break the
   // layout the user uploaded. The overflow is left to the audit and to the
   // file's own autofit, which shrinks the copy without touching the frame.
-  if (slide.layoutId !== undefined) return { adjustments, conflicts };
+  if (slide.layoutId !== undefined) return { adjustments: [], conflicts };
   for (const element of slide.elements) {
     if (element.type !== "text") continue;
     if (!isElementVisible(element)) continue;
@@ -141,7 +152,7 @@ export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
         ...element.frame,
         height: Math.ceil((availablePt + grownPt) * EMU_PER_PT) as Emu,
       };
-      adjustments.push({ elementId: element.id, kind: "grew-frame", fontSizePt: designedPt, grownPt });
+      record({ elementId: element.id, kind: "grew-frame", fontSizePt: designedPt, grownPt });
       continue;
     }
 
@@ -152,7 +163,7 @@ export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
     while (repairedPt > floor && neededHeightPt(element, repairedPt) > availablePt) repairedPt -= 1;
     if (repairedPt < designedPt) {
       element.style = { ...element.style, fontSizePt: repairedPt };
-      adjustments.push({ elementId: element.id, kind: "shrank-type", fontSizePt: repairedPt, grownPt: 0 });
+      record({ elementId: element.id, kind: "shrank-type", fontSizePt: repairedPt, grownPt: 0 });
     }
     // Still over the frame at the floor: report the size that would be needed
     // instead of shrinking the copy into unreadable type (ADR 0114 §6).
@@ -164,7 +175,81 @@ export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
       });
     }
   }
-  return { adjustments, conflicts };
+  repairStrandedLines(slide, record);
+  return { adjustments: [...byElement.values()], conflicts };
+}
+
+/**
+ * A short run of copy with no sentence punctuation: a metric value ("260 家"), a
+ * step label, a card heading. Such a text is meant to sit on one line, so its
+ * group may give up more size than a paragraph would before the narrow frame is
+ * blamed instead.
+ */
+function isShortRun(element: TextElement): boolean {
+  const compact = element.text.replace(/\s/g, "");
+  return compact.length > 0 && compact.length <= 12 && !/[。，；：、！？!?,;:]/.test(element.text);
+}
+
+/**
+ * Steps a whole size group down until no paragraph ends on a stranded line.
+ *
+ * A page's texts that share a size form one group: the body points of a list, the
+ * two columns of a comparison, a row of cards. Shrinking one member alone to fix
+ * its tail would leave two sizes inside one list, which is a worse defect than
+ * the tail it fixes, so the group gives up the point together. A step is only
+ * taken when it actually removes the strand — a size that is smaller and still
+ * stranded helps nobody. Paragraphs stop after two points; a group of short runs
+ * may step further, because a value or a label is meant to fit on one line and
+ * its frame is what has to give.
+ */
+function repairStrandedLines(slide: Slide, record: (adjustment: TextRefitAdjustment) => void): void {
+  const groups = new Map<number, TextElement[]>();
+  for (const element of slide.elements) {
+    if (element.type !== "text") continue;
+    if (!isElementVisible(element)) continue;
+    if (!element.text.trim()) continue;
+    if (element.frame.width <= 0) continue;
+    // A title is set by its own fitting rule (and a cover's two-line break is a
+    // deliberate display choice); the audit still reports a title that strands,
+    // but the refit does not quietly resize the page's headline.
+    if (element.contentRef === "title") continue;
+    const size = element.style.fontSizePt;
+    const members = groups.get(size);
+    if (members) members.push(element);
+    else groups.set(size, [element]);
+  }
+  const strands = (members: readonly TextElement[], size: number): number =>
+    members.filter((element) =>
+      endsInOrphan(element.text, element.frame.width / EMU_PER_PT, size, element.style.fontFamily),
+    ).length;
+  for (const [designedPt, members] of groups) {
+    const current = strands(members, designedPt);
+    if (current === 0) continue;
+    const allowancePt = members.every(isShortRun)
+      ? Math.max(STRAND_ALLOWANCE_PT, Math.round(designedPt * STRAND_SHORT_RUN_PORTION))
+      : Math.max(STRAND_ALLOWANCE_PT, Math.round(designedPt * STRAND_PARAGRAPH_PORTION));
+    const floor = Math.max(MINIMUM_PT, Math.round(designedPt - allowancePt));
+    // The largest size that clears every strand, or — when one member simply
+    // cannot be balanced in its frame — the size that leaves the fewest.
+    let chosen: number | undefined;
+    let chosenCount = current;
+    for (let candidate = Math.round(designedPt) - 1; candidate >= floor; candidate -= 1) {
+      const count = strands(members, candidate);
+      if (count === 0) {
+        chosen = candidate;
+        break;
+      }
+      if (count < chosenCount) {
+        chosen = candidate;
+        chosenCount = count;
+      }
+    }
+    if (chosen === undefined) continue;
+    for (const element of members) {
+      element.style = { ...element.style, fontSizePt: chosen };
+      record({ elementId: element.id, kind: "shrank-type", fontSizePt: chosen, grownPt: 0 });
+    }
+  }
 }
 
 /** Repairs every page of a document; used after a design has been composed. */
