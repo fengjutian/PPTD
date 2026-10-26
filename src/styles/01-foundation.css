@@ -90,7 +90,7 @@ button {
   position: relative;
   height: 100vh;
   display: grid;
-  grid-template: 88px 1fr 28px / 64px 216px minmax(640px, 1fr) var(--inspector-width, 252px);
+  grid-template: 96px 1fr 28px / 64px 216px minmax(640px, 1fr) var(--inspector-width, 252px);
   background: #202125;
 }
 .app-shell.module-shell {
@@ -153,6 +153,208 @@ button {
 }
 .topbar .export-button {
   margin-left: auto;
+}
+/* 标签行右侧的快速访问：和 PowerPoint 的撤销/重做位置一致，不占用“开始”组宽。 */
+.ribbon-quick-access {
+  position: absolute;
+  top: 3px;
+  right: 145px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ribbon-quick-access button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ribbon-text);
+  background: transparent;
+  cursor: pointer;
+}
+.ribbon-quick-access button:hover:not(:disabled) {
+  color: var(--ribbon-text-active);
+  background: var(--ribbon-hover);
+}
+.ribbon-quick-access button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ribbon-quick-access svg {
+  width: 14px;
+  height: 14px;
+}
+/* “开始”标签的命令分组：48px 命令体 + 10px 组标题，组间用细线分开。 */
+.topbar .home-tools {
+  flex: 1;
+  min-width: 0;
+  gap: 0;
+}
+.ribbon-group {
+  height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 6px;
+}
+.ribbon-group + .ribbon-group {
+  border-left: 1px solid var(--ribbon-border);
+}
+.ribbon-group-body {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.ribbon-group-label {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ribbon-text);
+  font-size: 8px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ribbon-compact-button {
+  width: 32px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ribbon-text-active);
+  background: transparent;
+  cursor: pointer;
+}
+.ribbon-compact-button:hover:not(:disabled) {
+  background: var(--ribbon-hover);
+}
+.ribbon-compact-button[aria-pressed="true"] {
+  background: var(--ribbon-hover);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 18%);
+}
+.ribbon-compact-button:disabled {
+  color: var(--ribbon-text);
+  opacity: 0.35;
+  cursor: default;
+}
+.ribbon-compact-button svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+.ribbon-compact-button span {
+  max-width: 34px;
+  overflow: hidden;
+  font-size: 8px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ribbon-vertical-actions {
+  width: 22px;
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.ribbon-vertical-actions button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ribbon-text-active);
+  background: transparent;
+  cursor: pointer;
+}
+.ribbon-vertical-actions button:hover:not(:disabled) {
+  background: var(--ribbon-hover);
+}
+.ribbon-vertical-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.ribbon-vertical-actions svg {
+  width: 13px;
+  height: 13px;
+}
+.ribbon-shape-colors {
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+.ribbon-shape-color {
+  height: 22px;
+  gap: 3px;
+  font-size: 8px;
+}
+.ribbon-shape-color input {
+  width: 28px;
+  height: 18px;
+}
+.ribbon-menu {
+  position: relative;
+}
+.ribbon-menu-popover {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  z-index: 60;
+  min-width: 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--ribbon-border);
+  border-radius: 8px;
+  color: var(--ribbon-text-active);
+  background: var(--ribbon-background);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+.ribbon-menu-popover button {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.ribbon-menu-popover button:hover:not(:disabled) {
+  background: var(--ribbon-hover);
+}
+.ribbon-menu-popover button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ribbon-menu-popover button[aria-checked="true"] {
+  background: var(--ribbon-hover);
+}
+.ribbon-menu-popover svg {
+  width: 14px;
+  height: 14px;
 }
 /* “开始”功能区里的字符与段落控件：两行紧凑排布，高度与 48px 的工具按钮对齐。 */
 .text-format-tools {

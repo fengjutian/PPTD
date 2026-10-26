@@ -33,6 +33,7 @@ describe("editor keyboard shortcuts", () => {
     expect(shortcut({ key: "]", ctrlKey: true })).toBe("layer-forward");
     expect(shortcut({ key: "[", ctrlKey: true })).toBe("layer-backward");
     expect(shortcut({ key: "f", ctrlKey: true })).toBe("find");
+    expect(shortcut({ key: "h", ctrlKey: true })).toBe("replace");
     expect(shortcut({ key: "a", ctrlKey: true })).toBe("select-all");
   });
 

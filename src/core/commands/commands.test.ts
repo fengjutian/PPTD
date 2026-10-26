@@ -405,6 +405,68 @@ describe("commands 1", () => {
     expect(described.slides[0]!.content).toEqual(withImage.slides[0]!.content);
   });
 
+  it("batch restyles shapes in one design change and skips locked targets", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const withShapes = produce(source, (draft) => {
+      applyCommand(draft, { type: "add-shape", slideId: slide.id, shape: "rectangle" });
+      applyCommand(draft, { type: "add-shape", slideId: slide.id, shape: "ellipse" });
+    });
+    const shapes = withShapes.slides[0]!.elements.filter((element) => element.type === "shape");
+    const first = shapes[0]!;
+    const second = shapes[1]!;
+    const withGradient = produce(withShapes, (draft) =>
+      applyCommand(draft, {
+        type: "set-shape-style",
+        slideId: slide.id,
+        elementId: first.id,
+        style: {
+          fillGradient: {
+            angleDeg: 45,
+            stops: [
+              { offset: 0, color: "#112233" },
+              { offset: 1, color: "#445566" },
+            ],
+          },
+        },
+      }),
+    );
+    const contentBefore = JSON.stringify(withGradient.slides[0]!.content);
+    const command = {
+      type: "set-shape-styles" as const,
+      slideId: slide.id,
+      elementIds: [first.id, second.id, slide.elements[0]!.id],
+      style: { fill: "#123456", stroke: "#654321" },
+    };
+    expect(commandDomain(command)).toBe("design");
+    const restyled = produce(withGradient, (draft) => applyCommand(draft, command));
+    const restyledShapes = restyled.slides[0]!.elements.filter((element) => element.type === "shape");
+    expect(restyledShapes[0]!.style).toMatchObject({ fill: "#123456", stroke: "#654321" });
+    expect(restyledShapes[0]!.style.fillGradient).toBeUndefined();
+    expect(restyledShapes[1]!.style).toMatchObject({ fill: "#123456", stroke: "#654321" });
+    expect(JSON.stringify(restyled.slides[0]!.content)).toBe(contentBefore);
+
+    const locked = produce(withGradient, (draft) =>
+      applyCommand(draft, { type: "set-elements-lock", slideId: slide.id, elementIds: [second.id], locked: true }),
+    );
+    const afterLocked = produce(locked, (draft) => applyCommand(draft, command));
+    const unlockedShape = afterLocked.slides[0]!.elements.find((element) => element.id === first.id);
+    const lockedShape = afterLocked.slides[0]!.elements.find((element) => element.id === second.id);
+    expect(unlockedShape).toMatchObject({ style: { fill: "#123456", stroke: "#654321" } });
+    expect(lockedShape).toEqual(second);
+
+    expect(() =>
+      produce(source, (draft) =>
+        applyCommand(draft, {
+          type: "set-shape-styles",
+          slideId: slide.id,
+          elementIds: [slide.elements[0]!.id],
+          style: { fill: "#ffffff" },
+        }),
+      ),
+    ).toThrow("ELEMENT_NOT_SHAPE");
+  });
+
   it("rejects style values the exporter could not round-trip", () => {
     const source = createDocument();
     const slide = source.slides[0]!;

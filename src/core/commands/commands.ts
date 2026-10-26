@@ -62,6 +62,7 @@ import {
   toAiBlocks,
   assertTextRange,
   assertTextStyle,
+  assertShapeStyle,
   normalizedToEmuRect,
   fitImageIntoBox,
   makeRoomForAsset,
@@ -138,6 +139,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-text-emphasis":
     case "clear-text-emphasis":
     case "set-shape-style":
+    case "set-shape-styles":
     case "set-line-style":
     case "set-line-direction":
     case "set-chart-style":
@@ -611,6 +613,24 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
       // Removing the last link should leave a plain element instead of a run
       // that carries no formatting at all.
       target.runs = hasTextRunStyle(runs) ? runs : undefined;
+    }
+    return;
+  }
+
+  if (command.type === "set-shape-styles") {
+    assertShapeStyle(command.style);
+    const targets = slide.elements.filter(
+      (element): element is Extract<SlideElement, { type: "shape" }> =>
+        command.elementIds.includes(element.id) && element.type === "shape" && !element.locked,
+    );
+    // The ribbon disables the controls without an editable shape; an empty batch
+    // is a programming error rather than a no-op undo entry.
+    if (targets.length === 0) throw new Error("ELEMENT_NOT_SHAPE");
+    for (const target of targets) {
+      const next = { ...target.style, ...command.style };
+      // Keep the single-object rule: a solid fill replaces the old gradient.
+      if (command.style.fill !== undefined && command.style.fillGradient === undefined) delete next.fillGradient;
+      target.style = next;
     }
     return;
   }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import {
   buildReplaceAllEdits,
@@ -24,17 +24,30 @@ import { useEditorStore } from "../../store/editor-store";
  * step and routes every target through the same rules as its single-target
  * command.
  */
-export function FindReplaceBar({ onClose }: { onClose: () => void }) {
+export function FindReplaceBar({
+  onClose,
+  initialFocus = "find",
+}: {
+  onClose: () => void;
+  /** The ribbon has separate Find and Replace entries; both open this one bar. */
+  initialFocus?: "find" | "replace";
+}) {
   const document = useEditorStore((state) => state.document);
   const execute = useEditorStore((state) => state.execute);
   const selectSlide = useEditorStore((state) => state.selectSlide);
   const selectElement = useEditorStore((state) => state.selectElement);
+  const findInput = useRef<HTMLInputElement>(null);
+  const replaceInput = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
   const [matchCase, setMatchCase] = useState(false);
   const [index, setIndex] = useState(0);
   const [status, setStatus] = useState<string>();
+
+  useEffect(() => {
+    (initialFocus === "replace" ? replaceInput : findInput).current?.focus();
+  }, [initialFocus]);
 
   const matches = useMemo(() => findTextMatches(document, query, { matchCase }), [document, query, matchCase]);
 
@@ -108,7 +121,7 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
       <label className="find-replace-field">
         <span>查找</span>
         <input
-          autoFocus
+          ref={findInput}
           value={query}
           placeholder="在文本、表格、图表、备注和标题中查找"
           onChange={(event) => {
@@ -129,6 +142,7 @@ export function FindReplaceBar({ onClose }: { onClose: () => void }) {
       <label className="find-replace-field">
         <span>替换为</span>
         <input
+          ref={replaceInput}
           value={replacement}
           placeholder="留空表示删除匹配文字"
           onChange={(event) => setReplacement(event.target.value)}

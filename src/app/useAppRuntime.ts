@@ -566,6 +566,12 @@ export function useAppRuntime() {
   const [aiImageError, setAiImageError] = useState<string>();
   /** The find-and-replace bar is a display mode, so it never enters the document. */
   const [findOpen, setFindOpen] = useState(false);
+  /** Which input the ribbon's Find or Replace entry should focus when it opens. */
+  const [findFocus, setFindFocus] = useState<"find" | "replace">("find");
+  const openFindReplace = useCallback((mode: "find" | "replace") => {
+    setFindFocus(mode);
+    setFindOpen(true);
+  }, []);
   /** Table/chart insertion dialogs live outside the document until confirmed. */
   const [insertTableOpen, setInsertTableOpen] = useState(false);
   const [insertChartOpen, setInsertChartOpen] = useState(false);
@@ -3818,10 +3824,10 @@ export function useAppRuntime() {
         redo();
         return;
       }
-      if (shortcut === "find") {
+      if (shortcut === "find" || shortcut === "replace") {
         if (editorSurface !== "canvas") return;
         event.preventDefault();
-        setFindOpen(true);
+        openFindReplace(shortcut);
         return;
       }
       if (shortcut === "select-all") {
@@ -3941,6 +3947,7 @@ export function useAppRuntime() {
     pasteSelection,
     editorSurface,
     findOpen,
+    openFindReplace,
     selectElements,
     redo,
     redoStack.length,
@@ -4309,6 +4316,8 @@ export function useAppRuntime() {
     clipboard,
     pasteSelection,
     setFindOpen,
+    findFocus,
+    openFindReplace,
     selectedTextElements,
     imageInputRef,
     setIconPickerOpen,

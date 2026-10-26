@@ -20,6 +20,7 @@ export type EditorShortcut =
   | "copy-format"
   | "apply-format"
   | "find"
+  | "replace"
   | "select-all";
 
 export interface ShortcutInput {
@@ -39,6 +40,7 @@ export function resolveEditorShortcut(input: ShortcutInput): EditorShortcut | nu
   const modifier = input.ctrlKey || input.metaKey;
   const key = input.key.toLowerCase();
   if (modifier && key === "f") return "find";
+  if (modifier && key === "h") return "replace";
   if (modifier && key === "a") return "select-all";
   if (modifier && key === "z") return input.shiftKey ? "redo" : "undo";
   if (modifier && key === "y") return "redo";

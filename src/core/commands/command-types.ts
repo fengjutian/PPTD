@@ -285,6 +285,12 @@ export type DocumentCommand =
     }
   | { type: "clear-text-emphasis"; slideId: SlideId; elementId: ElementId; start: number; end: number }
   | { type: "set-shape-style"; slideId: SlideId; elementId: ElementId; style: Partial<ShapeElementStyle> }
+  | {
+      type: "set-shape-styles";
+      slideId: SlideId;
+      elementIds: ElementId[];
+      style: Partial<ShapeElementStyle>;
+    }
   | { type: "set-line-style"; slideId: SlideId; elementId: ElementId; style: Partial<LineElementStyle> }
   | { type: "set-line-direction"; slideId: SlideId; elementId: ElementId; direction: LineDirection }
   | { type: "set-chart-style"; slideId: SlideId; elementId: ElementId; style: Partial<ChartElementStyle> }

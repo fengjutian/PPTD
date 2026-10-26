@@ -28,6 +28,7 @@ import {
   Plus,
   Presentation,
   Redo2,
+  Replace,
   Save,
   SaveAll,
   Scissors,
@@ -49,6 +50,10 @@ import {
 } from "../core/document-model";
 
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
+import { FormatPainterTool } from "../features/editor/FormatPainterTool";
+import { DrawingRibbonTools } from "../features/editor/DrawingRibbonTools";
+import { SelectionMenu } from "../features/editor/SelectionMenu";
+import { RibbonCompactButton, RibbonGroup } from "../features/editor/RibbonGroup";
 
 import { PageSizeControls } from "../features/editor/PageSizeControls";
 import { ShapePicker } from "../features/editor/ShapePicker";
@@ -92,7 +97,7 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
     copySelection,
     clipboard,
     pasteSelection,
-    setFindOpen,
+    openFindReplace,
     selectedTextElements,
     imageInputRef,
     setIconPickerOpen,
@@ -131,12 +136,15 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
   } = app;
 
   const selectableElements = activeSlide.elements.filter((element) => !element.locked && isElementVisible(element));
-  const allSelected =
-    selectableElements.length > 0 && selectableElements.every((element) => selectedElementIds.includes(element.id));
   const hasBackgroundImage = activeSlide.elements.some(
     (element) => element.type === "image" && element.placement === "slide-background",
   );
   const editableTextElements = selectedTextElements.filter((element) => !element.locked);
+  const activeSlideIndex = document.slides.findIndex((slide) => slide.id === activeSlide.id);
+  const editableSelectedElementIds = selectedElementIds.filter(
+    (id) => !activeSlide.elements.find((item) => item.id === id)?.locked,
+  );
+  const hasEditableSelection = editableSelectedElementIds.length > 0;
   const currentLink = selectedTextElements
     .flatMap((element) => element.runs ?? [])
     .find((run) => run.hyperlinkUrl)?.hyperlinkUrl;
@@ -186,6 +194,26 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
               </button>
             ))}
           </nav>
+          <div className="ribbon-quick-access" role="group" aria-label="快速访问">
+            <button
+              type="button"
+              aria-label="撤销"
+              title="撤销（Ctrl+Z）"
+              disabled={!undoStack.length}
+              onClick={undo}
+            >
+              <Undo2 />
+            </button>
+            <button
+              type="button"
+              aria-label="重做"
+              title="重做（Ctrl+Y）"
+              disabled={!redoStack.length}
+              onClick={redo}
+            >
+              <Redo2 />
+            </button>
+          </div>
           <div className="toolbar-group file-tools">
             <ToolButton label="新建项目" caption="新建" onClick={handleNew}>
               <FilePlus2 />
@@ -233,113 +261,162 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             </ToolButton>
           </div>
           <div className="toolbar-group home-tools">
-            <ToolButton label="撤销" onClick={undo} disabled={!undoStack.length}>
-              <Undo2 />
-            </ToolButton>
-            <ToolButton label="重做" onClick={redo} disabled={!redoStack.length}>
-              <Redo2 />
-            </ToolButton>
-            <span className="separator" />
-            <ToolButton label="新建幻灯片" caption="新建页面" onClick={() => execute({ type: "add-slide" })}>
-              <Plus />
-            </ToolButton>
-            <ToolButton
-              label="复制当前幻灯片"
-              caption="复制页面"
-              onClick={() => execute({ type: "duplicate-slide", slideId: activeSlide.id })}
-            >
-              <Copy />
-            </ToolButton>
-            <ToolButton
-              label="删除当前幻灯片"
-              caption="删除页面"
-              disabled={document.slides.length <= 1}
-              onClick={() => execute({ type: "delete-slide", slideId: activeSlide.id })}
-            >
-              <Trash2 />
-            </ToolButton>
-            <span className="separator" />
-            <div className="quick-edit-tools" role="group" aria-label="剪贴板与查找">
-              <button
-                type="button"
-                aria-label="剪切所选对象"
-                title="剪切（Ctrl+X）"
-                disabled={
-                  selectedElementIds.length === 0 ||
-                  selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
-                }
-                onClick={() => copySelection(true)}
-              >
-                <Scissors />
-              </button>
-              <button
-                type="button"
-                aria-label="复制所选对象"
-                title="复制（Ctrl+C）"
-                disabled={
-                  selectedElementIds.length === 0 ||
-                  selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
-                }
-                onClick={() => copySelection(false)}
-              >
-                <Copy />
-              </button>
-              <button
-                type="button"
-                aria-label="粘贴剪贴板对象"
-                title="粘贴（Ctrl+V）"
+            <RibbonGroup label="剪贴板">
+              <ToolButton
+                label="粘贴剪贴板对象"
+                caption="粘贴"
                 disabled={clipboard.elements.length === 0}
                 onClick={pasteSelection}
               >
                 <ClipboardPaste />
-              </button>
-              <button
-                type="button"
-                aria-label="查找和替换"
-                title="查找和替换（Ctrl+F）"
-                onClick={() => setFindOpen(true)}
+              </ToolButton>
+              <RibbonCompactButton
+                label="剪切所选对象"
+                caption="剪切"
+                disabled={!hasEditableSelection}
+                onClick={() => copySelection(true)}
+              >
+                <Scissors />
+              </RibbonCompactButton>
+              <RibbonCompactButton
+                label="复制所选对象"
+                caption="复制"
+                disabled={!hasEditableSelection}
+                onClick={() => copySelection(false)}
+              >
+                <Copy />
+              </RibbonCompactButton>
+              <FormatPainterTool elements={selectedTextElements} />
+              <RibbonCompactButton
+                label="删除所选对象"
+                caption="删除"
+                disabled={!hasEditableSelection}
+                onClick={() => {
+                  if (!hasEditableSelection) return;
+                  execute({
+                    type: "delete-elements",
+                    slideId: activeSlide.id,
+                    elementIds: editableSelectedElementIds,
+                  });
+                }}
+              >
+                <Trash2 />
+              </RibbonCompactButton>
+            </RibbonGroup>
+
+            <RibbonGroup label="幻灯片">
+              <ToolButton
+                label="新建幻灯片"
+                caption="新建"
+                onClick={() => execute({ type: "add-slide" })}
+              >
+                <Plus />
+              </ToolButton>
+              <RibbonCompactButton
+                label="复制当前幻灯片"
+                caption="复制"
+                onClick={() => execute({ type: "duplicate-slide", slideId: activeSlide.id })}
+              >
+                <Copy />
+              </RibbonCompactButton>
+              <RibbonCompactButton
+                label="重置当前页面版式（保留手工对象/配图）"
+                caption="重置"
+                onClick={() => {
+                  execute({ type: "relayout-slide", slideId: activeSlide.id });
+                  setTaskStatus("已按当前内容重新应用版式，手工对象、配图和锁定对象已保留");
+                }}
+              >
+                <Wand2 />
+              </RibbonCompactButton>
+              <RibbonCompactButton
+                label="删除当前幻灯片"
+                caption="删除"
+                disabled={document.slides.length <= 1}
+                onClick={() => execute({ type: "delete-slide", slideId: activeSlide.id })}
+              >
+                <Trash2 />
+              </RibbonCompactButton>
+              <div className="ribbon-vertical-actions" role="group" aria-label="移动当前幻灯片">
+                <button
+                  type="button"
+                  aria-label="上移当前幻灯片"
+                  title="上移当前幻灯片"
+                  disabled={activeSlideIndex <= 0}
+                  onClick={() =>
+                    execute({ type: "move-slide", slideId: activeSlide.id, toIndex: activeSlideIndex - 1 })
+                  }
+                >
+                  <ArrowUp />
+                </button>
+                <button
+                  type="button"
+                  aria-label="下移当前幻灯片"
+                  title="下移当前幻灯片"
+                  disabled={activeSlideIndex < 0 || activeSlideIndex >= document.slides.length - 1}
+                  onClick={() =>
+                    execute({ type: "move-slide", slideId: activeSlide.id, toIndex: activeSlideIndex + 1 })
+                  }
+                >
+                  <ArrowDown />
+                </button>
+              </div>
+            </RibbonGroup>
+
+            <RibbonGroup label="字体">
+              <TextFormatToolbar
+                slideId={activeSlide.id}
+                elements={selectedTextElements}
+                execute={execute}
+                section="font"
+              />
+            </RibbonGroup>
+
+            <RibbonGroup label="段落">
+              <TextFormatToolbar
+                slideId={activeSlide.id}
+                elements={selectedTextElements}
+                execute={execute}
+                section="paragraph"
+              />
+            </RibbonGroup>
+
+            <RibbonGroup label="绘图">
+              <DrawingRibbonTools
+                slideId={activeSlide.id}
+                selected={activeSlide.elements.filter((element) => selectedElementIds.includes(element.id))}
+                onCommand={execute}
+                onOpenArrange={() => setEditorRibbonTab("arrange")}
+              />
+            </RibbonGroup>
+
+            <RibbonGroup label="编辑">
+              <RibbonCompactButton
+                label="查找（Ctrl+F）"
+                caption="查找"
+                onClick={() => openFindReplace("find")}
               >
                 <Search />
-              </button>
-            </div>
-            <ToolButton
-              label="删除所选对象"
-              caption="删除对象"
-              disabled={
-                selectedElementIds.length === 0 ||
-                selectedElementIds.every((id) => activeSlide.elements.find((item) => item.id === id)?.locked)
-              }
-              onClick={() => {
-                const elementIds = selectedElementIds.filter(
-                  (id) => !activeSlide.elements.find((item) => item.id === id)?.locked,
-                );
-                if (elementIds.length) execute({ type: "delete-elements", slideId: activeSlide.id, elementIds });
-              }}
-            >
-              <Trash2 />
-            </ToolButton>
-            <ToolButton
-              label="全选本页对象（Ctrl+A）"
-              caption="全选"
-              pressed={allSelected}
-              disabled={selectableElements.length === 0}
-              onClick={() => {
-                selectElements(selectableElements.map((element) => element.id));
-                setTaskStatus(`已选择 ${selectableElements.length} 个对象`);
-              }}
-            >
-              <MousePointer2 />
-            </ToolButton>
-            <ToolButton
-              label="打开选择窗格"
-              caption="选择窗格"
-              pressed={leftTab === "layers"}
-              onClick={() => setLeftTab("layers")}
-            >
-              <Layers />
-            </ToolButton>
-            <span className="separator" />
-            <TextFormatToolbar slideId={activeSlide.id} elements={selectedTextElements} execute={execute} />
+              </RibbonCompactButton>
+              <RibbonCompactButton
+                label="替换（Ctrl+H）"
+                caption="替换"
+                onClick={() => openFindReplace("replace")}
+              >
+                <Replace />
+              </RibbonCompactButton>
+              <SelectionMenu
+                canSelectAll={selectableElements.length > 0}
+                hasSelection={selectedElementIds.length > 0}
+                selectionPaneOpen={leftTab === "layers"}
+                onSelectAll={() => {
+                  selectElements(selectableElements.map((element) => element.id));
+                  setTaskStatus(`已选择 ${selectableElements.length} 个对象`);
+                }}
+                onClearSelection={() => selectElements([])}
+                onOpenSelectionPane={() => setLeftTab("layers")}
+              />
+            </RibbonGroup>
           </div>
           <div className="toolbar-group insert-tools">
             <ToolButton label="文本" onClick={() => execute({ type: "add-text", slideId: activeSlide.id })}>
