@@ -1,8 +1,4 @@
-import {
-  analyzeImageBackdrop,
-  hasNearBlackBackdrop,
-  type BackdropSample,
-} from "../core/rendering/image-backdrop";
+import { analyzeImageBackdrop, hasNearBlackBackdrop } from "../core/rendering/image-backdrop";
 
 /**
  * Measures the backdrop of a generated picture.
@@ -47,13 +43,8 @@ export async function hasBlackBackdrop(dataUrl: string): Promise<boolean> {
     // ratio does not change which pixels are at the border.
     context.drawImage(image, 0, 0, PROBE_EDGE, PROBE_EDGE);
     const pixels = context.getImageData(0, 0, PROBE_EDGE, PROBE_EDGE).data;
-    return hasNearBlackBackdrop(measureBackdrop(pixels));
+    return hasNearBlackBackdrop(analyzeImageBackdrop(pixels, PROBE_EDGE, PROBE_EDGE));
   } catch {
     return false;
   }
-}
-
-/** The measurement behind `hasBlackBackdrop`, separated so it can be tested. */
-export function measureBackdrop(pixels: Uint8ClampedArray): BackdropSample {
-  return analyzeImageBackdrop(pixels, PROBE_EDGE, PROBE_EDGE);
 }

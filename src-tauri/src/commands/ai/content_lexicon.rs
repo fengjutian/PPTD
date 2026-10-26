@@ -123,7 +123,9 @@ impl TitleLexicon {
              2. 格式：{{\"enabled\":true,\"prompt\":\"画面描述\",\"role\":\"hero|side|band\"}}。\n\
              3. prompt 只描述画面本身，不要出现文字、字母或数字（不要写{}）。\n\
              4. role 表示图在页面上的位置：hero 右侧整块，side 右下角一块，band 标题下一条。\n\
-             5. 已经有时间线、对比、流程、表格或指标块的页面不要配图：那类页面版面已经满了。",
+             5. 已经有时间线、对比、流程、表格或指标块的页面不要配图：那类页面版面已经满了。\n\
+             6. 画面必须是明亮留白的浅色背景（白色或浅灰）：不要深色、黑色、夜景、暗场或黑底。\
+             深色背景在页面里就是一块黑块，会压过正文和标题。",
             self.max_images_per_deck,
             join_or(&self.image_text_request_words),
         )
@@ -314,6 +316,10 @@ mod tests {
         assert!(prompt.contains("文字"));
         assert!(prompt.contains(&lexicon.max_images_per_deck.to_string()));
         assert!(prompt.contains("画面"));
+        // 背景约束必须在提示里：模型写出的画面描述会直接进入图像请求，
+        // “深色科技感背景”曾让整张配图变成一块黑底（ADR 0110）。
+        assert!(prompt.contains("浅色背景"));
+        assert!(prompt.contains("黑底"));
     }
 
     #[test]

@@ -6,6 +6,7 @@ import {
   type AiVisualAssetRole,
 } from "../core/commands/visual-asset";
 import type { AiSlideDesign } from "../core/commands/template-layouts";
+import { hasBlackBackdrop } from "./visual-asset-background";
 
 /**
  * 生成页面配图。
@@ -65,6 +66,15 @@ export async function requestVisualAsset(input: {
       request: { prompt: input.prompt, width: size.width, height: size.height },
     });
     if (!result?.dataUrl) return { ok: false, error: "图像服务没有返回图片" };
+    // The prompt asks for a light backdrop, but the model can still follow a
+    // scene description that names a dark one. A near-black picture becomes a
+    // black block on the page, so it is not used at all (ADR 0110).
+    if (await hasBlackBackdrop(result.dataUrl)) {
+      return {
+        ok: false,
+        error: "图像服务返回了黑色背景的配图，已放弃使用；请把画面描述改成浅色背景后重试",
+      };
+    }
     return {
       ok: true,
       asset: {
