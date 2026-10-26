@@ -78,8 +78,8 @@ fn persist_token_usage(store: &TokenUsageStore) -> Result<(), String> {
     let Some(path) = store.database_path.as_deref() else {
         return Ok(());
     };
-    let connection = Connection::open(path)
-        .map_err(|error| format!("TOKEN_USAGE_OPEN_FAILED: {error}"))?;
+    let connection =
+        Connection::open(path).map_err(|error| format!("TOKEN_USAGE_OPEN_FAILED: {error}"))?;
     connection
         .execute(
             "UPDATE token_usage SET request_count = ?1, reported_request_count = ?2,

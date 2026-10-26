@@ -20,8 +20,8 @@ pub fn run() {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
             let database_path = directory.join("pptd.sqlite3");
-            let database = storage::Database::open(&database_path)
-                .map_err(std::io::Error::other)?;
+            let database =
+                storage::Database::open(&database_path).map_err(std::io::Error::other)?;
             ai::initialize_token_usage(&database_path).map_err(std::io::Error::other)?;
             app.manage(database);
             Ok(())
