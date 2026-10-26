@@ -54,44 +54,44 @@ export function LogViewer({ language, records, loading, location, onRefresh }: L
 
   return (
     <div className="diagnostics-viewer">
-        <div className="diagnostics-meta">
-          <button type="button" onClick={onRefresh} disabled={loading}>
-            <RefreshCw size={14} />
-            {loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.refresh")}
-          </button>
-          <button
-            type="button"
-            className={`diagnostics-copy diagnostics-copy-${copyState}`}
-            title={t("diagnostics.panel.copyTitle")}
-            onClick={() => void copyLogs()}
-            disabled={copyDisabled}
-          >
-            {copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}
-            {copyState === "copied"
-              ? t("diagnostics.panel.copied")
-              : copyState === "failed"
-                ? t("diagnostics.panel.copyFailed")
-                : t("diagnostics.panel.copy")}
-          </button>
-          <code className="diagnostics-location">{location ?? t("diagnostics.panel.unavailable")}</code>
-        </div>
-        {ordered.length === 0 ? (
-          <p className="diagnostics-empty">{loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.empty")}</p>
-        ) : (
-          <ul className="diagnostics-list">
-            {ordered.map((record, index) => (
-              <li key={`${record.at}-${index}`} className={`diagnostics-entry diagnostics-${record.level}`}>
-                <div className="diagnostics-entry-head">
-                  <span className="diagnostics-time">{formatLogTime(record.at)}</span>
-                  <span className="diagnostics-level">{record.level}</span>
-                  <code>{record.code}</code>
-                </div>
-                <p>{record.message}</p>
-                {record.context && <pre>{JSON.stringify(record.context)}</pre>}
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="diagnostics-meta">
+        <button type="button" onClick={onRefresh} disabled={loading}>
+          <RefreshCw size={14} />
+          {loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.refresh")}
+        </button>
+        <button
+          type="button"
+          className={`diagnostics-copy diagnostics-copy-${copyState}`}
+          title={t("diagnostics.panel.copyTitle")}
+          onClick={() => void copyLogs()}
+          disabled={copyDisabled}
+        >
+          {copyState === "copied" ? <Check size={14} /> : <Copy size={14} />}
+          {copyState === "copied"
+            ? t("diagnostics.panel.copied")
+            : copyState === "failed"
+              ? t("diagnostics.panel.copyFailed")
+              : t("diagnostics.panel.copy")}
+        </button>
+        <code className="diagnostics-location">{location ?? t("diagnostics.panel.unavailable")}</code>
+      </div>
+      {ordered.length === 0 ? (
+        <p className="diagnostics-empty">{loading ? t("diagnostics.panel.loading") : t("diagnostics.panel.empty")}</p>
+      ) : (
+        <ul className="diagnostics-list">
+          {ordered.map((record, index) => (
+            <li key={`${record.at}-${index}`} className={`diagnostics-entry diagnostics-${record.level}`}>
+              <div className="diagnostics-entry-head">
+                <span className="diagnostics-time">{formatLogTime(record.at)}</span>
+                <span className="diagnostics-level">{record.level}</span>
+                <code>{record.code}</code>
+              </div>
+              <p>{record.message}</p>
+              {record.context && <pre>{JSON.stringify(record.context)}</pre>}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -118,13 +118,7 @@ export function LogPanel({ language, records, loading, location, onRefresh, onCl
             <X />
           </button>
         </div>
-        <LogViewer
-          language={language}
-          records={records}
-          loading={loading}
-          location={location}
-          onRefresh={onRefresh}
-        />
+        <LogViewer language={language} records={records} loading={loading} location={location} onRefresh={onRefresh} />
       </section>
     </div>
   );
