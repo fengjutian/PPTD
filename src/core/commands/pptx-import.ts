@@ -132,6 +132,8 @@ export interface ImportedTextStyle {
   align: "left" | "center" | "right";
   verticalAlign: TextVerticalAlign;
   lineHeight?: number | null;
+  paragraphSpaceBeforePt?: number | null;
+  paragraphSpaceAfterPt?: number | null;
   bullet: "none" | "dot" | "number";
 }
 
@@ -276,6 +278,12 @@ function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): 
         strikethrough: element.style.strikethrough,
         verticalAlign: element.style.verticalAlign,
         ...(element.style.lineHeight ? { lineHeight: element.style.lineHeight } : {}),
+        ...(element.style.paragraphSpaceBeforePt === undefined || element.style.paragraphSpaceBeforePt === null
+          ? {}
+          : { paragraphSpaceBeforePt: element.style.paragraphSpaceBeforePt }),
+        ...(element.style.paragraphSpaceAfterPt === undefined || element.style.paragraphSpaceAfterPt === null
+          ? {}
+          : { paragraphSpaceAfterPt: element.style.paragraphSpaceAfterPt }),
         bullet: element.style.bullet,
         indentLevel: 0,
       };

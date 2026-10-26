@@ -155,6 +155,8 @@ pub struct ImportedTextStyle {
     pub align: String,
     pub vertical_align: String,
     pub line_height: Option<f64>,
+    pub paragraph_space_before_pt: Option<f64>,
+    pub paragraph_space_after_pt: Option<f64>,
     pub bullet: String,
 }
 
@@ -1647,6 +1649,14 @@ fn parse_placeholder_text_style(
                 changed = true;
             }
         }
+        if let Some(value) = paragraph_spacing_points(paragraph, "spcBef") {
+            style.paragraph_space_before_pt = Some(value);
+            changed = true;
+        }
+        if let Some(value) = paragraph_spacing_points(paragraph, "spcAft") {
+            style.paragraph_space_after_pt = Some(value);
+            changed = true;
+        }
         if let Some(props) = descendant(paragraph, "defRPr") {
             let run = parse_run_style(props, theme);
             changed |= apply_run_style(&mut style, run);
@@ -1680,6 +1690,10 @@ fn parse_text_body(
         .map(|style| style.bullet.clone())
         .unwrap_or_else(|| "none".to_string());
     let mut line_height = inherited_style.and_then(|style| style.line_height);
+    let mut paragraph_space_before_pt =
+        inherited_style.and_then(|style| style.paragraph_space_before_pt);
+    let mut paragraph_space_after_pt =
+        inherited_style.and_then(|style| style.paragraph_space_after_pt);
     let mut paragraph_align: Option<String> = None;
     let paragraphs: Vec<Node<'_, '_>> = body
         .children()
@@ -1719,6 +1733,10 @@ fn parse_text_body(
                     }
                 }
             }
+            paragraph_space_before_pt =
+                paragraph_spacing_points(props, "spcBef").or(paragraph_space_before_pt);
+            paragraph_space_after_pt =
+                paragraph_spacing_points(props, "spcAft").or(paragraph_space_after_pt);
         }
         for child_node in paragraph.children().filter(Node::is_element) {
             match child_node.tag_name().name() {
@@ -1795,6 +1813,8 @@ fn parse_text_body(
     }
     style.bullet = bullet;
     style.line_height = line_height;
+    style.paragraph_space_before_pt = paragraph_space_before_pt;
+    style.paragraph_space_after_pt = paragraph_space_after_pt;
     if let Some(body_pr) = child(body, "bodyPr") {
         if let Some(anchor) = body_pr.attribute("anchor") {
             style.vertical_align = match anchor {
@@ -1816,6 +1836,14 @@ struct RunStyle {
     italic: Option<bool>,
     underline: Option<bool>,
     strikethrough: Option<bool>,
+}
+
+fn paragraph_spacing_points(node: Node<'_, '_>, name: &str) -> Option<f64> {
+    descendant(node, name)
+        .and_then(|spacing| descendant(spacing, "spcPts"))
+        .and_then(|points| points.attribute("val"))
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|value| (value / 100.0).clamp(0.0, 200.0))
 }
 
 fn apply_run_style(style: &mut ImportedTextStyle, run: RunStyle) -> bool {
@@ -1882,6 +1910,8 @@ fn default_text_style(theme: &Option<ImportedTheme>, title: bool) -> ImportedTex
         align: "left".into(),
         vertical_align: "top".into(),
         line_height: None,
+        paragraph_space_before_pt: None,
+        paragraph_space_after_pt: None,
         bullet: "none".into(),
     }
 }
@@ -2438,7 +2468,9 @@ mod tests {
                 xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
                 <p:nvSpPr><p:nvPr><p:ph type="body" idx="2"/></p:nvPr></p:nvSpPr>
                 <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle><a:lvl1pPr algn="ctr">
-                    <a:lnSpc><a:spcPct val="140000"/></a:lnSpc><a:buChar char="•"/>
+                    <a:lnSpc><a:spcPct val="140000"/></a:lnSpc>
+                    <a:spcBef><a:spcPts val="600"/></a:spcBef><a:spcAft><a:spcPts val="900"/></a:spcAft>
+                    <a:buChar char="•"/>
                     <a:defRPr sz="2200" b="1" i="1"><a:solidFill><a:srgbClr val="445566"/></a:solidFill><a:latin typeface="Inherited Sans"/></a:defRPr>
                 </a:lvl1pPr></a:lstStyle></p:txBody>
             </p:sp>"#,
@@ -2464,6 +2496,8 @@ mod tests {
         assert_eq!(body.style.align, "center");
         assert_eq!(body.style.vertical_align, "middle");
         assert_eq!(body.style.line_height, Some(1.4));
+        assert_eq!(body.style.paragraph_space_before_pt, Some(6.0));
+        assert_eq!(body.style.paragraph_space_after_pt, Some(9.0));
         assert_eq!(body.style.bullet, "dot");
     }
 

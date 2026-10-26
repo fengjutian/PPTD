@@ -87,9 +87,32 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
   // is what makes the fragments one paragraph: making the fragments themselves
   // flex items would stack every styled run on its own line.
   if (bullet === "none") {
+    const hasParagraphSpacing =
+      element.style.paragraphSpaceBeforePt !== undefined || element.style.paragraphSpaceAfterPt !== undefined;
     return (
       <div style={boxStyle}>
-        <div style={{ width: "100%" }}>{fragments.map(renderFragment)}</div>
+        {hasParagraphSpacing ? (
+          splitIntoLines(fragments).map((line, lineIndex) => (
+            <div
+              key={lineIndex}
+              style={{
+                width: "100%",
+                paddingTop:
+                  element.style.paragraphSpaceBeforePt === undefined
+                    ? undefined
+                    : (element.style.paragraphSpaceBeforePt * scale * EMU_PER_INCH) / 72,
+                paddingBottom:
+                  element.style.paragraphSpaceAfterPt === undefined
+                    ? undefined
+                    : (element.style.paragraphSpaceAfterPt * scale * EMU_PER_INCH) / 72,
+              }}
+            >
+              {line.map(renderFragment)}
+            </div>
+          ))
+        ) : (
+          <div style={{ width: "100%" }}>{fragments.map(renderFragment)}</div>
+        )}
       </div>
     );
   }

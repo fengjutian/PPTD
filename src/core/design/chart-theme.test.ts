@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chartGridColor, chartSeriesColors } from "./chart-theme";
+import { chartGridColor, chartPaletteReadable, chartSeriesColors } from "./chart-theme";
 import { colorLuminance, contrastRatio } from "../rendering/contrast";
 
 describe("chart theme", () => {
@@ -32,5 +32,22 @@ describe("chart theme", () => {
     expect(colors).toHaveLength(5);
     expect(new Set(colors).size).toBeGreaterThan(1);
     expect(colors.every((color) => /^#[0-9A-F]{6}$/.test(color))).toBe(true);
+  });
+
+  it("uses the deck's second and third brand colours when it has them", () => {
+    const series = chartSeriesColors(
+      { background: "#FFFFFF", accent: "#0F7869", accent2: "#3A78A1", accent3: "#D59B43" },
+      3,
+    );
+    // A second series is a second voice, not a tint of the first.
+    expect(series[1]).toBe("#3A78A1");
+    expect(series[2]).toBe("#D59B43");
+  });
+
+  it("reports a palette that would merge into the page", () => {
+    // The first render of the dark chart used the near-white accent ink: the
+    // exporter must not stay quiet about a chart nobody can read.
+    expect(chartPaletteReadable(["#12233D"], "#12233D")).toBe(false);
+    expect(chartPaletteReadable(["#7FB8B2"], "#12233D")).toBe(true);
   });
 });

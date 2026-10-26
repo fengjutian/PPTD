@@ -23,11 +23,19 @@ import versionTwentyOneFixture from "./__fixtures__/v21-document.json";
 import versionTwentyTwoFixture from "./__fixtures__/v22-document.json";
 import versionTwentyThreeFixture from "./__fixtures__/v23-document.json";
 import versionTwentyFourFixture from "./__fixtures__/v24-document.json";
+import versionTwentyFiveFixture from "./__fixtures__/v25-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
 describe("presentation document schema", () => {
+  it("migrates version 25 without inventing paragraph spacing", () => {
+    const migrated = parsePresentationDocument(versionTwentyFiveFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    const element = migrated.slides[0]!.elements[0]!;
+    expect(element.type === "text" ? element.style.paragraphSpaceBeforePt : undefined).toBeUndefined();
+    expect(element.type === "text" ? element.style.paragraphSpaceAfterPt : undefined).toBeUndefined();
+  });
   it("migrates the fixed version 1 fixture to the current version", () => {
     const migrated = parsePresentationDocument(versionOneFixture);
     expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);

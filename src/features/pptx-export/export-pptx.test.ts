@@ -445,6 +445,8 @@ describe("PPTX export", () => {
         bullet: "number",
         indentLevel: 2,
         lineHeight: 1.5,
+        paragraphSpaceBeforePt: 6,
+        paragraphSpaceAfterPt: 9,
       },
     });
     const result = await buildPptx(document);
@@ -457,6 +459,8 @@ describe("PPTX export", () => {
     expect(slideXml).toContain("<a:buAutoNum");
     expect(slideXml).toContain('lvl="2"');
     expect(slideXml).toContain("<a:spcPct");
+    expect(slideXml).toContain('<a:spcBef><a:spcPts val="600"/></a:spcBef>');
+    expect(slideXml).toContain('<a:spcAft><a:spcPts val="900"/></a:spcAft>');
     expect(result.report.package.valid).toBe(true);
   });
 
@@ -750,6 +754,33 @@ describe("PPTX export", () => {
     // The chart area carries the color of the page. A white block on a dark
     // page would be a rectangle the editor never drew.
     expect(chartXml).toContain("0E2A47");
+  });
+
+  it("warns when a chart palette would merge into the page", async () => {
+    const document = createDocument();
+    document.slides[0]!.background = "#12233D";
+    const metric = { id: crypto.randomUUID(), type: "metric" as const, label: "完成率", value: "62%" };
+    document.slides[0]!.content.blocks = [metric];
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "chart",
+      contentBlockIds: [metric.id],
+      kind: "column",
+      frame: { x: inches(1), y: inches(2), width: inches(8), height: inches(4) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        textColor: "#FFFFFF",
+        // The page's own colour as the series colour: a chart nobody can read.
+        seriesColors: ["#12233D"],
+        showLegend: false,
+        showValueLabels: true,
+      },
+    });
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    expect(result.report.warnings.some((warning) => warning.includes("对比不足"))).toBe(true);
   });
 
   it("refuses to export a chart whose numbers are gone", async () => {

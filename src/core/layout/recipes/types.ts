@@ -58,6 +58,15 @@ export interface RecipeContext {
     accentStrong: string;
     /** The ink that reads on `accentStrong`. */
     onAccent: string;
+    /**
+     * The deck's second and third brand colours, when the theme declares them.
+     *
+     * A chart with two series needs two colours that belong to the same family;
+     * deriving the second from the first gives a tint, not a second voice. The
+     * recipes pass these through without reading them for anything else.
+     */
+    accent2?: string;
+    accent3?: string;
   };
   frame: {
     title: RectEmu;

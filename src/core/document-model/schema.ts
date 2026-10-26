@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { ELEMENT_NAME_MAX_LENGTH, MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 25 as const;
+export const CURRENT_SCHEMA_VERSION = 26 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -54,6 +54,8 @@ const textElement = base.extend({
     align: z.enum(["left", "center", "right"]),
     letterSpacingPt: z.number().min(-2).max(20).optional(),
     lineHeight: z.number().min(0.8).max(3).optional(),
+    paragraphSpaceBeforePt: z.number().min(0).max(200).optional(),
+    paragraphSpaceAfterPt: z.number().min(0).max(200).optional(),
     italic: z.boolean().optional(),
     underline: z.boolean().optional(),
     strikethrough: z.boolean().optional(),
@@ -713,6 +715,11 @@ const versionTwentyFourDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentyFiveDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(25) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTwentyThreeDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(23) })
   .superRefine(validateUniqueIds)
@@ -900,6 +907,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // optional: a version 24 document keeps deriving every name and stays fully
   // visible, so approving a deck does not silently hide an object.
   24: (document) => ({ ...versionTwentyFourDocumentSchema.parse(document), schemaVersion: 25 }),
+  // Version 26 adds optional paragraph spacing. Older text keeps its existing
+  // compact flow because the migration does not invent spacing values.
+  25: (document) => ({ ...versionTwentyFiveDocumentSchema.parse(document), schemaVersion: 26 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

@@ -944,6 +944,11 @@ export function buildDesignedSlide(
       accentSubtle: semanticOf("accentSubtle"),
       accentStrong: semanticOf("accentStrong"),
       onAccent: semanticOf("onAccent"),
+      // The second and third brand colours are only passed through, for the
+      // charts that need more than one series. A theme without them lets the
+      // chart derive its own second colour.
+      ...(paletteOf("accent2") ? { accent2: paletteOf("accent2")! } : {}),
+      ...(paletteOf("accent3") ? { accent3: paletteOf("accent3")! } : {}),
     };
     const recipeFrame = {
       title: frame(titleBox.x, titleBox.y, titleBox.width, titleBox.height),

@@ -31,7 +31,7 @@ import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
 import { lintTaste } from "../../core/design/taste-lint";
 import { shadowSpec } from "../../core/design/effects";
-import { chartGridColor } from "../../core/design/chart-theme";
+import { chartGridColor, chartPaletteReadable } from "../../core/design/chart-theme";
 import { checkTemplateFit, templateTargetMatchesDocument } from "../../services/template-review-target";
 import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
@@ -279,6 +279,8 @@ export async function buildPptx(
   let croppedImageCount = 0;
   let nativeChartCount = 0;
   let nativeTableCount = 0;
+  /** Charts whose palette has no contrast against the page they sit on. */
+  const chartWarnings: string[] = [];
   // The crop and the frame shape of every picture, in the order the pictures
   // were added. Both are written into the slide XML later, in one pass.
   const picturesBySlide: PictureTreatment[][] = [];
@@ -329,6 +331,12 @@ export async function buildPptx(
           align: element.style.align,
           ...(element.style.letterSpacingPt === undefined ? {} : { charSpacing: element.style.letterSpacingPt }),
           ...(element.style.lineHeight === undefined ? {} : { lineSpacingMultiple: element.style.lineHeight }),
+          ...(element.style.paragraphSpaceBeforePt === undefined
+            ? {}
+            : { paraSpaceBefore: element.style.paragraphSpaceBeforePt }),
+          ...(element.style.paragraphSpaceAfterPt === undefined
+            ? {}
+            : { paraSpaceAfter: element.style.paragraphSpaceAfterPt }),
           // The canvas and the file have to agree on where the text sits in its
           // frame; both read the same vertical alignment now.
           valign: element.style.verticalAlign ?? "top",
@@ -420,6 +428,11 @@ export async function buildPptx(
             : resolved.series.map((_, index) =>
                 color(element.style.seriesColors[index % element.style.seriesColors.length]!),
               );
+        // A chart whose bars merge into the page is worse than one in the wrong
+        // colour: report it instead of drawing something nobody can read.
+        if (!chartPaletteReadable(element.style.seriesColors, model.background)) {
+          chartWarnings.push("图表系列色与页面底色对比不足，导出的柱子或折线可能看不清");
+        }
         // The unit of the reviewed numbers belongs to the labels, so a value
         // reads "38万" in the deck and not "380000". Integer data uses an integer
         // format: PowerPoint renders "#,##0.##" as "10." for whole numbers.
@@ -683,7 +696,13 @@ export async function buildPptx(
       ...(tasteLint ? { tasteLint } : {}),
       ...(templateFit ? { templateFit } : {}),
       parity,
-      warnings: [...issues.map((issue) => issue.message), ...animationWarnings, ...gradientWarnings, ...hiddenWarnings],
+      warnings: [
+        ...issues.map((issue) => issue.message),
+        ...animationWarnings,
+        ...gradientWarnings,
+        ...hiddenWarnings,
+        ...chartWarnings,
+      ],
       issues,
       package: packageValidation,
     },

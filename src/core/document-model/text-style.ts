@@ -42,6 +42,8 @@ export function normalizeTextFormat(style: TextElementStyle): TextElementStyle {
     align: style.align,
     letterSpacingPt: style.letterSpacingPt,
     lineHeight: style.lineHeight,
+    paragraphSpaceBeforePt: style.paragraphSpaceBeforePt,
+    paragraphSpaceAfterPt: style.paragraphSpaceAfterPt,
     italic: style.italic ?? false,
     underline: style.underline ?? false,
     strikethrough: style.strikethrough ?? false,

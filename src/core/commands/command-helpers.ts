@@ -533,6 +533,10 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
     (!Number.isFinite(style.lineHeight) || style.lineHeight < 0.8 || style.lineHeight > 3)
   )
     throw new Error("INVALID_TEXT_STYLE");
+  for (const spacing of [style.paragraphSpaceBeforePt, style.paragraphSpaceAfterPt]) {
+    if (spacing !== undefined && (!Number.isFinite(spacing) || spacing < 0 || spacing > 200))
+      throw new Error("INVALID_TEXT_STYLE");
+  }
   if (
     style.letterSpacingPt !== undefined &&
     (!Number.isFinite(style.letterSpacingPt) || style.letterSpacingPt < -2 || style.letterSpacingPt > 20)

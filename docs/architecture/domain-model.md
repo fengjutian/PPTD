@@ -407,3 +407,9 @@ interface SlideTransition {
 缺少 `transition` 表示无切换，不存 `"none"`。`set-slide-transition` 只改设计 revision，一次设置/清除一个撤销项；方向只对 `push`/`wipe`/`split` 生效。导出在 `<p:clrMapOvr>` 之后写入原生 `<p:transition>`，报告用 `nativeTransitionCount` 记录实际写入页数。
 
 新增可选字段使持久化格式升到第 18 版；`17 → 18` 迁移不伪造切换，固定样例见 `src/core/document-model/__fixtures__/v18-document.json`。详见 [0056 页面切换效果与原生导出](decisions/0056-slide-transition-export.md)。
+
+## 24. 段前与段后间距
+
+`TextElementStyle.paragraphSpaceBeforePt` 和 `paragraphSpaceAfterPt` 是设计态 point 值，作用于文本框内的每个换行段落。它们不进入内容哈希；格式命令修改时只增加 design/document revision。PPTX 导入从 slide、layout、master 的段落属性继承，导出写回原生段落间距。
+
+当前文本内容仍是单一字符串，所以整个文本框共享同一组段落值；逐段不同样式和制表位不在该模型中伪实现。新增可选字段使持久化格式升到第 26 版；`25 → 26` 迁移不添加默认间距，固定样例见 `v25-document.json`。详见 [0105 原生段前与段后间距](decisions/0105-paragraph-spacing.md)。

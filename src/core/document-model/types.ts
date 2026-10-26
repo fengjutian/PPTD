@@ -106,6 +106,9 @@ export interface TextElementStyle {
   letterSpacingPt?: number;
   /** Line height as a multiple of the font size. Absent keeps the renderer's default. */
   lineHeight?: number;
+  /** Space before/after each paragraph, in points. */
+  paragraphSpaceBeforePt?: number;
+  paragraphSpaceAfterPt?: number;
   /** Absent means upright. */
   italic?: boolean;
   /** Absent means no underline. A run may override this for its own range. */
