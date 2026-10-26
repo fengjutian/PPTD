@@ -3904,6 +3904,8 @@ export function useAppRuntime() {
     pasteSelection,
     editorSurface,
     findOpen,
+    handleSave,
+    handleSaveAs,
     openFindReplace,
     selectElements,
     redo,
