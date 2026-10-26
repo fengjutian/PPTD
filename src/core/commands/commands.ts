@@ -1,4 +1,12 @@
-import type { ElementId, Emu, PresentationDocument, Slide, SlideElement, TextElement } from "../document-model";
+import type {
+  ElementId,
+  Emu,
+  PresentationDocument,
+  Slide,
+  SlideElement,
+  SlideLayoutSpec,
+  TextElement,
+} from "../document-model";
 import {
   captureContentVersion,
   createDocument,
@@ -21,7 +29,19 @@ import {
 
 import { alignFrames, distributeFrames, unionFrame } from "./arrange";
 
-import { classifyRelayoutElements, inferRelayoutContext } from "./slide-relayout";
+import {
+  classifyRelayoutElements,
+  inferRelayoutContext,
+  slideLayoutApplicationIssue,
+  slideLayoutOptions,
+} from "./slide-relayout";
+export {
+  classifyRelayoutElements,
+  inferRelayoutContext,
+  slideLayoutApplicationIssue,
+  slideLayoutOptions,
+  type SlideLayoutOption,
+} from "./slide-relayout";
 
 import type { ChangeDomain, AiSlideDraft, DocumentCommand } from "./command-types";
 export type {
@@ -308,6 +328,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       // reads, so both the content and the design revision move.
       return "both";
     case "relayout-slide":
+    case "apply-slide-layout":
       return "design";
     case "add-slide":
       return "both";
@@ -347,8 +368,8 @@ function isPageBackground(element: SlideElement): boolean {
   );
 }
 
-function relayoutSlide(document: PresentationDocument, slide: Slide): void {
-  const context = inferRelayoutContext(slide, document);
+function relayoutSlide(document: PresentationDocument, slide: Slide, targetLayout?: SlideLayoutSpec): void {
+  const context = inferRelayoutContext(slide, document, targetLayout);
   const preserved = classifyRelayoutElements(slide)
     .preserved // A locked title/body placeholder is still the content binding. Keeping it
     // beside the newly rendered placeholder would duplicate the heading or the
@@ -448,6 +469,13 @@ function relayoutSlide(document: PresentationDocument, slide: Slide): void {
   // Relayout replaces the composition; a group whose members were regenerated
   // would point at ids that no longer exist, so the grouping is dropped.
   slide.groups = undefined;
+  if (targetLayout) {
+    // The target is already a layout of this document. Writing its stable id is
+    // what lets the exporter keep the deck's master structure; the temporary
+    // render must not fork a second layout with the same name.
+    slide.layoutId = targetLayout.id;
+    return;
+  }
   const generatedLayout = temp.layouts?.[0];
   if (!generatedLayout) {
     delete slide.layoutId;
@@ -635,6 +663,13 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     return;
   }
 
+  if (command.type === "apply-slide-layout") {
+    const layout = document.layouts?.find((candidate) => candidate.id === command.layoutId);
+    if (!layout) throw new Error("LAYOUT_NOT_FOUND");
+    if (slideLayoutApplicationIssue(document, slide, layout)) throw new Error("LAYOUT_INCOMPATIBLE");
+    relayoutSlide(document, slide, layout);
+    return;
+  }
   if (command.type === "relayout-slide") {
     relayoutSlide(document, slide);
     return;

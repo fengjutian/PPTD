@@ -157,7 +157,75 @@ export interface BackgroundRhythm {
   repeatLimit: number;
 }
 
+export interface TemplateLayoutRequirement {
+  hasTitle: boolean;
+  hasBody: boolean;
+  hasImage: boolean;
+  minimumColumns: 1 | 2;
+  allowFree: boolean;
+}
+
+export type TemplateLayoutIssueCode =
+  | "TEMPLATE_LAYOUT_NO_CANDIDATE"
+  | "TEMPLATE_LAYOUT_TITLE_REQUIRED"
+  | "TEMPLATE_LAYOUT_BODY_REQUIRED"
+  | "TEMPLATE_LAYOUT_IMAGE_REQUIRED"
+  | "TEMPLATE_LAYOUT_COLUMNS_REQUIRED";
+
+export interface TemplateLayoutIssue {
+  slideIndex: number;
+  intent: TemplateLayoutIntent;
+  code: TemplateLayoutIssueCode;
+  message: string;
+}
+
+export interface TemplateLayoutPlan {
+  layouts: Array<AiTemplateLayout | undefined>;
+  issues: TemplateLayoutIssue[];
+}
+
 export const DEFAULT_BACKGROUND_RHYTHM: BackgroundRhythm = { coverVariants: 1, contentVariants: 3, repeatLimit: 2 };
+
+export function templateRequirementForIntent(intent: TemplateLayoutIntent): TemplateLayoutRequirement {
+  return {
+    hasTitle: true,
+    hasBody: intent !== "cover" && intent !== "section",
+    hasImage: intent === "image",
+    minimumColumns: intent === "split" ? 2 : 1,
+    allowFree: intent === "cover" || intent === "section" || intent === "quote",
+  };
+}
+
+export function templateLayoutMeetsRequirement(
+  layout: AiTemplateLayout,
+  requirement: TemplateLayoutRequirement,
+): boolean {
+  const capabilities = layoutCapabilities(layout.regions);
+  if (requirement.hasTitle && !capabilities.hasTitle) return false;
+  if (requirement.hasBody && !capabilities.hasBody) return false;
+  if (requirement.hasImage && !capabilities.hasImage) return false;
+  if (requirement.minimumColumns > capabilities.columns) return false;
+  if (!requirement.allowFree && capabilities.free) return false;
+  return true;
+}
+
+function requirementIssue(
+  slideIndex: number,
+  intent: TemplateLayoutIntent,
+  layouts: readonly AiTemplateLayout[],
+  requirement: TemplateLayoutRequirement,
+): TemplateLayoutIssue {
+  const capabilities = layouts.map((layout) => layoutCapabilities(layout.regions));
+  if (requirement.hasTitle && !capabilities.some((item) => item.hasTitle))
+    return { slideIndex, intent, code: "TEMPLATE_LAYOUT_TITLE_REQUIRED", message: "模板没有可用的标题占位版式" };
+  if (requirement.hasImage && !capabilities.some((item) => item.hasImage))
+    return { slideIndex, intent, code: "TEMPLATE_LAYOUT_IMAGE_REQUIRED", message: "该页需要图片，但模板没有图片占位版式" };
+  if (requirement.minimumColumns >= 2 && !capabilities.some((item) => item.columns >= 2))
+    return { slideIndex, intent, code: "TEMPLATE_LAYOUT_COLUMNS_REQUIRED", message: "该页需要双栏，但模板没有双栏版式" };
+  if (requirement.hasBody && !capabilities.some((item) => item.hasBody))
+    return { slideIndex, intent, code: "TEMPLATE_LAYOUT_BODY_REQUIRED", message: "该页需要正文，但模板没有正文占位版式" };
+  return { slideIndex, intent, code: "TEMPLATE_LAYOUT_NO_CANDIDATE", message: "模板没有满足该页设计需求的安全版式" };
+}
 
 /**
  * Localized and English layout names that express the same intent. Chinese vendor
@@ -356,14 +424,34 @@ export function planTemplateLayouts(input: {
   layouts: AiTemplateLayout[];
   intents: TemplateLayoutIntent[];
   rhythm?: BackgroundRhythm;
+  requirements?: TemplateLayoutRequirement[];
 }): Array<AiTemplateLayout | undefined> {
+  return planTemplateLayoutsWithReport(input).layouts;
+}
+
+export function planTemplateLayoutsWithReport(input: {
+  layouts: AiTemplateLayout[];
+  intents: TemplateLayoutIntent[];
+  rhythm?: BackgroundRhythm;
+  requirements?: TemplateLayoutRequirement[];
+}): TemplateLayoutPlan {
   const rhythm = input.rhythm ?? DEFAULT_BACKGROUND_RHYTHM;
   const usage = new Map<number, number>();
+  const issues: TemplateLayoutIssue[] = [];
   let previousIndex: number | undefined;
   let previousRun = 0;
-  return input.intents.map((intent) => {
-    const candidates = templateLayoutCandidates(input.layouts, intent);
-    if (candidates.length === 0) return undefined;
+  const layouts = input.intents.map((intent, slideIndex) => {
+    const requirement = input.requirements?.[slideIndex] ?? templateRequirementForIntent(intent);
+    const candidates = templateLayoutCandidates(input.layouts, intent).filter((layout) =>
+      templateLayoutMeetsRequirement(layout, requirement),
+    );
+    if (candidates.length === 0) {
+      // No uploaded template means there is nothing to match. The normal
+      // recipe renderer remains the intended path and must not produce a
+      // template compatibility warning.
+      if (input.layouts.length > 0) issues.push(requirementIssue(slideIndex, intent, input.layouts, requirement));
+      return undefined;
+    }
     const variantCount = Math.max(1, intent === "cover" ? rhythm.coverVariants : rhythm.contentVariants);
     const pool = [...candidates]
       .sort(
@@ -390,6 +478,7 @@ export function planTemplateLayouts(input: {
     }
     return chosen;
   });
+  return { layouts, issues };
 }
 
 /**

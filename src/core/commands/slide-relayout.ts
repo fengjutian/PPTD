@@ -7,7 +7,7 @@ import type {
   SlideLayoutSpec,
   TextElement,
 } from "../document-model";
-import { colorLuminance, type BackgroundRange } from "../rendering/contrast";
+import { colorLuminance, readableTextColor, type BackgroundRange } from "../rendering/contrast";
 import { LAYOUT_CAPACITY } from "./layout-capacity";
 import type { AiLayoutKind, AiSlideDesign, AiTemplateLayout, AiTemplateRegion } from "./template-layouts";
 
@@ -429,8 +429,18 @@ function backgroundRangeFor(textColor: string): BackgroundRange {
  * Builds the design input for a design-only relayout from the page that is
  * already on screen. It reuses the template artwork, title/body geometry, ink
  * and accent, so relayout is a composition change rather than a re-theme.
+ *
+ * With `targetLayout` the command is changing layouts. The target's persisted
+ * capabilities decide whether the page becomes a cover, a two-column page or a
+ * normal body page; its flat background and ink replace the current ones. The
+ * original placeholder geometry is not persisted, so the composition is rebuilt
+ * safely instead of pretending to reproduce the source template exactly.
  */
-export function inferRelayoutContext(slide: Slide, document: PresentationDocument): RelayoutContext {
+export function inferRelayoutContext(
+  slide: Slide,
+  document: PresentationDocument,
+  targetLayout?: SlideLayoutSpec,
+): RelayoutContext {
   const classified = classifyRelayoutElements(slide);
   const allText = slide.elements.filter((element): element is TextElement => element.type === "text");
   const generatedText = classified.generated.filter((element): element is TextElement => element.type === "text");
@@ -456,32 +466,64 @@ export function inferRelayoutContext(slide: Slide, document: PresentationDocumen
     height: Math.min(1, safe.height + 0.04),
   };
 
-  const titleColor = title?.style.color ?? "#171A1F";
-  const bodyColor = bodyTexts[0]?.style.color ?? titleColor;
-  const accent = inferAccent(classified.generated, titleColor);
-  const backgroundImage = classified.generated.find(isLayoutBackground);
-  const layout = inferLayout(slide, document, classified.generated);
+  const targetBackground = targetLayout?.backgroundColor;
+  const targetLuminance = targetBackground ? colorLuminance(targetBackground) : undefined;
+  const rawTitleColor = title?.style.color ?? "#171A1F";
+  const rawBodyColor = bodyTexts[0]?.style.color ?? rawTitleColor;
+  const rawAccent = inferAccent(classified.generated, rawTitleColor);
+  // A different layout may be dark where the old one was light. Keeping the old
+  // ink would put a dark title on a dark plate, so the ink is resolved against
+  // the target background before the composition is built.
+  const titleColor =
+    targetLuminance === undefined ? rawTitleColor : readableTextColor(rawTitleColor, targetLuminance, true);
+  const bodyColor =
+    targetLuminance === undefined ? rawBodyColor : readableTextColor(rawBodyColor, targetLuminance, false, titleColor);
+  const accent =
+    targetLuminance === undefined ? rawAccent : readableTextColor(rawAccent, targetLuminance, true, titleColor);
+  const background = targetBackground ?? slide.background;
+  // Only the current layout keeps its artwork. A target layout's artwork was
+  // never persisted; carrying the old image across would paint the wrong
+  // template behind the new composition.
+  const backgroundImage =
+    !targetLayout || targetLayout.id === slide.layoutId
+      ? classified.generated.find(isLayoutBackground)
+      : undefined;
+  const layout = targetLayout ? layoutKindForTarget(targetLayout) : inferLayout(slide, document, classified.generated);
   const range = { title: backgroundRangeFor(titleColor), body: backgroundRangeFor(bodyColor) };
+  const targetColumns = targetLayout?.capabilities?.columns ?? 0;
+  // A narrow source body leaves neither column enough room. A split target then
+  // uses the standard body area instead of squeezing two columns into it.
+  const regionBodyFrame = targetColumns >= 2 && bodyFrame.width < 0.5 ? { ...DEFAULT_BODY } : bodyFrame;
   const regions: AiTemplateRegion[] = [
     { role: "title", frame: titleFrame, textColor: titleColor, fontSizePt: title?.style.fontSizePt },
-    { role: "body", frame: bodyFrame, textColor: bodyColor, fontSizePt: bodyTexts[0]?.style.fontSizePt },
+    ...(targetLayout
+      ? targetBodyRegions(targetLayout, regionBodyFrame, bodyColor, bodyTexts[0]?.style.fontSizePt)
+      : [
+          {
+            role: "body" as const,
+            frame: bodyFrame,
+            textColor: bodyColor,
+            fontSizePt: bodyTexts[0]?.style.fontSizePt,
+          },
+        ]),
   ];
 
   return {
     design: {
       layout,
-      background: slide.background,
+      background,
       accent,
       titleColor,
       bodyColor,
       safeRegion,
       backgroundTreatment: "none",
       inkOverride: true,
+      ...(targetColumns >= 2 && canForceColumns(slide) ? { composition: "columns" as const } : {}),
     },
     templateLayout: {
       index: 0,
-      name: layoutName(slide, document) || "现有版式",
-      backgroundColor: slide.background,
+      name: targetLayout?.name.trim() || layoutName(slide, document) || "现有版式",
+      backgroundColor: background,
       ...(backgroundImage?.type === "image" ? { backgroundImageDataUrl: backgroundImage.source.dataUrl } : {}),
       backgroundLuminance: range,
       regions,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   planTemplateLayouts,
+  planTemplateLayoutsWithReport,
   templateLayoutCandidates,
   templateLayoutHasFooterMarker,
   type AiTemplateLayout,
@@ -59,6 +60,40 @@ describe("template layout selection", () => {
     expect(planTemplateLayouts({ layouts: [contentLayout(11, "内页"), withImage], intents: ["image"] })[0]?.index).toBe(
       21,
     );
+  });
+
+  it("rejects an image page instead of silently using a text-only layout", () => {
+    const result = planTemplateLayoutsWithReport({ layouts: [contentLayout(11, "内页")], intents: ["image"] });
+    expect(result.layouts).toEqual([undefined]);
+    expect(result.issues).toEqual([
+      expect.objectContaining({ slideIndex: 0, code: "TEMPLATE_LAYOUT_IMAGE_REQUIRED" }),
+    ]);
+  });
+
+  it("rejects a split page when the template has no two-column layout", () => {
+    const oneColumn: AiTemplateLayout = {
+      index: 31,
+      name: "单栏正文",
+      regions: [region("title", 0.05, 0.04, 0.9, 0.1), region("body", 0.05, 0.2, 0.9, 0.65)],
+    };
+    const result = planTemplateLayoutsWithReport({ layouts: [oneColumn], intents: ["split"] });
+    expect(result.layouts).toEqual([undefined]);
+    expect(result.issues[0]?.code).toBe("TEMPLATE_LAYOUT_COLUMNS_REQUIRED");
+  });
+
+  it("keeps issue indexes aligned with their pages", () => {
+    const result = planTemplateLayoutsWithReport({
+      layouts: [contentLayout(11, "内页")],
+      intents: ["body", "image", "body"],
+    });
+    expect(result.layouts.map((layout) => layout?.index)).toEqual([11, undefined, 11]);
+    expect(result.issues.map((issue) => issue.slideIndex)).toEqual([1]);
+  });
+
+  it("does not report template conflicts when no template was supplied", () => {
+    const result = planTemplateLayoutsWithReport({ layouts: [], intents: ["body", "image"] });
+    expect(result.layouts).toEqual([undefined, undefined]);
+    expect(result.issues).toEqual([]);
   });
 
   it("never keeps a layout whose own title collides with its body", () => {

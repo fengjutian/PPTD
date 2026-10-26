@@ -159,6 +159,7 @@ export type DocumentCommand =
       pageContext?: { index: number; total: number; sectionLabel?: string };
     }
   | { type: "relayout-slide"; slideId: SlideId }
+  | { type: "apply-slide-layout"; slideId: SlideId; layoutId: string }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }

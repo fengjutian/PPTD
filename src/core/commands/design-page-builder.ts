@@ -22,7 +22,7 @@ import { layoutFlow } from "../rendering/flow";
 import type { AiElementRepair, AiNormalizedRect, AiTemplateDecoration, TemplateLayoutIntent } from "./template-layouts";
 import {
   layoutCapabilities,
-  planTemplateLayouts,
+  planTemplateLayoutsWithReport,
   templateColumnRegions,
   templateContentRegion,
   templateImageRegion,
@@ -334,11 +334,12 @@ export function createDesignContext(
     if (composition === "columns") return "split";
     return "body";
   });
-  const chosenLayouts = planTemplateLayouts({
+  const templateLayoutPlan = planTemplateLayoutsWithReport({
     layouts: effectiveLayouts ?? [],
     intents: layoutIntents,
     rhythm: command.backgroundRhythm,
   });
+  const chosenLayouts = templateLayoutPlan.layouts;
   document.title = command.title.trim();
 
   return {
@@ -372,6 +373,7 @@ export function createDesignContext(
     deckPlan,
     layoutIntents,
     chosenLayouts,
+    templateLayoutIssues: templateLayoutPlan.issues,
     compileReports,
   };
 }
