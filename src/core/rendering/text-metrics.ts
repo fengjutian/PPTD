@@ -8,8 +8,14 @@
  * registered, so the model stays testable and headless tools keep working.
  */
 export interface TextMeasurer {
-  /** The width of the text in em, relative to the font size. */
-  widthEm(text: string, fontFamily: string): number;
+  /**
+   * The width of the text in em, relative to the font size.
+   *
+   * `bold` asks for the bold face when the font has one: a bold run is wider
+   * than its regular counterpart, and a title set in 700 weight was measured
+   * with the regular advance until this argument existed.
+   */
+  widthEm(text: string, fontFamily: string, bold?: boolean): number;
 }
 
 let activeMeasurer: TextMeasurer | undefined;

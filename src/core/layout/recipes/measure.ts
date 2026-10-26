@@ -1,5 +1,5 @@
 import type { Emu, RectEmu } from "../../document-model";
-import { estimateTextLines, textLines } from "../../rendering/text-fit";
+import { estimateTextLines, textLines, type TextRunMetrics } from "../../rendering/text-fit";
 import type { NormalizedFrame } from "./types";
 
 /** One point in EMU. */
@@ -109,8 +109,9 @@ export function endsInOrphan(
   fontSizePt: number,
   fontFamily: string | undefined,
   minimumLastLineChars = 3,
+  metrics?: TextRunMetrics,
 ): boolean {
-  const lines = textLines(text, widthPt, fontSizePt, fontFamily);
+  const lines = textLines(text, widthPt, fontSizePt, fontFamily, metrics);
   if (lines.length <= 1) return false;
   const lastLine = (lines[lines.length - 1] ?? "").replace(/\s/g, "");
   return lastLine.length < minimumLastLineChars;
@@ -123,8 +124,9 @@ export function anyEndsInOrphan(
   fontSizePt: number,
   fontFamily: string | undefined,
   minimumLastLineChars = 3,
+  metrics?: TextRunMetrics,
 ): boolean {
-  return items.some((item) => endsInOrphan(item, widthPt, fontSizePt, fontFamily, minimumLastLineChars));
+  return items.some((item) => endsInOrphan(item, widthPt, fontSizePt, fontFamily, minimumLastLineChars, metrics));
 }
 
 /**

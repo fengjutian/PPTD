@@ -1,6 +1,6 @@
 import { isElementVisible, type Emu, type PresentationDocument, type Slide, type TextElement } from "../document-model";
 import { endsInOrphan } from "./recipes/measure";
-import { estimateTextLines, fitTextToFrame } from "../rendering/text-fit";
+import { estimateTextLines, fitTextToFrame, runMetricsOf } from "../rendering/text-fit";
 
 /**
  * Makes the text of a finished page fit the frame it was given.
@@ -99,7 +99,13 @@ function growthLimitPt(slide: Slide, element: TextElement, pageHeight: Emu): num
 /** The height a text needs at a given size, measured the way the renderer breaks it. */
 function neededHeightPt(element: TextElement, fontSizePt: number): number {
   const widthPt = element.frame.width / EMU_PER_PT;
-  const lines = estimateTextLines(element.text, widthPt, fontSizePt, element.style.fontFamily);
+  const lines = estimateTextLines(
+    element.text,
+    widthPt,
+    fontSizePt,
+    element.style.fontFamily,
+    runMetricsOf(element),
+  );
   return lines * fontSizePt * (element.style.lineHeight ?? 1.25);
 }
 
@@ -137,6 +143,8 @@ export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
       fontSize: designedPt,
       lineHeight: element.style.lineHeight ?? 1.25,
       fontFamily: element.style.fontFamily,
+      bold: element.style.bold,
+      letterSpacingPt: element.style.letterSpacingPt,
       minimumScale: MINIMUM_SCALE,
     });
     // A vertically centred or bottom-aligned block would move when its frame
@@ -220,7 +228,7 @@ function repairStrandedLines(slide: Slide, record: (adjustment: TextRefitAdjustm
   }
   const strands = (members: readonly TextElement[], size: number): number =>
     members.filter((element) =>
-      endsInOrphan(element.text, element.frame.width / EMU_PER_PT, size, element.style.fontFamily),
+      endsInOrphan(\n        element.text,\n        element.frame.width / EMU_PER_PT,\n        size,\n        element.style.fontFamily,\n        3,\n        runMetricsOf(element),\n      ),
     ).length;
   for (const [designedPt, members] of groups) {
     const current = strands(members, designedPt);

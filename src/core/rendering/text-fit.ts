@@ -20,19 +20,47 @@ export function measureTextUnits(text: string): number {
 }
 
 /**
+ * The typographic properties of a run that change its advance.
+ *
+ * Both are optional and both default to "the plain regular run": a caller that
+ * has no element at hand (a recipe fitting a headline before it owns the style)
+ * keeps the old behaviour.
+ */
+export interface TextRunMetrics {
+  readonly bold?: boolean;
+  /** Tracking in points: the extra space the exporter writes between glyphs. */
+  readonly letterSpacingPt?: number;
+}
+
+/**
  * The width of the text in em units.
  *
  * When the application registered a measurer, the real font decides. Without
  * one the estimate above is used, which is the reason the core never depends
  * on a renderer.
  */
-export function measureTextWidthEm(text: string, fontFamily?: string): number {
+export function measureTextWidthEm(text: string, fontFamily?: string, bold = false): number {
   const measurer = getTextMeasurer();
   if (measurer && fontFamily) {
-    const width = measurer.widthEm(text, fontFamily);
+    const width = measurer.widthEm(text, fontFamily, bold);
     if (Number.isFinite(width) && width >= 0) return width;
   }
   return measureTextUnits(text);
+}
+
+/**
+ * The width of one character in em, including the tracking the file will carry.
+ *
+ * Tracking is a fixed distance per glyph, so it becomes a width in em by
+ * dividing by the font size. The exporter writes it (`charSpacing`), PowerPoint
+ * applies it, and leaving it out of the measure made a tracked title break a
+ * word later in the file than in the picture.
+ */
+export function measureCharacterEm(character: string, fontSizePt: number, metrics?: TextRunMetrics, fontFamily?: string): number {
+  const base = measureTextWidthEm(character, fontFamily, metrics?.bold === true);
+  const tracking = metrics?.letterSpacingPt;
+  if (tracking === undefined || tracking === 0) return base;
+  return base + tracking / Math.max(0.01, fontSizePt);
 }
 
 /**
@@ -42,10 +70,16 @@ export function measureTextWidthEm(text: string, fontFamily?: string): number {
  * checks and the ink box all read it, so they cannot disagree about where a
  * paragraph breaks.
  */
-export function textLines(text: string, widthPt: number, fontSizePt: number, fontFamily?: string): readonly string[] {
+export function textLines(
+  text: string,
+  widthPt: number,
+  fontSizePt: number,
+  fontFamily?: string,
+  metrics?: TextRunMetrics,
+): readonly string[] {
   return breakIntoLines(text, {
     widthEm: Math.max(1, widthPt / Math.max(0.01, fontSizePt)),
-    widthOf: (character) => measureTextWidthEm(character, fontFamily),
+    widthOf: (character) => measureCharacterEm(character, fontSizePt, metrics, fontFamily),
   });
 }
 
@@ -57,8 +91,14 @@ export function textLines(text: string, widthPt: number, fontSizePt: number, fon
  * lines. Counting whole paragraphs by width instead would disagree with the
  * renderer wherever a Latin word or a piece of punctuation decides a break.
  */
-export function estimateTextLines(text: string, widthPt: number, fontSizePt: number, fontFamily?: string): number {
-  return textLines(text, widthPt, fontSizePt, fontFamily).length;
+export function estimateTextLines(
+  text: string,
+  widthPt: number,
+  fontSizePt: number,
+  fontFamily?: string,
+  metrics?: TextRunMetrics,
+): number {
+  return textLines(text, widthPt, fontSizePt, fontFamily, metrics).length;
 }
 
 /**
@@ -112,6 +152,10 @@ export interface TextFrameFitOptions {
   readonly lineHeight: number;
   /** The font the measurement uses. */
   readonly fontFamily?: string;
+  /** Bold runs are wider; the fit has to know before it decides a break. */
+  readonly bold?: boolean;
+  /** Tracking in points, as the exporter writes it. */
+  readonly letterSpacingPt?: number;
   /** The smallest share of the requested size a fit may fall back to. */
   readonly minimumScale?: number;
 }
@@ -148,10 +192,14 @@ const FIT_STEP = 0.97;
  */
 export function fitTextToFrame(text: string, options: TextFrameFitOptions): TextFrameFit {
   const lineHeight = Math.max(0.1, options.lineHeight);
+  const metrics: TextRunMetrics = {
+    ...(options.bold === undefined ? {} : { bold: options.bold }),
+    ...(options.letterSpacingPt === undefined ? {} : { letterSpacingPt: options.letterSpacingPt }),
+  };
   const breakAt = (fontSize: number): string[] =>
     breakIntoLines(text, {
       widthEm: Math.max(1, options.width / Math.max(0.01, fontSize)),
-      widthOf: (character) => measureTextWidthEm(character, options.fontFamily),
+      widthOf: (character) => measureCharacterEm(character, fontSize, metrics, options.fontFamily),
     });
   const linesAt = (fontSize: number) => {
     const lineBox = fontSize * lineHeight;
@@ -199,16 +247,16 @@ export function textInkBox(element: TextElement): TextInkBox {
   const lineHeight = element.style.lineHeight ?? 1.25;
   const frameWidthPt = element.frame.width / EMU_PER_POINT;
   const frameHeightPt = element.frame.height / EMU_PER_POINT;
-  const lines =
-    breakIntoLines(element.text, {
-      widthEm: Math.max(1, frameWidthPt / fontSizePt),
-      widthOf: (character) => measureTextWidthEm(character, element.style.fontFamily),
-    }) ?? [];
+  const metrics = runMetricsOf(element);
+  const lines = textLines(element.text, frameWidthPt, fontSizePt, element.style.fontFamily, metrics);
   const widestEm = lines.reduce(
     (widest, line) =>
       Math.max(
         widest,
-        [...line].reduce((sum, character) => sum + measureTextWidthEm(character, element.style.fontFamily), 0),
+        [...line].reduce(
+          (sum, character) => sum + measureCharacterEm(character, fontSizePt, metrics, element.style.fontFamily),
+          0,
+        ),
       ),
     0,
   );
@@ -250,11 +298,25 @@ export function textOverflowsFrame(element: TextElement, tolerance = 1.001): boo
   // gate's allowance is what keeps the two from disagreeing about a page.
   const lineHeight = element.style.lineHeight ?? 1.2;
   return (
-    estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) *
+    estimateTextLines(
+      element.text,
+      widthPt,
+      element.style.fontSizePt,
+      element.style.fontFamily,
+      runMetricsOf(element),
+    ) *
       element.style.fontSizePt *
       lineHeight >
     heightPt * tolerance
   );
+}
+
+/** The run properties of an element that change its advance. */
+export function runMetricsOf(element: TextElement): TextRunMetrics {
+  return {
+    ...(element.style.bold ? { bold: true } : {}),
+    ...(element.style.letterSpacingPt === undefined ? {} : { letterSpacingPt: element.style.letterSpacingPt }),
+  };
 }
 
 /**
