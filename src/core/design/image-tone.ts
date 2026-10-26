@@ -16,8 +16,9 @@ import { mixHex } from "./shape-gradient";
  * belongs, and a duotone would be decoration for its own sake.
  *
  * The two ends come from the brand, not from the ink: `accent` on a dark page is
- * near-white (ADR 0098), and a near-white highlight end would wash the picture
- * out to grey.
+ * near-white (ADR 0098), and a near-white highlight end lifted the whole picture
+ * into a pale field that competed with the headline. Shadow and highlight are
+ * two stops of the same brand colour instead, which keeps the picture dark.
  */
 export function darkPageTone(colors: {
   background: string;
@@ -27,6 +28,6 @@ export function darkPageTone(colors: {
   if ((colorLuminance(colors.background) ?? 1) >= 0.45) return undefined;
   return {
     dark: colors.accentStrong,
-    light: mixHex(colors.accent, "#FFFFFF", 0.55),
+    light: mixHex(colors.accentStrong, "#FFFFFF", 0.55),
   };
 }

@@ -170,6 +170,44 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 /**
+ * The band a deck's type scale should sit in, as ratios rather than point sizes.
+ *
+ * Measured from the presets, and written down because the alternative is a
+ * number nobody can check: a 1.25 modular scale would shrink every preset's
+ * headline (the presets measure 1.75–1.9 against the body), so the band is a
+ * *constraint* — a scale outside it is a mistake to fix — rather than a target
+ * to re-flow the deck towards.
+ *
+ * The lower end is there because a headline that is only half again the body
+ * size stops reading as a headline; the upper end because past 2.2 the body
+ * shrinks to a caption and the page turns into a title with footnotes.
+ */
+export const TYPE_SCALE_BAND = {
+  titleToBody: [1.6, 2.2],
+  displayToTitle: [1.2, 1.7],
+} as const;
+
+const ratioInBand = (ratio: number, [low, high]: readonly [number, number]) => ratio >= low && ratio <= high;
+
+/**
+ * Which parts of a token set fall outside `TYPE_SCALE_BAND`.
+ *
+ * Returns stable codes rather than prose so a caller can decide how loudly to
+ * say it. Empty means the scale is inside the band.
+ */
+export function auditTypeScale(type: { displayPt: number; titlePt: number; bodyPt: number }): string[] {
+  const findings: string[] = [];
+  if (type.bodyPt <= 0 || type.titlePt <= 0) return findings;
+  if (!ratioInBand(type.titlePt / type.bodyPt, TYPE_SCALE_BAND.titleToBody)) {
+    findings.push("TYPE_SCALE_TITLE_TO_BODY");
+  }
+  if (type.titlePt > 0 && !ratioInBand(type.displayPt / type.titlePt, TYPE_SCALE_BAND.displayToTitle)) {
+    findings.push("TYPE_SCALE_DISPLAY_TO_TITLE");
+  }
+  return findings;
+}
+
+/**
  * Derives the tokens of a deck.
  *
  * A larger page gets slightly more air, but the normalized spacing stays in a
