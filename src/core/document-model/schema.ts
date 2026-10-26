@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { ELEMENT_NAME_MAX_LENGTH, MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 27 as const;
+export const CURRENT_SCHEMA_VERSION = 28 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -207,6 +207,7 @@ const imageElement = base.extend({
   altText: z.string().max(500),
   crop: imageCropSchema.optional(),
   frameShape: z.enum(["roundRect", "ellipse"]).optional(),
+  tone: z.object({ dark: hexColor, light: hexColor }).optional(),
   provenance: assetProvenanceSchema.optional(),
   placement: z.enum(["content", "layout-background", "slide-background"]).optional(),
 });
@@ -729,6 +730,11 @@ const versionTwentyFiveDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentySevenDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(27) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTwentySixDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(26) })
   .superRefine(validateUniqueIds)
@@ -927,6 +933,8 @@ const migrations: Readonly<Record<number, Migration>> = {
   // Version 27 adds optional native tab stops. Existing tabs keep rendering as
   // plain text because the migration does not invent layout positions.
   26: (document) => ({ ...versionTwentySixDocumentSchema.parse(document), schemaVersion: 27 }),
+  // 28 adds the optional picture tone; a document without one is unchanged.
+  27: (document) => ({ ...versionTwentySevenDocumentSchema.parse(document), schemaVersion: 28 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

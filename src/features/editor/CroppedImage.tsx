@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import type { ImageElement } from "../../core/document-model";
+import type { ImageElement, ImageTone } from "../../core/document-model";
 import { cropGeometry } from "../../core/rendering/image-crop";
 import {
   isAssetReference,
@@ -103,13 +103,45 @@ export function CroppedImage({ element, className, alt }: CroppedImageProps) {
   }
 
   return (
-    <img
-      className={className}
-      style={style}
-      src={url}
-      alt={alt ?? element.altText}
-      draggable={false}
-      onError={() => setUnreadable(true)}
-    />
+    <>
+      {element.tone ? <DuotoneFilter id={toneFilterId(element.id)} tone={element.tone} /> : null}
+      <img
+        className={className}
+        style={element.tone ? { ...style, filter: `url(#${toneFilterId(element.id)})` } : style}
+        src={url}
+        alt={alt ?? element.altText}
+        draggable={false}
+        onError={() => setUnreadable(true)}
+      />
+    </>
+  );
+}
+
+const toneFilterId = (elementId: string) => `tone-${elementId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+
+const channel = (value: string, offset: number) => (Number.parseInt(value.slice(1 + offset, 3 + offset), 16) / 255).toFixed(4);
+
+/**
+ * The canvas half of the exported `a:duotone`.
+ *
+ * Desaturating and then mapping each channel through a two-stop table is the
+ * same operation PowerPoint performs, so the page and the PPTX show one picture
+ * rather than an approximation. It has to be an SVG filter: a CSS blend of two
+ * overlays gets close for photographs and wrong for everything with saturated
+ * colours, and the whole point of this effect is the colour mapping.
+ */
+function DuotoneFilter({ id, tone }: { id: string; tone: ImageTone }) {
+  const ends = (offset: number) => `${channel(tone.dark, offset)} ${channel(tone.light, offset)}`;
+  return (
+    <svg className="image-tone-filter" aria-hidden="true" focusable="false">
+      <filter id={id} colorInterpolationFilters="sRGB">
+        <feColorMatrix type="saturate" values="0" />
+        <feComponentTransfer>
+          <feFuncR type="table" tableValues={ends(0)} />
+          <feFuncG type="table" tableValues={ends(2)} />
+          <feFuncB type="table" tableValues={ends(4)} />
+        </feComponentTransfer>
+      </filter>
+    </svg>
   );
 }

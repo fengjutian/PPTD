@@ -1,0 +1,29 @@
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "schemaVersion": 27,
+  "title": "V27 fixture",
+  "pageSize": { "width": 12191695, "height": 6858000 },
+  "revisions": { "document": 1, "content": 0, "design": 1 },
+  "slides": [
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "background": "#12233d",
+      "content": { "title": "Fixture", "body": "", "speakerNotes": "", "status": "draft" },
+      "elements": [
+        {
+          "id": "33333333-3333-4333-8333-333333333333",
+          "type": "image",
+          "frame": { "x": 685800, "y": 594360, "width": 6858000, "height": 4114800 },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "source": {
+            "kind": "embedded",
+            "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+            "mimeType": "image/png"
+          },
+          "altText": "深色页上的照片"
+        }
+      ]
+    }
+  ]
+}

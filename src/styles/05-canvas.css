@@ -11,6 +11,13 @@
   object-fit: fill;
   pointer-events: none;
 }
+/* 双色映射的滤镜定义本身不占位：它只有一个 id，被图片用 filter:url() 引用。 */
+.slide-element.image .image-tone-filter {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
 /* 读不到的图片必须看得出来。一块纯白会被当成作者本来就没放图，模板版式背景就是
    这样消失得无声无息：斜纹加虚线边框占住原来的位置，缺口一眼可见。 */
 .slide-element.image .image-missing {

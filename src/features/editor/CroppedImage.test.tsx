@@ -44,4 +44,19 @@ describe("图片元素", () => {
     expect(markup).toContain('src="data:image/png;base64,AA=="');
     expect(markup).toContain("模板版式背景");
   });
+
+  it("带双色映射的图片用同一个映射画，而不是叠一层色块", () => {
+    const element = { ...imageElement("data:image/png;base64,AA=="), tone: { dark: "#000000", light: "#FFFFFF" } };
+    const markup = renderToStaticMarkup(<CroppedImage element={element} className="image-fill" />);
+
+    // 滤镜的两端就是文档里的两端，画布与导出必须看到同一张图。
+    expect(markup).toContain("<feColorMatrix");
+    expect(markup).toContain('tableValues="0.0000 1.0000"');
+    expect(markup).toContain("filter:url(#tone-");
+    // 没有 toned 的图片不该凭空多出一个滤镜。
+    const plain = renderToStaticMarkup(
+      <CroppedImage element={imageElement("data:image/png;base64,AA==")} className="image-fill" />,
+    );
+    expect(plain).not.toContain("<filter");
+  });
 });

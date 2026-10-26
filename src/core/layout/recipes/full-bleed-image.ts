@@ -1,5 +1,6 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { Emu } from "../../document-model";
+import { darkPageTone } from "../../design/image-tone";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement } from "./elements";
@@ -241,6 +242,9 @@ export const fullBleedImage: LayoutRecipe = {
       },
       conflicts: [],
       imageFrame: ctx.templateImage ?? { x: 0, y: 0, width: 1, height: 1 },
+      // A full-bleed picture is the page's field: on a dark page it takes the
+      // deck's colour instead of glowing white behind the copy.
+      imageTone: darkPageTone(ctx.colors),
     };
   },
 };

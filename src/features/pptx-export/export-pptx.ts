@@ -596,7 +596,7 @@ export async function buildPptx(
           objectName: element.id,
           altText: element.altText,
         });
-        slidePictures.push({ crop: element.crop, frameShape: element.frameShape });
+        slidePictures.push({ crop: element.crop, frameShape: element.frameShape, tone: element.tone });
         if (element.crop) croppedImageCount += 1;
       }
       nativeObjectCount += 1;

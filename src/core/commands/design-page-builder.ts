@@ -1044,6 +1044,11 @@ export function buildDesignedSlide(
         // not shape goes back to a plain frame.
         if (recipePlan.imageShape) candidate.frameShape = recipePlan.imageShape;
         else delete candidate.frameShape;
+        // Same rule for the tone: the composition asks for it on the pages where
+        // the picture is the field, and a page that does not ask gets the
+        // picture's own colours back (no stale tone from a previous plan).
+        if (recipePlan.imageTone) candidate.tone = recipePlan.imageTone;
+        else delete candidate.tone;
         break;
       }
     }

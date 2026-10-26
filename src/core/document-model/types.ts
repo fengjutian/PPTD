@@ -455,12 +455,32 @@ export interface AssetProvenance {
  */
 export type ImageFrameShape = "roundRect" | "ellipse";
 
+/**
+ * A two-colour tone applied to a picture.
+ *
+ * The picture's own colours are mapped onto the two ends: shadows become
+ * `dark`, highlights become `light`. On a dark page this is what makes a
+ * photograph belong to the deck instead of sitting on it as a bright rectangle.
+ *
+ * Two colours and no strength, because that is what the OOXML `duotone` effect
+ * takes. A strength would have to be faked with a second pass the renderer does
+ * not have, and a strength that silently does nothing is worse than none.
+ */
+export interface ImageTone {
+  /** The colour shadows are mapped to. */
+  dark: string;
+  /** The colour highlights are mapped to. */
+  light: string;
+}
+
 export interface ImageElement extends ElementBase {
   type: "image";
   source: { kind: "embedded"; dataUrl: string; mimeType: SupportedImageMimeType };
   altText: string;
   /** Crop of the source image. Absent means the whole picture is shown. */
   crop?: ImageCrop;
+  /** A two-colour mapping, drawn by the canvas and written as `a:duotone`. */
+  tone?: ImageTone;
   /**
    * The geometry the picture is clipped into. Absent means the plain frame.
    *

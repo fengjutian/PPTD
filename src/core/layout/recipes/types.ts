@@ -2,7 +2,7 @@ import type { CompositionFacts, IntentConflict } from "../../commands/design-int
 import type { AiVisualAsset } from "../../commands/visual-asset";
 import type { DeckConcept, RecipeId } from "../../design/deck-concept";
 import type { DesignTokens } from "../../design/design-tokens";
-import type { Emu, ImageFrameShape, RectEmu, SlideContent, SlideElement } from "../../document-model";
+import type { Emu, ImageFrameShape, ImageTone, RectEmu, SlideContent, SlideElement } from "../../document-model";
 import type { PageChrome } from "../page-chrome";
 
 /** A rectangle in page-relative units, 0–1 on both axes. */
@@ -122,6 +122,15 @@ export interface RecipePlan {
    * plate beside a column is a soft-cornered rectangle, a portrait is a circle.
    */
   imageShape?: ImageFrameShape;
+  /**
+   * A two-colour mapping the composition wants on the picture.
+   *
+   * Set by compositions that place a photograph on a dark page, where the
+   * picture would otherwise be a bright hole in the page. The composition
+   * decides because it is the one that knows both the picture and the field it
+   * sits on; the picture keeps its own colours everywhere else.
+   */
+  imageTone?: ImageTone;
 }
 
 export interface RecipeSupportOptions {

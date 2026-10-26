@@ -311,6 +311,40 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("writes a picture tone as a native duotone effect", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.background = "#12233d";
+    slide.elements.push({
+      id: "44444444-4444-4444-8444-444444444444" as ElementId,
+      type: "image",
+      frame: { x: 0 as Emu, y: 0 as Emu, width: 8_000_000 as Emu, height: 6_000_000 as Emu },
+      rotationMilliDegree: 0,
+      locked: false,
+      source: {
+        kind: "embedded",
+        dataUrl:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==",
+        mimeType: "image/png",
+      },
+      altText: "深色页全幅照片",
+      placement: "content",
+      // A tone and a shape together: the shaped path rebuilds the blip, and the
+      // effect has to survive that rebuild.
+      frameShape: "roundRect",
+      tone: { dark: "#0F7869", light: "#E4F2EE" },
+    });
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    // A native effect on the picture, not a recoloured copy of its pixels: the
+    // photograph stays replaceable in PowerPoint.
+    expect(slideXml).toContain("<a:duotone>");
+    expect(slideXml).toContain('<a:srgbClr val="0F7869"/>');
+    expect(slideXml).toContain('<a:srgbClr val="E4F2EE"/>');
+    expect(slideXml).toContain('prst="roundRect"');
+    expect(result.report.package.valid).toBe(true);
+  });
+
   it("leaves a picture without a frame shape as a picture", async () => {
     const document = createDocument();
     const slide = document.slides[0]!;

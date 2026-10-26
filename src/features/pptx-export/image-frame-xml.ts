@@ -1,5 +1,5 @@
 import { strFromU8, strToU8 } from "fflate";
-import type { ImageCrop, ImageFrameShape } from "../../core/document-model";
+import type { ImageCrop, ImageFrameShape, ImageTone } from "../../core/document-model";
 import { cropSourceRect } from "../../core/rendering/image-crop";
 
 /**
@@ -17,6 +17,29 @@ import { cropSourceRect } from "../../core/rendering/image-crop";
 export interface PictureTreatment {
   crop?: ImageCrop;
   frameShape?: ImageFrameShape;
+  tone?: ImageTone;
+}
+
+/**
+ * The two-colour mapping, as the effect PowerPoint applies to a picture.
+ *
+ * `a:duotone` replaces the picture's colours with a gradient between its two
+ * stops: shadows take the first, highlights the second. It goes inside
+ * `<a:blip>`, next to the crop, and survives a picture being replaced later
+ * because it is a property of the picture, not of its pixels.
+ */
+function toneXml(tone: ImageTone): string {
+  const hex = (value: string) => value.replace(/^#/, "").toUpperCase();
+  return `<a:duotone><a:srgbClr val="${hex(tone.dark)}"/><a:srgbClr val="${hex(tone.light)}"/></a:duotone>`;
+}
+
+/** Inserts the tone into the blip, whether the writer left it open or closed. */
+function applyTone(picture: string, tone: ImageTone | undefined): string {
+  if (!tone) return picture;
+  const effect = toneXml(tone);
+  return picture.replace(/<a:blip\b([^>]*?)(\/)?>/, (_match, attributes: string, selfClosing?: string) =>
+    selfClosing ? `<a:blip${attributes}>${effect}</a:blip>` : `<a:blip${attributes}>${effect}`,
+  );
 }
 
 const PRESET_GEOMETRY: Readonly<Record<ImageFrameShape, string>> = {
@@ -40,13 +63,14 @@ function srcRectXml(crop: ImageCrop | undefined): string {
  * flips of the transform (ADR 0102).
  */
 function rewritePicture(picture: string, treatment: PictureTreatment): string {
+  const toned = applyTone(picture, treatment.tone);
   const source = srcRectXml(treatment.crop);
   if (!treatment.frameShape) {
-    if (!source) return picture;
-    return picture.replace(/<a:stretch>/, `${source}<a:stretch>`);
+    if (!source) return toned;
+    return toned.replace(/<a:stretch>/, `${source}<a:stretch>`);
   }
 
-  const embed = /r:embed="([^"]+)"/.exec(picture)?.[1];
+  const embed = /r:embed="([^"]+)"/.exec(toned)?.[1];
   const offset = /<a:off x="(-?\d+)" y="(-?\d+)"\s*\/>/.exec(picture);
   const extent = /<a:ext cx="(\d+)" cy="(\d+)"\s*\/>/.exec(picture);
   const id = /<p:cNvPr id="(\d+)"/.exec(picture)?.[1];
@@ -66,7 +90,10 @@ function rewritePicture(picture: string, treatment: PictureTreatment): string {
     `<p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
     `<p:spPr>${xfrm}` +
     `<a:prstGeom prst="${PRESET_GEOMETRY[treatment.frameShape]}"><a:avLst/></a:prstGeom>` +
-    `<a:blipFill><a:blip r:embed="${embed}"/>${source}<a:stretch><a:fillRect/></a:stretch></a:blipFill>` +
+    // A shaped picture is rebuilt from its parts, so the tone has to be written
+    // again here; the blip from the writer no longer exists at this point.
+    `<a:blipFill><a:blip r:embed="${embed}">${treatment.tone ? toneXml(treatment.tone) : ""}</a:blip>` +
+    `${source}<a:stretch><a:fillRect/></a:stretch></a:blipFill>` +
     // The theme's default shape line would otherwise draw an outline that the
     // canvas does not have.
     `<a:ln><a:noFill/></a:ln>` +
