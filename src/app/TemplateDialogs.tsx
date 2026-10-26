@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Check, CircleAlert, FileUp, Palette, Sparkles, X } from "lucide-react";
 
 import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
+import { ThemeCoverPreview } from "../features/ai/ThemeCoverPreview";
 import { VariantGalleryDialog } from "../features/ai/VariantGalleryDialog";
 
 import type { AppRuntime } from "./app-runtime";
@@ -271,35 +272,12 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                       <small>任务已在后台执行，可以关闭此窗口并继续编辑。</small>
                     </div>
                   ) : themePresetId ? (
-                    <div
-                      className="theme-preset-preview picker-preset-preview"
-                      style={
-                        {
-                          "--theme-primary": pickerThemePreset.theme.colors.find((color) => color.name === "primary")
-                            ?.value,
-                          "--theme-accent": pickerThemePreset.theme.colors.find((color) => color.name === "accent")
-                            ?.value,
-                          "--theme-muted": pickerThemePreset.theme.colors.find((color) => color.name === "muted")
-                            ?.value,
-                          "--theme-surface": pickerThemePreset.theme.colors.find((color) => color.name === "surface")
-                            ?.value,
-                          "--theme-major-font": pickerThemePreset.theme.majorFont,
-                          "--theme-minor-font": pickerThemePreset.theme.minorFont,
-                        } as React.CSSProperties
-                      }
-                    >
-                      <span className="theme-preview-kicker">PPTD · {pickerThemePreset.name}</span>
-                      <div>
-                        <h2>{aiDraft?.title ?? pickerThemePreset.name}</h2>
-                        <p>{pickerThemeGuidance.character}</p>
-                      </div>
-                      <div className="theme-preview-bars">
-                        <i />
-                        <i />
-                        <i />
-                      </div>
-                      <small>{pickerThemeGuidance.pageRhythm}</small>
-                    </div>
+                    <ThemeCoverPreview
+                      presetId={pickerThemePreset.id}
+                      conceptPresetId={pickerStyleProfile.preferredConcept}
+                      title={aiDraft?.title ?? pickerThemePreset.name}
+                      subtitle={aiDraft?.slides[0]?.body}
+                    />
                   ) : templatePreviewBusy ? (
                     <span>正在解析模板…</span>
                   ) : templatePreview ? (

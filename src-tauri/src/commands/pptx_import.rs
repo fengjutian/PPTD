@@ -2728,6 +2728,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_explicit_run_character_spacing_in_hundredths_of_a_point() {
+        let slide = Document::parse(
+            r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <p:txBody><a:bodyPr/><a:p><a:r><a:rPr spc="-150"/><a:t>缩紧字距</a:t></a:r></a:p></p:txBody>
+            </p:sp>"#,
+        )
+        .expect("slide");
+        let body =
+            parse_text_body(slide.root_element(), &None, false, None, None).expect("text body");
+
+        assert_eq!(body.style.letter_spacing_pt, Some(-1.5));
+    }
+
+    #[test]
     fn merges_a_partial_slide_theme_override_with_the_deck_theme() {
         let base = parse_theme_xml(
             r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">

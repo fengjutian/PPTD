@@ -57,13 +57,18 @@ export const coverStatement: LayoutRecipe = {
     const bodyFamily = ctx.tokens.fonts.body;
     const lineHeight = ctx.tokens.type.lineHeight;
     const titleLineHeight = ctx.tokens.type.titleLineHeight;
+    const paperCover = ctx.concept.motif === "paper";
+    const instrumentCover = ctx.concept.motif === "instrument";
 
     // The cover is a full-bleed field of the brand panel. The panel tone is
     // never an ink resolved for this page: on a dark page that ink is nearly
     // white, which painted the cover as a grey gradient. Every stop is dark
     // enough for white copy, so the same ink works on all presets.
-    const gradient = accentPanelGradient(ctx.colors.panel);
-    const ink = "#FFFFFF";
+    const gradient = paperCover || instrumentCover ? undefined : accentPanelGradient(ctx.colors.panel);
+    const field = paperCover || instrumentCover ? ctx.colors.background : ctx.colors.panel;
+    const ink = paperCover || instrumentCover ? ctx.colors.title : "#FFFFFF";
+    const secondaryInk = paperCover || instrumentCover ? ctx.colors.body : ink;
+    const accentInk = paperCover || instrumentCover ? ctx.colors.accentStrong : ink;
     const coverTitle = {
       x: chrome.title.x,
       y: Math.max(TITLE.y, chrome.title.y + 0.04),
@@ -112,8 +117,19 @@ export const coverStatement: LayoutRecipe = {
     }
 
     const elements: RecipePlan["elements"] = [
-      rectElement(frameFromNormalized({ x: 0, y: 0, width: 1, height: 1 }, page), ctx.colors.panel, gradient),
+      rectElement(frameFromNormalized({ x: 0, y: 0, width: 1, height: 1 }, page), field, gradient),
     ];
+    if (paperCover) {
+      elements.push(
+        rectElement(frameFromNormalized({ x: coverTitle.x, y: 0.115, width: 0.08, height: 0.008 }, page), accentInk),
+      );
+    }
+    if (instrumentCover) {
+      elements.push(
+        rectElement(frameFromNormalized({ x: 0, y: 0, width: 0.15, height: 1 }, page), ctx.colors.panel),
+        rectElement(frameFromNormalized({ x: 0.168, y: 0.12, width: 0.006, height: 0.76 }, page), accentInk),
+      );
+    }
     if (split) {
       const eyebrowFrameNormalized = { ...coverTitle, height: EYEBROW_HEIGHT };
       const eyebrowFrame = frameFromNormalized(eyebrowFrameNormalized, page);
@@ -130,7 +146,7 @@ export const coverStatement: LayoutRecipe = {
           split.eyebrow,
           eyebrowFrame,
           eyebrowSize,
-          mixHex(ink, ctx.colors.panel, 0.22),
+          paperCover || instrumentCover ? ctx.colors.textMuted : mixHex(ink, ctx.colors.panel, 0.22),
           false,
           "left",
           headingFamily,
@@ -149,7 +165,7 @@ export const coverStatement: LayoutRecipe = {
     );
 
     if (subtitle) {
-      elements.push(rectElement(frameFromNormalized(ruleNormalized, page), ink));
+      elements.push(rectElement(frameFromNormalized(ruleNormalized, page), accentInk));
       const subtitleFrame = frameFromNormalized(subtitleFrameNormalized, page);
       const subtitleSize = fittedFontSize(
         subtitle,
@@ -163,7 +179,7 @@ export const coverStatement: LayoutRecipe = {
         return conflict("body", "封面副标题在副标题框内放不下");
       }
       elements.push(
-        textElement(subtitle, subtitleFrame, subtitleSize, ink, false, "left", bodyFamily, {
+        textElement(subtitle, subtitleFrame, subtitleSize, secondaryInk, false, "left", bodyFamily, {
           contentRef: "body",
           lineHeight,
         }),

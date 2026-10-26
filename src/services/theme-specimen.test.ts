@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { THEME_PRESETS } from "../core/design/theme-presets";
 import type { TextElement } from "../core/document-model";
-import { buildSpecimenDocument, SPECIMEN_PAGE_COUNT } from "./theme-specimen";
+import { buildSpecimenDocument, buildThemeCoverPreviewDocument, SPECIMEN_PAGE_COUNT } from "./theme-specimen";
 
 describe("theme specimens", () => {
   it("draws the eight page roles the picker promises", () => {
@@ -46,5 +46,21 @@ describe("theme specimens", () => {
     expect(titleX(documentary)).toBeCloseTo(0.04, 2);
     expect(titleX(paper)).toBeCloseTo(0.17, 2);
     expect(titleX(instrument)).toBeCloseTo(0.22, 2);
+  });
+
+  it("builds the picker preview through the real cover recipe with reviewed copy", () => {
+    const document = buildThemeCoverPreviewDocument({
+      themePresetId: "finance-gold",
+      conceptPresetId: "instrument",
+      title: "Alphabet 2023 年报：广告基本盘与 AI 第二曲线同时加速",
+      subtitle: "稳健、可信、精致",
+    });
+    expect(document.slides).toHaveLength(1);
+    const texts = document.slides[0]!.elements.filter(
+      (element): element is TextElement => element.type === "text",
+    );
+    expect(texts.some((element) => element.text.includes("广告基本盘"))).toBe(true);
+    expect(texts.some((element) => element.text === "稳健、可信、精致")).toBe(true);
+    expect(document.slides[0]!.elements.some((element) => element.type === "shape")).toBe(true);
   });
 });

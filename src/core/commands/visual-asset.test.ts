@@ -5,6 +5,7 @@ import {
   planVisualAssetLayout,
   resolveVisualAsset,
   VISUAL_ASSET_ASPECT,
+  VISUAL_ASSET_BACKGROUND_RULE,
   VISUAL_ASSET_REQUEST_SIZE,
   VISUAL_ASSET_STYLE_HINT,
 } from "./visual-asset";

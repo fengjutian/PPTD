@@ -134,6 +134,54 @@ export interface SpecimenOptions {
   conceptPresetId?: ConceptPresetId;
 }
 
+export interface ThemeCoverPreviewOptions extends SpecimenOptions {
+  title: string;
+  subtitle?: string;
+}
+
+/** Builds the picker preview through the same command and recipe path as the final deck. */
+export function buildThemeCoverPreviewDocument(options: ThemeCoverPreviewOptions): PresentationDocument {
+  const slide: AiSlideDraft = {
+    title: options.title.trim() || "未命名演示文稿",
+    body: options.subtitle?.trim() ?? "",
+    speakerNotes: "",
+  };
+  const design = designed("cover", {
+    recipe: "cover-statement",
+    emphasis: "title-dominant",
+    densityTarget: "airy",
+  });
+  const pageFacts: CompositionFacts[] = [
+    {
+      itemCount: slide.body ? 1 : 0,
+      shortItems: true,
+      longestItemLength: slide.body.length,
+      bodyLength: slide.body.length,
+      hasQuote: false,
+      hasComparison: false,
+      hasRowBlock: false,
+      layout: "cover",
+    },
+  ];
+  const concept = resolveDeckConcept({
+    concept: defaultConceptForPreset(options.conceptPresetId ?? "editorial"),
+    pageFacts,
+    pageCount: 1,
+    id: "theme-cover-preview",
+  }).concept;
+  const preset = findThemePreset(options.themePresetId ?? "editorial-teal") ?? defaultThemePreset();
+  const document = createDocument();
+  applyCommand(document, {
+    type: "apply-ai-designed-draft",
+    title: slide.title,
+    slides: [slide],
+    designs: [design],
+    designConcept: concept,
+    themePresetId: preset.id,
+  });
+  return document;
+}
+
 export function buildSpecimenDocument(options: SpecimenOptions = {}): PresentationDocument {
   const concept = resolveDeckConcept({
     concept: defaultConceptForPreset(options.conceptPresetId ?? "editorial"),
