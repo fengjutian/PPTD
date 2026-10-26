@@ -385,9 +385,7 @@ export async function buildPptx(
                   bold: style.bold,
                   color: color(style.color),
                   ...(style.underline ? { underline: { style: "sng" as const } } : {}),
-                  ...(fragment.style.hyperlinkUrl
-                    ? { hyperlink: { url: fragment.style.hyperlinkUrl } }
-                    : {}),
+                  ...(fragment.style.hyperlinkUrl ? { hyperlink: { url: fragment.style.hyperlinkUrl } } : {}),
                 },
               };
             }),

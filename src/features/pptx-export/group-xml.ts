@@ -57,10 +57,7 @@ interface TreeItem {
  */
 const SHAPE_TOKEN = /<(\/)?(p:(?:sp|pic|graphicFrame|cxnSp|grpSp))\b[^>]*?(\/?)>/g;
 
-export function patchSlideGroups(
-  entries: Record<string, Uint8Array>,
-  slides: readonly Slide[],
-): NativeGroupResult {
+export function patchSlideGroups(entries: Record<string, Uint8Array>, slides: readonly Slide[]): NativeGroupResult {
   let written = 0;
   let skipped = 0;
 
@@ -319,12 +316,7 @@ function rotatedBounds(frame: RectEmu, rotationMilliDegree: number): Bounds {
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
-function groupShapeXml(
-  shapeId: number,
-  groupId: string,
-  bounds: Bounds,
-  children: string,
-): string {
+function groupShapeXml(shapeId: number, groupId: string, bounds: Bounds, children: string): string {
   const name = escapeXml(`Group ${groupId}`);
   return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${shapeId}" name="${name}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${bounds.x}" y="${bounds.y}"/><a:ext cx="${bounds.width}" cy="${bounds.height}"/><a:chOff x="${bounds.x}" y="${bounds.y}"/><a:chExt cx="${bounds.width}" cy="${bounds.height}"/></a:xfrm></p:grpSpPr>${children}</p:grpSp>`;
 }

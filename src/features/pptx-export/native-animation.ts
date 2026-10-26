@@ -230,9 +230,9 @@ export function applyTimingToSlideXml(xml: string, timing: string): string {
  * Patches every slide's native animation timeline.
  *
  * Shapes are addressed by the object name PptxGenJS wrote, which the exporter
- * sets to the stable element id. An animation whose target cannot be found
- * (for example a chart, which has no object-name option) is skipped and
- * counted, never pointed at a guessed shape id.
+ * sets to the stable element id. An animation whose target cannot be found, or
+ * whose object type does not yet have a verified animation node (charts), is
+ * skipped and counted, never pointed at a guessed shape id.
  */
 export function patchSlideAnimations(
   entries: Record<string, Uint8Array>,
@@ -253,9 +253,7 @@ export function patchSlideAnimations(
     // Charts now carry a stable name for native grouping, but chart animation
     // is still unverified. Keep the existing behavior instead of writing a
     // timing target just because the name exists.
-    const charts = new Set(
-      slide.elements.filter((element) => element.type === "chart").map((element) => element.id),
-    );
+    const charts = new Set(slide.elements.filter((element) => element.type === "chart").map((element) => element.id));
     const grouped: GroupedAnimation[] = [];
     for (const animation of slide.animations) {
       const shapeId = shapeIds.get(animation.elementId);

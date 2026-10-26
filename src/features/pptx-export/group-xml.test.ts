@@ -36,10 +36,7 @@ function slideXml(...blocks: string[]): string {
 
 describe("native group XML", () => {
   it("wraps two named shapes in a group with an identity child coordinate system", () => {
-    const xml = slideXml(
-      shapeXml("a", 2, frame(0, 0, 100, 100)),
-      shapeXml("b", 3, frame(200, 50, 70, 60)),
-    );
+    const xml = slideXml(shapeXml("a", 2, frame(0, 0, 100, 100)), shapeXml("b", 3, frame(200, 50, 70, 60)));
     const result = patchGroupsInSlideXml(xml, {
       elements: [element("a", frame(0, 0, 100, 100)), element("b", frame(200, 50, 70, 60))],
       groups: [group("g1", ["a", "b"])],
@@ -81,10 +78,7 @@ describe("native group XML", () => {
   });
 
   it("keeps a group with a table flattened because PowerPoint forbids grouping tables", () => {
-    const xml = slideXml(
-      shapeXml("a", 2, frame(0, 0, 100, 100)),
-      tableXml("t", 3, frame(200, 0, 100, 100)),
-    );
+    const xml = slideXml(shapeXml("a", 2, frame(0, 0, 100, 100)), tableXml("t", 3, frame(200, 0, 100, 100)));
     const result = patchGroupsInSlideXml(xml, {
       elements: [element("a", frame(0, 0, 100, 100)), element("t", frame(200, 0, 100, 100))],
       groups: [group("mixed", ["a", "t"])],
@@ -132,15 +126,9 @@ describe("native group XML", () => {
   });
 
   it("includes the area covered by a rotated member", () => {
-    const xml = slideXml(
-      shapeXml("a", 2, frame(100, 100, 100, 50)),
-      shapeXml("b", 3, frame(100, 100, 100, 50)),
-    );
+    const xml = slideXml(shapeXml("a", 2, frame(100, 100, 100, 50)), shapeXml("b", 3, frame(100, 100, 100, 50)));
     const result = patchGroupsInSlideXml(xml, {
-      elements: [
-        element("a", frame(100, 100, 100, 50)),
-        element("b", frame(100, 100, 100, 50), 90_000),
-      ],
+      elements: [element("a", frame(100, 100, 100, 50)), element("b", frame(100, 100, 100, 50), 90_000)],
       groups: [group("rotated", ["a", "b"])],
     });
 
