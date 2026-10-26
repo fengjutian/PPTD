@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { applyCommand } from "./commands";
 import type { AiSlideDesign } from "./template-layouts";
 import { createDocument } from "../document-model";
-import { defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
+import { defaultConceptForPreset, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
 import type { CompositionFacts } from "./design-intent";
+import { findStyleProfile, styleConstraintForProfile } from "../design/style-profiles";
 
 const items = ["销售收入保持正增长", "移动端成为增长引擎", "资源向高质量业务倾斜", "管理转向质量与效率"];
 
@@ -75,6 +76,39 @@ describe("recipe rendering through the design command", () => {
     expect(whiteCards).toHaveLength(0);
     const block = slide.content.blocks?.find((candidate) => candidate.type === "bullet-list");
     expect(block?.type === "bullet-list" ? block.items : []).toEqual(items);
+  });
+
+  it("applies style material tokens to the compiled native objects", () => {
+    const document = createDocument();
+    const styleConstraint = styleConstraintForProfile(findStyleProfile("glassmorphism"))!;
+    const instrumentConcept = resolveDeckConcept({
+      concept: defaultConceptForPreset("instrument"),
+      pageFacts: [facts()],
+      pageCount: 1,
+      id: "style-compiler",
+    }).concept;
+    applyCommand(document, {
+      type: "apply-ai-designed-draft",
+      title: "style compiler",
+      slides: [
+        {
+          title: "风格约束进入确定性编译器",
+          body: items.join("\n"),
+          speakerNotes: "",
+          blocks: [{ type: "bullet-list", items }],
+        },
+      ],
+      designs: [design({ recipe: "instrument-columns" })],
+      designConcept: instrumentConcept,
+      themePresetId: "tech-blue",
+      styleConstraint: { ...styleConstraint, allowedConcepts: ["instrument"], preferredRecipes: ["instrument-columns"] },
+    });
+
+    const panels = document.slides[0]!.elements.filter(
+      (element) => element.type === "shape" && element.style.shadow === "raised",
+    );
+    expect(panels.length).toBeGreaterThan(0);
+    expect(panels.every((element) => element.type === "shape" && element.style.radiusPt === 14)).toBe(true);
   });
 
   it("falls back to the legacy branch when the recipe cannot carry the content", () => {
