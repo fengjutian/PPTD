@@ -27,6 +27,12 @@ export type StyleImageMedium = "photo" | "illustration" | "3d" | "texture";
 export interface StyleConstraint {
   profileId: StyleProfileId;
   name: string;
+  /** Human-readable art direction that the model must preserve across pages. */
+  summary: string;
+  /** Observable traits used by prompts and quality reports, not marketing tags. */
+  visualTraits: readonly string[];
+  /** The profile's primary composition language. */
+  composition: StyleProfile["specimen"]["composition"];
   allowedConcepts: readonly ConceptPresetId[];
   preferredRecipes: readonly RecipeId[];
   density: StyleDensity;
@@ -434,7 +440,9 @@ export function findStyleProfile(id: string | undefined): StyleProfile | undefin
  * occupies its natural skeleton; the other slots use deterministic alternatives
  * so the comparison is style-versus-style rather than one palette four times.
  */
-export function styleProfilesForDirections(selected: StyleProfile | undefined): ReadonlyMap<ConceptPresetId, StyleProfile> {
+export function styleProfilesForDirections(
+  selected: StyleProfile | undefined,
+): ReadonlyMap<ConceptPresetId, StyleProfile> {
   const result = new Map<ConceptPresetId, StyleProfile>();
   if (selected) result.set(selected.preferredConcept, selected);
   for (const concept of CONCEPT_PRESET_IDS) {
@@ -454,6 +462,9 @@ export function styleConstraintForProfile(profile: StyleProfile | undefined): St
   return {
     profileId: profile.id,
     name: profile.name,
+    summary: profile.summary,
+    visualTraits: profile.visualTraits,
+    composition: profile.specimen.composition,
     allowedConcepts: profile.allowedConcepts,
     preferredRecipes: profile.preferredRecipes,
     density: profile.density,
@@ -467,7 +478,12 @@ export function styleConstraintForProfile(profile: StyleProfile | undefined): St
             ? "paper"
             : "none",
       line: ["minimal", "paper", "luxury"].includes(composition) ? "fine" : "strong",
-      imageCrop: profile.preferredConcept === "documentary" ? "full-bleed" : composition === "editorial" ? "editorial" : "contained",
+      imageCrop:
+        profile.preferredConcept === "documentary"
+          ? "full-bleed"
+          : composition === "editorial"
+            ? "editorial"
+            : "contained",
     },
     imagery: profile.imagery,
     forbidden: profile.forbidden,

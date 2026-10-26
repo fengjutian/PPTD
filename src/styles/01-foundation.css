@@ -849,12 +849,20 @@ button {
   gap: 1px 8px;
   align-items: center;
   padding: 9px;
-  border: 1px solid #3b3d44;
+  border: 1px solid #d7dce4;
   border-radius: 8px;
-  color: #c9cbd0;
-  background: #24262b;
+  color: #253047;
+  background: #f7f9fc;
   text-align: left;
   cursor: pointer;
+}
+.insert-chart-kinds button:hover {
+  border-color: #9bb7e3;
+  background: #f0f5fc;
+}
+.insert-chart-kinds button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ppt-accent) 45%, transparent);
+  outline-offset: 2px;
 }
 .insert-chart-kinds button svg {
   grid-row: 1 / 3;
@@ -866,12 +874,22 @@ button {
   font-size: 12px;
 }
 .insert-chart-kinds button span {
-  color: #8f939b;
+  color: #687386;
   font-size: 10px;
 }
 .insert-chart-kinds button.active {
   border-color: var(--ppt-accent);
-  background: rgb(211 82 48 / 12%);
+  color: #17366c;
+  background: #edf4ff;
+}
+.insert-data-dialog .secondary-action {
+  border-color: #cbd2dc;
+  color: #344054;
+  background: #f4f6f8;
+}
+.insert-data-dialog .secondary-action:hover {
+  border-color: #aeb8c6;
+  background: #e9edf2;
 }
 /* PPTX 内容导入：模式选择与报告。 */
 .upload-dialog.import-mode-dialog {

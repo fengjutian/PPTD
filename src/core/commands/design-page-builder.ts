@@ -1044,6 +1044,7 @@ export function buildDesignedSlide(
         content: slide.content,
         facts: compositionFacts,
         concept,
+        ...(command.styleConstraint ? { stylePreferredRecipes: command.styleConstraint.preferredRecipes } : {}),
         tokens,
         colors: recipeColors,
         frame: recipeFrame,

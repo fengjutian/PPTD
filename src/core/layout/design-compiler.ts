@@ -16,6 +16,8 @@ export interface DesignCompileInput {
   content: SlideContent;
   facts: CompositionFacts;
   concept: DeckConcept;
+  /** Ordered, renderer-backed recipes required by the selected style. */
+  stylePreferredRecipes?: readonly RecipeId[];
   tokens: DesignTokens;
   colors: RecipeContext["colors"];
   frame: RecipeContext["frame"];
@@ -32,6 +34,7 @@ export type DesignCompileOutcome = "accepted" | "accepted-with-adjustments" | "r
 
 export type DesignCompileDiagnosticCode =
   | "RECIPE_SELECTED"
+  | "STYLE_RECIPE_SELECTED"
   | "DIRECTION_RECIPE_SUBSTITUTED"
   | "TEMPLATE_BODY_TAKEN_OVER"
   | "NO_COMPATIBLE_RECIPE"
@@ -110,7 +113,11 @@ function compatibleRecipeAlternatives(
   supports: RecipeSupportOptions,
   excluded?: RecipeId,
 ): RecipeId[] {
-  return input.concept.recipes
+  const ordered = [
+    ...(input.stylePreferredRecipes ?? []),
+    ...input.concept.recipes.filter((id) => !input.stylePreferredRecipes?.includes(id)),
+  ];
+  return ordered
     .filter((id) => id !== excluded)
     .filter((id) => (input.hasAsset ? true : !isImageRecipe(id)))
     .filter((id) => findRecipe(id)?.supports(input.facts, input.concept, supports) === true)
@@ -133,7 +140,11 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
     ...(input.templateImage ? { hasTemplateImage: true } : {}),
     ...(input.assetRole ? { assetRole: input.assetRole } : {}),
   };
-  const recipeId = planRecipe(input.plan, input.facts, { concept: input.concept, options: supports });
+  const recipeId = planRecipe(input.plan, input.facts, {
+    concept: input.concept,
+    options: supports,
+    preferredRecipes: input.stylePreferredRecipes,
+  });
   if (!recipeId) {
     return rejected("NO_COMPATIBLE_RECIPE", "designPlan.role", "设计计划没有可用的页面配方", {
       ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
@@ -185,7 +196,19 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
       selectedRecipe: recipeId,
     });
   }
-  if (input.plan.recipe && input.plan.recipe !== recipeId) {
+  const selectedByStyle =
+    input.stylePreferredRecipes?.includes(recipeId) === true &&
+    (!input.plan.recipe || directionOwnsRequest(input.plan.recipe));
+  if (selectedByStyle) {
+    diagnostics.push({
+      code: "STYLE_RECIPE_SELECTED",
+      severity: input.plan.recipe && input.plan.recipe !== recipeId ? "warning" : "info",
+      intent: "styleConstraint.preferredRecipes",
+      message: `所选风格优先采用配方 ${recipeId}`,
+      ...(input.plan.recipe ? { requestedRecipe: input.plan.recipe } : {}),
+      selectedRecipe: recipeId,
+    });
+  } else if (input.plan.recipe && input.plan.recipe !== recipeId) {
     diagnostics.push({
       code: "DIRECTION_RECIPE_SUBSTITUTED",
       severity: "warning",
@@ -374,9 +397,20 @@ function takeoverSurface(chrome: PageChrome, safe: NormalizedFrame): NormalizedF
 interface PlanDirection {
   concept: DeckConcept;
   options: RecipeSupportOptions;
+  preferredRecipes?: readonly RecipeId[];
 }
 
 function planRecipe(plan: PageDesignPlan, facts: CompositionFacts, direction?: PlanDirection): RecipeId | undefined {
+  // A style is a compiler constraint, not a prompt hint. It may take over a
+  // generic list request, but never a semantic recipe such as comparison,
+  // process, timeline or chart.
+  if (direction && (!plan.recipe || directionOwnsRequest(plan.recipe))) {
+    for (const id of direction.preferredRecipes ?? []) {
+      if (!direction.concept.recipes.includes(id)) continue;
+      const recipe = findRecipe(id);
+      if (recipe?.supports(facts, direction.concept, direction.options)) return id;
+    }
+  }
   // A direction owns a composition of its own. It is checked before the role
   // table and before a shared-list request, otherwise `paper` and `instrument`
   // would keep drawing the editorial list on every content page.

@@ -256,6 +256,29 @@ describe("design plan compiler", () => {
     );
   });
 
+  it("enforces a style-preferred recipe in the designPlan compiler path", () => {
+    const request = input({
+      role: "claim",
+      composition: { primitive: "stack" },
+      density: "normal",
+      templatePolicy: "use",
+    });
+    const result = compileDesignPlan({
+      ...request,
+      facts: { ...facts, shortItems: true },
+      stylePreferredRecipes: ["asymmetric-split"],
+    });
+
+    expect(result.compileReport.selectedRecipe).toBe("asymmetric-split");
+    expect(result.compileReport.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "STYLE_RECIPE_SELECTED",
+        intent: "styleConstraint.preferredRecipes",
+        selectedRecipe: "asymmetric-split",
+      }),
+    );
+  });
+
   it("reports a direction-owned recipe substitution instead of hiding it", () => {
     const paper = resolveDeckConcept({
       concept: defaultConceptForPreset("paper"),
