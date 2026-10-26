@@ -250,10 +250,16 @@ export function patchSlideAnimations(
     }
     const xml = strFromU8(data);
     const shapeIds = shapeIdsByElement(xml);
+    // Charts now carry a stable name for native grouping, but chart animation
+    // is still unverified. Keep the existing behavior instead of writing a
+    // timing target just because the name exists.
+    const charts = new Set(
+      slide.elements.filter((element) => element.type === "chart").map((element) => element.id),
+    );
     const grouped: GroupedAnimation[] = [];
     for (const animation of slide.animations) {
       const shapeId = shapeIds.get(animation.elementId);
-      if (!shapeId || !animationExportsNatively(animation.effect)) {
+      if (!shapeId || charts.has(animation.elementId) || !animationExportsNatively(animation.effect)) {
         skipped += 1;
         continue;
       }

@@ -166,7 +166,12 @@ export function ExportDialogs({ app }: { app: AppRuntime }) {
                   <p>
                     {exportReport.slideCount} 页 · {exportReport.nativeObjectCount} 个原生对象
                     {exportReport.nativeChartCount > 0 ? ` · ${exportReport.nativeChartCount} 个原生图表` : ""}
-                    {exportReport.nativeTableCount > 0 ? ` · ${exportReport.nativeTableCount} 个原生表格` : ""} · ZIP{" "}
+                    {exportReport.nativeTableCount > 0 ? ` · ${exportReport.nativeTableCount} 个原生表格` : ""}
+                    {exportReport.nativeGroupCount > 0 ? ` · ${exportReport.nativeGroupCount} 个原生组合` : ""}
+                    {exportReport.nativeGroupSkipped > 0
+                      ? ` · ${exportReport.nativeGroupSkipped} 个分组未成组`
+                      : ""}{" "}
+                    · ZIP{" "}
                     {exportReport.package.entryCount} 个条目
                     {exportReport.masters.length > 0
                       ? ` · ${exportReport.masters.length} 个母版（${exportReport.masters.join("、")}）`

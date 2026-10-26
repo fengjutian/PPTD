@@ -174,6 +174,7 @@ import { themePresetMetadata } from "../core/design/theme-preset-metadata";
 import {
   applyStyleProfileToThemeDirection,
   findStyleProfile,
+  styleConstraintForProfile,
   STYLE_PROFILES,
   type StyleProfileId,
 } from "../core/design/style-profiles";
@@ -1146,7 +1147,7 @@ export function useAppRuntime() {
       setExportReport(report);
       setAgentWorkflow((state) => transitionAgentWorkflow(state, "complete"));
       setTaskStatus(
-        `导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象${report.warnings.length ? `，${report.warnings.length} 条提示` : ""}`,
+        `导出完成：${report.slideCount} 页，${report.nativeObjectCount} 个原生对象${report.nativeGroupCount > 0 ? `，${report.nativeGroupCount} 个原生组合` : ""}${report.warnings.length ? `，${report.warnings.length} 条提示` : ""}`,
       );
     } catch (error) {
       if (error instanceof Error && error.message === "EXPORT_CANCELLED") {
@@ -2499,6 +2500,7 @@ export function useAppRuntime() {
       ? applyTemplateToGoal(defaultPresentationVisualGoal(), templateTarget)
       : defaultPresentationVisualGoal();
     const styleProfile = findStyleProfile(styleProfileId);
+    const styleConstraint = styleConstraintForProfile(styleProfile);
     const themeDirection = applyStyleProfileToThemeDirection(
       preset ? themeDirectionForPreset(preset) : undefined,
       styleProfile,
@@ -2584,6 +2586,7 @@ export function useAppRuntime() {
             proposals = await generateDeckDirections(sourceDraft, briefs, analysis, {
               taskId,
               themeDirection,
+              styleConstraint,
               recentLooks,
               preferences: preferences.map(({ text, scope }) => ({ text, scope })),
             });
@@ -2624,6 +2627,8 @@ export function useAppRuntime() {
                 const previewDesign = await generatePresentationDesign(previewDraft, previewBriefs, analysis, {
                   concept: resolved,
                   taskId,
+                  themeDirection,
+                  styleConstraint,
                 });
                 if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
                 const pages = buildDirectionPreviewPages({
@@ -2653,6 +2658,8 @@ export function useAppRuntime() {
                   const fullDesign = await generatePresentationDesign(sourceDraft, briefs, analysis, {
                     concept: resolved,
                     taskId,
+                    themeDirection,
+                    styleConstraint,
                   });
                   const preview = createDocument();
                   applyCommand(preview, {
@@ -2775,6 +2782,7 @@ export function useAppRuntime() {
             const aiConcept = await generateDeckConcepts(sourceDraft, briefs, analysis, {
               taskId,
               themeDirection,
+              styleConstraint,
             });
             concept = resolveDeckConcept({
               concept: styleProfile ? { ...aiConcept, preset: styleProfile.preferredConcept } : aiConcept,
@@ -2802,6 +2810,7 @@ export function useAppRuntime() {
           taskId,
           concept,
           themeDirection,
+          styleConstraint,
         });
         if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
         setDesignProgress({ percent: 70, label: "正在校验 AI 设计结果" });

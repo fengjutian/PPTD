@@ -226,6 +226,8 @@ pub struct GenerateDesignRequest {
     concept: Option<serde_json::Value>,
     /// Structured theme art direction (character, rhythm, image style, constraints).
     theme_direction: Option<serde_json::Value>,
+    /// User-selected style bounds (concepts, recipes, density and visual tokens).
+    style_constraint: Option<serde_json::Value>,
     model: Option<String>,
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
@@ -243,6 +245,7 @@ pub struct GenerateConceptsRequest {
     visual_goal: serde_json::Value,
     /// Structured theme art direction (character, rhythm, image style, constraints).
     theme_direction: Option<serde_json::Value>,
+    style_constraint: Option<serde_json::Value>,
     model: Option<String>,
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
@@ -258,6 +261,7 @@ pub struct GenerateDirectionsRequest {
     visual_goal: serde_json::Value,
     /// Structured theme art direction (character, rhythm, image style, constraints).
     theme_direction: Option<serde_json::Value>,
+    style_constraint: Option<serde_json::Value>,
     /// Recent local look fingerprints (palette, fonts, concept, page count).
     /// Never contains reviewed copy; used only to avoid repeating a look.
     recent_looks: Option<serde_json::Value>,
@@ -1397,11 +1401,14 @@ pub async fn generate_deck_concepts(
         serde_json::to_string(&request.visual_goal).map_err(|_| "AI_CONCEPT_REQUEST_INVALID")?;
     let theme_direction = serde_json::to_string(&request.theme_direction)
         .map_err(|_| "AI_CONCEPT_REQUEST_INVALID")?;
+    let style_constraint = serde_json::to_string(&request.style_constraint)
+        .map_err(|_| "AI_CONCEPT_REQUEST_INVALID")?;
     if draft.len() > 120_000
         || briefs.len() > 120_000
         || template.len() > 120_000
         || visual_goal.len() > 20_000
         || theme_direction.len() > 20_000
+        || style_constraint.len() > 20_000
     {
         return Err("AI_CONCEPT_REQUEST_TOO_LARGE".into());
     }
@@ -1421,6 +1428,7 @@ pub async fn generate_deck_concepts(
 2. 主题方向只影响设计，不得改变内容；硬规则、已审核内容和模板安全区优先。
 3. 只能选择“可选方向”里真实存在的 preset；主题方向中当前 recipe 无法实现的构图（例如拼贴）不得声称会使用。
 4. 主题方向缺失时按内容选择 editorial。
+5. 风格约束是用户明确选择的设计边界：preset 必须来自 allowedConcepts，优先采用 preferredRecipes 和指定 density；forbidden 中的组合禁止使用。capability 为 partial 时必须按 fallback 降级，不得声称实现当前渲染器不支持的效果。
 
 三、可选方向
 本次开放四个方向：
@@ -1450,7 +1458,7 @@ pub async fn generate_deck_concepts(
 只输出一个严格 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
 {"concepts":[{"preset":"editorial","name":"编辑式年报","idea":"用细线和大字号把结论排成编辑部版面，不用卡片。","typeContrast":"strong","imagery":"none","rationale":"内容以判断和要点为主，适合编号栏和留白。"}]}"##;
     let user_prompt = format!(
-        "请为以下已审核演示选择一个整册视觉方向。只能输出 1 个方向。\n\n内容摘要（只用于判断信息形态，不得复述或改写）：\n{draft}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n主题方向（只约束视觉；为空表示用户使用上传模板）：\n{theme_direction}\n\n本次视觉目标：\n{visual_goal}"
+        "请为以下已审核演示选择一个整册视觉方向。只能输出 1 个方向。\n\n内容摘要（只用于判断信息形态，不得复述或改写）：\n{draft}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n主题方向（只约束视觉；为空表示用户使用上传模板）：\n{theme_direction}\n\n风格约束（结构化强约束；为空表示未选择风格）：\n{style_constraint}\n\n本次视觉目标：\n{visual_goal}"
     );
     let body = ChatRequest {
         model,
@@ -1500,6 +1508,8 @@ pub async fn generate_deck_directions(
         serde_json::to_string(&request.visual_goal).map_err(|_| "AI_DIRECTION_REQUEST_INVALID")?;
     let theme_direction = serde_json::to_string(&request.theme_direction)
         .map_err(|_| "AI_DIRECTION_REQUEST_INVALID")?;
+    let style_constraint = serde_json::to_string(&request.style_constraint)
+        .map_err(|_| "AI_DIRECTION_REQUEST_INVALID")?;
     let recent_looks =
         serde_json::to_string(&request.recent_looks).map_err(|_| "AI_DIRECTION_REQUEST_INVALID")?;
     let preferences =
@@ -1509,6 +1519,7 @@ pub async fn generate_deck_directions(
         || template.len() > 120_000
         || visual_goal.len() > 20_000
         || theme_direction.len() > 20_000
+        || style_constraint.len() > 20_000
         || recent_looks.len() > 20_000
         || preferences.len() > 10_000
     {
@@ -1530,6 +1541,7 @@ pub async fn generate_deck_directions(
 2. 四个方向必须在版面骨架、图像策略、字阶对比中至少两项不同；只换配色不算不同方向。
 3. 方向描述面向用户：说清这一版长什么样、为什么适合这份内容，不要复述标题。
 4. 四个方向都必须能由这份内容真实承载：没有数字就不说数据图表，没有图片素材就不说摄影。
+5. 风格约束是用户明确选择的设计边界。方向选择页仍须返回四个 preset 供比较，但 allowedConcepts 之外的方向要在 rationale 中明确“仅供对比”；allowedConcepts 内的方向优先使用 preferredRecipes、density、imagery 与 tokens 描述其差异。forbidden 禁止违反，capability=partial 时必须按 fallback 描述降级方案。
 
 三、四个方向
 - editorial：编辑式。细线、大字号、编号栏、留白，不使用卡片和面板；标题下方有强调线；页边距约 7% 页宽。
@@ -1568,7 +1580,7 @@ pub async fn generate_deck_directions(
 只输出一个严格 JSON 对象，不要 Markdown、代码围栏、解释或额外字段；directions 必须恰好包含 4 项，preset 各出现一次。
 {"directions":[{"preset":"editorial","name":"编辑式年报","idea":"用细线和大字号把结论排成编辑部版面。","typeContrast":"strong","imagery":"none","rationale":"内容以判断和要点为主，适合编号栏和留白。"},{"preset":"documentary","name":"纪实全幅","idea":"让真实图片占住页面，文字退到边缘。","typeContrast":"calm","imagery":"side","rationale":"内容有现场照片，图片比文字更能说明问题。"},{"preset":"paper","name":"纸本专栏","idea":"把论述收进居中的窄栏，用留白控制阅读速度。","typeContrast":"calm","imagery":"none","rationale":"内容有较长判断，窄栏比满版更适合连续阅读。"},{"preset":"instrument","name":"数据仪表","idea":"让指标和对比先说话，解释文字收进右栏。","typeContrast":"dramatic","imagery":"none","rationale":"内容有多组指标，读者先看数字再看解释。"}]}"##;
     let user_prompt = format!(
-        "请为以下已审核演示提出四个整册视觉方向：editorial、documentary、paper 与 instrument。\n\n内容摘要（只用于判断信息形态，不得复述或改写）：\n{draft}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n主题方向（只约束视觉；为空表示用户使用上传模板）：\n{theme_direction}\n\n最近项目外观（仅用于避免重复，不含正文；为空表示没有记录）：\n{recent_looks}\n\n用户偏好原话（仅作气质参考，不含正文；为空表示没有记录）：\n{preferences}\n\n本次视觉目标：\n{visual_goal}"
+        "请为以下已审核演示提出四个整册视觉方向：editorial、documentary、paper 与 instrument。\n\n内容摘要（只用于判断信息形态，不得复述或改写）：\n{draft}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n主题方向（只约束视觉；为空表示用户使用上传模板）：\n{theme_direction}\n\n风格约束（结构化强约束；方向页仍保留四项用于比较）：\n{style_constraint}\n\n最近项目外观（仅用于避免重复，不含正文；为空表示没有记录）：\n{recent_looks}\n\n用户偏好原话（仅作气质参考，不含正文；为空表示没有记录）：\n{preferences}\n\n本次视觉目标：\n{visual_goal}"
     );
     let body = ChatRequest {
         model,
@@ -1613,12 +1625,15 @@ pub async fn generate_presentation_design(
         serde_json::to_string(&request.concept).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let theme_direction =
         serde_json::to_string(&request.theme_direction).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let style_constraint = serde_json::to_string(&request.style_constraint)
+        .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     if draft.len() > 120_000
         || briefs.len() > 120_000
         || template.len() > 120_000
         || visual_goal.len() > 20_000
         || concept.len() > 20_000
         || theme_direction.len() > 20_000
+        || style_constraint.len() > 20_000
     {
         return Err("AI_DESIGN_REQUEST_TOO_LARGE".into());
     }
@@ -1761,7 +1776,13 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 3. 主题方向中当前 recipe 无法实现的构图（例如拼贴）不得声称会使用；必须选择已实现配方或留空。
 4. 主题方向为空表示上传模板，按模板分析执行。
 
-十、输出合同
+十、风格约束
+1. 风格约束是用户已选择的设计边界。densityTarget 必须等于 density；页面配方优先从 preferredRecipes 中选择，但内容块语义、配方合法性和模板安全区优先，装不下时留空或选择合法配方，不能删改内容。
+2. tokens 控制排版意图：spacing 决定疏密，corner/shadow/line 决定组件语言，imageCrop 决定配图角色和裁切倾向。当前输出协议没有对应字段时，通过 layout、composition、densityTarget、recipe、visualAsset 与 designPlan 表达，不得输出坐标或未定义字段。
+3. imagery.medium 与 guidance 必须写入 visualAsset 的画面描述和角色选择；forbidden 中的组合一律避免。
+4. capability=partial 时必须遵循 fallback，只使用当前渲染器已实现的可编辑对象，不得假装支持真实玻璃折射、可旋转 3D 场景等能力。
+
+十一、输出合同
 1. 仅输出一个合法 JSON 对象，不要 Markdown、代码围栏、解释或额外字段。
 2. slides 数量必须与输入内容页数完全一致，顺序必须一致。
 3. 所有颜色必须为六位十六进制格式，例如 #1A2B3C。
@@ -1772,7 +1793,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 严格输出结构：
 {"slides":[{"layout":"cover","visualNarrative":"statement","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","recipe":"editorial-index","variant":"left","focal":"title","visualAsset":{"enabled":true,"prompt":"一座明亮的现代化数据中心，几何线条构成的上升箭头","role":"hero"}}]}"##;
     let user_prompt = format!(
-        "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度、页面配方和配色角色。SlideBrief 是页面目的、结论、视觉意图、视觉形式和密度的事实来源；不要跳过或改写它。visualBrief.form=chart/diagram/table 时优先选择能承载对应内容块的配方；form=none 时不要强行配图。\n\n整册设计方向（只用于保持配方合法，不得改写）：\n{concept}\n\n主题方向（只约束视觉；为空表示上传模板）：\n{theme_direction}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、配方匹配内容条数与长度、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
+        "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度、页面配方和配色角色。SlideBrief 是页面目的、结论、视觉意图、视觉形式和密度的事实来源；不要跳过或改写它。visualBrief.form=chart/diagram/table 时优先选择能承载对应内容块的配方；form=none 时不要强行配图。\n\n整册设计方向（只用于保持配方合法，不得改写）：\n{concept}\n\n主题方向（只约束视觉；为空表示上传模板）：\n{theme_direction}\n\n风格约束（结构化强约束；为空表示未选择风格）：\n{style_constraint}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、配方匹配内容条数与长度、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
     );
     let body = ChatRequest {
         model,

@@ -24,6 +24,24 @@ export type StyleProfileId =
 export type StyleDensity = "airy" | "balanced" | "compact";
 export type StyleImageMedium = "photo" | "illustration" | "3d" | "texture";
 
+export interface StyleConstraint {
+  profileId: StyleProfileId;
+  name: string;
+  allowedConcepts: readonly ConceptPresetId[];
+  preferredRecipes: readonly RecipeId[];
+  density: StyleDensity;
+  tokens: {
+    spacing: "tight" | "regular" | "wide";
+    corner: "none" | "subtle" | "rounded";
+    shadow: "none" | "paper" | "raised";
+    line: "none" | "fine" | "strong";
+    imageCrop: "contained" | "editorial" | "full-bleed";
+  };
+  imagery: StyleProfile["imagery"];
+  forbidden: readonly string[];
+  capability?: StyleProfile["capability"];
+}
+
 /**
  * A user-facing visual language assembled from capabilities the renderer owns.
  * Profiles contain no copy or coordinates: applying one is always a design-only
@@ -409,6 +427,29 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
 
 export function findStyleProfile(id: string | undefined): StyleProfile | undefined {
   return STYLE_PROFILES.find((profile) => profile.id === id);
+}
+
+/** Turns the catalog entry into the narrow contract shared by AI and code. */
+export function styleConstraintForProfile(profile: StyleProfile | undefined): StyleConstraint | undefined {
+  if (!profile) return undefined;
+  const composition = profile.specimen.composition;
+  return {
+    profileId: profile.id,
+    name: profile.name,
+    allowedConcepts: profile.allowedConcepts,
+    preferredRecipes: profile.preferredRecipes,
+    density: profile.density,
+    tokens: {
+      spacing: profile.density === "airy" ? "wide" : profile.density === "compact" ? "tight" : "regular",
+      corner: ["glass", "organic", "three-dimensional"].includes(composition) ? "rounded" : "subtle",
+      shadow: composition === "glass" || composition === "three-dimensional" ? "raised" : "none",
+      line: ["minimal", "paper", "luxury"].includes(composition) ? "fine" : "strong",
+      imageCrop: profile.preferredConcept === "documentary" ? "full-bleed" : composition === "editorial" ? "editorial" : "contained",
+    },
+    imagery: profile.imagery,
+    forbidden: profile.forbidden,
+    capability: profile.capability,
+  };
 }
 
 /** Adds the selected visual language to the model-facing theme contract. */

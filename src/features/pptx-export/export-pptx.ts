@@ -26,6 +26,7 @@ import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package"
 import { linkThemeColors, normalizeThemeColors, patchThemeColors } from "./theme-xml";
 import { normalizePackagePartNames } from "./package-parts";
 import { patchImageFrames, type PictureTreatment } from "./image-frame-xml";
+import { patchSlideGroups } from "./group-xml";
 import { patchShapeGradients } from "./shape-gradient-xml";
 import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
@@ -60,6 +61,10 @@ export interface ExportReport {
   nativeChartCount: number;
   /** Tables that were written as native table objects, not as pictures. */
   nativeTableCount: number;
+  /** Editor groups written as native PowerPoint `<p:grpSp>` objects. */
+  nativeGroupCount: number;
+  /** Groups that had to stay flattened (for example a table member). */
+  nativeGroupSkipped: number;
   /** Names of the slide masters written into the package. */
   masters: string[];
   /** Theme fonts written into the theme part, when the deck declares a theme. */
@@ -462,6 +467,10 @@ export async function buildPptx(
         const valueFormat = resolved.unit ? `${numberFormat}"${resolved.unit}"` : numberFormat;
         slide.addChart(chartType(pptx, element.kind), series, {
           ...position,
+          // Charts carry the stable element id like every other object. Native
+          // grouping needs to find the graphic frame by name; chart animation
+          // itself remains unsupported and is deliberately skipped.
+          objectName: element.id,
           ...(element.kind === "column" || element.kind === "bar"
             ? { barDir: element.kind === "bar" ? "bar" : "col" }
             : {}),
@@ -633,13 +642,23 @@ export async function buildPptx(
   const animationResult = patchSlideAnimations(entries, exportDocument.slides);
   const animationWarnings =
     animationResult.skipped > 0 && !issues.some((issue) => issue.code === "animation-not-exported")
-      ? [`${animationResult.skipped} 个动画缺少原生目标或效果不支持，未写入 PPTX`]
+      ? [`${animationResult.skipped} 个动画未写入 PPTX（目标对象、效果或对象类型暂不支持原生动画）`]
       : [];
   const hiddenWarnings =
     hiddenCount > 0 && !issues.some((issue) => issue.code === "hidden-not-exported")
       ? [`${hiddenCount} 个隐藏对象未写入 PPTX`]
       : [];
   const _picturesPatched = patchImageFrames(entries, picturesBySlide);
+  // Grouping is the last XML pass: gradients, animations and picture frames
+  // found their targets by order or shape id, and a group would hide the
+  // members from those lookups.
+  const groupResult = patchSlideGroups(entries, exportDocument.slides);
+  const groupWarnings =
+    groupResult.skipped > 0
+      ? [
+          `${groupResult.skipped} 个分组包含 PowerPoint 不允许组合的对象（例如表格）或缺少可导出成员，已按独立原生对象导出`,
+        ]
+      : [];
   const bytes = zipSync(entries, { level: 6 });
   const packageValidation = validatePptxPackage(bytes);
   if (!packageValidation.valid) {
@@ -718,6 +737,8 @@ export async function buildPptx(
       croppedImages: croppedImageCount,
       nativeChartCount,
       nativeTableCount,
+      nativeGroupCount: groupResult.written,
+      nativeGroupSkipped: groupResult.skipped,
       masters: [...masters.values()].map((plan) => plan.title),
       ...(theme ? { themeFonts: { major: theme.majorFont, minor: theme.minorFont } } : {}),
       themeColors: themeApplied ? themeSlots.map((slot) => slot.name) : [],
@@ -733,6 +754,7 @@ export async function buildPptx(
         ...issues.map((issue) => issue.message),
         ...animationWarnings,
         ...gradientWarnings,
+        ...groupWarnings,
         ...hiddenWarnings,
         ...chartWarnings,
         ...templateWarnings,

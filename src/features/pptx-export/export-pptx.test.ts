@@ -99,18 +99,69 @@ describe("PPTX export", () => {
     expect(second.report.warnings.some((warning) => warning.includes("没有匹配的模板版式"))).toBe(true);
   });
 
-  it("reports editor groups as flattened native objects", async () => {
+  it("writes editor groups as native PowerPoint groups", async () => {
     const document = createDocument();
     const slide = document.slides[0]!;
     applyCommand(document, { type: "add-text", slideId: slide.id });
+    applyCommand(document, { type: "add-shape", slideId: slide.id, shape: "rectangle" });
+    const elementIds = [slide.elements[0]!.id, slide.elements[2]!.id];
+    applyCommand(document, { type: "group-elements", slideId: slide.id, elementIds });
+    const result = await buildPptx(document);
+
+    expect(result.report.nativeGroupCount).toBe(1);
+    expect(result.report.nativeGroupSkipped).toBe(0);
+    expect(result.report.warnings.some((warning) => warning.includes("分组"))).toBe(false);
+    expect(result.report.package.valid).toBe(true);
+
+    const xml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    const groupStart = xml.indexOf("<p:grpSp>");
+    expect(groupStart).toBeGreaterThan(-1);
+    expect(xml.indexOf(`name="${elementIds[0]}"`)).toBeGreaterThan(groupStart);
+    expect(xml.indexOf(`name="${elementIds[1]}"`)).toBeGreaterThan(groupStart);
+    expect((xml.match(/<p:grpSp>/g) ?? []).length).toBe(1);
+  });
+
+  it("keeps a group containing a table flat and reports why", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-table", slideId: slide.id, columns: 2, rows: 2 });
+    const table = slide.elements.find((element) => element.type === "table");
+    if (!table) throw new Error("expected table");
     applyCommand(document, {
       type: "group-elements",
       slideId: slide.id,
-      elementIds: slide.elements.slice(0, 2).map((element) => element.id),
+      elementIds: [slide.elements[0]!.id, table.id],
     });
     const result = await buildPptx(document);
-    expect(result.report.issues.some((issue) => issue.code === "group-not-exported")).toBe(true);
+
+    expect(result.report.nativeGroupCount).toBe(0);
+    expect(result.report.nativeGroupSkipped).toBe(1);
+    expect(result.report.warnings.some((warning) => warning.includes("表格"))).toBe(true);
+    const xml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(xml).not.toContain("<p:grpSp>");
     expect(result.report.package.valid).toBe(true);
+  });
+
+  it("groups a chart with a text box by its stable object name", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    applyCommand(document, { type: "add-chart", slideId: slide.id, kind: "column" });
+    const chart = slide.elements.find((element) => element.type === "chart");
+    if (!chart) throw new Error("expected chart");
+    applyCommand(document, {
+      type: "group-elements",
+      slideId: slide.id,
+      elementIds: [slide.elements[0]!.id, chart.id],
+    });
+    const result = await buildPptx(document);
+
+    expect(result.report.nativeGroupCount).toBe(1);
+    expect(result.report.nativeGroupSkipped).toBe(0);
+    const xml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    const groupStart = xml.indexOf("<p:grpSp>");
+    expect(groupStart).toBeGreaterThan(-1);
+    expect(xml.indexOf(`name="${chart.id}"`)).toBeGreaterThan(groupStart);
+    expect(xml.indexOf("<p:graphicFrame>")).toBeGreaterThan(groupStart);
   });
 
   it("reports taste findings without failing the export", async () => {
@@ -211,7 +262,7 @@ describe("PPTX export", () => {
     expect(result.report.issues.some((issue) => issue.code === "animation-not-exported")).toBe(false);
   });
 
-  it("reports animations whose target has no native shape name", async () => {
+  it("reports chart animations as not natively exported", async () => {
     const document = createDocument();
     const slide = document.slides[0]!;
     applyCommand(document, { type: "add-chart", slideId: slide.id, kind: "column" });
@@ -228,7 +279,7 @@ describe("PPTX export", () => {
 
     expect(result.report.nativeAnimationCount).toBe(0);
     expect(result.report.nativeAnimationSkipped).toBe(1);
-    expect(result.report.warnings.some((warning) => warning.includes("缺少原生目标"))).toBe(true);
+    expect(result.report.warnings.some((warning) => warning.includes("未写入 PPTX"))).toBe(true);
   });
 
   it("writes split, float-in, pulse and disappear as native effects", async () => {

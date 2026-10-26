@@ -3,6 +3,7 @@ import { z } from "zod";
 import { applyDeckArtDirection } from "../core/commands/deck-art-direction";
 import { CONCEPT_PRESET_IDS, type DeckConcept } from "../core/design/deck-concept";
 import type { ThemeDirection } from "../core/design/theme-direction";
+import type { StyleConstraint } from "../core/design/style-profiles";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
 import { bodyFromBlocks, sanitizeBlocks } from "./ai-draft-content";
@@ -458,6 +459,8 @@ export interface AiPresentationDesignOptions {
   concept?: DeckConcept;
   /** Structured theme art direction; sent to the design prompt. */
   themeDirection?: ThemeDirection;
+  /** Structured style bounds shared by the model and the post-response guard. */
+  styleConstraint?: StyleConstraint;
   /** 生成任务号：取消时后端会中断该任务下所有在途请求。 */
   taskId?: number;
 }
@@ -473,7 +476,7 @@ export async function generateDeckConcepts(
   draft: AiDraft,
   briefs: SlideBrief[],
   template: DesignTemplateContext,
-  options: { taskId?: number; themeDirection?: ThemeDirection } = {},
+  options: { taskId?: number; themeDirection?: ThemeDirection; styleConstraint?: StyleConstraint } = {},
 ): Promise<AiDeckConceptOutput> {
   const { provider, model } = await aiSelection();
   const visualGoal = defaultPresentationVisualGoal();
@@ -484,6 +487,7 @@ export async function generateDeckConcepts(
       template,
       visualGoal,
       themeDirection: options.themeDirection,
+      styleConstraint: options.styleConstraint,
       model,
       provider,
       taskId: options.taskId,
@@ -497,6 +501,7 @@ export async function generateDeckConcepts(
 export interface AiDeckDirectionOptions {
   taskId?: number;
   themeDirection?: ThemeDirection;
+  styleConstraint?: StyleConstraint;
   /** Local look fingerprints; never reviewed copy. */
   recentLooks?: readonly unknown[];
   /** The user's own taste notes, stored only on this machine. */
@@ -525,6 +530,7 @@ export async function generateDeckDirections(
       template,
       visualGoal: defaultPresentationVisualGoal(),
       themeDirection: options.themeDirection,
+      styleConstraint: options.styleConstraint,
       recentLooks: options.recentLooks,
       preferences: options.preferences,
       model,
@@ -561,6 +567,7 @@ export async function generatePresentationDesign(
       visualGoal,
       concept: options.concept,
       themeDirection: options.themeDirection,
+      styleConstraint: options.styleConstraint,
       model,
       provider,
       taskId: options.taskId,
@@ -571,7 +578,7 @@ export async function generatePresentationDesign(
   });
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
-  return constrainDesignToTemplate(
+  const constrained = constrainDesignToTemplate(
     {
       slides: applyDeckArtDirection(
         design.slides.map((slide, index) => {
@@ -628,6 +635,16 @@ export async function generatePresentationDesign(
     },
     template,
   );
+  if (!options.styleConstraint) return constrained;
+  const allowedRecipes = options.concept ? new Set(options.concept.recipes) : undefined;
+  return {
+    ...constrained,
+    slides: constrained.slides.map((slide) => ({
+      ...slide,
+      densityTarget: options.styleConstraint!.density,
+      ...(slide.recipe && allowedRecipes && !allowedRecipes.has(slide.recipe) ? { recipe: undefined } : {}),
+    })),
+  };
 }
 
 export const aiKeyConfigured = (providerId: string) => invoke<boolean>("ai_api_key_configured", { providerId });

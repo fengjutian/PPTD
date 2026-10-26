@@ -30,9 +30,9 @@ export const EXIT_EFFECTS: readonly AnimationEffect[] = ["disappear"];
 /**
  * Effects the exporter can write as a native PowerPoint timing node.
  *
- * All nine editor effects have a verified DrawingML node. Objects without a
- * stable native name (notably charts) can still be skipped by the exporter and
- * are counted in the export report.
+ * All nine editor effects have a verified DrawingML node. Objects whose native
+ * animation is not verified (notably charts) can still be skipped by the
+ * exporter and are counted in the export report.
  */
 export const NATIVE_ANIMATION_EFFECTS: readonly AnimationEffect[] = [
   "appear",
