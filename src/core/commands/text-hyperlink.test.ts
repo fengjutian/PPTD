@@ -53,6 +53,86 @@ describe("text hyperlink commands", () => {
     expect(runs.at(-1)?.end).toBe(title.text.length);
   });
 
+  it("links only the selected range and leaves the copy and other styles alone", () => {
+    const source = createDocument();
+    const title = titleOf(source);
+    title.text = "Open report now";
+    title.runs = [{ start: 0, end: 4, bold: true }];
+    const slide = source.slides[0]!;
+    const contentBefore = JSON.stringify(slide.content);
+
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "set-text-hyperlink",
+        slideId: slide.id,
+        elementIds: [title.id],
+        url: "https://example.com/report",
+        range: { start: 5, end: 11 },
+      }),
+    );
+    const next = result.slides[0]!.elements[0]!;
+    expect(next.type === "text" ? next.text : undefined).toBe("Open report now");
+    expect(next.type === "text" ? next.runs : undefined).toEqual([
+      { start: 0, end: 4, bold: true },
+      { start: 5, end: 11, hyperlinkUrl: "https://example.com/report" },
+    ]);
+    expect(JSON.stringify(result.slides[0]!.content)).toBe(contentBefore);
+    expect(result.slides[0]!.content.contentHash).toBe(slide.content.contentHash);
+  });
+
+  it("clears only the selected range of a link", () => {
+    const source = createDocument();
+    const title = titleOf(source);
+    title.text = "Open report now";
+    title.runs = [
+      { start: 0, end: 4, hyperlinkUrl: "https://example.com/open" },
+      { start: 5, end: 11, hyperlinkUrl: "https://example.com/report" },
+    ];
+    const slide = source.slides[0]!;
+
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "set-text-hyperlink",
+        slideId: slide.id,
+        elementIds: [title.id],
+        url: null,
+        range: { start: 5, end: 11 },
+      }),
+    );
+    const next = result.slides[0]!.elements[0]!;
+    expect(next.type === "text" ? next.runs : undefined).toEqual([
+      { start: 0, end: 4, hyperlinkUrl: "https://example.com/open" },
+    ]);
+  });
+
+  it("refuses a range that addresses more than one text box or leaves the copy", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = titleOf(source);
+    expect(() =>
+      produce(source, (draft) =>
+        applyCommand(draft, {
+          type: "set-text-hyperlink",
+          slideId: slide.id,
+          elementIds: [title.id, title.id],
+          url: "https://example.com",
+          range: { start: 0, end: 2 },
+        }),
+      ),
+    ).toThrow("TEXT_HYPERLINK_RANGE_INVALID");
+    expect(() =>
+      produce(source, (draft) =>
+        applyCommand(draft, {
+          type: "set-text-hyperlink",
+          slideId: slide.id,
+          elementIds: [title.id],
+          url: "https://example.com",
+          range: { start: 0, end: title.text.length + 1 },
+        }),
+      ),
+    ).toThrow("TEXT_HYPERLINK_RANGE_INVALID");
+  });
+
   it("removes a link without changing the text", () => {
     const source = createDocument();
     const title = titleOf(source);
@@ -93,6 +173,50 @@ describe("text hyperlink commands", () => {
         }),
       ),
     ).toThrow("ELEMENT_NOT_TEXT");
+  });
+
+  it("clears emphasis without clearing a link in the same range", () => {
+    const source = createDocument();
+    const title = titleOf(source);
+    title.runs = [{ start: 0, end: 4, bold: true, hyperlinkUrl: "https://example.com/report" }];
+    const slide = source.slides[0]!;
+
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "clear-text-emphasis",
+        slideId: slide.id,
+        elementId: title.id,
+        start: 0,
+        end: 2,
+      }),
+    );
+    const next = result.slides[0]!.elements[0]!;
+    expect(next.type === "text" ? next.runs : undefined).toEqual([
+      { start: 0, end: 2, hyperlinkUrl: "https://example.com/report" },
+      { start: 2, end: 4, bold: true, hyperlinkUrl: "https://example.com/report" },
+    ]);
+  });
+
+  it("knows when a range link would not change anything", () => {
+    const source = createDocument();
+    const slide = source.slides[0]!;
+    const title = titleOf(source);
+    title.runs = [{ start: 0, end: 4, hyperlinkUrl: "https://example.com/report" }];
+    const command = {
+      type: "set-text-hyperlink" as const,
+      slideId: slide.id,
+      elementIds: [title.id],
+      url: "https://example.com/report",
+      range: { start: 0, end: 4 },
+    };
+    expect(commandDomain(command, source)).toBeNull();
+
+    title.runs = [{ start: 0, end: 2, hyperlinkUrl: "https://example.com/report" }];
+    expect(commandDomain(command, source)).toBe("design");
+    expect(commandDomain({ ...command, url: null }, source)).toBe("design");
+
+    title.runs = [];
+    expect(commandDomain({ ...command, url: null }, source)).toBeNull();
   });
 
   it("is design work and creates no undo entry when nothing changes", () => {

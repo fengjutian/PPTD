@@ -2559,7 +2559,7 @@ export function useAppRuntime() {
       setDesignDetail("已拆出每页的设计目的、视觉意图与信息密度");
       let concept!: DeckConcept;
       let designDirection: DesignDirectionRecord | undefined;
-      let design!: AiPresentationDesign;
+      let design: AiPresentationDesign | undefined;
 
       /**
        * Four directions, two real pages each, then the user decides.
@@ -2569,9 +2569,25 @@ export function useAppRuntime() {
        * A failure reports "unavailable" so the single-direction path can say
        * why; "undefined" means the gate did not apply at all.
        */
-      const directionGate = async (): Promise<
-        { concept: DeckConcept; record: DesignDirectionRecord } | { unavailable: true } | undefined
-      > => {
+      type DirectionCandidate = {
+        id: string;
+        proposal: AiDeckConcept;
+        concept: DeckConcept;
+        images: string[];
+        previewIndexes: number[];
+        styleProfile: StyleProfile;
+        themePreset: ThemePreset;
+        analysis: TemplateAnalysis;
+        styleConstraint: StyleConstraint;
+        themeDirection: ThemeDirection;
+      };
+      type ChosenDirectionResult = {
+        concept: DeckConcept;
+        record: DesignDirectionRecord;
+        design: AiPresentationDesign | undefined;
+        direction: DirectionCandidate;
+      };
+      const directionGate = async (): Promise<ChosenDirectionResult | { unavailable: true } | undefined> => {
         if (mode !== "preset" || sourceDraft.slides.length === 0) return undefined;
         const gateSettings = await loadSettings().catch(() => defaultSettings());
         if (!gateSettings.designDirectionGate) return undefined;
@@ -2606,18 +2622,6 @@ export function useAppRuntime() {
           }
           if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
           setDesignDetail(`已收到 ${proposals.length} 个方向，正在渲染代表页`);
-          type DirectionCandidate = {
-            id: string;
-            proposal: AiDeckConcept;
-            concept: DeckConcept;
-            images: string[];
-            previewIndexes: number[];
-            styleProfile: StyleProfile;
-            themePreset: ThemePreset;
-            analysis: TemplateAnalysis;
-            styleConstraint: StyleConstraint;
-            themeDirection: ThemeDirection;
-          };
           const directionStyles = styleProfilesForDirections(styleProfile);
           // 四个方向各自有一次模型请求和两次本地渲染。串行执行把等待时间乘以
           // 四，是"设计阶段超时"最直接的原因；这里按方向并行，单个方向失败

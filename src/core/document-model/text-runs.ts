@@ -147,6 +147,21 @@ function withHyperlink(style: TextRunStyle, url: string | null): TextRunStyle {
 }
 
 /**
+ * Merges emphasis into the runs of a range. Unlike `applyTextRun`, it keeps the
+ * properties the caller did not mention: bolding a linked word must not unlink
+ * it, and bolding a red word must not turn it black.
+ */
+export function mergeTextRunStyle(
+  runs: TextRun[] | undefined,
+  textLength: number,
+  start: number,
+  end: number,
+  style: TextRunStyle,
+): TextRun[] {
+  return mapTextRange(runs, textLength, start, end, (existing) => ({ ...existing, ...style }));
+}
+
+/**
  * Sets or clears the hyperlink of every character while keeping the rest of
  * each run's style. Gaps between runs become linked (or plain) runs, so a link
  * set on the whole text box cannot silently drop bold or colour emphasis.

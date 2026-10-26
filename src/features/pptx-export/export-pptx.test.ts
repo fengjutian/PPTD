@@ -1142,4 +1142,21 @@ describe("PPTX export", () => {
     expect(relsXml).toContain('TargetMode="External"');
     expect(relsXml).toContain("https://example.com/report?id=7");
   });
+
+  it("exports a partial text hyperlink without linking the rest of the box", async () => {
+    const document = createDocument();
+    const element = document.slides[0]!.elements[0]!;
+    if (element.type !== "text") throw new Error("TEXT_EXPECTED");
+    element.text = "Open report now";
+    element.runs = [{ start: 0, end: 4, hyperlinkUrl: "https://example.com/open" }];
+
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    const entries = unzipSync(result.bytes);
+    const slideXml = strFromU8(entries["ppt/slides/slide1.xml"]!);
+    const relsXml = strFromU8(entries["ppt/slides/_rels/slide1.xml.rels"]!);
+    expect(slideXml.match(/<a:hlinkClick/g)).toHaveLength(1);
+    expect(slideXml).toContain("Open");
+    expect(slideXml).toContain("report now");
+    expect(relsXml).toContain("https://example.com/open");
+  });
 });

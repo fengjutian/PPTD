@@ -377,7 +377,7 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
               <Sparkles />
             </ToolButton>
             <ToolButton
-              label={currentLink ? `编辑超链接：${currentLink}` : "设置所选文本框的超链接"}
+              label={currentLink ? `编辑整个文本框的超链接：${currentLink}` : "设置整个文本框的超链接"}
               caption="超链接"
               disabled={editableTextElements.length === 0}
               onClick={applyHyperlink}

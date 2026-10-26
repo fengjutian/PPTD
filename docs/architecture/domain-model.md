@@ -177,6 +177,8 @@ interface TextRun {
   bold?: boolean;
   color?: string;
   underline?: boolean;
+  /** 受限外部链接；只接受 http、https 和 mailto。 */
+  hyperlinkUrl?: string;
 }
 
 interface TextElement extends ElementBase {
@@ -188,7 +190,9 @@ interface TextElement extends ElementBase {
 }
 ```
 
-`textFragments` 把文字切成片段，`resolveFragmentStyle` 决定每段的最终样式：片段提到的属性以片段为准，没提到的以元素为准。片段不参与内容哈希，因此强调是设计态；正文被改写时（`edit-text`）片段被清空，因为偏移量已经指向了旧正文。
+`textFragments` 把文字切成片段，`resolveFragmentStyle` 决定每段的最终样式：片段提到的属性以片段为准，没提到的以元素为准。片段不参与内容哈希，因此强调和链接都是设计态；正文被改写时（`edit-text`）片段被清空，因为偏移量已经指向了旧正文。
+
+`set-text-hyperlink` 可以处理整个文本框，也可以带 `range` 只处理一个文本元素里的一段字符。局部链接保留范围外的链接和范围内的粗体/颜色/下划线；清除强调只移除粗体、颜色和下划线，不会把同一片段上的链接一起删掉。片段范围内的字符偏移必须落在正文内，且不能从代理对中间切开。
 
 导出把有片段的文本写成原生 run，导出前检查不阻止导出——片段是装饰，缺了片段只是少一处强调，不会让文件不可用。
 

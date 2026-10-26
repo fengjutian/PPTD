@@ -590,12 +590,7 @@ export function isLowSurrogate(code: number): boolean {
  * inside the text and may not cut a surrogate pair in half: a fragment that
  * starts in the middle of a character would export as a broken glyph.
  */
-export function assertTextRange(
-  text: string,
-  start: number,
-  end: number,
-  errorCode = "INVALID_TEXT_EMPHASIS",
-): void {
+export function assertTextRange(text: string, start: number, end: number, errorCode = "INVALID_TEXT_EMPHASIS"): void {
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length)
     throw new Error(errorCode);
   if (start > 0 && isHighSurrogate(text.charCodeAt(start - 1)) && isLowSurrogate(text.charCodeAt(start)))

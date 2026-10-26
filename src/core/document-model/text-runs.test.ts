@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyTextRun,
+  clearTextEmphasisRange,
+  isSafeTextHyperlinkUrl,
+  mergeTextRunStyle,
   mergeTextRuns,
   resolveFragmentStyle,
   setTextHyperlink,
+  setTextHyperlinkRange,
   subtractTextRange,
   textFragments,
 } from "./text-runs";
@@ -92,6 +96,97 @@ describe("text runs", () => {
     expect(setTextHyperlink([{ start: 0, end: 3, bold: true, hyperlinkUrl: "https://example.com" }], 3, null)).toEqual([
       { start: 0, end: 3, bold: true },
     ]);
+  });
+
+  it("links only the selected range and keeps links outside it", () => {
+    expect(
+      setTextHyperlinkRange(
+        [
+          { start: 0, end: 4, hyperlinkUrl: "https://example.com/a" },
+          { start: 4, end: 8, bold: true },
+        ],
+        10,
+        2,
+        6,
+        "https://example.com/b",
+      ),
+    ).toEqual([
+      { start: 0, end: 2, hyperlinkUrl: "https://example.com/a" },
+      { start: 2, end: 4, hyperlinkUrl: "https://example.com/b" },
+      { start: 4, end: 6, bold: true, hyperlinkUrl: "https://example.com/b" },
+      { start: 6, end: 8, bold: true },
+    ]);
+  });
+
+  it("clears only the range and leaves the rest of a link intact", () => {
+    expect(
+      setTextHyperlinkRange([{ start: 0, end: 10, hyperlinkUrl: "https://example.com/a" }], 10, 3, 6, null),
+    ).toEqual([
+      { start: 0, end: 3, hyperlinkUrl: "https://example.com/a" },
+      { start: 6, end: 10, hyperlinkUrl: "https://example.com/a" },
+    ]);
+  });
+
+  it("merges emphasis without dropping the colour or link on the words", () => {
+    expect(
+      mergeTextRunStyle(
+        [{ start: 0, end: 4, color: "#FF6600", hyperlinkUrl: "https://example.com/report" }],
+        4,
+        1,
+        3,
+        { bold: true },
+      ),
+    ).toEqual([
+      { start: 0, end: 1, color: "#FF6600", hyperlinkUrl: "https://example.com/report" },
+      { start: 1, end: 3, bold: true, color: "#FF6600", hyperlinkUrl: "https://example.com/report" },
+      { start: 3, end: 4, color: "#FF6600", hyperlinkUrl: "https://example.com/report" },
+    ]);
+  });
+
+  it("clears emphasis without clearing the link that shares the run", () => {
+    expect(
+      clearTextEmphasisRange(
+        [
+          {
+            start: 0,
+            end: 6,
+            bold: true,
+            color: "#FF6600",
+            underline: true,
+            hyperlinkUrl: "https://example.com/report",
+          },
+        ],
+        6,
+        2,
+        4,
+      ),
+    ).toEqual([
+      {
+        start: 0,
+        end: 2,
+        bold: true,
+        color: "#FF6600",
+        underline: true,
+        hyperlinkUrl: "https://example.com/report",
+      },
+      { start: 2, end: 4, hyperlinkUrl: "https://example.com/report" },
+      {
+        start: 4,
+        end: 6,
+        bold: true,
+        color: "#FF6600",
+        underline: true,
+        hyperlinkUrl: "https://example.com/report",
+      },
+    ]);
+  });
+
+  it("accepts only the documented hyperlink destinations", () => {
+    expect(isSafeTextHyperlinkUrl("https://example.com/report?id=7")).toBe(true);
+    expect(isSafeTextHyperlinkUrl("mailto:team@example.com")).toBe(true);
+    expect(isSafeTextHyperlinkUrl("file:///C:/secret")).toBe(false);
+    expect(isSafeTextHyperlinkUrl("https://example.com/\nnext")).toBe(false);
+    expect(isSafeTextHyperlinkUrl("javascript:alert(1)")).toBe(false);
   });
 
   it("lets the element decide the properties a run does not mention", () => {

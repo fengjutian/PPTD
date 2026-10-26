@@ -231,6 +231,7 @@ export function InspectorPanelView({
    * emphasis lands on exactly the words the user picked.
    */
   const readSelection = (target: HTMLTextAreaElement) => {
+    setLinkError(undefined);
     if (target.selectionStart === target.selectionEnd) {
       setSelection(undefined);
       return;
@@ -250,11 +251,73 @@ export function InspectorPanelView({
         })()
       : false;
 
-  /** The emphasised fragments, so the user can see what is already marked. */
+  /** The link destinations covered by the current text selection. */
+  const selectionLinkUrls =
+    element.type === "text" && selection
+      ? Array.from(
+          new Set(
+            textFragments(element.text, element.runs)
+              .filter((fragment) => fragment.start < selection.end && fragment.end > selection.start)
+              .flatMap((fragment) => (fragment.style.hyperlinkUrl ? [fragment.style.hyperlinkUrl] : [])),
+          ),
+        )
+      : [];
+  const selectionLink = selectionLinkUrls.length === 1 ? selectionLinkUrls[0] : undefined;
+  const selectionHasLink = selectionLinkUrls.length > 0;
+
+  /**
+   * A link is not emphasis. Listing it here would make “clear all emphasis”
+   * look like it also owns the link, and the old cleaning command did remove it.
+   */
   const emphasised =
     element.type === "text"
-      ? textFragments(element.text, element.runs).filter((fragment) => Object.keys(fragment.style).length > 0)
+      ? textFragments(element.text, element.runs).filter(
+          (fragment) =>
+            fragment.style.bold !== undefined ||
+            fragment.style.color !== undefined ||
+            fragment.style.underline !== undefined,
+        )
       : [];
+  const linked =
+    element.type === "text"
+      ? textFragments(element.text, element.runs).filter((fragment) => fragment.style.hyperlinkUrl !== undefined)
+      : [];
+
+  const applySelectionHyperlink = () => {
+    if (element.type !== "text" || !selection || locked) return;
+    const input = window.prompt(
+      selectionHasLink
+        ? "修改所选文字的链接（http/https 或 mailto），留空移除链接"
+        : "为所选文字设置链接（http/https 或 mailto）",
+      selectionLink ?? "",
+    );
+    if (input === null) return;
+    const url = input.trim();
+    if (url && !isSafeTextHyperlinkUrl(url)) {
+      setLinkError("链接必须是 2048 字符以内的 http、https 或 mailto 地址");
+      return;
+    }
+    setLinkError(undefined);
+    onCommand({
+      type: "set-text-hyperlink",
+      slideId,
+      elementIds: [element.id],
+      url: url || null,
+      range: selection,
+    });
+  };
+
+  const clearSelectionHyperlink = () => {
+    if (element.type !== "text" || !selection || locked) return;
+    setLinkError(undefined);
+    onCommand({
+      type: "set-text-hyperlink",
+      slideId,
+      elementIds: [element.id],
+      url: null,
+      range: selection,
+    });
+  };
 
   const setShapeStyle = (style: Partial<ShapeElementStyle>) => {
     onCommand({ type: "set-shape-style", slideId, elementId: element.id, style });
@@ -371,6 +434,11 @@ export function InspectorPanelView({
                 disabled={locked}
                 onChange={(event) => {
                   textDraftCancelRef.current = false;
+                  // The old offsets point into the previous copy; a draft that
+                  // changes the text must not keep a range link or emphasis
+                  // aimed at the old words.
+                  setSelection(undefined);
+                  setLinkError(undefined);
                   setTextDraft(event.target.value);
                 }}
                 onSelect={(event) => readSelection(event.currentTarget)}
@@ -463,9 +531,44 @@ export function InspectorPanelView({
                 清除全部强调
               </button>
             </div>
+            <div className="field-row">
+              <button
+                type="button"
+                className="toggle-button"
+                disabled={locked || !selection}
+                onClick={applySelectionHyperlink}
+                title="只给文本框中选中的文字设置链接"
+              >
+                <ExternalLink />
+                {selectionHasLink ? (selectionLink ? "编辑所选文字链接" : "替换所选文字链接") : "设置所选文字链接"}
+              </button>
+              <button
+                type="button"
+                className="toggle-button"
+                disabled={locked || !selection || !selectionHasLink}
+                onClick={clearSelectionHyperlink}
+              >
+                <Unlink />
+                清除所选文字链接
+              </button>
+            </div>
+            {selectionLink && <p className="inspector-hint">所选文字链接：{selectionLink}</p>}
+            {selectionHasLink && !selectionLink && (
+              <p className="inspector-hint">所选文字包含多个链接；重新设置会统一替换。</p>
+            )}
+            {linkError && (
+              <p className="inspector-hint" role="alert">
+                {linkError}
+              </p>
+            )}
             {emphasised.length > 0 && (
               <p className="inspector-hint">
                 已强调 {emphasised.length} 处：{emphasised.map((fragment) => fragment.text).join(" / ")}
+              </p>
+            )}
+            {linked.length > 0 && (
+              <p className="inspector-hint">
+                已链接 {linked.length} 处：{linked.map((fragment) => fragment.text).join(" / ")}
               </p>
             )}
           </InspectorSection>

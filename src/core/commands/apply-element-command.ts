@@ -1,5 +1,5 @@
 ﻿import type { Emu, PresentationDocument, Slide, SlideElement } from "../document-model";
-import { BUILTIN_ICONS, hashString, inches, applyTextRun, clearTextEmphasisRange } from "../document-model";
+import { BUILTIN_ICONS, hashString, inches, clearTextEmphasisRange, mergeTextRunStyle } from "../document-model";
 
 import type { DocumentCommand } from "./command-types";
 export type {
@@ -116,7 +116,15 @@ export function applyElementCommand(
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     assertTextRunStyle(command.style);
     assertTextRange(element.text, command.start, command.end);
-    element.runs = applyTextRun(element.runs, command.start, command.end, command.style);
+    // Merge rather than replace: the command only names the property the user
+    // changed, so an existing colour, underline or link stays on the words.
+    element.runs = mergeTextRunStyle(
+      element.runs,
+      element.text.length,
+      command.start,
+      command.end,
+      command.style,
+    );
     return;
   }
   if (command.type === "clear-text-emphasis") {

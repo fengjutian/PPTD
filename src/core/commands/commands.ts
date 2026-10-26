@@ -592,17 +592,10 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     if (command.range) {
       // A range addresses characters of one text box. Applying the same offsets
       // to several boxes would link unrelated words.
-      if (command.elementIds.length !== 1 || targets.length !== 1)
-        throw new Error("TEXT_HYPERLINK_RANGE_INVALID");
+      if (command.elementIds.length !== 1 || targets.length !== 1) throw new Error("TEXT_HYPERLINK_RANGE_INVALID");
       const target = targets[0]!;
       assertTextRange(target.text, command.range.start, command.range.end, "TEXT_HYPERLINK_RANGE_INVALID");
-      const runs = setTextHyperlinkRange(
-        target.runs,
-        target.text.length,
-        command.range.start,
-        command.range.end,
-        url,
-      );
+      const runs = setTextHyperlinkRange(target.runs, target.text.length, command.range.start, command.range.end, url);
       target.runs = hasTextRunStyle(runs) ? runs : undefined;
       return;
     }

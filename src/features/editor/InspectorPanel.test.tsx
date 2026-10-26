@@ -181,6 +181,21 @@ describe("inspector panel", () => {
     expect(buttonDisabled(markup, "清除全部强调")).toBe(false);
   });
 
+  it("offers a link for a selected range and keeps links out of the emphasis list", () => {
+    const element = textElement();
+    if (element.type !== "text") throw new Error("expected a text element");
+    element.text = "Open report now";
+    element.runs = [{ start: 5, end: 11, hyperlinkUrl: "https://example.com/report" }];
+    const markup = renderView(element);
+    expect(markup).toContain("设置所选文字链接");
+    expect(buttonDisabled(markup, "设置所选文字链接")).toBe(true);
+    expect(buttonDisabled(markup, "清除所选文字链接")).toBe(true);
+    // A link is not emphasis; the old list would have called this "已强调".
+    expect(markup).not.toContain("已强调 1 处");
+    expect(markup).toContain("已链接 1 处");
+    expect(markup).toContain("report");
+  });
+
   it("warns when the text does not fit and offers to fit it", () => {
     const element = textElement();
     if (element.type !== "text") throw new Error("expected a text element");
