@@ -91,11 +91,29 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-slide-background-image":
     case "remove-slide-background-image":
       return "design";
+    case "set-text-hyperlink": {
+      if (!document) return "design";
+      const slide = document.slides.find((item) => item.id === command.slideId);
+      const targets = slide?.elements.filter(
+        (item): item is TextElement =>
+          command.elementIds.includes(item.id) && item.type === "text" && !item.locked,
+      );
+      if (!targets || targets.length === 0) return "design";
+      const url = command.url?.trim() ?? null;
+      const changed = targets.some((target) => {
+        const runs = target.runs ?? [];
+        if (url === null) return runs.some((run) => run.hyperlinkUrl !== undefined);
+        // A gap means part of the box is still unlinked, so setting the same
+        // URL over a partially linked box is a real edit.
+        const covered = runs.reduce((total, run) => total + (run.end - run.start), 0);
+        return covered < target.text.length || runs.some((run) => run.hyperlinkUrl !== url);
+      });
+      return changed ? "design" : null;
+    }
     case "set-text-style":
     case "set-text-style-elements":
     case "clear-text-format":
-    case "fit-text":
-    case "set-text-emphasis":
+    case "fit-text":    case "set-text-emphasis":
     case "clear-text-emphasis":
     case "set-shape-style":
     case "set-line-style":
@@ -539,6 +557,28 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     for (const target of targets) {
       target.style = clearedTextStyle(target.contentRef, document.theme);
       target.runs = undefined;
+    }
+    return;
+  }
+  if (command.type === "set-text-hyperlink") {
+    const url = command.url?.trim() ?? null;
+    if (
+      url !== null &&
+      (url.length > 2048 || !/^(?:https?:\/\/[^\s\x00-\x1f]+|mailto:[^\s\x00-\x1f]+)$/i.test(url))
+    ) {
+      throw new Error("TEXT_HYPERLINK_INVALID");
+    }
+    const targets = slide.elements.filter(
+      (element): element is TextElement =>
+        command.elementIds.includes(element.id) && element.type === "text" && !element.locked,
+    );
+    if (targets.length === 0) throw new Error("ELEMENT_NOT_TEXT");
+    // A link is design metadata: the reviewed copy, its hash and every fragment
+    // style stay as they are; only the destination attached to each character
+    // changes.
+    for (const target of targets) {
+      const runs = setTextHyperlink(target.runs, target.text.length, url);
+      target.runs = runs.length > 0 ? runs : undefined;
     }
     return;
   }
