@@ -3764,6 +3764,11 @@ export function useAppRuntime() {
         targetIsContentEditable: target?.isContentEditable,
       });
       if (!shortcut) return;
+      if (shortcut === "save-project" || shortcut === "save-project-as") {
+        event.preventDefault();
+        void (shortcut === "save-project" ? handleSave() : handleSaveAs());
+        return;
+      }
       if (shortcut === "undo") {
         if (!undoStack.length) return;
         event.preventDefault();

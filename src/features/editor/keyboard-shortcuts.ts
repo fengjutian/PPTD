@@ -1,4 +1,6 @@
 export type EditorShortcut =
+  | "save-project"
+  | "save-project-as"
   | "undo"
   | "redo"
   | "duplicate-element"
@@ -33,12 +35,16 @@ export interface ShortcutInput {
 }
 
 export function resolveEditorShortcut(input: ShortcutInput): EditorShortcut | null {
+  const modifier = input.ctrlKey || input.metaKey;
+  const key = input.key.toLowerCase();
+  // Saving is an application command, so it remains available while a text
+  // field or content-editable element owns focus.
+  if (modifier && key === "s") return input.shiftKey ? "save-project-as" : "save-project";
+
   const tagName = input.targetTagName?.toLowerCase();
   if (tagName === "input" || tagName === "textarea" || tagName === "select" || input.targetIsContentEditable)
     return null;
 
-  const modifier = input.ctrlKey || input.metaKey;
-  const key = input.key.toLowerCase();
   if (modifier && key === "f") return "find";
   if (modifier && key === "h") return "replace";
   if (modifier && key === "a") return "select-all";

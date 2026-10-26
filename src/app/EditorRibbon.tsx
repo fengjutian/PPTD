@@ -230,14 +230,19 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
               <FolderClock />
             </ToolButton>
             <ToolButton
-              label={saving ? "正在保存" : "保存项目"}
+              label={saving ? "正在保存" : "保存项目（Ctrl+S）"}
               caption={saving ? "保存中" : "保存"}
               onClick={handleSave}
               disabled={saving}
             >
               <Save />
             </ToolButton>
-            <ToolButton label="另存为" caption="另存" onClick={handleSaveAs} disabled={saving || !isDesktopRuntime()}>
+            <ToolButton
+              label="另存为（Ctrl+Shift+S）"
+              caption="另存"
+              onClick={handleSaveAs}
+              disabled={saving || !isDesktopRuntime()}
+            >
               <SaveAll />
             </ToolButton>
             <ToolButton label="重命名项目" caption="重命名" onClick={handleRenameProject} disabled={saving}>

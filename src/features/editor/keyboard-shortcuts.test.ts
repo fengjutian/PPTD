@@ -13,6 +13,15 @@ const shortcut = (overrides: Partial<ShortcutInput>): EditorShortcutResult =>
 type EditorShortcutResult = ReturnType<typeof resolveEditorShortcut>;
 
 describe("editor keyboard shortcuts", () => {
+  it("maps project save shortcuts even while an editor field has focus", () => {
+    expect(shortcut({ key: "s", ctrlKey: true })).toBe("save-project");
+    expect(shortcut({ key: "S", ctrlKey: true, shiftKey: true })).toBe("save-project-as");
+    expect(shortcut({ key: "s", metaKey: true, targetTagName: "textarea" })).toBe("save-project");
+    expect(shortcut({ key: "s", metaKey: true, shiftKey: true, targetIsContentEditable: true })).toBe(
+      "save-project-as",
+    );
+  });
+
   it("maps Windows and macOS history shortcuts", () => {
     expect(shortcut({ key: "z", ctrlKey: true })).toBe("undo");
     expect(shortcut({ key: "Z", metaKey: true, shiftKey: true })).toBe("redo");
