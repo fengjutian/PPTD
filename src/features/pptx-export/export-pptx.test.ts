@@ -80,6 +80,8 @@ describe("PPTX export", () => {
     // Every measured page resolved to the template's own layout.
     expect(result.report.templateFit?.checkedSlides).toBe(1);
     expect(result.report.templateFit?.layoutCoverage).toBe(1);
+    expect(result.report.designAudit.layouts[0]).toMatchObject({ name: document.layouts![0]!.name, usedBySlides: 1 });
+    expect(result.report.designAudit.versions.schema).toBe(document.schemaVersion);
     expect(result.report.warnings.some((warning) => warning.includes("没有匹配的模板版式"))).toBe(false);
 
     // The same deck with its layout bindings removed. With two layouts in the

@@ -5,6 +5,7 @@ import { CONCEPT_PRESET_IDS, type DeckConcept } from "../core/design/deck-concep
 import type { ThemeDirection } from "../core/design/theme-direction";
 import type { StyleConstraint } from "../core/design/style-profiles";
 import { recipeCatalogForConcept } from "../core/layout/recipes/registry";
+import { layoutCapabilities } from "../core/commands/template-layouts";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
 import { bodyFromBlocks, sanitizeBlocks } from "./ai-draft-content";
@@ -39,6 +40,22 @@ export * from "./ai-contracts";
 const SINGLE_CALL_PAGE_LIMIT = 6;
 /** 单批页数。批越小单次输出越短，越不容易触发服务端超时。 */
 const BATCH_PAGE_COUNT = 5;
+
+/** Adds stable layout capabilities before template data crosses the AI port. */
+export function designTemplateForPrompt(template: DesignTemplateContext): DesignTemplateContext {
+  return {
+    ...template,
+    layouts: template.layouts.map((layout) => ({
+      ...layout,
+      capabilities: layoutCapabilities(
+        layout.regions.map((region) => ({
+          role: region.role,
+          frame: { x: region.x, y: region.y, width: region.width, height: region.height },
+        })),
+      ),
+    })),
+  };
+}
 
 function parseAiResponse<Schema extends z.ZodTypeAny>(schema: Schema, raw: unknown, stage: string): z.output<Schema> {
   const parsed = schema.safeParse(raw);
@@ -485,7 +502,7 @@ export async function generateDeckConcepts(
     request: {
       draft,
       briefs,
-      template,
+      template: designTemplateForPrompt(template),
       visualGoal,
       themeDirection: options.themeDirection,
       styleConstraint: options.styleConstraint,
@@ -528,7 +545,7 @@ export async function generateDeckDirections(
     request: {
       draft,
       briefs,
-      template,
+      template: designTemplateForPrompt(template),
       visualGoal: defaultPresentationVisualGoal(),
       themeDirection: options.themeDirection,
       styleConstraint: options.styleConstraint,
@@ -564,7 +581,7 @@ export async function generatePresentationDesign(
     request: {
       draft,
       briefs,
-      template,
+      template: designTemplateForPrompt(template),
       visualGoal,
       concept: options.concept,
       recipeCatalog: options.concept ? recipeCatalogForConcept(options.concept) : [],

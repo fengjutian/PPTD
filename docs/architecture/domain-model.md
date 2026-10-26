@@ -112,7 +112,12 @@ AI 设计任务记录开始时的三个 revision。应用结果前必须比较 `
 interface PresentationDocument {
   // …
   theme?: { name: string; majorFont: string; minorFont: string; colors: Array<{ name: string; value: string }> };
-  layouts?: Array<{ id: string; name: string; backgroundColor?: string }>;
+  layouts?: Array<{
+    id: string;
+    name: string;
+    backgroundColor?: string;
+    capabilities?: { hasTitle: boolean; hasBody: boolean; hasImage: boolean; columns: number; free: boolean };
+  }>;
 }
 
 interface Slide {
@@ -124,6 +129,8 @@ interface Slide {
 两者都是设计态：修改主题或版式绑定只增加 design revision，不触碰内容哈希。`Slide.layoutId` 必须能在 `layouts` 中解析，否则 Schema 拒绝该文档。
 
 版式的整页画面是图片元素，带 `placement: "layout-background"`。画布把它画在页面底层，导出把它放进母版背景，页面上不再重复绘制这张图片。用户为单页设置的背景图片使用 `placement: "slide-background"`，作为锁定的页级图片保留在内容对象下方并原生导出；它可以覆盖母版画面，但不会修改母版。详见 [0008 模板主题与版式落地到导出的 PPTX](decisions/0008-template-master-and-theme-export.md)。
+
+`apply-slide-layout` 是设计态命令，用于把一页切换到一个已存在的版式。它先通过 `slideLayoutApplicationIssue` 校验目标能力：没有标题/正文占位、封面类自由版式会隐藏正文、双栏版式装不下当前要点，或目标不存在时分别返回 `LAYOUT_INCOMPATIBLE` / `LAYOUT_NOT_FOUND`。校验通过后复用 `relayout-slide` 的内容到构图链路，保留已审核内容、内容块 id、演讲备注、用户手工对象和锁定对象；生成元素被替换，用户分组按重排规则清除。目标版式的 `id` 和背景写入页面，`layouts` 不追加副本，导出时目标版式继续作为该页母版依据。版式只持久化名称、背景和能力摘要，不持久化原始占位符几何或版式画面，因此重建的是目标能力对应的封面/章节、双栏或正文构图，不宣称复刻源模板的精确占位符位置。
 
 第 22 版文档新增可选的设计态字段 `templateStyle`：它是上传模板编译后的验收目标（标题轴、内容区、字号、色板、字体与容差），供视觉评审、修复和报告复用。它不进入内容哈希，也不改变内容 revision；重新打开项目后手动复检可以直接使用，不需要重新分析模板。
 

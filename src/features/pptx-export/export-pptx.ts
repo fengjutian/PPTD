@@ -33,6 +33,7 @@ import { patchSlideAnimations } from "./native-animation";
 import { lintTaste } from "../../core/design/taste-lint";
 import { shadowSpec } from "../../core/design/effects";
 import { chartGridColor, chartPaletteReadable } from "../../core/design/chart-theme";
+import { buildDesignAudit, type DesignAuditReport } from "../../core/design/design-audit";
 import { checkTemplateFit, templateTargetMatchesDocument } from "../../services/template-review-target";
 import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
@@ -107,6 +108,8 @@ export interface ExportReport {
    * itself failed before producing a report.
    */
   parity?: ExportParityReport;
+  /** Unified trace of design data, layout capabilities and export degradations. */
+  designAudit: DesignAuditReport;
   warnings: string[];
   issues: ExportIssue[];
   package: PptxPackageValidation;
@@ -727,6 +730,21 @@ export async function buildPptx(
       ? [`${templateFit.checkedSlides - templateFit.layoutCoverage} 页没有匹配的模板版式，已按自由排版导出`]
       : [];
 
+  const warnings = [
+    ...issues.map((issue) => issue.message),
+    ...animationWarnings,
+    ...gradientWarnings,
+    ...groupWarnings,
+    ...hiddenWarnings,
+    ...chartWarnings,
+    ...templateWarnings,
+  ];
+  const designAudit = buildDesignAudit(exportDocument, {
+    nativeAnimationSkipped: animationResult.skipped,
+    nativeGroupSkipped: groupResult.skipped,
+    warnings,
+  });
+
   return {
     bytes,
     report: {
@@ -748,15 +766,8 @@ export async function buildPptx(
       ...(tasteLint ? { tasteLint } : {}),
       ...(templateFit ? { templateFit } : {}),
       parity,
-      warnings: [
-        ...issues.map((issue) => issue.message),
-        ...animationWarnings,
-        ...gradientWarnings,
-        ...groupWarnings,
-        ...hiddenWarnings,
-        ...chartWarnings,
-        ...templateWarnings,
-      ],
+      designAudit,
+      warnings,
       issues,
       package: packageValidation,
     },

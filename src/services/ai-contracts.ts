@@ -671,6 +671,13 @@ export interface DesignTemplateContext {
     name: string;
     backgroundColor: string | null;
     regions: Array<{ role: "title" | "body" | "image"; x: number; y: number; width: number; height: number }>;
+    capabilities?: {
+      hasTitle: boolean;
+      hasBody: boolean;
+      hasImage: boolean;
+      columns: number;
+      free: boolean;
+    };
   }>;
 }
 
