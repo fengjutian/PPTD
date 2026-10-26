@@ -41,6 +41,7 @@ export interface ImportedSlide {
   index: number;
   title?: string;
   body?: string;
+  background?: string | null;
   speakerNotes: string;
   elements: ImportedElement[];
   /** Indexes into `elements` for each imported selection group. */
@@ -189,7 +190,7 @@ function themeColor(imported: ImportedDeck, name: string, fallback: string): str
 
 function mapSlide(slide: ImportedSlide, index: number, imported: ImportedDeck): Slide {
   const base = createSlide(index + 1);
-  const background = themeColor(imported, "lt1", "#FFFFFF");
+  const background = slide.background ?? themeColor(imported, "lt1", "#FFFFFF");
   const blocks: NonNullable<Slide["content"]["blocks"]> = [];
   const elements: SlideElement[] = slide.elements.map((element) => {
     if (element.type === "table") {

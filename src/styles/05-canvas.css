@@ -534,6 +534,10 @@
 .panel-heading .panel-tab {
   width: auto;
   height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -541,6 +545,11 @@
   color: #8f939b;
   font-size: 12px;
   font-weight: 500;
+}
+.panel-heading .panel-tab svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
 }
 .panel-heading .panel-tab:hover {
   color: #c9ccd2;

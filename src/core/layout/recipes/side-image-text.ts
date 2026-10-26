@@ -122,11 +122,15 @@ export const sideImageText: LayoutRecipe = {
       textHeightPt(title, titleWidth * pageWidthIn * 72, titleSize, displayFamily, titleLineHeight),
       page.height,
     );
-    // The band is at least as tall as the title frame the chrome gave the page.
-    // The line estimate and PowerPoint disagree by a character at the wrap
-    // boundary, and a band that covers one of two lines is worse than a band
-    // with a little air in it.
-    const bandHeight = Math.max(titleHeight, Math.min(0.32, chrome.title.height)) + BAND_PADDING * 2;
+    // The band is at least as tall as two lines of the fitted headline.
+    //
+    // Sizing it to the estimated text height was fragile: the estimator and
+    // PowerPoint disagree by a character at the wrap boundary, and when they did
+    // the second line fell outside the band — a tinted block with a word hanging
+    // out of it. A two-line floor makes a one-line headline sit in a taller band
+    // (reads as padding) instead of a two-line headline escaping a short one.
+    const twoLines = (titleSize * titleLineHeight * 2) / (pageHeightIn * 72);
+    const bandHeight = Math.max(titleHeight, chrome.title.height, twoLines) + BAND_PADDING * 2;
     const bandTop = chrome.title.y - BAND_PADDING;
     // The headline stays top-aligned on the shared title axis: centring it in
     // the band would move a one-line page's headline below a two-line page's,

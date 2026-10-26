@@ -529,133 +529,138 @@
   color: #b4482a;
   background: rgba(211, 82, 48, 0.1);
 }
-:root[data-theme="light"] .panel-heading .panel-tab {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .panel-heading .panel-tab {
+  border-color: transparent;
+  background: transparent;
   color: #5f646d;
 }
-:root[data-theme="light"] .panel-heading .panel-tab:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .panel-heading .panel-tab:hover {
   color: #25282d;
   background: #e5e7eb;
 }
-:root[data-theme="light"] .panel-heading .panel-tab.active {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .panel-heading .panel-tab.active {
   border-color: #cfd3d9;
   background: #fff;
   color: #22252a;
 }
-:root[data-theme="light"] .layer-toolbar {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-toolbar {
   border-color: #e2e5e9;
   color: #6b7079;
 }
-:root[data-theme="light"] .layer-toolbar button {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-toolbar button {
   color: #555b64;
 }
-:root[data-theme="light"] .layer-toolbar button:hover:not(:disabled) {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-toolbar button:hover:not(:disabled) {
   color: #22252a;
   background: #e9ebee;
 }
-:root[data-theme="light"] .layer-row {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-row {
   color: #454a52;
 }
-:root[data-theme="light"] .layer-row:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-row:hover {
   background: #e9ebee;
 }
-:root[data-theme="light"] .layer-row.active {
-  background: rgba(211, 82, 48, 0.12);
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-row.active {
+  background: color-mix(in srgb, var(--ppt-accent) 12%, transparent);
   color: #22252a;
 }
-:root[data-theme="light"] .layer-row.group-mate {
-  border-color: rgba(211, 82, 48, 0.3);
-  background: rgba(211, 82, 48, 0.05);
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-row.group-mate {
+  border-color: color-mix(in srgb, var(--ppt-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--ppt-accent) 5%, transparent);
 }
-:root[data-theme="light"] .layer-type {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-type {
   background: #fff;
   color: #555b64;
 }
-:root[data-theme="light"] .layer-meta {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-meta {
   color: #7a8089;
 }
-:root[data-theme="light"] .layer-name-input {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-name-input {
   background: #fff;
   color: #22252a;
 }
-:root[data-theme="light"] .layer-lock {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-lock {
   color: #a9662c;
 }
-:root[data-theme="light"] .layer-row.active .layer-meta {
-  color: #a85a43;
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-row.active .layer-meta {
+  color: color-mix(in srgb, var(--ppt-accent) 72%, #22252a);
 }
-:root[data-theme="light"] .layer-action {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-action {
   color: #5b616a;
 }
-:root[data-theme="light"] .layer-action:hover:not(:disabled) {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-action:hover:not(:disabled) {
   color: #22252a;
   background: #dfe2e6;
 }
-:root[data-theme="light"] .layer-action.danger:hover:not(:disabled) {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-action.danger:hover:not(:disabled) {
   color: #fff;
   background: #b23b2e;
 }
-:root[data-theme="light"] .layer-hint {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-hint {
   border-color: #e2e5e9;
   color: #6f747d;
 }
-:root[data-theme="light"] .layer-show-all {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-show-all {
   color: #a9662c;
 }
-:root[data-theme="light"] .layer-show-all:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-show-all:hover {
   color: #22252a;
 }
-:root[data-theme="light"] .layer-empty-actions button {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-empty-actions button {
   border-color: #cfd3d9;
   background: #fff;
   color: #454a52;
 }
-:root[data-theme="light"] .layer-empty-actions button:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-empty-actions button:hover {
   border-color: var(--ppt-accent);
   background: var(--ppt-accent);
   color: #fff;
 }
-:root[data-theme="light"] .layer-search {
-  border-color: #cfd3d9;
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search {
+  border-color: var(--panel-border);
   background: #fff;
   color: #7a8089;
 }
-:root[data-theme="light"] .layer-search input {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search:focus-within {
+  color: #555b64;
+}
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search input {
   color: #24272c;
 }
-:root[data-theme="light"] .layer-search input::placeholder {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search input::placeholder {
   color: #8a8f98;
 }
-:root[data-theme="light"] .layer-search button:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search button:hover {
   background: #e9ebee;
   color: #22252a;
 }
-:root[data-theme="light"] .layer-clear-search {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-clear-search {
   border-color: #cfd3d9;
   background: #fff;
   color: #454a52;
 }
-:root[data-theme="light"] .layer-clear-search:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-clear-search:hover {
   border-color: var(--ppt-accent);
   background: var(--ppt-accent);
   color: #fff;
 }
-:root[data-theme="light"] .layer-menu {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu {
   border-color: #d9dce1;
   background: #fff;
   box-shadow: 0 14px 34px rgba(23, 25, 28, 0.18);
 }
-:root[data-theme="light"] .layer-menu button {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu button {
   color: #33373d;
 }
-:root[data-theme="light"] .layer-menu button:hover:not(:disabled),
-:root[data-theme="light"] .layer-menu button:focus-visible {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu button:hover:not(:disabled),
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu button:focus-visible {
   background: #eef0f3;
   color: #15171a;
 }
-:root[data-theme="light"] .layer-menu button svg {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu button svg {
   color: #6b7079;
 }
-:root[data-theme="light"] .layer-menu-separator {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu-separator {
   background: #e2e5e9;
 }
 :root[data-theme="light"] .inspector-warning {

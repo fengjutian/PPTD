@@ -120,7 +120,8 @@ interface ElementBase {
 - `src/core/commands/layer-visibility.test.ts`：改名规范化/清空/超长/锁定、批量隐藏/显示、未知目标、复制副本可见、设计域。
 - `src/store/layer-visibility.test.ts`：改名与批量隐藏各一个撤销项，重复隐藏不新增。
 - `src/features/pptx-export/export-pptx.test.ts`：隐藏对象不写入 slide XML、报告 warning、对象计数。
-- `src/features/editor/LayerList.test.tsx`、`LayerContextMenu.test.tsx`、`SlideScene.test.tsx`：隐藏行/眼睛、菜单项、缩略图过滤。
+- `src/features/editor/LayerList.test.tsx`、`LayerContextMenu.test.tsx`、`SlideScene.test.tsx`：隐藏行/眼睛、显示全部入口、菜单项、缩略图过滤。
+- `src/features/editor/InspectorPanel.test.tsx`：选中隐藏对象时的说明与“显示图层”。
 - 浏览器验证（headless Edge + CDP）：眼睛显示/隐藏命令、双击改名 Enter、F2/Esc、右键重命名、隐藏行样式与浅色主题截图。
 
 ## 7. 已知边界
@@ -139,4 +140,4 @@ interface ElementBase {
 - 导出：`buildPptx` 使用 `withoutHiddenElements`；预检 `hidden-not-exported`。
 - UI：`LayerList` 行内眼睛/名称编辑、`LayerContextMenu` 重命名与隐藏/显示、搜索匹配自定义名、样式与浅色主题。
 - 文档：ADR 0104、本任务、v0.1-plan。
-- 验证：`tsc`（app/node）、ESLint、Prettier、`npm run build` 通过；全量 `vitest run` 175 个文件 / 1387 个用例通过；headless Edge 验证显示/隐藏命令、双击/F2/右键改名、Esc 取消，以及深色/浅色截图。
+- 验证：`tsc`（app/node）、ESLint、Prettier、`npm run build` 通过；全量 `vitest run` 175 个文件 / 1389 个用例通过；headless Edge 验证显示/隐藏命令、双击/F2/右键改名、Esc 取消，以及深色/浅色截图。

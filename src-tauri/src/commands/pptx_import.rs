@@ -135,6 +135,7 @@ pub struct ImportedSlide {
     pub index: usize,
     pub title: Option<String>,
     pub body: Option<String>,
+    pub background: Option<String>,
     pub speaker_notes: String,
     pub elements: Vec<ImportedElement>,
     /// Indexes into `elements` for each imported selection group.
@@ -1050,30 +1051,90 @@ fn is_title_placeholder(key: &PlaceholderKey) -> bool {
     matches!(key.ph_type.as_str(), "title" | "ctrTitle")
 }
 
-fn parse_layout_frames(
+#[derive(Default)]
+struct LayoutInheritance {
+    frames: HashMap<PlaceholderKey, ImportedFrame>,
+    background: Option<Result<String, ()>>,
+    has_decorations: bool,
+}
+
+fn parse_background(xml: &str, theme: &Option<ImportedTheme>) -> Option<Result<String, ()>> {
+    let document = Document::parse(xml).ok()?;
+    let background = document
+        .root_element()
+        .descendants()
+        .find(|node| node.has_tag_name("bg"))?;
+    if let Some(properties) = child(background, "bgPr") {
+        return Some(parse_color(properties, theme).ok_or(()));
+    }
+    if let Some(reference) = child(background, "bgRef") {
+        let color = descendant(reference, "srgbClr")
+            .and_then(|node| node.attribute("val"))
+            .map(|value| format!("#{}", value.to_ascii_uppercase()))
+            .or_else(|| {
+                descendant(reference, "schemeClr")
+                    .and_then(|node| node.attribute("val"))
+                    .and_then(|name| theme_color(theme, name))
+            });
+        return Some(color.ok_or(()));
+    }
+    Some(Err(()))
+}
+
+fn parse_layout_inheritance(
     archive: &mut ZipArchive<File>,
     layout_target: &str,
-) -> HashMap<PlaceholderKey, ImportedFrame> {
-    let mut frames = HashMap::new();
+    theme: &Option<ImportedTheme>,
+) -> LayoutInheritance {
+    let mut inherited = LayoutInheritance::default();
     let Some(xml) = read_xml(archive, layout_target).ok().flatten() else {
-        return frames;
+        return inherited;
     };
-    collect_placeholder_frames(&xml, &mut frames);
+    collect_placeholder_frames(&xml, &mut inherited.frames);
     let layout_rels = read_relationships(archive, layout_target);
+    let layout_theme = theme_for_part(archive, layout_target, &layout_rels, theme);
+    inherited.background = parse_background(&xml, &layout_theme);
+    inherited.has_decorations = has_decorative_objects(&xml);
     if let Some(master) = layout_rels
         .values()
         .find(|rel| rel.kind.ends_with("/slideMaster"))
     {
         let target = resolve_target(layout_target, &master.target);
         if let Some(master_xml) = read_xml(archive, &target).ok().flatten() {
+            let master_rels = read_relationships(archive, &target);
+            let master_theme = theme_for_part(archive, &target, &master_rels, &layout_theme);
             let mut master_frames = HashMap::new();
             collect_placeholder_frames(&master_xml, &mut master_frames);
             for (key, frame) in master_frames {
-                frames.entry(key).or_insert(frame);
+                inherited.frames.entry(key).or_insert(frame);
             }
+            if inherited.background.is_none() {
+                inherited.background = parse_background(&master_xml, &master_theme);
+            }
+            inherited.has_decorations |= has_decorative_objects(&master_xml);
         }
     }
-    frames
+    inherited
+}
+
+fn has_decorative_objects(xml: &str) -> bool {
+    let Ok(document) = Document::parse(xml) else {
+        return false;
+    };
+    let Some(tree) = document
+        .root_element()
+        .descendants()
+        .find(|node| node.has_tag_name("spTree"))
+    else {
+        return false;
+    };
+    tree.children()
+        .filter(Node::is_element)
+        .any(|node| match node.tag_name().name() {
+            "sp" => placeholder(node).is_none(),
+            "pic" | "graphicFrame" | "cxnSp" | "grpSp" => true,
+            _ => false,
+        })
 }
 
 fn collect_placeholder_frames(xml: &str, frames: &mut HashMap<PlaceholderKey, ImportedFrame>) {
@@ -1112,18 +1173,33 @@ fn parse_slide(
     let rels = read_relationships(archive, part);
     let slide_theme = theme_for_part(archive, part, &rels, theme);
     let layout_rel = rels.values().find(|rel| rel.kind.ends_with("/slideLayout"));
-    let layout_frames = layout_rel
+    let layout = layout_rel
         .map(|rel| {
             let target = resolve_target(part, &rel.target);
-            parse_layout_frames(archive, &target)
+            parse_layout_inheritance(archive, &target, &slide_theme)
         })
         .unwrap_or_default();
+    let slide_background = parse_background(xml, &slide_theme).or(layout.background);
 
     let mut slide = ImportedSlide {
         index,
+        background: slide_background.and_then(|background| match background {
+            Ok(color) => Some(color),
+            Err(()) => {
+                report.unsupported(index, "background", "渐变、图片或效果背景未重建");
+                None
+            }
+        }),
         speaker_notes: String::new(),
         ..Default::default()
     };
+    if layout.has_decorations {
+        report.unsupported(
+            index,
+            "master-decoration",
+            "版式或母版装饰对象尚未重建，页面内容仍按原坐标导入",
+        );
+    }
     let tree = document
         .root_element()
         .descendants()
@@ -1147,7 +1223,7 @@ fn parse_slide(
         match node.tag_name().name() {
             "sp" => {
                 if let Some(element) =
-                    parse_shape(index, node, &layout_frames, &slide_theme, report)
+                    parse_shape(index, node, &layout.frames, &slide_theme, report)
                 {
                     push_element(&mut slide, element, report);
                 }
@@ -1167,7 +1243,7 @@ fn parse_slide(
                 }
             }
             "cxnSp" => {
-                if let Some(element) = parse_connector(node, &layout_frames, &slide_theme) {
+                if let Some(element) = parse_connector(node, &layout.frames, &slide_theme) {
                     push_element(&mut slide, element, report);
                 }
             }
@@ -1177,7 +1253,7 @@ fn parse_slide(
                     index,
                     part,
                     rels: &rels,
-                    layout_frames: &layout_frames,
+                    layout_frames: &layout.frames,
                     theme: &slide_theme,
                     session,
                 };
@@ -2183,6 +2259,49 @@ fn notes_for_slide(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_solid_and_theme_backgrounds_and_rejects_unrepresentable_backgrounds() {
+        let theme = parse_theme_xml(
+            r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:themeElements><a:clrScheme name="Base">
+                    <a:accent2><a:srgbClr val="224466"/></a:accent2>
+                </a:clrScheme></a:themeElements>
+            </a:theme>"#,
+        );
+        let solid = r#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="AABBCC"/></a:solidFill></p:bgPr></p:bg></p:cSld>
+        </p:sld>"#;
+        let reference = r#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="accent2"/></p:bgRef></p:bg></p:cSld>
+        </p:sld>"#;
+        let gradient = r#"<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+            xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <p:cSld><p:bg><p:bgPr><a:gradFill/></p:bgPr></p:bg></p:cSld>
+        </p:sld>"#;
+
+        assert_eq!(parse_background(solid, &theme), Some(Ok("#AABBCC".into())));
+        assert_eq!(
+            parse_background(reference, &theme),
+            Some(Ok("#224466".into()))
+        );
+        assert_eq!(parse_background(gradient, &theme), Some(Err(())));
+    }
+
+    #[test]
+    fn distinguishes_master_decorations_from_placeholders() {
+        let placeholder_only = r#"<p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+            <p:cSld><p:spTree><p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr></p:sp></p:spTree></p:cSld>
+        </p:sldLayout>"#;
+        let decorated = r#"<p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+            <p:cSld><p:spTree><p:pic/></p:spTree></p:cSld>
+        </p:sldMaster>"#;
+
+        assert!(!has_decorative_objects(placeholder_only));
+        assert!(has_decorative_objects(decorated));
+    }
 
     #[test]
     fn merges_a_partial_slide_theme_override_with_the_deck_theme() {

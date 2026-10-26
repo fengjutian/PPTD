@@ -145,6 +145,13 @@ describe("importedDeckToDocument", () => {
     expect(document.slides[0]!.content.title).toBe("第 1 页");
   });
 
+  it("keeps a resolved slide background instead of forcing the deck theme background", () => {
+    const source = deck();
+    source.slides[0]!.background = "#102030";
+    const document = importedDeckToDocument(source);
+    expect(document.slides[0]!.background).toBe("#102030");
+  });
+
   it("clamps impossible crop values instead of producing an invalid image", () => {
     const source = deck();
     source.slides[0]!.elements = source.slides[0]!.elements.map((element) =>

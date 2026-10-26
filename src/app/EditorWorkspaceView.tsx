@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Copy, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Layers, Plus, Presentation, Sparkles, Trash2 } from "lucide-react";
 
 import { InspectorPanel } from "../features/editor/InspectorPanel";
 
@@ -59,6 +59,7 @@ export function EditorWorkspaceView({ app }: { app: AppRuntime }) {
                   className={`panel-tab ${leftTab === "slides" ? "active" : ""}`}
                   onClick={() => setLeftTab("slides")}
                 >
+                  <Presentation aria-hidden="true" />
                   页面
                 </button>
                 <button
@@ -68,6 +69,7 @@ export function EditorWorkspaceView({ app }: { app: AppRuntime }) {
                   className={`panel-tab ${leftTab === "layers" ? "active" : ""}`}
                   onClick={() => setLeftTab("layers")}
                 >
+                  <Layers aria-hidden="true" />
                   图层
                 </button>
               </div>
