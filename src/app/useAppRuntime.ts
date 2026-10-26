@@ -185,6 +185,7 @@ import { rankStyleProfiles } from "../core/design/style-profile-ranking";
 import { defaultPresentationVisualGoal, type VisualReview } from "../services/visual-alignment";
 import {
   documentContentFingerprint,
+  qualityStageCanCommit,
   runDesignQualityStage,
   summarizeQualityIssues,
   type ReviewEvidence,
@@ -3185,6 +3186,7 @@ export function useAppRuntime() {
       // 视觉评审跑过但没达标（或整体失败）时，确定性质检通过也不代表稿子
       // 视觉上没问题。必须把报告留下，不能只闪一条状态就进入编辑器。
       const visualBelowTarget = stage.visualPassed === false;
+      const qualityAccepted = qualityStageCanCommit(stage);
       const qualityReport = {
         templateName: deckName,
         ...(templateTarget === undefined ? {} : { templateTargetName: templateTarget.name }),
@@ -3217,8 +3219,8 @@ export function useAppRuntime() {
       // 成功稿也保留报告。Contact Sheet、整册评分和缓存命中是可审计证据，
       // 不能因为通过质量门就从界面中消失。
       setDesignQualityReport(qualityReport);
-      setDesignQualityReportOpen(!stage.passed || visualCoverageIncomplete || visualBelowTarget);
-      if (stage.passed && !visualCoverageIncomplete && !visualBelowTarget) {
+      setDesignQualityReportOpen(!qualityAccepted);
+      if (qualityAccepted) {
         // The quality gate is a commit boundary: until every required check
         // passes, the generated candidate remains isolated from project state.
         replaceDocument(finalDocument, "both");

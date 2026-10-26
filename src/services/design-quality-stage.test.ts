@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { applyCommand, type AiSlideDesign } from "../core/commands/commands";
 import { createDocument, type PresentationDocument } from "../core/document-model";
-import { runDesignQualityStage, summarizeQualityIssues } from "./design-quality-stage";
+import {
+  qualityStageCanCommit,
+  runDesignQualityStage,
+  summarizeQualityIssues,
+  type DesignQualityStageResult,
+} from "./design-quality-stage";
 import type { TemplateReviewTarget } from "./template-review-target";
 import { applyTemplateToGoal } from "./template-review-target";
 import type { VisualReview } from "./visual-alignment";
@@ -47,6 +52,30 @@ const passingReview: VisualReview = {
     },
   ],
 };
+
+const commitCandidate = (overrides: Partial<DesignQualityStageResult> = {}): DesignQualityStageResult => ({
+  designs: [design()],
+  document: buildDocument([design()]),
+  notes: [],
+  issues: [],
+  passed: true,
+  degraded: false,
+  ...overrides,
+});
+
+describe("quality commit gate", () => {
+  it("accepts deterministic-only success when visual review did not run", () => {
+    expect(qualityStageCanCommit(commitCandidate())).toBe(true);
+  });
+
+  it("rejects deterministic failures, incomplete visual coverage, and a failed visual target", () => {
+    expect(qualityStageCanCommit(commitCandidate({ passed: false }))).toBe(false);
+    expect(
+      qualityStageCanCommit(commitCandidate({ visualReviewCoverage: { reviewed: 3, total: 6 }, visualPassed: true })),
+    ).toBe(false);
+    expect(qualityStageCanCommit(commitCandidate({ visualPassed: false }))).toBe(false);
+  });
+});
 
 const visionPort = (review: () => Promise<VisualReview>): VisionReviewPort => ({
   available: true,

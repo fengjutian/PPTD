@@ -87,7 +87,7 @@ export interface DesignQualityStageResult {
   notes: string[];
   /** 未通过质量门的具体问题。 */
   issues: PresentationQualityIssue[];
-  /** 质量门是否通过。通过与否都不影响文档产出。 */
+  /** 确定性质量门是否通过；调用方只可提交满足 `qualityStageCanCommit` 的候选。 */
   passed: boolean;
   /** 是否发生过降级（视觉评审不可用、底图无法渲染等）。 */
   degraded: boolean;
@@ -126,6 +126,16 @@ export interface DesignQualityStageResult {
   deckReview?: VisualReview;
   /** 最终采用轮次中逐页评审的请求与复用数量。 */
   reviewReuse?: { reviewed: number; reused: number };
+}
+
+/** The single commit rule shared by generation flows and regression tests. */
+export function qualityStageCanCommit(result: DesignQualityStageResult): boolean {
+  const coverage = result.visualReviewCoverage;
+  return (
+    result.passed &&
+    result.visualPassed !== false &&
+    (coverage === undefined || coverage.reviewed >= coverage.total)
+  );
 }
 
 /** 取消不是失败：取消必须一路向上抛出，不能被降级逻辑吞掉。 */
