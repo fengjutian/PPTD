@@ -120,6 +120,124 @@ export const processRail: LayoutRecipe = {
     const contentHeight = chrome.contentBottom - contentTop;
     if (contentHeight < 0.25) return conflict("process", "流程页没有足够的内容区");
 
+    // A landscape page has room for the steps side by side. The vertical rail
+    // used to put four short steps in the left fifth of a 16:9 page and leave
+    // the rest blank: it read as a list squeezed into a corner. Tall pages keep
+    // the vertical rail, where a row of four columns would be unreadable.
+    if (page.width / page.height >= 1.3) {
+      const columns = block.items.length;
+      const gap = 0.045;
+      const columnWidth = (chrome.content.width - gap * (columns - 1)) / columns;
+      const diameter = 0.26;
+      // The circle is a length (inches) while everything else here is a share
+      // of the page height. Converting once keeps the node on the rail and the
+      // labels under it instead of a third of a page away.
+      const diameterNorm = diameter / pageHeightIn;
+      const labelGap = 0.03;
+      const textGap = 0.008;
+      const labelSizes = block.items.map((item) =>
+        fittedFontSize(
+          item.label,
+          frameFromNormalized({ x: 0, y: 0, width: columnWidth, height: 0.12 }, page),
+          LABEL_SIZE_PT,
+          14,
+          headingFamily,
+          lineHeight,
+        ),
+      );
+      const labelHeights = block.items.map((item, index) =>
+        pointsToNormalized(
+          textHeightPt(item.label, columnWidth * pageWidthIn * 72, labelSizes[index]!, headingFamily, lineHeight),
+          page.height,
+        ),
+      );
+      const textHeightsAt = (size: number) =>
+        block.items.map((item) =>
+          pointsToNormalized(
+            textHeightPt(item.text, columnWidth * pageWidthIn * 72, size, bodyFamily, lineHeight),
+            page.height,
+          ),
+        );
+      let textSize = Math.min(TEXT_SIZE_PT, 15);
+      let textHeights = textHeightsAt(textSize);
+      const blockHeightAt = () =>
+        diameterNorm +
+        labelGap +
+        Math.max(...labelHeights) +
+        textGap +
+        Math.max(...textHeights);
+      while (textSize > MIN_TEXT_SIZE_PT && blockHeightAt() > contentHeight) {
+        textSize -= 1;
+        textHeights = textHeightsAt(textSize);
+      }
+      const blockHeight = blockHeightAt();
+      if (blockHeight > contentHeight) {
+        return conflict("process", "流程步骤在内容区里放不下");
+      }
+      const groupTop = contentTop + (contentHeight - blockHeight) / 2;
+      const railY = groupTop + diameterNorm / 2;
+      elements.push(
+        rectElement(
+          frameFromNormalized(
+            { x: chrome.content.x, y: railY - 0.003, width: chrome.content.width, height: 0.006 },
+            page,
+          ),
+          colors.accent,
+        ),
+      );
+      block.items.forEach((item, index) => {
+        const x = chrome.content.x + index * (columnWidth + gap);
+        const node = circleFrame(x * pageWidthIn, railY * pageHeightIn - diameter / 2, diameter);
+        elements.push(ellipseElement(node, colors.accent));
+        elements.push(
+          textElement(String(index + 1).padStart(2, "0"), node, 11, "#FFFFFF", true, "center", headingFamily, {
+            lineHeight: 1,
+          }),
+        );
+        const labelTop = railY + diameterNorm / 2 + labelGap;
+        elements.push(
+          textElement(
+            item.label,
+            frameFromNormalized(
+              { x, y: labelTop, width: columnWidth, height: Math.max(0.02, labelHeights[index]!) + 0.004 },
+              page,
+            ),
+            labelSizes[index]!,
+            colors.title,
+            true,
+            "left",
+            headingFamily,
+            { lineHeight },
+          ),
+        );
+        elements.push(
+          textElement(
+            item.text,
+            frameFromNormalized(
+              {
+                x,
+                y: labelTop + labelHeights[index]! + textGap,
+                width: columnWidth,
+                height: Math.max(0.02, textHeights[index]!),
+              },
+              page,
+            ),
+            textSize,
+            colors.body,
+            false,
+            "left",
+            bodyFamily,
+            { contentRef: "decorative", lineHeight },
+          ),
+        );
+      });
+      return {
+        elements,
+        consumed: { title: true, body: true, items: 0, blockIds: [block.id] },
+        conflicts: [],
+      };
+    }
+
     let textSize = TEXT_SIZE_PT;
     const labelSizes = block.items.map((item) =>
       fittedFontSize(

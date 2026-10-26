@@ -27,7 +27,7 @@ describe("PPTX import dialogs", () => {
         onExtractTemplate={() => undefined}
       />,
     );
-    expect(markup).toContain("导入内容（Level A）");
+    expect(markup).toContain("导入可编辑内容");
     expect(markup).toContain("仅提取模板主题");
     expect(markup).toContain("只读取主题色");
     expect(markup).not.toContain("Level B");

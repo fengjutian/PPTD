@@ -783,7 +783,10 @@ fn read_theme(archive: &mut ZipArchive<File>) -> Option<ImportedTheme> {
 
 /// Theme override parts are intentionally partial. Missing fonts or colour
 /// slots inherit from the deck theme instead of resetting to editor defaults.
-fn merge_theme(base: &Option<ImportedTheme>, override_theme: ImportedTheme) -> Option<ImportedTheme> {
+fn merge_theme(
+    base: &Option<ImportedTheme>,
+    override_theme: ImportedTheme,
+) -> Option<ImportedTheme> {
     let mut merged = base.clone().unwrap_or_default();
     if override_theme.major_font.is_some() {
         merged.major_font = override_theme.major_font;
@@ -792,7 +795,11 @@ fn merge_theme(base: &Option<ImportedTheme>, override_theme: ImportedTheme) -> O
         merged.minor_font = override_theme.minor_font;
     }
     for color in override_theme.colors {
-        if let Some(existing) = merged.colors.iter_mut().find(|item| item.name == color.name) {
+        if let Some(existing) = merged
+            .colors
+            .iter_mut()
+            .find(|item| item.name == color.name)
+        {
             *existing = color;
         } else {
             merged.colors.push(color);
@@ -1139,7 +1146,9 @@ fn parse_slide(
         }
         match node.tag_name().name() {
             "sp" => {
-                if let Some(element) = parse_shape(index, node, &layout_frames, &slide_theme, report) {
+                if let Some(element) =
+                    parse_shape(index, node, &layout_frames, &slide_theme, report)
+                {
                     push_element(&mut slide, element, report);
                 }
             }
@@ -2174,6 +2183,48 @@ fn notes_for_slide(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn merges_a_partial_slide_theme_override_with_the_deck_theme() {
+        let base = parse_theme_xml(
+            r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:themeElements>
+                    <a:clrScheme name="Base">
+                        <a:dk1><a:srgbClr val="111111"/></a:dk1>
+                        <a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
+                        <a:accent1><a:srgbClr val="3366CC"/></a:accent1>
+                    </a:clrScheme>
+                    <a:fontScheme name="Base">
+                        <a:majorFont><a:latin typeface="Base Display"/></a:majorFont>
+                        <a:minorFont><a:latin typeface="Base Text"/></a:minorFont>
+                    </a:fontScheme>
+                </a:themeElements>
+            </a:theme>"#,
+        );
+        let override_theme = parse_theme_xml(
+            r#"<a:themeOverride xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:clrScheme name="Override">
+                    <a:accent1><a:srgbClr val="EE3344"/></a:accent1>
+                </a:clrScheme>
+                <a:fontScheme name="Override">
+                    <a:minorFont><a:latin typeface="Override Text"/></a:minorFont>
+                </a:fontScheme>
+            </a:themeOverride>"#,
+        )
+        .expect("override theme");
+
+        let merged = merge_theme(&base, override_theme).expect("merged theme");
+        assert_eq!(
+            theme_color(&Some(merged.clone()), "accent1").as_deref(),
+            Some("#EE3344")
+        );
+        assert_eq!(
+            theme_color(&Some(merged.clone()), "tx1").as_deref(),
+            Some("#111111")
+        );
+        assert_eq!(merged.major_font.as_deref(), Some("Base Display"));
+        assert_eq!(merged.minor_font.as_deref(), Some("Override Text"));
+    }
 
     #[test]
     fn reads_the_theme_referenced_by_the_slide_master() {

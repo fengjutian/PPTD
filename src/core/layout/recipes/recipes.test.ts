@@ -754,7 +754,7 @@ describe("process-rail recipe", () => {
     status: "approved",
   };
 
-  it("draws four steps as one vertical rail with editable bindings", () => {
+  it("draws four steps as one rail across a landscape page", () => {
     const ctx = context(processContent, {
       facts: facts({ itemCount: 0, hasProcess: true, hasRowBlock: true, layout: "cards" }),
     });
@@ -771,6 +771,32 @@ describe("process-rail recipe", () => {
     );
     const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
     expect(nodes).toHaveLength(4);
+    // Side by side on one line and spread across the content width: four short
+    // steps in the left fifth of a 16:9 page read as a list in a corner.
+    const centers = nodes.map((node) => node.frame.y + node.frame.height / 2);
+    expect(Math.max(...centers) - Math.min(...centers)).toBeLessThan(page.height * 0.01);
+    const lefts = nodes.map((node) => node.frame.x);
+    expect(Math.max(...lefts) - Math.min(...lefts)).toBeGreaterThan(page.width * 0.55);
+  });
+
+  it("keeps the vertical rail on a page that is not landscape", () => {
+    const tall = { width: inches(7.5), height: inches(7.5) };
+    const ctx = context(processContent, {
+      facts: facts({ itemCount: 0, hasProcess: true, hasRowBlock: true, layout: "cards" }),
+    });
+    ctx.frame.page = tall;
+    ctx.frame.title = { x: inches(0.6), y: inches(0.35), width: inches(6.3), height: inches(0.7) };
+    ctx.frame.content = { x: inches(0.6), y: inches(1.4), width: inches(6.3), height: inches(5.3) };
+    ctx.frame.safe = { x: 0.08, y: 0.05, width: 0.84, height: 0.9 };
+    ctx.chrome = undefined;
+    const result = plan(processRail, ctx);
+    const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(4);
+    // Stacked: one column, four different heights.
+    const centers = nodes.map((node) => node.frame.y + node.frame.height / 2);
+    expect(Math.max(...centers) - Math.min(...centers)).toBeGreaterThan(tall.height * 0.15);
+    const lefts = nodes.map((node) => node.frame.x);
+    expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThan(tall.width * 0.05);
   });
 
   it("refuses a seventh step instead of compressing it", () => {

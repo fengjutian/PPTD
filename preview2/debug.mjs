@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
+﻿import { spawn } from "node:child_process";
 
 const EDGE = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const PORT = 9229;
 const URL = "http://localhost:5199/preview2/layer3.html";
-const PROFILE = "D:\\github\\PPTD\\.tmp\\edge-layer3-debug";
+const PROFILE = "C:\\Users\\Charles.feng\\AppData\\Local\\Temp\\pptd-edge-layer3-debug";
 
 const child = spawn(
   EDGE,
@@ -69,3 +69,4 @@ socket.close();
 child.kill();
 console.log("done");
 process.exit(0);
+

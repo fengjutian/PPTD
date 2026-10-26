@@ -1,10 +1,10 @@
-import { spawn } from "node:child_process";
+﻿import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 
 const EDGE = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const PORT = 9228;
 const URL = "http://localhost:5199/preview2/layer3.html";
-const PROFILE = "D:\\github\\PPTD\\.tmp\\edge-layer3";
+const PROFILE = "C:\\Users\\Charles.feng\\AppData\\Local\\Temp\\pptd-edge-layer3";
 const OUT = "D:\\github\\PPTD\\preview2";
 
 const child = spawn(
@@ -70,7 +70,7 @@ async function shot(name) {
 }
 async function setInput(value) {
   await evaluate(`(() => {
-    const input = document.querySelector('input[aria-label="图层名称"]');
+    const input = document.querySelector('input[aria-label="鍥惧眰鍚嶇О"]');
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
     setter.call(input, ${JSON.stringify(value)});
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -95,18 +95,18 @@ await shot("layer3-dark");
 console.log(
   "hidden row:",
   await evaluate(
-    "(() => { const row = document.querySelector('[data-layer-id=\"i1\"]'); return { className: row.className, name: row.querySelector('.layer-name')?.textContent, eye: row.querySelector('[aria-label$=\"图层\"]')?.getAttribute('aria-label'), pressed: row.querySelector('[aria-label$=\"图层\"]')?.getAttribute('aria-pressed') }; })()",
+    "(() => { const row = document.querySelector('[data-layer-id=\"i1\"]'); return { className: row.className, name: row.querySelector('.layer-name')?.textContent, eye: row.querySelector('[aria-label$=\"鍥惧眰\"]')?.getAttribute('aria-label'), pressed: row.querySelector('[aria-label$=\"鍥惧眰\"]')?.getAttribute('aria-pressed') }; })()",
   ),
 );
 
 // Show the hidden picture with its row eye.
-await evaluate("document.querySelector('[data-layer-id=\"i1\"] [aria-label=\"显示图层\"]').click()");
+await evaluate("document.querySelector('[data-layer-id=\"i1\"] [aria-label=\"鏄剧ず鍥惧眰\"]').click()");
 await delay(150);
 console.log("show i1:", await evaluate("window.__commands"));
 
 // Hide a visible layer with its row eye.
 await evaluate("window.__commands = []");
-await evaluate("document.querySelector('[data-layer-id=\"t3\"] [aria-label=\"隐藏图层\"]').click()");
+await evaluate("document.querySelector('[data-layer-id=\"t3\"] [aria-label=\"闅愯棌鍥惧眰\"]').click()");
 await delay(150);
 console.log("hide t3:", await evaluate("window.__commands"));
 
@@ -119,13 +119,13 @@ await delay(200);
 console.log(
   "editing:",
   await evaluate(
-    "({ input: document.querySelector('input[aria-label=\"图层名称\"]')?.value ?? null, placeholder: document.querySelector('input[aria-label=\"图层名称\"]')?.placeholder ?? null })",
+    "({ input: document.querySelector('input[aria-label=\"鍥惧眰鍚嶇О\"]')?.value ?? null, placeholder: document.querySelector('input[aria-label=\"鍥惧眰鍚嶇О\"]')?.placeholder ?? null })",
   ),
 );
-await setInput("  右侧   光轨图  ");
+await setInput("  鍙充晶   鍏夎建鍥? ");
 await shot("layer3-rename");
 await evaluate(
-  "document.querySelector('input[aria-label=\"图层名称\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))",
+  "document.querySelector('input[aria-label=\"鍥惧眰鍚嶇О\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))",
 );
 await delay(200);
 console.log("rename command:", await evaluate("window.__commands"));
@@ -137,8 +137,8 @@ await evaluate(
   "document.querySelector('[data-layer-id=\"t3\"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true }))",
 );
 await delay(200);
-const hadInput = await evaluate("Boolean(document.querySelector('input[aria-label=\"图层名称\"]'))");
-await evaluate("document.querySelector('input[aria-label=\"图层名称\"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))");
+const hadInput = await evaluate("Boolean(document.querySelector('input[aria-label=\"鍥惧眰鍚嶇О\"]'))");
+await evaluate("document.querySelector('input[aria-label=\"鍥惧眰鍚嶇О\"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))");
 await delay(150);
 console.log("f2/escape:", { hadInput, commands: await evaluate("window.__commands") });
 
@@ -152,14 +152,14 @@ console.log(
   await evaluate("[...document.querySelectorAll('.layer-menu [role=\"menuitem\"]')].map((item) => item.textContent)"),
 );
 await evaluate(
-  "[...document.querySelectorAll('.layer-menu [role=\"menuitem\"]')].find((item) => item.textContent.includes('重命名')).click()",
+  "[...document.querySelectorAll('.layer-menu [role=\"menuitem\"]')].find((item) => item.textContent.includes('閲嶅懡鍚?)).click()",
 );
 await delay(250);
 console.log(
   "menu rename input:",
-  await evaluate("Boolean(document.querySelector('input[aria-label=\"图层名称\"]'))"),
+  await evaluate("Boolean(document.querySelector('input[aria-label=\"鍥惧眰鍚嶇О\"]'))"),
 );
-await evaluate("document.querySelector('input[aria-label=\"图层名称\"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))");
+await evaluate("document.querySelector('input[aria-label=\"鍥惧眰鍚嶇О\"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))");
 
 // Light theme screenshot of the visibility state.
 await evaluate("document.documentElement.dataset.theme = 'light'");
@@ -171,3 +171,4 @@ child.kill();
 clearTimeout(exitTimer);
 console.log("done");
 process.exit(0);
+
