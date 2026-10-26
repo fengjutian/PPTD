@@ -91,6 +91,79 @@ export const MEASURE_BAND: Readonly<Record<LineMeasure["script"], { min: number;
   latin: { min: 40, max: 85 },
 };
 
+export interface TextFrameFitOptions {
+  /** Frame width in the same unit as `fontSize`. */
+  readonly width: number;
+  /** Frame height in the same unit as `fontSize`. */
+  readonly height: number;
+  /** The size the layout asked for. */
+  readonly fontSize: number;
+  /** Line height as a multiple of the font size. */
+  readonly lineHeight: number;
+  /** The font the measurement uses. */
+  readonly fontFamily?: string;
+  /** The smallest share of the requested size a fit may fall back to. */
+  readonly minimumScale?: number;
+}
+
+export interface TextFrameFit {
+  /** The size that keeps every line of the block inside the frame. */
+  readonly fontSize: number;
+  /** The lines the text breaks into at that size. */
+  readonly lines: readonly string[];
+  /** True when the text had to be set smaller than requested. */
+  readonly shrunk: boolean;
+  /** True when even the smallest size leaves lines that do not fit the height. */
+  readonly overflow: boolean;
+}
+
+/** How far a fit may shrink before it reports a conflict instead of shrinking. */
+const MINIMUM_FIT_SCALE = 0.55;
+/** The multiplicative step of the fit search; small enough to stay under a point. */
+const FIT_STEP = 0.97;
+
+/**
+ * The largest size at or below the requested one that keeps a whole block of
+ * text inside its frame.
+ *
+ * The layout engine, the preview renderer and the exporter have to agree on the
+ * lines a paragraph breaks into, or a frame the layout measured as one line is
+ * painted as two and the second line is lost. Both sides therefore break with
+ * this module's measurer, and this function decides what happens when a frame
+ * really is too small: the text is set smaller — which is what the exported
+ * `normAutofit` does — instead of dropping the words that do not fit.
+ *
+ * Units are irrelevant as long as `width`, `height` and `fontSize` share them:
+ * the line breaking only depends on the ratio between the frame and the type.
+ */
+export function fitTextToFrame(text: string, options: TextFrameFitOptions): TextFrameFit {
+  const lineHeight = Math.max(0.1, options.lineHeight);
+  const breakAt = (fontSize: number): string[] =>
+    breakIntoLines(text, {
+      widthEm: Math.max(1, options.width / Math.max(0.01, fontSize)),
+      widthOf: (character) => measureTextWidthEm(character, options.fontFamily),
+    });
+  const linesAt = (fontSize: number) => {
+    const lineBox = fontSize * lineHeight;
+    // A frame rounded to whole EMU can be a hair shorter than the lines it was
+    // measured for; that rounding must not read as an overflow. Two percent of
+    // a line is the same slack the gate allows when it reports an overflow.
+    return Math.max(1, Math.floor((options.height + lineBox * 0.02) / lineBox));
+  };
+  const requested = Math.max(0.01, options.fontSize);
+  let fontSize = requested;
+  let lines = breakAt(fontSize);
+  if (lines.length <= linesAt(fontSize)) return { fontSize, lines, shrunk: false, overflow: false };
+
+  const floor = Math.max(0.01, requested * (options.minimumScale ?? MINIMUM_FIT_SCALE));
+  while (fontSize > floor) {
+    fontSize = Math.max(floor, fontSize * FIT_STEP);
+    lines = breakAt(fontSize);
+    if (lines.length <= linesAt(fontSize)) return { fontSize, lines, shrunk: true, overflow: false };
+  }
+  return { fontSize, lines, shrunk: true, overflow: lines.length > linesAt(fontSize) };
+}
+
 /**
  * Whether the text is taller than the frame it sits in.
  *

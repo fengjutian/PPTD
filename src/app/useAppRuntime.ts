@@ -41,6 +41,7 @@ import {
   type ThemeDirectionAudit,
 } from "../core/design/theme-direction";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
+import { auditSlideLayout } from "../core/layout/layout-audit";
 
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
 import { resolveEditorShortcut } from "../features/editor/keyboard-shortcuts";
@@ -3450,6 +3451,11 @@ export function useAppRuntime() {
         if (!quality.passed) {
           throw new Error(`VARIANT_QUALITY_GATE_FAILED:${quality.issues.map((issue) => issue.issue).join(",")}`);
         }
+        // The gate is a fixed list of checks; the card still has to say whether
+        // the page it is about to show has a text that lost a line, an object
+        // off the page or two texts on top of each other. A hard-coded zero made
+        // that line claim "排版检查通过" for pages it had never measured.
+        const layoutAudit = auditSlideLayout(candidate);
         pending.push({
           id: crypto.randomUUID(),
           presetId: preset.id,
@@ -3460,7 +3466,7 @@ export function useAppRuntime() {
           name: `${variantStyle.name} · ${variantConcept.name}`,
           description: variantConcept.idea,
           reason: `${variantConcept.rationale}；${styleChoice?.reason ?? choice.reason}`,
-          issueCount: 0,
+          issueCount: layoutAudit.issues.length,
         });
       };
       const worker = async () => {
@@ -3743,6 +3749,9 @@ export function useAppRuntime() {
     setThemeDrawerOpen(showDetails);
   };
 
+  const saveShortcutRef = useRef({ handleSave, handleSaveAs });
+  saveShortcutRef.current = { handleSave, handleSaveAs };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // The format painter is a mode, so Escape leaves it from anywhere.
@@ -3766,7 +3775,8 @@ export function useAppRuntime() {
       if (!shortcut) return;
       if (shortcut === "save-project" || shortcut === "save-project-as") {
         event.preventDefault();
-        void (shortcut === "save-project" ? handleSave() : handleSaveAs());
+        const save = saveShortcutRef.current;
+        void (shortcut === "save-project" ? save.handleSave() : save.handleSaveAs());
         return;
       }
       if (shortcut === "undo") {
@@ -3904,8 +3914,6 @@ export function useAppRuntime() {
     pasteSelection,
     editorSurface,
     findOpen,
-    handleSave,
-    handleSaveAs,
     openFindReplace,
     selectElements,
     redo,

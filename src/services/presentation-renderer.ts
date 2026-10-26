@@ -7,6 +7,7 @@ import {
   tableColumnAlignsRight,
   textFragments,
   type ChartElement,
+  type IconElement,
   type LineElement,
   type PresentationDocument,
   type ResolvedChartData,
@@ -14,11 +15,13 @@ import {
   type TableElement,
   type TextElement,
 } from "../core/document-model";
+import { BUILTIN_ICONS } from "../core/document-model/icons";
 import { breakAtoms } from "../core/rendering/cjk-linebreak";
 import { chartPlotArea, chartValueY, niceChartDomain } from "../core/rendering/chart-geometry";
 import { isLargeText } from "../core/rendering/contrast";
 import { gradientLinePoints, rgba as gradientRgba } from "../core/design/shape-gradient";
 import { cropGeometry } from "../core/rendering/image-crop";
+import { fitTextToFrame, measureTextWidthEm } from "../core/rendering/text-fit";
 import { resolveImageUrl } from "./image-url-service";
 
 export interface PresentationRender {
@@ -123,6 +126,7 @@ async function renderSlide(
     }
     if (element.type === "line") drawLine(context, element, w, h, sx);
     if (element.type === "text") drawText(context, element, w, h, sx);
+    if (element.type === "icon") drawIcon(context, element, w, h);
     if (element.type === "chart") drawChart(context, element, slide, w, h);
     if (element.type === "table") drawTable(context, element, slide, w, h, sx);
     context.restore();
@@ -702,6 +706,16 @@ function splitStyledParagraphs(characters: StyledCharacter[]): StyledCharacter[]
  * The review sees a picture of the page, so a text with emphasised words has
  * to be drawn here as well. The fragments come from the same runs the export
  * reads, so the reviewer judges the emphasis that will be in the file.
+ *
+ * Two rules keep the picture honest:
+ *
+ * - The line breaking uses the measurer the layout engine used, not the canvas
+ *   metrics of this particular font size. A frame the layout measured as one
+ *   line must not be painted as two: the second line used to be dropped, which
+ *   silently cut the last characters of a sentence out of the preview.
+ * - A block that still does not fit is set smaller, the way the exported
+ *   `normAutofit` shrinks it, instead of being truncated at the frame edge. A
+ *   page has to lose neither words nor their parity with the file.
  */
 function drawText(
   context: CanvasRenderingContext2D,
@@ -710,32 +724,43 @@ function drawText(
   height: number,
   scale: number,
 ): void {
-  const fontSize = (element.style.fontSizePt * scale * 914_400) / 72;
+  const nominal = (element.style.fontSizePt * scale * 914_400) / 72;
+  const lineHeightRatio = element.style.lineHeight ?? 1.25;
+  const fit = fitTextToFrame(element.text, {
+    width,
+    height,
+    fontSize: nominal,
+    lineHeight: lineHeightRatio,
+    fontFamily: element.style.fontFamily,
+  });
+  const fontSize = fit.fontSize;
   const fontFor = (bold: boolean) => `${bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
   const characters = styledCharacters(element);
-  // The same line breaker the layout engine uses, so the picture the reviewer
-  // looks at breaks exactly where the quality gate counted the lines.
+  // Widths in em and the limit in em: the same numbers the fit above used, so
+  // the two cannot disagree about where a line ends.
+  const widthEm = Math.max(1, width / fontSize);
   const lines: StyledCharacter[][] = [];
   for (const paragraph of splitStyledParagraphs(characters)) {
-    const atoms = paragraph.map((styled) => {
-      context.font = fontFor(styled.bold);
-      return { value: styled, text: styled.character, width: context.measureText(styled.character).width };
-    });
+    const atoms = paragraph.map((styled) => ({
+      value: styled,
+      text: styled.character,
+      width: measureTextWidthEm(styled.character, element.style.fontFamily),
+    }));
     if (atoms.length === 0) continue;
-    for (const line of breakAtoms(atoms, width)) lines.push(line.map((atom) => atom.value));
+    for (const line of breakAtoms(atoms, widthEm)) lines.push(line.map((atom) => atom.value));
   }
   // The export honours an explicit leading; the review picture must use the
   // same one, or a page that fits in the file looks like it overflows here.
-  const lineHeight = fontSize * (element.style.lineHeight ?? 1.25);
+  const lineHeight = fontSize * lineHeightRatio;
+  // The same two percent of slack the fit used, so the line it counted as
+  // fitting is actually painted.
+  const maxLines = Math.max(1, Math.floor((height + lineHeight * 0.02) / lineHeight));
   context.textBaseline = "top";
   context.textAlign = "left";
-  lines.slice(0, Math.max(1, Math.floor(height / lineHeight))).forEach((lineCharacters, lineIndex) => {
-    const measure = (charactersOnLine: StyledCharacter[]) =>
-      charactersOnLine.reduce((sum, styled) => {
-        context.font = fontFor(styled.bold);
-        return sum + context.measureText(styled.character).width;
-      }, 0);
-    const total = measure(lineCharacters);
+  lines.slice(0, maxLines).forEach((lineCharacters, lineIndex) => {
+    const total =
+      lineCharacters.reduce((sum, styled) => sum + measureTextWidthEm(styled.character, element.style.fontFamily), 0) *
+      fontSize;
     let x =
       element.style.align === "center" ? (width - total) / 2 : element.style.align === "right" ? width - total : 0;
     const y = lineIndex * lineHeight;
@@ -758,6 +783,35 @@ function drawText(
     }
     flush();
   });
+}
+
+/**
+ * Draws a built-in icon.
+ *
+ * Icons are their own element type, and the export writes them as an SVG
+ * picture. The preview used to skip the type entirely, so a numbered badge that
+ * the builder had replaced with an icon came out as an empty disc — the file had
+ * a glyph, the page the user was looking at had none.
+ */
+function drawIcon(context: CanvasRenderingContext2D, element: IconElement, width: number, height: number): void {
+  const definition = BUILTIN_ICONS[element.name];
+  if (!definition) return;
+  context.save();
+  // The icon is drawn on a 24×24 grid and stretched over its frame.
+  context.scale(width / 24, height / 24);
+  context.strokeStyle = element.style.color;
+  context.lineWidth = element.style.strokeWidth ?? 2;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const path of definition.paths) {
+    context.stroke(new Path2D(path));
+  }
+  for (const circle of definition.circles ?? []) {
+    context.beginPath();
+    context.arc(circle.cx, circle.cy, circle.r, 0, Math.PI * 2);
+    context.stroke();
+  }
+  context.restore();
 }
 
 /**
