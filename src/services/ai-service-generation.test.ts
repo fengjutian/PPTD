@@ -6,6 +6,7 @@ import {
   briefsFromDraft,
   cancelAiGeneration,
   describeAiError,
+  designTemplateForPrompt,
   extractSourceFacts,
   generatePresentationDraft,
   generatePresentationDesign,
@@ -21,6 +22,38 @@ import {
 } from "./ai-service";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: () => false }));
+
+it("adds explicit layout capabilities before template data is sent to AI", () => {
+  const template = designTemplateForPrompt({
+    slideWidthEmu: null,
+    slideHeightEmu: null,
+    themeColors: [],
+    majorFont: null,
+    minorFont: null,
+    defaultBackgroundColor: null,
+    slides: [],
+    layouts: [
+      {
+        index: 0,
+        name: "双栏图文",
+        backgroundColor: null,
+        regions: [
+          { role: "title", x: 0, y: 0, width: 1, height: 0.1 },
+          { role: "body", x: 0, y: 0.2, width: 0.45, height: 0.7 },
+          { role: "body", x: 0.55, y: 0.2, width: 0.45, height: 0.7 },
+          { role: "image", x: 0.55, y: 0.2, width: 0.45, height: 0.7 },
+        ],
+      },
+    ],
+  });
+  expect(template.layouts[0]?.capabilities).toEqual({
+    hasTitle: true,
+    hasBody: true,
+    hasImage: true,
+    columns: 2,
+    free: false,
+  });
+});
 
 describe("多页草稿的分批编排", () => {
   const outlineFor = (count: number) => ({

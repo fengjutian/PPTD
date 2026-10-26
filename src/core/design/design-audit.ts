@@ -9,8 +9,9 @@ export interface DesignAuditReport {
     theme?: string;
     template?: string;
   };
-  components: Record<"text" | "image" | "shape" | "table" | "chart" | "group", number>;
+  components: Record<"text" | "image" | "shape" | "line" | "icon" | "table" | "chart" | "group", number>;
   layouts: Array<{ name: string; capabilities?: SlideLayoutCapabilities; usedBySlides: number }>;
+  rhythm: { uniqueLayouts: number; longestRepeat: number; repeatedRuns: number };
   recipes: { identified: string[]; coverage: number; note: string };
   degradations: Array<{ code: string; count: number; message: string }>;
 }
@@ -22,9 +23,10 @@ export interface DesignAuditInput {
 }
 
 export function buildDesignAudit(document: PresentationDocument, input: DesignAuditInput = {}): DesignAuditReport {
-  const components = { text: 0, image: 0, shape: 0, table: 0, chart: 0, group: 0 };
+  const components = { text: 0, image: 0, shape: 0, line: 0, icon: 0, table: 0, chart: 0, group: 0 };
   for (const slide of document.slides) {
     for (const element of slide.elements) components[element.type] += 1;
+    components.group += slide.groups?.length ?? 0;
   }
   const degradations: DesignAuditReport["degradations"] = [];
   if ((input.nativeAnimationSkipped ?? 0) > 0)
@@ -41,6 +43,21 @@ export function buildDesignAudit(document: PresentationDocument, input: DesignAu
     });
   if ((input.warnings?.length ?? 0) > 0)
     degradations.push({ code: "EXPORT_WARNING", count: input.warnings!.length, message: "导出过程中产生警告" });
+  const layoutSequence = document.slides.map((slide) => slide.layoutId ?? "free");
+  let longestRepeat = 0;
+  let currentRepeat = 0;
+  let previous: string | undefined;
+  let repeatedRuns = 0;
+  for (const layout of layoutSequence) {
+    if (layout === previous) currentRepeat += 1;
+    else {
+      if (currentRepeat > 2) repeatedRuns += 1;
+      previous = layout;
+      currentRepeat = 1;
+    }
+    longestRepeat = Math.max(longestRepeat, currentRepeat);
+  }
+  if (currentRepeat > 2) repeatedRuns += 1;
   return {
     versions: {
       schema: document.schemaVersion,
@@ -57,6 +74,7 @@ export function buildDesignAudit(document: PresentationDocument, input: DesignAu
       ...(layout.capabilities ? { capabilities: layout.capabilities } : {}),
       usedBySlides: document.slides.filter((slide) => slide.layoutId === layout.id).length,
     })),
+    rhythm: { uniqueLayouts: new Set(layoutSequence).size, longestRepeat, repeatedRuns },
     recipes: {
       identified: [],
       coverage: 0,

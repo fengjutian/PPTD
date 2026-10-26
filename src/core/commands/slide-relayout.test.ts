@@ -316,6 +316,27 @@ describe("design-only relayout", () => {
       expect(second?.type === "text" && second.frame.x > result.pageSize.width / 2).toBe(true);
     });
 
+    it("keeps a comparison page across the whole content area on a two-column layout", () => {
+      const source = pageWithLayouts([
+        {
+          type: "comparison",
+          leftLabel: "左侧",
+          rightLabel: "右侧",
+          leftItems: ["甲", "乙"],
+          rightItems: ["丙", "丁"],
+        },
+      ]);
+      const result = produce(source, (draft) =>
+        applyCommand(draft, {
+          type: "apply-slide-layout",
+          slideId: source.slides[0]!.id,
+          layoutId: splitLayout.id,
+        }),
+      );
+      const right = result.slides[0]!.elements.find((element) => element.type === "text" && element.text === "右侧");
+      expect(right?.type === "text" && right.frame.x > result.pageSize.width / 2).toBe(true);
+    });
+
     it("refuses a missing layout and a layout that would hide reviewed copy", () => {
       const source = pageWithLayouts([{ type: "bullet-list", items: ["第一项", "第二项"] }]);
       const slideId = source.slides[0]!.id;
