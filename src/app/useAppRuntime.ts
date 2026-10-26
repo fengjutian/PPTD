@@ -3897,7 +3897,9 @@ export function useAppRuntime() {
     } catch {
       // Browser previews without storage keep the choice for this session.
     }
-    setTaskStatus(`已选择「${profile.name}」，并匹配主题「${findThemePreset(profile.themePresetId)?.name ?? profile.themePresetId}」`);
+    setTaskStatus(
+      `已选择「${profile.name}」，并匹配主题「${findThemePreset(profile.themePresetId)?.name ?? profile.themePresetId}」`,
+    );
   };
   const templateTargetPreview = useMemo(
     () =>

@@ -21,6 +21,6 @@ describe("StyleWorkspaceView", () => {
     expect((markup.match(/class="style-card(?: active)?"/g) ?? []).length).toBe(8);
     expect(markup).toContain("商务专业");
     expect(markup).toContain("风格决定整册构图、信息密度和图片语言");
-    expect(markup).toContain("aria-pressed=\"true\"");
+    expect(markup).toContain('aria-pressed="true"');
   });
 });

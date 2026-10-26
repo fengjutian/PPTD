@@ -2,14 +2,7 @@ import type { ConceptPresetId, RecipeId } from "./deck-concept";
 import type { ThemeDirection } from "./theme-direction";
 
 export type StyleProfileId =
-  | "minimal"
-  | "corporate"
-  | "futuristic"
-  | "editorial"
-  | "academic"
-  | "infographic"
-  | "organic"
-  | "luxury";
+  "minimal" | "corporate" | "futuristic" | "editorial" | "academic" | "infographic" | "organic" | "luxury";
 
 export type StyleDensity = "airy" | "balanced" | "compact";
 export type StyleImageMedium = "photo" | "illustration" | "3d" | "texture";
@@ -60,7 +53,13 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
     imagery: { media: ["photo"], guidance: "低饱和摄影、材质特写和大面积留白，主体清晰。" },
     visualTraits: ["大留白", "低饱和", "细线"],
     forbidden: ["多彩渐变", "装饰性图标", "连续卡片阵列"],
-    specimen: { background: "#F7F7F5", ink: "#202326", accent: "#85898D", secondary: "#D7D8D6", composition: "minimal" },
+    specimen: {
+      background: "#F7F7F5",
+      ink: "#202326",
+      accent: "#85898D",
+      secondary: "#D7D8D6",
+      composition: "minimal",
+    },
   },
   {
     id: "corporate",
@@ -108,7 +107,13 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
     imagery: { media: ["photo"], guidance: "有编辑构图的纪实或人物摄影，保留可供标题进入的负空间。" },
     visualTraits: ["大标题", "错落图文", "章节节奏"],
     forbidden: ["同构卡片墙", "图片内生成文字", "平均分栏"],
-    specimen: { background: "#F3F0E8", ink: "#1E292B", accent: "#0F7869", secondary: "#D59B43", composition: "editorial" },
+    specimen: {
+      background: "#F3F0E8",
+      ink: "#1E292B",
+      accent: "#0F7869",
+      secondary: "#D59B43",
+      composition: "editorial",
+    },
   },
   {
     id: "academic",
@@ -156,7 +161,13 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
     imagery: { media: ["photo", "texture"], guidance: "自然光、植物、手作材质和低饱和生活场景。" },
     visualTraits: ["自然材质", "温暖留白", "柔和节奏"],
     forbidden: ["冷色霓虹", "密集仪表盘", "锐利科技线条"],
-    specimen: { background: "#F5F0E5", ink: "#334438", accent: "#6F7F54", secondary: "#B9784D", composition: "organic" },
+    specimen: {
+      background: "#F5F0E5",
+      ink: "#334438",
+      accent: "#6F7F54",
+      secondary: "#B9784D",
+      composition: "organic",
+    },
   },
   {
     id: "luxury",

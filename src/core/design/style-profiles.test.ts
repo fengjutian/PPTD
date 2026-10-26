@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultConceptForPreset } from "./deck-concept";
+import { defaultConceptForPreset, resolveDeckConcept } from "./deck-concept";
 import { applyStyleProfileToThemeDirection, findStyleProfile, STYLE_PROFILES } from "./style-profiles";
 import { themeDirectionForPreset } from "./theme-direction";
 import { findThemePreset } from "./theme-presets";
@@ -12,9 +12,18 @@ describe("style profiles", () => {
 
     for (const profile of STYLE_PROFILES) {
       expect(findThemePreset(profile.themePresetId)).toBeDefined();
-      const concept = defaultConceptForPreset(profile.preferredConcept);
       expect(profile.allowedConcepts).toContain(profile.preferredConcept);
-      for (const recipe of profile.preferredRecipes) expect(concept.recipes).toContain(recipe);
+      const availableRecipes = new Set(
+        profile.allowedConcepts.flatMap(
+          (preset) =>
+            resolveDeckConcept({
+              concept: defaultConceptForPreset(preset),
+              pageFacts: [],
+              pageCount: 0,
+            }).concept.recipes,
+        ),
+      );
+      for (const recipe of profile.preferredRecipes) expect(availableRecipes).toContain(recipe);
     }
   });
 
