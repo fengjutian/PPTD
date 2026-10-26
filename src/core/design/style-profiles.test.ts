@@ -60,8 +60,8 @@ describe("style profiles", () => {
     expect(constraint.profileId).toBe("glassmorphism");
     expect(constraint.allowedConcepts).toContain("editorial");
     expect(constraint.preferredRecipes.length).toBeGreaterThan(0);
-    expect(constraint.density).toBe("airy");
-    expect(constraint.tokens).toMatchObject({ spacing: "wide", corner: "rounded", shadow: "raised" });
+    expect(constraint.density).toBe("balanced");
+    expect(constraint.tokens).toMatchObject({ spacing: "regular", corner: "rounded", shadow: "raised" });
     expect(constraint.capability?.status).toBe("partial");
   });
 });
