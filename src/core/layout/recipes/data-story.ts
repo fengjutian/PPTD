@@ -1,6 +1,7 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { ChartElement, ContentBlock, Emu } from "../../document-model";
 import { parseMetricValue } from "../../document-model";
+import { chartSeriesColors } from "../../design/chart-theme";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
 import { fittedFontSizeInRange, frameFromNormalized, textFits, textHeightPt } from "./measure";
@@ -149,7 +150,7 @@ export const dataStory: LayoutRecipe = {
           fontFamily: bodyFamily,
           fontSizePt: 12,
           textColor: ctx.colors.body,
-          seriesColors: [ctx.colors.accent],
+          seriesColors: chartSeriesColors(ctx.colors, 1),
           showLegend: false,
           showValueLabels: true,
         },

@@ -1626,7 +1626,10 @@ fn parse_placeholder_text_style(
             .into();
             changed = true;
         }
-        if descendant(paragraph, "buAutoNum").is_some() {
+        if descendant(paragraph, "buNone").is_some() {
+            style.bullet = "none".into();
+            changed = true;
+        } else if descendant(paragraph, "buAutoNum").is_some() {
             style.bullet = "number".into();
             changed = true;
         } else if descendant(paragraph, "buChar").is_some() {
@@ -1673,8 +1676,10 @@ fn parse_text_body(
     let mut text = String::new();
     let mut style: Option<ImportedTextStyle> = None;
     let mut runs: Vec<ImportedRun> = Vec::new();
-    let mut bullet = "none".to_string();
-    let mut line_height = None;
+    let mut bullet = inherited_style
+        .map(|style| style.bullet.clone())
+        .unwrap_or_else(|| "none".to_string());
+    let mut line_height = inherited_style.and_then(|style| style.line_height);
     let mut paragraph_align: Option<String> = None;
     let paragraphs: Vec<Node<'_, '_>> = body
         .children()
@@ -1696,7 +1701,9 @@ fn parse_text_body(
                     style.align = align.into();
                 }
             }
-            if descendant(props, "buAutoNum").is_some() {
+            if descendant(props, "buNone").is_some() {
+                bullet = "none".into();
+            } else if descendant(props, "buAutoNum").is_some() {
                 bullet = "number".into();
             } else if descendant(props, "buChar").is_some() {
                 bullet = "dot".into();
@@ -1789,12 +1796,14 @@ fn parse_text_body(
     style.bullet = bullet;
     style.line_height = line_height;
     if let Some(body_pr) = child(body, "bodyPr") {
-        style.vertical_align = match body_pr.attribute("anchor") {
-            Some("ctr") => "middle",
-            Some("b") => "bottom",
-            _ => "top",
+        if let Some(anchor) = body_pr.attribute("anchor") {
+            style.vertical_align = match anchor {
+                "ctr" => "middle",
+                "b" => "bottom",
+                _ => "top",
+            }
+            .into();
         }
-        .into();
     }
     Some(TextBody { text, style, runs })
 }
@@ -2423,6 +2432,42 @@ mod tests {
     }
 
     #[test]
+    fn inherits_placeholder_text_style_when_the_slide_run_has_no_explicit_style() {
+        let layout = Document::parse(
+            r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <p:nvSpPr><p:nvPr><p:ph type="body" idx="2"/></p:nvPr></p:nvSpPr>
+                <p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle><a:lvl1pPr algn="ctr">
+                    <a:lnSpc><a:spcPct val="140000"/></a:lnSpc><a:buChar char="•"/>
+                    <a:defRPr sz="2200" b="1" i="1"><a:solidFill><a:srgbClr val="445566"/></a:solidFill><a:latin typeface="Inherited Sans"/></a:defRPr>
+                </a:lvl1pPr></a:lstStyle></p:txBody>
+            </p:sp>"#,
+        )
+        .expect("layout");
+        let inherited = parse_placeholder_text_style(layout.root_element(), &None, false)
+            .expect("placeholder style");
+        let slide = Document::parse(
+            r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <p:txBody><a:bodyPr/><a:p><a:r><a:t>继承文本</a:t></a:r></a:p></p:txBody>
+            </p:sp>"#,
+        )
+        .expect("slide");
+        let body = parse_text_body(slide.root_element(), &None, false, Some(&inherited))
+            .expect("text body");
+
+        assert_eq!(body.style.font_family, "Inherited Sans");
+        assert_eq!(body.style.font_size_pt, 22.0);
+        assert_eq!(body.style.color, "#445566");
+        assert!(body.style.bold);
+        assert!(body.style.italic);
+        assert_eq!(body.style.align, "center");
+        assert_eq!(body.style.vertical_align, "middle");
+        assert_eq!(body.style.line_height, Some(1.4));
+        assert_eq!(body.style.bullet, "dot");
+    }
+
+    #[test]
     fn merges_a_partial_slide_theme_override_with_the_deck_theme() {
         let base = parse_theme_xml(
             r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -2917,6 +2962,7 @@ mod tests {
         let element = parse_shape(
             0,
             document.root_element(),
+            &HashMap::new(),
             &HashMap::new(),
             &Option::<ImportedTheme>::None,
             &mut report,

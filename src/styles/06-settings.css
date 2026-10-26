@@ -529,16 +529,22 @@
   color: #b4482a;
   background: rgba(211, 82, 48, 0.1);
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .panel-heading .panel-tab {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .panel-heading
+  .panel-tab {
   border-color: transparent;
   background: transparent;
   color: #5f646d;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .panel-heading .panel-tab:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .panel-heading
+  .panel-tab:hover {
   color: #25282d;
   background: #e5e7eb;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .panel-heading .panel-tab.active {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .panel-heading
+  .panel-tab.active {
   border-color: #cfd3d9;
   background: #fff;
   color: #22252a;
@@ -550,7 +556,9 @@
 :root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-toolbar button {
   color: #555b64;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-toolbar button:hover:not(:disabled) {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-toolbar
+  button:hover:not(:disabled) {
   color: #22252a;
   background: #e9ebee;
 }
@@ -582,17 +590,21 @@
 :root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-lock {
   color: #a9662c;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-row.active .layer-meta {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-row.active
+  .layer-meta {
   color: color-mix(in srgb, var(--ppt-accent) 72%, #22252a);
 }
 :root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-action {
   color: #5b616a;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-action:hover:not(:disabled) {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-action:hover:not(:disabled) {
   color: #22252a;
   background: #dfe2e6;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-action.danger:hover:not(:disabled) {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-action.danger:hover:not(:disabled) {
   color: #fff;
   background: #b23b2e;
 }
@@ -606,12 +618,16 @@
 :root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-show-all:hover {
   color: #22252a;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-empty-actions button {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-empty-actions
+  button {
   border-color: #cfd3d9;
   background: #fff;
   color: #454a52;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-empty-actions button:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-empty-actions
+  button:hover {
   border-color: var(--ppt-accent);
   background: var(--ppt-accent);
   color: #fff;
@@ -621,16 +637,21 @@
   background: #fff;
   color: #7a8089;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search:focus-within {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-search:focus-within {
   color: #555b64;
 }
 :root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search input {
   color: #24272c;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search input::placeholder {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-search
+  input::placeholder {
   color: #8a8f98;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-search button:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-search
+  button:hover {
   background: #e9ebee;
   color: #22252a;
 }
@@ -639,7 +660,8 @@
   background: #fff;
   color: #454a52;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-clear-search:hover {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-clear-search:hover {
   border-color: var(--ppt-accent);
   background: var(--ppt-accent);
   color: #fff;
@@ -652,8 +674,12 @@
 :root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu button {
   color: #33373d;
 }
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu button:hover:not(:disabled),
-:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"]) .layer-menu button:focus-visible {
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-menu
+  button:hover:not(:disabled),
+:root:is([data-theme="light"], [data-theme="blue"], [data-theme="green"], [data-theme="amber"])
+  .layer-menu
+  button:focus-visible {
   background: #eef0f3;
   color: #15171a;
 }

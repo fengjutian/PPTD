@@ -1,5 +1,6 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { ChartElement, ContentBlock, Emu } from "../../document-model";
+import { chartSeriesColors } from "../../design/chart-theme";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
 import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
@@ -141,7 +142,7 @@ export const chartStory: LayoutRecipe = {
         fontFamily: bodyFamily,
         fontSizePt: 12,
         textColor: ctx.colors.body,
-        seriesColors: [ctx.colors.accent, ctx.colors.title, ctx.colors.body],
+        seriesColors: chartSeriesColors(ctx.colors, Math.max(1, block.series?.length ?? 1)),
         showLegend: (block.series?.length ?? 0) > 1,
         showValueLabels: true,
       },

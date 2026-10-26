@@ -31,6 +31,7 @@ import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
 import { lintTaste } from "../../core/design/taste-lint";
 import { shadowSpec } from "../../core/design/effects";
+import { chartGridColor } from "../../core/design/chart-theme";
 import { checkTemplateFit, templateTargetMatchesDocument } from "../../services/template-review-target";
 import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
@@ -444,7 +445,9 @@ export async function buildPptx(
           valAxisLabelFontFace: element.style.fontFamily,
           valAxisLabelFontSize: Math.max(8, element.style.fontSizePt - 2),
           valAxisLabelFormatCode: valueFormat,
-          valGridLine: { color: "E3E7EC", size: 1 },
+          // The grid belongs to the page, not to a fixed grey: a hard-coded
+          // `#E3E7EC` drew a bright ladder across a dark deck.
+          valGridLine: { color: color(chartGridColor(model.background)), size: 1 },
           catAxisLineShow: false,
           valAxisLineShow: false,
           // The chart area carries the color of the page, not a white block:
