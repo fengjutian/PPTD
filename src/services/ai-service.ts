@@ -6,6 +6,8 @@ import type { ThemeDirection } from "../core/design/theme-direction";
 import type { StyleConstraint } from "../core/design/style-profiles";
 import { recipeCatalogForConcept } from "../core/layout/recipes/registry";
 import { layoutCapabilities } from "../core/commands/template-layouts";
+import { layoutRect, type PageCoordinateSystem } from "../core/layout/geometry/coordinate-system";
+import { createPptWorkbench, PPT_WORKBENCH_TOOLS, runPptWorkbenchLoop } from "../workbench";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
 import { bodyFromBlocks, sanitizeBlocks } from "./ai-draft-content";
@@ -482,6 +484,20 @@ export interface AiPresentationDesignOptions {
   /** 生成任务号：取消时后端会中断该任务下所有在途请求。 */
   taskId?: number;
 }
+
+const workbenchTurnSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("tool-call"), name: z.string().min(1).max(100), input: z.unknown() }),
+  z.object({ kind: z.literal("final"), output: z.unknown() }),
+]);
+
+const designCoordinateSystem: PageCoordinateSystem = {
+  coordinateSpace: "normalized-1000",
+  page: layoutRect(0, 0, 1000, 1000),
+  safe: layoutRect(80, 60, 840, 860),
+  title: layoutRect(100, 80, 800, 120),
+  content: layoutRect(100, 260, 800, 600),
+  footer: layoutRect(100, 930, 800, 40),
+};
 
 /**
  * Asks the model for the deck-level design direction.

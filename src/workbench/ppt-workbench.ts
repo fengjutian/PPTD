@@ -1,4 +1,12 @@
 import type { PageCoordinateSystem } from "../core/layout/geometry/coordinate-system";
+import type { PresentationDocument } from "../core/document-model";
+import {
+  callDocumentWorkbench,
+  createDocumentWorkbench,
+  DOCUMENT_WORKBENCH_TOOLS,
+  type DocumentWorkbench,
+  type DocumentWorkbenchToolName,
+} from "./document/document-workbench";
 import {
   callLayoutWorkbench,
   createLayoutWorkbench,
@@ -8,7 +16,7 @@ import {
 } from "./layout/layout-workbench";
 import type { WorkbenchCallResult, WorkbenchToolDefinition } from "./contracts";
 
-export type PptWorkbenchToolName = `layout.${LayoutWorkbenchToolName}`;
+export type PptWorkbenchToolName = `layout.${LayoutWorkbenchToolName}` | DocumentWorkbenchToolName;
 
 /**
  * AI-facing PPT operation state. It deliberately contains no writable document
@@ -18,21 +26,29 @@ export type PptWorkbenchToolName = `layout.${LayoutWorkbenchToolName}`;
 export interface PptWorkbench {
   readonly protocolVersion: 1;
   readonly layout: LayoutWorkbench;
+  readonly document?: DocumentWorkbench;
 }
 
-export const PPT_WORKBENCH_TOOLS: readonly WorkbenchToolDefinition<PptWorkbenchToolName>[] =
-  LAYOUT_WORKBENCH_TOOLS.map((tool) => ({
+export const PPT_WORKBENCH_TOOLS: readonly WorkbenchToolDefinition<PptWorkbenchToolName>[] = [
+  ...LAYOUT_WORKBENCH_TOOLS.map((tool) => ({
     ...tool,
     name: `layout.${tool.name}` as PptWorkbenchToolName,
-  }));
+  })),
+  ...DOCUMENT_WORKBENCH_TOOLS,
+];
 
 const pptWorkbenchToolNames = new Set<string>(PPT_WORKBENCH_TOOLS.map((tool) => tool.name));
 
 export function createPptWorkbench(
   coordinateSystem: PageCoordinateSystem,
+  document?: PresentationDocument,
 ): WorkbenchCallResult<PptWorkbench, Record<string, unknown>> {
   const result = createLayoutWorkbench(coordinateSystem);
-  const workbench: PptWorkbench = { protocolVersion: 1, layout: result.workbench };
+  const workbench: PptWorkbench = {
+    protocolVersion: 1,
+    layout: result.workbench,
+    ...(document ? { document: createDocumentWorkbench(document) } : {}),
+  };
   return result.ok
     ? { ok: true, workbench, value: result.value as Record<string, unknown> }
     : { ok: false, workbench, issues: result.issues };
@@ -49,6 +65,20 @@ export function callPptWorkbench(
       workbench,
       issues: [{ code: "UNSUPPORTED_TOOL", paths: [tool], message: "Workbench 工具未注册" }],
     };
+  }
+  if (!tool.startsWith("layout.")) {
+    if (!workbench.document) {
+      return {
+        ok: false,
+        workbench,
+        issues: [{ code: "CONTEXT_UNAVAILABLE", paths: [tool], message: "工作台没有文档快照" }],
+      };
+    }
+    const result = callDocumentWorkbench(workbench.document, workbench.layout, tool as DocumentWorkbenchToolName, input);
+    const next: PptWorkbench = { ...workbench, document: result.workbench };
+    return result.ok
+      ? { ok: true, workbench: next, value: result.value }
+      : { ok: false, workbench: next, issues: result.issues };
   }
   const layoutTool = tool.slice("layout.".length) as LayoutWorkbenchToolName;
   const result = callLayoutWorkbench(workbench.layout, layoutTool, input);

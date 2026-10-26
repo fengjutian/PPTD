@@ -247,6 +247,12 @@ pub struct GenerateDesignRequest {
     task_id: Option<u64>,
     /// 是否流式接收并汇报进度。设计结果一次返回整册，流式只用于显示"已设计几页"。
     stream_progress: Option<bool>,
+    /// AI-facing Workbench tool declarations. Empty keeps the legacy one-shot path.
+    #[serde(default)]
+    workbench_tools: Vec<serde_json::Value>,
+    /// Previous tool calls and results, supplied by the frontend orchestrator.
+    #[serde(default)]
+    workbench_transcript: Vec<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -1642,6 +1648,10 @@ pub async fn generate_presentation_design(
         serde_json::to_string(&request.theme_direction).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let style_constraint = serde_json::to_string(&request.style_constraint)
         .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let workbench_tools = serde_json::to_string(&request.workbench_tools)
+        .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let workbench_transcript = serde_json::to_string(&request.workbench_transcript)
+        .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     if draft.len() > 120_000
         || briefs.len() > 120_000
         || template.len() > 120_000
@@ -1650,13 +1660,17 @@ pub async fn generate_presentation_design(
         || recipe_catalog.len() > 40_000
         || theme_direction.len() > 20_000
         || style_constraint.len() > 20_000
+        || workbench_tools.len() > 40_000
+        || workbench_transcript.len() > 120_000
+        || request.workbench_tools.len() > 32
+        || request.workbench_transcript.len() > 24
     {
         return Err("AI_DESIGN_REQUEST_TOO_LARGE".into());
     }
     let provider = ai::resolve(request.provider.as_deref())?;
     let api_key = ai::read_api_key(provider)?;
     let model = ai::resolve_model(provider, request.model)?;
-    let system_prompt = r##"你是 PPTD 的演示文稿视觉设计引擎。你的唯一职责是根据模板分析数据，为已经审核并冻结的内容生成可编辑的视觉设计参数。
+    let mut system_prompt = r##"你是 PPTD 的演示文稿视觉设计引擎。你的唯一职责是根据模板分析数据，为已经审核并冻结的内容生成可编辑的视觉设计参数。
 
 一、不可违反的内容边界
 1. 标题、正文、数字、引用、演讲备注和页面顺序均已审核，视为只读事实。
@@ -1807,16 +1821,34 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 6. 不得输出坐标、字号、正文或装饰元素；这些由确定性排版引擎生成。
 
 严格输出结构：
-{"slides":[{"layout":"cover","visualNarrative":"statement","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","recipe":"editorial-index","variant":"left","focal":"title","visualAsset":{"enabled":true,"prompt":"一座明亮的现代化数据中心，几何线条构成的上升箭头","role":"hero"}}]}"##;
-    let user_prompt = format!(
+{"slides":[{"layout":"cover","visualNarrative":"statement","composition":"stacked","emphasis":"title-dominant","densityTarget":"airy","palette":{"background":"surface","accent":"accent-1","title":"primary","body":"secondary"},"background":"#FFFFFF","accent":"#3366CC","titleColor":"#111111","bodyColor":"#333333","recipe":"editorial-index","variant":"left","focal":"title","visualAsset":{"enabled":true,"prompt":"一座明亮的现代化数据中心，几何线条构成的上升箭头","role":"hero"}}]}"##.to_string();
+    let workbench_enabled = !request.workbench_tools.is_empty();
+    if workbench_enabled {
+        system_prompt.push_str(
+            r#"
+
+十二、Workbench 多轮协议
+你可以先调用受控 Workbench 工具检查语义区域、分栏、分行、间距和边界。工具只是设计中间层，不能修改内容。
+每一轮只能返回以下两种严格 JSON 之一：
+1. 调用工具：{"kind":"tool-call","name":"layout.columns","input":{"id":"content-columns","source":"content","count":4,"gap":"md"}}
+2. 完成设计：{"kind":"final","output":{"slides":[...]}}
+不得一次调用多个工具，不得调用工具清单之外的名称。工具失败时根据返回问题调整参数；不要重复完全相同的失败调用。最终 output 必须完整满足前述设计输出合同。"#,
+        );
+    }
+    let mut user_prompt = format!(
         "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度、页面配方和配色角色。SlideBrief 是页面目的、结论、视觉意图、视觉形式和密度的事实来源；不要跳过或改写它。visualBrief.form=chart/diagram/table 时优先选择能承载对应内容块的配方；form=none 时不要强行配图。\n\n整册设计方向（只用于保持配方合法，不得改写）：\n{concept}\n\n当前渲染器配方目录（只能从这里选择；requiresImage、minimumColumns 和 capacity 是能力边界，components 是会生成的语义组件）：\n{recipe_catalog}\n\n主题方向（只约束视觉；为空表示上传模板）：\n{theme_direction}\n\n风格约束（结构化强约束；为空表示未选择风格）：\n{style_constraint}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、配方来自目录且匹配内容条数与长度、需要图片的配方确有图片、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
     );
+    if workbench_enabled {
+        user_prompt.push_str(&format!(
+            "\n\nWorkbench 工具定义：\n{workbench_tools}\n\n此前工具调用与结果：\n{workbench_transcript}\n\n请决定下一次工具调用，或返回最终设计。"
+        ));
+    }
     let body = ChatRequest {
         model,
         messages: vec![
             ChatMessage {
                 role: "system".into(),
-                content: system_prompt.into(),
+                content: system_prompt,
             },
             ChatMessage {
                 role: "user".into(),
