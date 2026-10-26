@@ -4,6 +4,7 @@ import {
   planTemplateLayoutsWithReport,
   templateLayoutCandidates,
   templateLayoutHasFooterMarker,
+  templateRequirementForIntent,
   type AiTemplateLayout,
 } from "./template-layouts";
 
@@ -75,6 +76,26 @@ describe("template layout selection", () => {
       regions: [region("title", 0.05, 0.04, 0.9, 0.1), region("body", 0.05, 0.2, 0.9, 0.65)],
     };
     const result = planTemplateLayoutsWithReport({ layouts: [oneColumn], intents: ["split"] });
+    expect(result.layouts).toEqual([undefined]);
+    expect(result.issues[0]?.code).toBe("TEMPLATE_LAYOUT_COLUMNS_REQUIRED");
+  });
+
+  it("allows a recipe to strengthen the default intent requirement", () => {
+    const imageOnly: AiTemplateLayout = {
+      index: 41,
+      name: "单栏图文",
+      regions: [
+        region("title", 0.05, 0.04, 0.9, 0.1),
+        region("body", 0.05, 0.2, 0.4, 0.65),
+        region("image", 0.52, 0.2, 0.43, 0.65),
+      ],
+    };
+    const requirement = { ...templateRequirementForIntent("image"), minimumColumns: 2 as const };
+    const result = planTemplateLayoutsWithReport({
+      layouts: [imageOnly],
+      intents: ["image"],
+      requirements: [requirement],
+    });
     expect(result.layouts).toEqual([undefined]);
     expect(result.issues[0]?.code).toBe("TEMPLATE_LAYOUT_COLUMNS_REQUIRED");
   });

@@ -27,6 +27,7 @@ import {
   templateContentRegion,
   templateImageRegion,
   templateLayoutHasFooterMarker,
+  templateRequirementForIntent,
   templateTitleRegion,
 } from "./template-layouts";
 import {
@@ -45,6 +46,7 @@ import { resolveChartKind } from "../design/data-relation";
 import { compileDesignPlanWithRetry } from "../layout/design-compiler";
 import type { DesignCompileReport } from "../layout/design-compiler";
 import { consumptionProblem, isImageRecipe, selectPreferredStyleRecipe, selectRecipe } from "../layout/recipes/plan";
+import { RECIPE_CATALOG } from "../layout/recipes/registry";
 import type { RecipeContext } from "../layout/recipes/types";
 import { planPageChrome } from "../layout/page-chrome";
 import { coverCrop } from "../rendering/image-fit";
@@ -334,9 +336,22 @@ export function createDesignContext(
     if (composition === "columns") return "split";
     return "body";
   });
+  const layoutRequirements = layoutIntents.map((intent, index) => {
+    const base = templateRequirementForIntent(intent);
+    const recipe = command.designs[index]!.recipe;
+    const catalog = recipe ? RECIPE_CATALOG[recipe] : undefined;
+    return catalog
+      ? {
+          ...base,
+          hasImage: base.hasImage || catalog.requiresImage,
+          minimumColumns: Math.max(base.minimumColumns, catalog.minimumColumns) as 1 | 2,
+        }
+      : base;
+  });
   const templateLayoutPlan = planTemplateLayoutsWithReport({
     layouts: effectiveLayouts ?? [],
     intents: layoutIntents,
+    requirements: layoutRequirements,
     rhythm: command.backgroundRhythm,
   });
   const chosenLayouts = templateLayoutPlan.layouts;
@@ -372,6 +387,7 @@ export function createDesignContext(
     pageFacts,
     deckPlan,
     layoutIntents,
+    layoutRequirements,
     chosenLayouts,
     templateLayoutIssues: templateLayoutPlan.issues,
     compileReports,
