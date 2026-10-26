@@ -7,7 +7,7 @@ import { findThemePreset } from "./theme-presets";
 
 describe("style profiles", () => {
   it("only references themes, concepts and recipes the renderer owns", () => {
-    expect(STYLE_PROFILES).toHaveLength(8);
+    expect(STYLE_PROFILES).toHaveLength(16);
     expect(new Set(STYLE_PROFILES.map((profile) => profile.id)).size).toBe(STYLE_PROFILES.length);
 
     for (const profile of STYLE_PROFILES) {

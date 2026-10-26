@@ -2709,6 +2709,250 @@
   line-height: 1.5;
 }
 
+.style-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(15 23 34 / 32%);
+  backdrop-filter: blur(1px);
+}
+
+.style-drawer {
+  width: min(520px, calc(100vw - 36px));
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  color: #202832;
+  background: #f8f8f6;
+  box-shadow: -18px 0 48px rgb(20 29 40 / 18%);
+  animation: style-drawer-enter 180ms ease-out;
+}
+
+@keyframes style-drawer-enter {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+.style-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid #dedfdd;
+  background: #ffffff;
+}
+
+.style-drawer-header span {
+  color: #3768a6;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.style-drawer-header h2 {
+  margin: 5px 0 4px;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.style-drawer-header p {
+  margin: 0;
+  color: #68717b;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.style-drawer-header > button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #d9dcdf;
+  border-radius: 8px;
+  color: #66707a;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.style-drawer-header > button:hover {
+  color: #244f89;
+  border-color: #8ca8cc;
+}
+
+.style-drawer-header svg {
+  width: 16px;
+  height: 16px;
+}
+
+.style-drawer-scroll {
+  min-height: 0;
+  padding: 20px 26px 28px;
+  overflow-y: auto;
+}
+
+.style-specimen.large {
+  aspect-ratio: 16 / 8.4;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgb(32 40 50 / 8%);
+}
+
+.style-detail-section {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #e0e1df;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.style-detail-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  color: #27384c;
+  font-size: 12px;
+}
+
+.style-detail-section h3 svg {
+  width: 15px;
+  height: 15px;
+  color: #3768a6;
+}
+
+.style-detail-section p {
+  margin: 7px 0 0;
+  color: #626c77;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.style-detail-overview {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  padding: 13px 4px;
+}
+
+.style-detail-overview > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 0 12px;
+  border-right: 1px solid #e6e7e5;
+}
+
+.style-detail-overview > div:last-child {
+  border-right: 0;
+}
+
+.style-detail-overview small {
+  color: #89909a;
+  font-size: 9px;
+}
+
+.style-detail-overview strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-detail-tags,
+.style-recipe-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.style-detail-tags span,
+.style-recipe-list span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #40536a;
+  background: #eff2f5;
+  font-size: 9px;
+}
+
+.style-recipe-list {
+  margin-top: 10px;
+}
+
+.style-recipe-list span {
+  border: 1px solid #d9e1eb;
+  background: #f7f9fb;
+}
+
+.style-theme-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.style-theme-swatches span {
+  height: 28px;
+  border: 1px solid rgb(50 58 68 / 12%);
+  border-radius: 6px;
+}
+
+.style-font-pair {
+  color: #394b60 !important;
+  font-weight: 600;
+}
+
+.style-detail-forbidden {
+  border-color: #eadedb;
+  background: #fffdfc;
+}
+
+.style-detail-forbidden h3 svg {
+  color: #a85b4d;
+}
+
+.style-detail-forbidden ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  margin: 0;
+  padding: 0;
+  color: #765b55;
+  font-size: 10px;
+  list-style-position: inside;
+}
+
+.style-drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 26px;
+  border-top: 1px solid #dedfdd;
+  background: #ffffff;
+}
+
+.style-drawer-actions button {
+  min-width: 112px;
+}
+
+.style-drawer-actions .primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.style-drawer-actions .primary-action svg {
+  width: 14px;
+  height: 14px;
+}
+
 @media (max-width: 1200px) {
   .style-card-grid {
     grid-template-columns: repeat(3, minmax(210px, 1fr));

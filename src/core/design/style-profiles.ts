@@ -2,7 +2,22 @@ import type { ConceptPresetId, RecipeId } from "./deck-concept";
 import type { ThemeDirection } from "./theme-direction";
 
 export type StyleProfileId =
-  "minimal" | "corporate" | "futuristic" | "editorial" | "academic" | "infographic" | "organic" | "luxury";
+  | "minimal"
+  | "corporate"
+  | "futuristic"
+  | "editorial"
+  | "academic"
+  | "infographic"
+  | "organic"
+  | "luxury"
+  | "swiss"
+  | "keynote"
+  | "brutalist"
+  | "zen"
+  | "bauhaus"
+  | "hand-drawn"
+  | "government"
+  | "industrial";
 
 export type StyleDensity = "airy" | "balanced" | "compact";
 export type StyleImageMedium = "photo" | "illustration" | "3d" | "texture";
@@ -184,6 +199,146 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
     visualTraits: ["克制金色", "精致字阶", "大片摄影"],
     forbidden: ["亮黄大面积填充", "金币意象", "繁复装饰边框"],
     specimen: { background: "#171714", ink: "#F4EFE5", accent: "#B08A4F", secondary: "#706A5E", composition: "luxury" },
+  },
+  {
+    id: "swiss",
+    name: "瑞士国际",
+    englishName: "Swiss International",
+    summary: "严格网格、无衬线字阶和强对齐形成理性的信息秩序。",
+    suitableFor: ["设计提案", "品牌策略", "信息可视化"],
+    themePresetId: "minimal-gray",
+    preferredConcept: "editorial",
+    allowedConcepts: ["editorial", "instrument"],
+    preferredRecipes: ["editorial-index", "asymmetric-split", "comparison", "timeline-rail"],
+    density: "balanced",
+    imagery: { media: ["photo"], guidance: "高对比纪实摄影或几何裁切，图片边缘服从统一网格。" },
+    visualTraits: ["严格网格", "强对齐", "无衬线"],
+    forbidden: ["随意旋转", "柔和装饰阴影", "不对齐的悬浮卡片"],
+    specimen: { background: "#F5F5F2", ink: "#16191C", accent: "#D43A2F", secondary: "#8B9095", composition: "grid" },
+  },
+  {
+    id: "keynote",
+    name: "产品发布",
+    englishName: "Keynote",
+    summary: "超大观点、产品大图和短文案构成具有舞台感的发布节奏。",
+    suitableFor: ["新品发布", "软件演示", "融资路演"],
+    themePresetId: "tech-blue",
+    preferredConcept: "documentary",
+    allowedConcepts: ["documentary", "editorial"],
+    preferredRecipes: ["cover-statement", "full-bleed-image", "section-statement", "data-story"],
+    density: "airy",
+    imagery: { media: ["photo", "3d"], guidance: "单一产品主体、简洁环境与明确光向，保留大面积舞台空间。" },
+    visualTraits: ["超大观点", "产品主角", "舞台节奏"],
+    forbidden: ["长段正文", "多产品同页争抢", "密集装饰"],
+    specimen: { background: "#07101F", ink: "#F7FAFF", accent: "#3979F6", secondary: "#98B8F8", composition: "hero" },
+  },
+  {
+    id: "brutalist",
+    name: "粗野主义",
+    englishName: "Brutalist",
+    summary: "粗大字形、高反差色块和非对称切分制造直接冲击。",
+    suitableFor: ["创意机构", "艺术展览", "青年活动"],
+    themePresetId: "creative-orange",
+    preferredConcept: "editorial",
+    allowedConcepts: ["editorial", "documentary"],
+    preferredRecipes: ["cover-statement", "asymmetric-split", "editorial-index", "image-led"],
+    density: "balanced",
+    imagery: { media: ["photo", "texture"], guidance: "高反差裁切、印刷颗粒和直接闪光摄影，保留原始质感。" },
+    visualTraits: ["粗大字形", "高反差", "非对称"],
+    forbidden: ["柔弱低对比", "精致奢华边框", "平均三栏"],
+    specimen: {
+      background: "#F3E52B",
+      ink: "#111111",
+      accent: "#E64A25",
+      secondary: "#2157C9",
+      composition: "editorial",
+    },
+  },
+  {
+    id: "zen",
+    name: "日式禅意",
+    englishName: "Zen",
+    summary: "克制色彩、细腻留白和安静节奏承载文化与生活美学。",
+    suitableFor: ["文化艺术", "茶道生活", "个人品牌"],
+    themePresetId: "paper-ink",
+    preferredConcept: "paper",
+    allowedConcepts: ["paper", "documentary"],
+    preferredRecipes: ["paper-column", "quote-field", "side-image-text", "section-statement"],
+    density: "airy",
+    imagery: { media: ["photo", "texture"], guidance: "自然光静物、器物局部、纸张与木石肌理，构图安静疏朗。" },
+    visualTraits: ["安静留白", "细腻材质", "克制色彩"],
+    forbidden: ["高饱和撞色", "密集信息板", "厚重阴影"],
+    specimen: { background: "#F2EFE7", ink: "#2D332E", accent: "#65745C", secondary: "#B18B68", composition: "paper" },
+  },
+  {
+    id: "bauhaus",
+    name: "包豪斯",
+    englishName: "Bauhaus",
+    summary: "基础色、几何构成和功能主义网格建立鲜明视觉记忆。",
+    suitableFor: ["设计教育", "创意提案", "视觉实验"],
+    themePresetId: "creative-orange",
+    preferredConcept: "editorial",
+    allowedConcepts: ["editorial", "instrument"],
+    preferredRecipes: ["cover-statement", "process-rail", "comparison", "editorial-index"],
+    density: "balanced",
+    imagery: { media: ["illustration"], guidance: "使用圆、方、线等简洁几何关系，图形服务于信息结构。" },
+    visualTraits: ["基础色", "几何构成", "功能主义"],
+    forbidden: ["仿真材质", "复杂渐变", "无功能装饰"],
+    specimen: { background: "#F2E9D7", ink: "#171717", accent: "#D63B2E", secondary: "#2457A6", composition: "data" },
+  },
+  {
+    id: "hand-drawn",
+    name: "手绘插画",
+    englishName: "Hand-drawn",
+    summary: "轻松线条、知识插图和清晰步骤营造亲切的讲解感。",
+    suitableFor: ["教学课件", "儿童科普", "头脑风暴"],
+    themePresetId: "education-green",
+    preferredConcept: "editorial",
+    allowedConcepts: ["editorial", "paper"],
+    preferredRecipes: ["process-rail", "timeline-rail", "comparison", "side-image-text"],
+    density: "balanced",
+    imagery: { media: ["illustration"], guidance: "统一笔触的扁平手绘插图，轮廓清楚且不在图片内生成文字。" },
+    visualTraits: ["手绘线条", "亲切讲解", "步骤清晰"],
+    forbidden: ["写实与卡通混搭", "图片内文字", "幼稚贴纸堆叠"],
+    specimen: {
+      background: "#F6F5E9",
+      ink: "#26392C",
+      accent: "#4E8853",
+      secondary: "#E0A13A",
+      composition: "organic",
+    },
+  },
+  {
+    id: "government",
+    name: "政务庄重",
+    englishName: "Government",
+    summary: "正式层级、稳定版心和克制红金表达公共事务的秩序感。",
+    suitableFor: ["政策解读", "政务汇报", "公共事务"],
+    themePresetId: "gov-red",
+    preferredConcept: "instrument",
+    allowedConcepts: ["instrument", "paper"],
+    preferredRecipes: ["instrument-columns", "data-story", "timeline-rail", "paper-column"],
+    density: "balanced",
+    imagery: { media: ["photo"], guidance: "公共服务、城市建设和真实工作场景，保持明亮、正式和可信。" },
+    visualTraits: ["正式层级", "稳定版心", "公共表达"],
+    forbidden: ["娱乐化贴纸", "过量金色装饰", "连续满版红底"],
+    specimen: { background: "#FAF7F0", ink: "#312725", accent: "#A62B1F", secondary: "#C98324", composition: "grid" },
+  },
+  {
+    id: "industrial",
+    name: "工业工程",
+    englishName: "Industrial",
+    summary: "冷灰、钢蓝与参数化结构突出工程精度和实施路径。",
+    suitableFor: ["制造工艺", "工程方案", "供应链汇报"],
+    themePresetId: "industrial-steel",
+    preferredConcept: "instrument",
+    allowedConcepts: ["instrument", "documentary"],
+    preferredRecipes: ["instrument-columns", "process-rail", "data-story", "side-image-text"],
+    density: "compact",
+    imagery: { media: ["photo"], guidance: "工厂产线、机械细节、工程图纸与冷调工业摄影。" },
+    visualTraits: ["参数结构", "工程精度", "冷调摄影"],
+    forbidden: ["卡通机械", "廉价科技蓝", "装饰性渐变"],
+    specimen: { background: "#EEF1F2", ink: "#25343D", accent: "#35566B", secondary: "#D97706", composition: "data" },
   },
 ] as const;
 
