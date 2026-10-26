@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createDocument,
+  emu,
   type ElementId,
   type RectEmu,
   type SlideElement,
@@ -9,7 +10,7 @@ import {
 import { patchGroupsInSlideXml } from "./group-xml";
 
 function frame(x: number, y: number, width: number, height: number): RectEmu {
-  return { x, y, width, height };
+  return { x: emu(x), y: emu(y), width: emu(width), height: emu(height) };
 }
 
 function element(id: string, bounds: RectEmu, rotationMilliDegree = 0): SlideElement {

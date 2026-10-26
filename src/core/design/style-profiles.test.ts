@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultConceptForPreset, resolveDeckConcept } from "./deck-concept";
-import { applyStyleProfileToThemeDirection, findStyleProfile, STYLE_PROFILES } from "./style-profiles";
+import {
+  applyStyleProfileToThemeDirection,
+  findStyleProfile,
+  styleConstraintForProfile,
+  STYLE_PROFILES,
+} from "./style-profiles";
 import { themeDirectionForPreset } from "./theme-direction";
 import { findThemePreset } from "./theme-presets";
 
@@ -47,5 +52,16 @@ describe("style profiles", () => {
     expect(styled.character).toContain("未来科技");
     expect(styled.imageStyle).toContain("精细 3D");
     expect(styled.forbiddenCombinations).toContain("廉价霓虹");
+  });
+
+  it("builds a narrow AI contract from the selected style", () => {
+    const constraint = styleConstraintForProfile(findStyleProfile("glassmorphism"))!;
+
+    expect(constraint.profileId).toBe("glassmorphism");
+    expect(constraint.allowedConcepts).toContain("editorial");
+    expect(constraint.preferredRecipes.length).toBeGreaterThan(0);
+    expect(constraint.density).toBe("airy");
+    expect(constraint.tokens).toMatchObject({ spacing: "wide", corner: "rounded", shadow: "raised" });
+    expect(constraint.capability?.status).toBe("partial");
   });
 });
