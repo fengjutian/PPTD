@@ -333,6 +333,16 @@ export function buildVocabularyPreviewDocument() {
       body: "二十年治理的现场记录",
       speakerNotes: "",
     },
+    {
+      title: "收入连续三个季度回升",
+      body: "",
+      speakerNotes: "",
+      blocks: [
+        { type: "metric", label: "第一季度", value: "38" },
+        { type: "metric", label: "第二季度", value: "52" },
+        { type: "metric", label: "第三季度", value: "71" },
+      ],
+    },
   ];
   const dark: Partial<AiSlideDesign> = {
     background: "#12233D",
@@ -347,6 +357,7 @@ export function buildVocabularyPreviewDocument() {
     designed("split", dark),
     designed("split", { ...dark, visualAsset: { enabled: true, role: "side" } }),
     designed("cover", { ...dark, visualAsset: { enabled: true, role: "hero" } }),
+    designed("cards", dark),
   ];
   const facts: CompositionFacts[] = [
     {
@@ -378,6 +389,17 @@ export function buildVocabularyPreviewDocument() {
       hasComparison: false,
       hasRowBlock: false,
       layout: "cover",
+    },
+    {
+      itemCount: 0,
+      shortItems: false,
+      longestItemLength: 0,
+      bodyLength: 0,
+      hasQuote: false,
+      hasComparison: false,
+      hasRowBlock: true,
+      hasMetric: true,
+      layout: "cards",
     },
   ];
   const concept = resolveDeckConcept({

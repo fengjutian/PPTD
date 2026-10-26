@@ -1054,6 +1054,7 @@ fn is_title_placeholder(key: &PlaceholderKey) -> bool {
 #[derive(Default)]
 struct LayoutInheritance {
     frames: HashMap<PlaceholderKey, ImportedFrame>,
+    text_styles: HashMap<PlaceholderKey, ImportedTextStyle>,
     background: Option<Result<String, ()>>,
     has_decorations: bool,
 }
@@ -1094,6 +1095,7 @@ fn parse_layout_inheritance(
     let layout_rels = read_relationships(archive, layout_target);
     let layout_theme = theme_for_part(archive, layout_target, &layout_rels, theme);
     inherited.background = parse_background(&xml, &layout_theme);
+    collect_placeholder_text_styles(&xml, &layout_theme, &mut inherited.text_styles);
     inherited.has_decorations = has_decorative_objects(&xml);
     if let Some(master) = layout_rels
         .values()
@@ -1107,6 +1109,11 @@ fn parse_layout_inheritance(
             collect_placeholder_frames(&master_xml, &mut master_frames);
             for (key, frame) in master_frames {
                 inherited.frames.entry(key).or_insert(frame);
+            }
+            let mut master_styles = HashMap::new();
+            collect_placeholder_text_styles(&master_xml, &master_theme, &mut master_styles);
+            for (key, style) in master_styles {
+                inherited.text_styles.entry(key).or_insert(style);
             }
             if inherited.background.is_none() {
                 inherited.background = parse_background(&master_xml, &master_theme);
@@ -1151,6 +1158,29 @@ fn collect_placeholder_frames(xml: &str, frames: &mut HashMap<PlaceholderKey, Im
         };
         if let Some(frame) = parse_frame(shape) {
             frames.entry(key).or_insert(frame);
+        }
+    }
+}
+
+fn collect_placeholder_text_styles(
+    xml: &str,
+    theme: &Option<ImportedTheme>,
+    styles: &mut HashMap<PlaceholderKey, ImportedTextStyle>,
+) {
+    let Ok(document) = Document::parse(xml) else {
+        return;
+    };
+    for shape in document
+        .root_element()
+        .descendants()
+        .filter(|node| node.has_tag_name("sp"))
+    {
+        let Some(key) = placeholder(shape) else {
+            continue;
+        };
+        if let Some(style) = parse_placeholder_text_style(shape, theme, is_title_placeholder(&key))
+        {
+            styles.entry(key).or_insert(style);
         }
     }
 }
@@ -1222,9 +1252,14 @@ fn parse_slide(
         }
         match node.tag_name().name() {
             "sp" => {
-                if let Some(element) =
-                    parse_shape(index, node, &layout.frames, &slide_theme, report)
-                {
+                if let Some(element) = parse_shape(
+                    index,
+                    node,
+                    &layout.frames,
+                    &layout.text_styles,
+                    &slide_theme,
+                    report,
+                ) {
                     push_element(&mut slide, element, report);
                 }
             }
@@ -1254,6 +1289,7 @@ fn parse_slide(
                     part,
                     rels: &rels,
                     layout_frames: &layout.frames,
+                    layout_text_styles: &layout.text_styles,
                     theme: &slide_theme,
                     session,
                 };
@@ -1301,6 +1337,7 @@ struct GroupParser<'a> {
     part: &'a str,
     rels: &'a HashMap<String, Rel>,
     layout_frames: &'a HashMap<PlaceholderKey, ImportedFrame>,
+    layout_text_styles: &'a HashMap<PlaceholderKey, ImportedTextStyle>,
     theme: &'a Option<ImportedTheme>,
     session: Option<&'a ImportSession>,
 }
@@ -1343,6 +1380,7 @@ impl GroupParser<'_> {
                     self.index,
                     child_node,
                     self.layout_frames,
+                    self.layout_text_styles,
                     self.theme,
                     report,
                 ),
@@ -1422,6 +1460,7 @@ fn parse_shape(
     index: usize,
     shape: Node<'_, '_>,
     layout_frames: &HashMap<PlaceholderKey, ImportedFrame>,
+    layout_text_styles: &HashMap<PlaceholderKey, ImportedTextStyle>,
     theme: &Option<ImportedTheme>,
     report: &mut DeckReport,
 ) -> Option<ImportedElement> {
@@ -1453,6 +1492,7 @@ fn parse_shape(
         shape,
         theme,
         key.as_ref().map(is_title_placeholder).unwrap_or(false),
+        key.as_ref().and_then(|key| layout_text_styles.get(key)),
     );
     if let Some(text) = text {
         return Some(ImportedElement::Text {
@@ -1567,10 +1607,67 @@ fn parse_connector(
     })
 }
 
+fn parse_placeholder_text_style(
+    shape: Node<'_, '_>,
+    theme: &Option<ImportedTheme>,
+    is_title: bool,
+) -> Option<ImportedTextStyle> {
+    let body = descendant(shape, "txBody")?;
+    let mut style = default_text_style(theme, is_title);
+    let mut changed = false;
+    let paragraph = descendant(body, "lvl1pPr").or_else(|| descendant(body, "pPr"));
+    if let Some(paragraph) = paragraph {
+        if let Some(value) = paragraph.attribute("algn") {
+            style.align = match value {
+                "ctr" => "center",
+                "r" => "right",
+                _ => "left",
+            }
+            .into();
+            changed = true;
+        }
+        if descendant(paragraph, "buAutoNum").is_some() {
+            style.bullet = "number".into();
+            changed = true;
+        } else if descendant(paragraph, "buChar").is_some() {
+            style.bullet = "dot".into();
+            changed = true;
+        }
+        if let Some(spacing) = descendant(paragraph, "spcPct") {
+            if let Some(value) = spacing
+                .attribute("val")
+                .and_then(|value| value.parse::<f64>().ok())
+                .map(|value| value / 100_000.0)
+                .filter(|value| (0.5..=3.0).contains(value))
+            {
+                style.line_height = Some(value);
+                changed = true;
+            }
+        }
+        if let Some(props) = descendant(paragraph, "defRPr") {
+            let run = parse_run_style(props, theme);
+            changed |= apply_run_style(&mut style, run);
+        }
+    }
+    if let Some(body_pr) = child(body, "bodyPr") {
+        if let Some(anchor) = body_pr.attribute("anchor") {
+            style.vertical_align = match anchor {
+                "ctr" => "middle",
+                "b" => "bottom",
+                _ => "top",
+            }
+            .into();
+            changed = true;
+        }
+    }
+    changed.then_some(style)
+}
+
 fn parse_text_body(
     shape: Node<'_, '_>,
     theme: &Option<ImportedTheme>,
     is_title: bool,
+    inherited_style: Option<&ImportedTextStyle>,
 ) -> Option<TextBody> {
     let body = descendant(shape, "txBody")?;
     let mut text = String::new();
@@ -1628,7 +1725,11 @@ fn parse_text_body(
                     let end = text.encode_utf16().count();
                     let run_style =
                         child(child_node, "rPr").map(|props| parse_run_style(props, theme));
-                    let current = style.get_or_insert_with(|| default_text_style(theme, is_title));
+                    let current = style.get_or_insert_with(|| {
+                        inherited_style
+                            .cloned()
+                            .unwrap_or_else(|| default_text_style(theme, is_title))
+                    });
                     if let Some(run_style) = run_style {
                         let run_color = run_style
                             .color
@@ -1677,7 +1778,11 @@ fn parse_text_body(
     if text.trim().is_empty() {
         return None;
     }
-    let mut style = style.unwrap_or_else(|| default_text_style(theme, is_title));
+    let mut style = style.unwrap_or_else(|| {
+        inherited_style
+            .cloned()
+            .unwrap_or_else(|| default_text_style(theme, is_title))
+    });
     if let Some(align) = paragraph_align {
         style.align = align;
     }
@@ -1704,6 +1809,26 @@ struct RunStyle {
     strikethrough: Option<bool>,
 }
 
+fn apply_run_style(style: &mut ImportedTextStyle, run: RunStyle) -> bool {
+    let mut changed = false;
+    macro_rules! apply {
+        ($field:ident) => {
+            if let Some(value) = run.$field {
+                style.$field = value;
+                changed = true;
+            }
+        };
+    }
+    apply!(font_size_pt);
+    apply!(font_family);
+    apply!(color);
+    apply!(bold);
+    apply!(italic);
+    apply!(underline);
+    apply!(strikethrough);
+    changed
+}
+
 fn parse_run_style(props: Node<'_, '_>, theme: &Option<ImportedTheme>) -> RunStyle {
     RunStyle {
         font_size_pt: props
@@ -1716,14 +1841,8 @@ fn parse_run_style(props: Node<'_, '_>, theme: &Option<ImportedTheme>) -> RunSty
         color: parse_color(props, theme),
         bold: props.attribute("b").map(|value| value == "1"),
         italic: props.attribute("i").map(|value| value == "1"),
-        underline: props
-            .attribute("u")
-            .map(|value| value != "none")
-            .or(Some(false)),
-        strikethrough: props
-            .attribute("strike")
-            .map(|value| value != "noStrike")
-            .or(Some(false)),
+        underline: props.attribute("u").map(|value| value != "none"),
+        strikethrough: props.attribute("strike").map(|value| value != "noStrike"),
     }
 }
 
@@ -2244,7 +2363,7 @@ fn notes_for_slide(
         if key.ph_type != "body" {
             continue;
         }
-        if let Some(body) = parse_text_body(shape, &None, false) {
+        if let Some(body) = parse_text_body(shape, &None, false, None) {
             if !body.text.trim().is_empty() {
                 if !text.is_empty() {
                     text.push('\n');
@@ -2911,7 +3030,7 @@ mod tests {
             </p:sp>
         "#;
         let document = Document::parse(xml).expect("xml");
-        let body = parse_text_body(document.root_element(), &None, false).expect("text");
+        let body = parse_text_body(document.root_element(), &None, false, None).expect("text");
         assert_eq!(body.text, "标题\n第二行");
         assert_eq!(body.style.align, "center");
         assert_eq!(body.style.font_size_pt, 24.0);
