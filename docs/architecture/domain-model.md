@@ -318,6 +318,8 @@ indentLevel?: number; // 0–8
 
 多选格式走批量命令 `set-text-style-elements`，清除格式走 `clear-text-format`；两者都只产生一个设计事务和一个撤销项。锁定对象被跳过；没有可编辑文本时命令拒绝执行。`clear-text-format` 的默认值来自主题的标题/正文令牌，没有主题时回退到工厂默认值，不把硬编码字号写回文档。
 
+“开始”功能区的绘图组另有多选形状命令 `set-shape-styles`：只处理 id 命中、类型为 `shape` 且未锁定的对象；纯色填充会删除旧渐变，与单对象 `set-shape-style` 的规则一致。该命令属于设计域，一个命令一个撤销项，不改变文字、表格/图表内容、内容 revision 或审核状态。
+
 字号增减使用 Office 字号阶梯（8、9、10、10.5、11、12、14 … 120），定义在 `src/core/document-model/text-style.ts`。画布与 PPTX 导出共享同一份样式语义：导出写成原生 `i`/`u`/`strike`/`anchor`/`lnSpc`/`buChar`/`buAutoNum`/`lvl` 属性，文本仍是可编辑对象。
 
 新增字段使持久化格式升到第 15 版；`14 → 15` 迁移不写入任何默认格式，固定样例见 `src/core/document-model/__fixtures__/v14-document.json`。详见 [0044 字符与段落格式](decisions/0044-text-character-and-paragraph-formatting.md)。

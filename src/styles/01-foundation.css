@@ -103,7 +103,7 @@ button {
   display: flex;
   align-items: flex-end;
   gap: 22px;
-  padding: 0 16px 8px;
+  padding: 0 16px 4px;
   color: var(--ribbon-text-active);
   background: var(--ribbon-background);
   border-bottom: 1px solid var(--ribbon-border);
@@ -327,6 +327,10 @@ button {
   color: var(--ribbon-text-active);
   background: var(--ribbon-background);
   box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+.home-tools > .ribbon-group:last-child .ribbon-menu-popover {
+  right: 0;
+  left: auto;
 }
 .ribbon-menu-popover button {
   height: 30px;
@@ -1147,6 +1151,27 @@ button {
   color: #fff;
   background: #8a5a1f;
 }
+/* 1280–1400px 时压缩按钮和组间距，让六个组和导出入口同时留在顶部。 */
+@media (max-width: 1400px) {
+  .topbar {
+    gap: 10px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+  .ribbon-group {
+    padding: 0 3px;
+  }
+  .ribbon-compact-button {
+    width: 29px;
+  }
+  .text-format-select.font {
+    width: 84px;
+  }
+  .text-format-tools,
+  .text-format-row {
+    gap: 2px;
+  }
+}
 /* 1080–1200px 时收紧功能区间距，给剪贴板和查找按钮留出空间，避免导出按钮被挤出。 */
 @media (max-width: 1200px) {
   .topbar {
@@ -1154,11 +1179,36 @@ button {
     padding-right: 10px;
     padding-left: 10px;
   }
+  .ribbon-group {
+    padding: 0 1px;
+  }
+  .ribbon-group-body {
+    gap: 1px;
+  }
+  .ribbon-compact-button {
+    width: 24px;
+  }
+  .text-format-tools,
+  .text-format-row {
+    gap: 1px;
+  }
   .text-format-select.font {
-    width: 92px;
+    width: 68px;
   }
   .text-format-select.spacing {
-    width: 48px;
+    width: 44px;
+  }
+  .text-format-size {
+    width: 38px;
+  }
+  .text-format-toggle {
+    width: 21px;
+  }
+  .text-format-segmented button {
+    width: 19px;
+  }
+  .text-format-divider {
+    margin: 0 1px;
   }
 }
 .brand {

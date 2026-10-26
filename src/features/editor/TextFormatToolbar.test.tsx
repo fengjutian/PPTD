@@ -57,4 +57,24 @@ describe("text format toolbar", () => {
     );
     expect(buttonTag(markup, "加粗")).toContain("disabled");
   });
+
+  it("splits the font and paragraph commands without losing either group", () => {
+    const elements = textElements(1);
+    const font = renderToStaticMarkup(
+      <TextFormatToolbar slideId={SLIDE_ID} elements={elements} execute={() => undefined} section="font" />,
+    );
+    const paragraph = renderToStaticMarkup(
+      <TextFormatToolbar slideId={SLIDE_ID} elements={elements} execute={() => undefined} section="paragraph" />,
+    );
+
+    expect(font).toContain('aria-label="字体"');
+    expect(buttonTag(font, "加粗")).not.toBe("");
+    expect(buttonTag(font, "清除格式")).not.toBe("");
+    expect(buttonTag(font, "项目符号")).toBe("");
+
+    expect(buttonTag(paragraph, "项目符号")).not.toBe("");
+    expect(paragraph).toContain('aria-label="水平对齐"');
+    expect(buttonTag(paragraph, "加粗")).toBe("");
+    expect(paragraph).not.toContain('aria-label="字体"');
+  });
 });

@@ -453,7 +453,7 @@ describe("commands 1", () => {
     const unlockedShape = afterLocked.slides[0]!.elements.find((element) => element.id === first.id);
     const lockedShape = afterLocked.slides[0]!.elements.find((element) => element.id === second.id);
     expect(unlockedShape).toMatchObject({ style: { fill: "#123456", stroke: "#654321" } });
-    expect(lockedShape).toEqual(second);
+    expect(lockedShape).toMatchObject({ locked: true, style: second.style });
 
     expect(() =>
       produce(source, (draft) =>

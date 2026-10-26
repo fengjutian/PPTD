@@ -103,9 +103,7 @@ export function FindReplaceBar({
     const replaced = matches.filter((match) => edited.has(matchKey(match))).length;
     const skipped = matches.length - replaced;
     execute({ type: "replace-text-edits", edits });
-    setStatus(
-      `已替换 ${replaced} 处（${edits.length} 个位置）${skipped > 0 ? `，跳过 ${skipped} 处锁定对象` : ""}`,
-    );
+    setStatus(`已替换 ${replaced} 处（${edits.length} 个位置）${skipped > 0 ? `，跳过 ${skipped} 处锁定对象` : ""}`);
   };
 
   return (

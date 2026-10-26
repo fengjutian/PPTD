@@ -100,9 +100,7 @@ export function ImportDialogs({ app }: { app: AppRuntime }) {
           onRestoreDesign={restoreContentVersionWithDesign}
         />
       )}
-      {editorCanvasOpen && findOpen && (
-        <FindReplaceBar initialFocus={findFocus} onClose={() => setFindOpen(false)} />
-      )}
+      {editorCanvasOpen && findOpen && <FindReplaceBar initialFocus={findFocus} onClose={() => setFindOpen(false)} />}
     </>
   );
 }

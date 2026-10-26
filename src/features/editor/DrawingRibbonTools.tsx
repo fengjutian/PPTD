@@ -79,11 +79,7 @@ export function DrawingRibbonTools({
           />
         </label>
       </div>
-      <RibbonCompactButton
-        label="排列：对齐、分布、旋转、锁定和组合"
-        caption="排列"
-        onClick={onOpenArrange}
-      >
+      <RibbonCompactButton label="排列：对齐、分布、旋转、锁定和组合" caption="排列" onClick={onOpenArrange}>
         <Move />
       </RibbonCompactButton>
     </>

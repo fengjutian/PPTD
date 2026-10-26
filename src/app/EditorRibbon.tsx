@@ -195,22 +195,10 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             ))}
           </nav>
           <div className="ribbon-quick-access" role="group" aria-label="快速访问">
-            <button
-              type="button"
-              aria-label="撤销"
-              title="撤销（Ctrl+Z）"
-              disabled={!undoStack.length}
-              onClick={undo}
-            >
+            <button type="button" aria-label="撤销" title="撤销（Ctrl+Z）" disabled={!undoStack.length} onClick={undo}>
               <Undo2 />
             </button>
-            <button
-              type="button"
-              aria-label="重做"
-              title="重做（Ctrl+Y）"
-              disabled={!redoStack.length}
-              onClick={redo}
-            >
+            <button type="button" aria-label="重做" title="重做（Ctrl+Y）" disabled={!redoStack.length} onClick={redo}>
               <Redo2 />
             </button>
           </div>
@@ -305,11 +293,7 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             </RibbonGroup>
 
             <RibbonGroup label="幻灯片">
-              <ToolButton
-                label="新建幻灯片"
-                caption="新建"
-                onClick={() => execute({ type: "add-slide" })}
-              >
+              <ToolButton label="新建幻灯片" caption="新建" onClick={() => execute({ type: "add-slide" })}>
                 <Plus />
               </ToolButton>
               <RibbonCompactButton
@@ -391,18 +375,10 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             </RibbonGroup>
 
             <RibbonGroup label="编辑">
-              <RibbonCompactButton
-                label="查找（Ctrl+F）"
-                caption="查找"
-                onClick={() => openFindReplace("find")}
-              >
+              <RibbonCompactButton label="查找（Ctrl+F）" caption="查找" onClick={() => openFindReplace("find")}>
                 <Search />
               </RibbonCompactButton>
-              <RibbonCompactButton
-                label="替换（Ctrl+H）"
-                caption="替换"
-                onClick={() => openFindReplace("replace")}
-              >
+              <RibbonCompactButton label="替换（Ctrl+H）" caption="替换" onClick={() => openFindReplace("replace")}>
                 <Replace />
               </RibbonCompactButton>
               <SelectionMenu
