@@ -20,6 +20,8 @@ export interface LogPanelProps {
   onClose: () => void;
 }
 
+export type LogViewerProps = Omit<LogPanelProps, "onClose">;
+
 /**
  * 诊断日志面板。
  *
@@ -27,7 +29,7 @@ export interface LogPanelProps {
  * 聚合，一条记录一行，因为它存在的意义是让用户和开发者看到原始的错误码与
  * 阶段，而不是再翻译一次。
  */
-export function LogPanel({ language, records, loading, location, onRefresh, onClose }: LogPanelProps) {
+export function LogViewer({ language, records, loading, location, onRefresh }: LogViewerProps) {
   const t = useMemo(() => createTranslator(language), [language]);
   const ordered = useMemo(() => [...records].reverse(), [records]);
   const [copyState, setCopyState] = useState<CopyState>("idle");
@@ -51,25 +53,7 @@ export function LogPanel({ language, records, loading, location, onRefresh, onCl
   }, [copyDisabled, location, ordered]);
 
   return (
-    <div className="upload-dialog-backdrop" role="presentation">
-      <section
-        className="upload-dialog diagnostics-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="diagnostics-title"
-      >
-        <div className="upload-dialog-heading">
-          <div>
-            <ScrollText />
-            <div>
-              <h2 id="diagnostics-title">{t("diagnostics.panel.title")}</h2>
-              <p>{t("diagnostics.panel.description")}</p>
-            </div>
-          </div>
-          <button type="button" aria-label={t("diagnostics.panel.close")} onClick={onClose}>
-            <X />
-          </button>
-        </div>
+    <div className="diagnostics-viewer">
         <div className="diagnostics-meta">
           <button type="button" onClick={onRefresh} disabled={loading}>
             <RefreshCw size={14} />
@@ -108,6 +92,39 @@ export function LogPanel({ language, records, loading, location, onRefresh, onCl
             ))}
           </ul>
         )}
+    </div>
+  );
+}
+
+export function LogPanel({ language, records, loading, location, onRefresh, onClose }: LogPanelProps) {
+  const t = useMemo(() => createTranslator(language), [language]);
+  return (
+    <div className="upload-dialog-backdrop" role="presentation">
+      <section
+        className="upload-dialog diagnostics-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="diagnostics-title"
+      >
+        <div className="upload-dialog-heading">
+          <div>
+            <ScrollText />
+            <div>
+              <h2 id="diagnostics-title">{t("diagnostics.panel.title")}</h2>
+              <p>{t("diagnostics.panel.description")}</p>
+            </div>
+          </div>
+          <button type="button" aria-label={t("diagnostics.panel.close")} onClick={onClose}>
+            <X />
+          </button>
+        </div>
+        <LogViewer
+          language={language}
+          records={records}
+          loading={loading}
+          location={location}
+          onRefresh={onRefresh}
+        />
       </section>
     </div>
   );

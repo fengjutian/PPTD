@@ -8,6 +8,7 @@ describe("SettingsWorkspace 语言", () => {
       <SettingsWorkspace language="en" onLanguageChange={() => undefined} onMessage={() => undefined} />,
     );
     expect(markup).toContain("Language");
+    expect(markup).toContain("Log");
     expect(markup).toContain("Model service");
     expect(markup).toContain("AI model service");
     expect(markup).toContain("MiniMax (China)");

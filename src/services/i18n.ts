@@ -26,6 +26,7 @@ const zh = {
   "settings.tabs.appearance": "应用外观",
   "settings.tabs.font": "字体",
   "settings.tabs.language": "语言",
+  "settings.tabs.log": "日志",
 
   "settings.model.title": "AI 模型服务",
   "settings.model.description": "选择生成结构化演示文稿内容所用的厂商与模型。",
@@ -146,6 +147,7 @@ const en: Record<UiMessageKey, string> = {
   "settings.tabs.appearance": "Appearance",
   "settings.tabs.font": "Fonts",
   "settings.tabs.language": "Language",
+  "settings.tabs.log": "Log",
 
   "settings.model.title": "AI model service",
   "settings.model.description": "Choose the provider and model used to generate structured presentation content.",

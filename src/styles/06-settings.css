@@ -27,6 +27,12 @@
   border-radius: 12px;
   background: #202126;
 }
+.settings-log-card .diagnostics-viewer {
+  overflow: hidden;
+  border: 1px solid #35373d;
+  border-radius: 8px;
+  background: #191a1e;
+}
 .settings-section-heading {
   display: flex;
   align-items: flex-start;

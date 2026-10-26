@@ -1,6 +1,4 @@
-import { Layers3, LayoutDashboard, Palette, ScrollText, Settings, Sparkles } from "lucide-react";
-
-import { LogPanel } from "../features/diagnostics/LogPanel";
+import { Layers3, LayoutDashboard, Palette, Settings, Sparkles } from "lucide-react";
 
 import { ContentReviewStatus } from "../features/editor/ContentReviewStatus";
 
@@ -24,14 +22,11 @@ export function AppView({ app }: { app: AppRuntime }) {
     t,
     activeView,
     changeActiveView,
-    diagnosticsOpen,
-    openDiagnostics,
     uiLanguage,
     logRecords,
     logLoading,
     logLocation,
     loadDiagnostics,
-    setDiagnosticsOpen,
     editorSurface,
     projectHomeItems,
     designBusy,
@@ -111,16 +106,6 @@ export function AppView({ app }: { app: AppRuntime }) {
           <Palette />
           <span>{t("shell.theme")}</span>
         </button>
-        <button
-          className={diagnosticsOpen ? "active" : ""}
-          aria-expanded={diagnosticsOpen}
-          aria-haspopup="dialog"
-          title={t("shell.logTitle")}
-          onClick={openDiagnostics}
-        >
-          <ScrollText />
-          <span>{t("shell.log")}</span>
-        </button>
         <div className="nav-spacer" />
         <button
           className={activeView === "settings" ? "active" : ""}
@@ -132,17 +117,6 @@ export function AppView({ app }: { app: AppRuntime }) {
           <span>{t("shell.settings")}</span>
         </button>
       </nav>
-
-      {diagnosticsOpen && (
-        <LogPanel
-          language={uiLanguage}
-          records={logRecords}
-          loading={logLoading}
-          location={logLocation}
-          onRefresh={() => void loadDiagnostics()}
-          onClose={() => setDiagnosticsOpen(false)}
-        />
-      )}
 
       {activeView === "editor" && editorSurface === "projects" && (
         <ProjectHome
@@ -184,7 +158,15 @@ export function AppView({ app }: { app: AppRuntime }) {
             </div>
           </header>
           <div className="feature-scroll">
-            <SettingsWorkspace language={uiLanguage} onLanguageChange={setUiLanguage} onMessage={setTaskStatus} />
+            <SettingsWorkspace
+              language={uiLanguage}
+              onLanguageChange={setUiLanguage}
+              onMessage={setTaskStatus}
+              logRecords={logRecords}
+              logLoading={logLoading}
+              logLocation={logLocation}
+              onLogRefresh={() => void loadDiagnostics()}
+            />
           </div>
         </main>
       )}

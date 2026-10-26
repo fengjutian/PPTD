@@ -1,9 +1,10 @@
-import { Check, KeyRound, Languages, Palette, PlugZap, Trash2, Type } from "lucide-react";
+import { Check, KeyRound, Languages, Palette, PlugZap, ScrollText, Trash2, Type } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { LogViewer } from "../diagnostics/LogPanel";
 import { AI_PROVIDERS, findAiProvider } from "../../services/ai-providers";
 import { CONCEPT_PRESET_LABELS, type ConceptPresetId } from "../../core/design/deck-concept";
 import { aiKeyConfigured, deleteAiKey, saveAiKey, testAiConnection } from "../../services/ai-service";
-import { appLogLocation } from "../../services/app-log";
+import type { AppLogRecord } from "../../services/app-log";
 import {
   clearDesignMemory,
   designMemorySummary,
@@ -60,6 +61,10 @@ export interface SettingsWorkspaceProps {
   language: UiLanguage;
   onLanguageChange: (language: UiLanguage) => void;
   onMessage: (message: string) => void;
+  logRecords?: AppLogRecord[];
+  logLoading?: boolean;
+  logLocation?: string;
+  onLogRefresh?: () => void;
 }
 
 export interface DesignMemoryDetailsProps {
@@ -155,15 +160,22 @@ export function DiagnosticsLog({ language, path }: DiagnosticsLogProps) {
   );
 }
 
-export function SettingsWorkspace({ language, onLanguageChange, onMessage }: SettingsWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<"model" | "appearance" | "font" | "language">("model");
+export function SettingsWorkspace({
+  language,
+  onLanguageChange,
+  onMessage,
+  logRecords = [],
+  logLoading = false,
+  logLocation,
+  onLogRefresh = () => undefined,
+}: SettingsWorkspaceProps) {
+  const [activeTab, setActiveTab] = useState<"model" | "appearance" | "font" | "language" | "log">("model");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [apiKey, setApiKey] = useState("");
   const [configured, setConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [testState, setTestState] = useState<{ kind: "success" | "error"; message: string }>();
   const [installedFonts, setInstalledFonts] = useState<Record<string, boolean>>({});
-  const [logPath, setLogPath] = useState<string>();
   const [memory, setMemory] = useState<DesignMemorySummary>();
   const [memoryDetails, setMemoryDetails] = useState<{ looks: DesignLook[]; preferences: DesignPreference[] }>({
     looks: [],
@@ -202,16 +214,6 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
     const detected: Record<string, boolean> = {};
     for (const option of UI_FONT_OPTIONS) detected[option.id] = probeUiFont(option);
     setInstalledFonts(detected);
-  }, []);
-  // 日志位置只在桌面端存在；浏览器预览没有文件可给，保持 undefined。
-  useEffect(() => {
-    let active = true;
-    void appLogLocation().then((location) => {
-      if (active) setLogPath(location);
-    });
-    return () => {
-      active = false;
-    };
   }, []);
   const refreshMemory = async () => {
     const [summary, looks, preferences] = await Promise.all([
@@ -334,6 +336,19 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
         >
           <Languages />
           {t("settings.tabs.language")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "log"}
+          className={activeTab === "log" ? "active" : ""}
+          onClick={() => {
+            setActiveTab("log");
+            onLogRefresh();
+          }}
+        >
+          <ScrollText />
+          {t("settings.tabs.log")}
         </button>
       </div>
       {activeTab === "model" && (
@@ -495,7 +510,6 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
               {testState.message}
             </div>
           )}
-          <DiagnosticsLog language={language} path={logPath} />
         </section>
       )}
       {activeTab === "appearance" && (
@@ -590,12 +604,32 @@ export function SettingsWorkspace({ language, onLanguageChange, onMessage }: Set
           <p className="field-help">{t("settings.language.help")}</p>
         </section>
       )}
-      <div className="settings-actions">
-        <button type="button" className="primary-action" disabled={busy || !settings.aiModel.trim()} onClick={save}>
-          {busy ? t("settings.actions.saving") : t("settings.actions.save")}
-          <Check />
-        </button>
-      </div>
+      {activeTab === "log" && (
+        <section className="settings-card settings-log-card" role="tabpanel">
+          <div className="settings-section-heading">
+            <ScrollText />
+            <div>
+              <h2>{t("diagnostics.panel.title")}</h2>
+              <p>{t("diagnostics.panel.description")}</p>
+            </div>
+          </div>
+          <LogViewer
+            language={language}
+            records={logRecords}
+            loading={logLoading}
+            location={logLocation}
+            onRefresh={onLogRefresh}
+          />
+        </section>
+      )}
+      {activeTab !== "log" && (
+        <div className="settings-actions">
+          <button type="button" className="primary-action" disabled={busy || !settings.aiModel.trim()} onClick={save}>
+            {busy ? t("settings.actions.saving") : t("settings.actions.save")}
+            <Check />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
