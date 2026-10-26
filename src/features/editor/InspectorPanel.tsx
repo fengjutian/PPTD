@@ -16,6 +16,7 @@ import {
   CircleAlert,
   Copy,
   Eraser,
+  ExternalLink,
   EyeOff,
   IndentDecrease,
   IndentIncrease,
@@ -49,6 +50,7 @@ import {
   type SlideId,
   type SlideTransition,
   type TextElementStyle,
+  isSafeTextHyperlinkUrl,
   resolveFragmentStyle,
   textFragments,
 } from "../../core/document-model";
@@ -156,6 +158,7 @@ export function InspectorPanelView({
   const [textDraft, setTextDraft] = useState<string>();
   const [fontAvailable, setFontAvailable] = useState(true);
   const [selection, setSelection] = useState<{ start: number; end: number }>();
+  const [linkError, setLinkError] = useState<string>();
   const textDraftCancelRef = useRef(false);
   const locked = element.locked;
   const fontFamily = element.type === "text" ? element.style.fontFamily : "";
@@ -164,6 +167,7 @@ export function InspectorPanelView({
     // A text selection addresses a range of one specific element. Keeping it
     // when another element is selected would bold the wrong characters.
     setSelection(undefined);
+    setLinkError(undefined);
     setTextDraft(undefined);
   }, [element.id]);
 

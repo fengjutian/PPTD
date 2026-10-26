@@ -41,7 +41,12 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { isElementVisible, type AnimationEffect, type SlideAnimation } from "../core/document-model";
+import {
+  isElementVisible,
+  isSafeTextHyperlinkUrl,
+  type AnimationEffect,
+  type SlideAnimation,
+} from "../core/document-model";
 
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 
@@ -141,7 +146,7 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
     const input = window.prompt("输入链接地址（http/https 或 mailto），留空移除链接", currentLink ?? "");
     if (input === null) return;
     const url = input.trim();
-    if (url && (url.length > 2048 || !/^(?:https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(url))) {
+    if (url && !isSafeTextHyperlinkUrl(url)) {
       setTaskStatus("链接必须是 2048 字符以内的 http、https 或 mailto 地址");
       return;
     }
