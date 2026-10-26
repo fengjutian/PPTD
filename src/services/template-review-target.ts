@@ -1,5 +1,6 @@
 import type {
   PresentationDocument,
+  SlideLayoutCapabilities,
   TemplateGrid,
   TemplateLayoutTarget,
   TemplateReviewTarget,
@@ -14,6 +15,18 @@ export type {
   TemplateReviewTarget,
   TemplateTolerances,
 } from "../core/document-model";
+
+/**
+ * Prompt-only view of a template layout.
+ *
+ * Persisted review targets measure geometry. Layout capabilities belong to the
+ * current document and are merged only when a prompt is built, so an old
+ * review target never has to be rewritten just to tell the model whether a
+ * layout can carry a picture or two columns.
+ */
+export type PromptTemplateReviewTarget = Omit<TemplateReviewTarget, "layouts"> & {
+  layouts: Array<TemplateLayoutTarget & { capabilities?: SlideLayoutCapabilities }>;
+};
 
 /**
  * The measurable target a reviewed deck is compared against when the user
@@ -340,10 +353,18 @@ export function templateTargetForPrompt(
   target: TemplateReviewTarget,
   document: PresentationDocument,
   maxLayouts = 12,
-): TemplateReviewTarget {
+): PromptTemplateReviewTarget {
   const used = new Set(document.layouts?.map((layout) => layout.name) ?? []);
   const relevant = target.layouts.filter((layout) => used.has(layout.name));
-  const layouts = (relevant.length > 0 ? relevant : target.layouts).slice(0, maxLayouts);
+  const capabilities = new Map(
+    document.layouts?.flatMap((layout) =>
+      layout.capabilities === undefined ? [] : ([[layout.name, layout.capabilities]] as const),
+    ) ?? [],
+  );
+  const layouts = (relevant.length > 0 ? relevant : target.layouts).slice(0, maxLayouts).map((layout) => ({
+    ...layout,
+    ...(capabilities.has(layout.name) ? { capabilities: capabilities.get(layout.name)! } : {}),
+  }));
   return { ...target, layouts };
 }
 

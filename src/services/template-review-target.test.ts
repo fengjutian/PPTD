@@ -5,6 +5,7 @@ import {
   applyTemplateToGoal,
   buildTemplateReviewTarget,
   checkTemplateFit,
+  templateTargetForPrompt,
   templateTargetForSlide,
   templateTargetMatchesDocument,
 } from "./template-review-target";
@@ -137,6 +138,35 @@ describe("template review target", () => {
 
   it("does not invent a target when the template has no usable placeholders", () => {
     expect(buildTemplateReviewTarget(analysis({ layouts: [] }))).toBeUndefined();
+  });
+
+  it("adds persisted layout capabilities to the prompt-sized target", () => {
+    const target = buildTemplateReviewTarget(analysis())!;
+    const document = withBody();
+    const layoutName = target.layouts[0]!.name;
+    document.layouts = [
+      {
+        id: crypto.randomUUID(),
+        name: layoutName,
+        capabilities: { hasTitle: true, hasBody: true, hasImage: false, columns: 2, free: false },
+      },
+    ];
+
+    const promptTarget = templateTargetForPrompt(target, document);
+
+    expect(promptTarget.layouts).toHaveLength(1);
+    expect(promptTarget.layouts[0]).toMatchObject({
+      name: layoutName,
+      capabilities: { hasTitle: true, hasBody: true, hasImage: false, columns: 2, free: false },
+    });
+  });
+
+  it("does not invent prompt capabilities for old documents", () => {
+    const target = buildTemplateReviewTarget(analysis())!;
+    const document = withBody();
+    document.layouts = [{ id: crypto.randomUUID(), name: target.layouts[0]!.name }];
+
+    expect(templateTargetForPrompt(target, document).layouts[0]).not.toHaveProperty("capabilities");
   });
 
   it("warns when a page's picture has no placeholder in its layout", () => {
