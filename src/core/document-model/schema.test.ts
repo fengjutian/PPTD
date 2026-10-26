@@ -345,6 +345,8 @@ describe("presentation document schema", () => {
     expect(() => presentationDocumentSchema.parse(document)).toThrow();
     document.slides[0]!.elements[0]!.name = "x".repeat(81);
     expect(() => presentationDocumentSchema.parse(document)).toThrow();
+    document.slides[0]!.elements[0]!.name = "第一行\n第二行";
+    expect(() => presentationDocumentSchema.parse(document)).toThrow();
   });
 
   it("keeps a shadow token through a save and a re-read", () => {

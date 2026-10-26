@@ -2,7 +2,7 @@ import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu, RectEmu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";
+import { fittedFontSize, frameFromNormalized, textFits, textHeightPt } from "./measure";`nimport { railStations } from "./rail-geometry";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
 type ProcessBlock = Extract<ContentBlock, { type: "process" }>;
@@ -127,7 +127,8 @@ export const processRail: LayoutRecipe = {
     if (page.width / page.height >= 1.3) {
       const columns = block.items.length;
       const gap = 0.045;
-      const columnWidth = (chrome.content.width - gap * (columns - 1)) / columns;
+      const stations = railStations(chrome.content, columns, gap);
+      const columnWidth = stations[0]?.width ?? chrome.content.width;
       const diameter = 0.26;
       // The circle is a length (inches) while everything else here is a share
       // of the page height. Converting once keeps the node on the rail and the
@@ -161,11 +162,7 @@ export const processRail: LayoutRecipe = {
       let textSize = Math.min(TEXT_SIZE_PT, 15);
       let textHeights = textHeightsAt(textSize);
       const blockHeightAt = () =>
-        diameterNorm +
-        labelGap +
-        Math.max(...labelHeights) +
-        textGap +
-        Math.max(...textHeights);
+        diameterNorm + labelGap + Math.max(...labelHeights) + textGap + Math.max(...textHeights);
       while (textSize > MIN_TEXT_SIZE_PT && blockHeightAt() > contentHeight) {
         textSize -= 1;
         textHeights = textHeightsAt(textSize);
@@ -186,7 +183,7 @@ export const processRail: LayoutRecipe = {
         ),
       );
       block.items.forEach((item, index) => {
-        const x = chrome.content.x + index * (columnWidth + gap);
+        const x = stations[index]?.x ?? chrome.content.x;
         const node = circleFrame(x * pageWidthIn, railY * pageHeightIn - diameter / 2, diameter);
         elements.push(ellipseElement(node, colors.accent));
         elements.push(

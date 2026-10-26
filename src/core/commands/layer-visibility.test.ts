@@ -97,10 +97,7 @@ describe("layer visibility and naming commands", () => {
     );
     expect(shown.slides[0]!.elements.every((element) => element.hidden === undefined)).toBe(true);
     expect(
-      commandDomain(
-        { type: "set-elements-hidden", slideId: slide.id, elementIds: [shape.id], hidden: false },
-        shown,
-      ),
+      commandDomain({ type: "set-elements-hidden", slideId: slide.id, elementIds: [shape.id], hidden: false }, shown),
     ).toBeNull();
   });
 
@@ -136,10 +133,7 @@ describe("layer visibility and naming commands", () => {
       commandDomain({ type: "rename-element", slideId: slide.id, elementId: shape.id, name: "底" }, document),
     ).toBe("design");
     expect(
-      commandDomain(
-        { type: "set-elements-hidden", slideId: slide.id, elementIds: [shape.id], hidden: true },
-        document,
-      ),
+      commandDomain({ type: "set-elements-hidden", slideId: slide.id, elementIds: [shape.id], hidden: true }, document),
     ).toBe("design");
   });
 });

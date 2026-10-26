@@ -191,9 +191,7 @@ export const LayerList = memo(function LayerList({
 
   const toggleHidden = (elementId: ElementId) => {
     const elementIds = blockOf(elementId);
-    const allHidden = elementIds.every(
-      (id) => slide.elements.find((element) => element.id === id)?.hidden === true,
-    );
+    const allHidden = elementIds.every((id) => slide.elements.find((element) => element.id === id)?.hidden === true);
     onCommand({ type: "set-elements-hidden", slideId: slide.id, elementIds, hidden: !allHidden });
   };
 

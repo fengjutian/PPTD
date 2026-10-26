@@ -734,7 +734,7 @@ fn theme_part_path(archive: &mut ZipArchive<File>) -> Option<String> {
 }
 
 fn parse_theme_xml(xml: &str) -> Option<ImportedTheme> {
-    let document = Document::parse(&xml).ok()?;
+    let document = Document::parse(xml).ok()?;
     let root = document.root_element();
     let mut theme = ImportedTheme::default();
     if let Some(scheme) = descendant(root, "clrScheme") {

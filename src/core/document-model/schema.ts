@@ -15,7 +15,13 @@ const base = z.object({
   rotationMilliDegree: z.number().int(),
   locked: z.boolean(),
   /** Editor-side layer metadata; absent means the derived name and visible. */
-  name: z.string().trim().min(1).max(ELEMENT_NAME_MAX_LENGTH).optional(),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .max(ELEMENT_NAME_MAX_LENGTH)
+    .regex(/^[^\r\n]+$/, "ELEMENT_NAME_SINGLE_LINE")
+    .optional(),
   hidden: z.boolean().optional(),
   /** Missing in legacy documents; the relayout command infers it structurally. */
   origin: z.enum(["generated", "user"]).optional(),
