@@ -1,5 +1,7 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { Emu } from "../../document-model";
+import { layoutRectToNormalized, normalizedToLayoutRect } from "../coordinate-system";
+import { layoutColumns } from "../layout-functions";
 import { resolveChrome } from "../page-chrome";
 import { readContentUnits } from "./content";
 import { rectElement, textElement, verticalRule } from "./elements";
@@ -27,8 +29,6 @@ const MIN_ITEMS = 2;
 const MAX_ITEMS = 4;
 /** A point longer than this is prose; it belongs to the column page. */
 const MAX_ITEM_LENGTH = 30;
-/** The gutter between two panels, as a share of the content width. */
-const COLUMN_GAP = 0.04;
 /** The index numeral is the page's visual anchor, not a label. */
 const NUMERAL_LINE_HEIGHT = 1.02;
 /** The numeral takes this share of the height the grid has, within bounds. */
@@ -156,8 +156,8 @@ export const instrumentColumns: LayoutRecipe = {
     }
 
     const count = units.items.length;
-    const gap = COLUMN_GAP * chrome.content.width;
-    const columnWidth = (chrome.content.width - gap * (count - 1)) / count;
+    const columnSlots = layoutColumns(normalizedToLayoutRect(chrome.content), count, "md").map(layoutRectToNormalized);
+    const columnWidth = Math.min(...columnSlots.map((slot) => slot.width));
     const tickHeight = Math.max(0.003, ruleHeight(ctx.tokens.rule.hairlinePt, page.height));
     const available = chrome.contentBottom - contentTop;
     if (available < 0.2) return conflict("items", "标题与面板之间没有足够的高度");
@@ -194,17 +194,16 @@ export const instrumentColumns: LayoutRecipe = {
       );
 
     units.items.forEach((item, index) => {
-      const x = chrome.content.x + index * (columnWidth + gap);
+      const slot = columnSlots[index]!;
+      const x = slot.x;
+      const slotWidth = slot.width;
       elements.push(
-        rectElement(
-          frameFromNormalized({ x, y: panelTop, width: columnWidth, height: tickHeight }, page),
-          colors.accent,
-        ),
+        rectElement(frameFromNormalized({ x, y: panelTop, width: slotWidth, height: tickHeight }, page), colors.accent),
       );
       elements.push(
         textElement(
           String(index + 1).padStart(2, "0"),
-          frameFromNormalized({ x, y: panelTop + tickHeight, width: columnWidth, height: numeralHeight }, page),
+          frameFromNormalized({ x, y: panelTop + tickHeight, width: slotWidth, height: numeralHeight }, page),
           numeralPt,
           colors.accent,
           true,
@@ -220,7 +219,7 @@ export const instrumentColumns: LayoutRecipe = {
             {
               x,
               y: textTop,
-              width: columnWidth,
+              width: slotWidth,
               height: Math.max(0.02, textBottom - textTop),
             },
             page,
@@ -234,9 +233,11 @@ export const instrumentColumns: LayoutRecipe = {
         ),
       );
       if (index > 0) {
+        const previous = columnSlots[index - 1]!;
+        const separatorX = (previous.x + previous.width + x) / 2;
         elements.push(
           verticalRule(
-            x - gap / 2,
+            separatorX,
             panelTop,
             Math.max(0.02, textBottom - panelTop + CLOSING_GAP),
             0.004,
