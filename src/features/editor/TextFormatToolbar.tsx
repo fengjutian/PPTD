@@ -35,6 +35,16 @@ import { FONT_OPTIONS } from "./font-options";
 const MIN_INDENT = 0;
 const MAX_INDENT = 8;
 
+/** The same quick values PowerPoint offers before its “more spacing” dialog. */
+const CHARACTER_SPACING_OPTIONS = [
+  { value: "-1.5", label: "很紧" },
+  { value: "-1", label: "紧密" },
+  { value: "0", label: "常规" },
+  { value: "1", label: "稀疏" },
+  { value: "1.5", label: "很松" },
+  { value: "3", label: "更松" },
+] as const;
+
 interface TextFormatToolbarProps {
   slideId: SlideId;
   /** The selected objects; the toolbar filters the text ones itself. */
@@ -96,6 +106,7 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
   const align = shared(stateElements, (element) => element.style.align);
   const vertical = shared(stateElements, (element) => element.style.verticalAlign ?? "top");
   const bullet = shared(stateElements, (element) => element.style.bullet ?? "none");
+  const characterSpacing = shared(stateElements, (element) => element.style.letterSpacingPt);
 
   const fontSize = primary?.style.fontSizePt;
   const indentLevel = primary?.style.indentLevel ?? 0;
@@ -216,6 +227,36 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
       disabled={disabled}
       onChange={(event) => apply({ color: event.target.value })}
     />
+  );
+
+  const spacingValue = characterSpacing.mixed ? "" : characterSpacing.value === undefined ? "" : String(characterSpacing.value);
+  const customSpacing =
+    spacingValue !== "" && !CHARACTER_SPACING_OPTIONS.some((option) => Number(option.value) === characterSpacing.value);
+  const characterSpacingControl = (
+    <select
+      className="text-format-select character-spacing"
+      aria-label="字符间距"
+      title="字符间距：负值收紧，正值拉开"
+      value={spacingValue}
+      data-mixed={characterSpacing.mixed || undefined}
+      disabled={disabled}
+      onChange={(event) => {
+        const value = event.target.value;
+        apply({ letterSpacingPt: value === "" ? undefined : Number(value) });
+      }}
+    >
+      {characterSpacing.mixed ? (
+        <option value="">多值</option>
+      ) : spacingValue === "" ? (
+        <option value="">默认</option>
+      ) : null}
+      {customSpacing && <option value={spacingValue}>{spacingValue} pt</option>}
+      {CHARACTER_SPACING_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 
   const characterControls = (
@@ -386,6 +427,7 @@ export function TextFormatToolbar({ slideId, elements, execute, section = "all" 
           </div>
           <div className="text-format-row">
             {characterControls}
+            {characterSpacingControl}
             <span className="text-format-divider" />
             {clearFormatControl}
           </div>

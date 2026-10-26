@@ -105,6 +105,7 @@ describe("importedDeckToDocument", () => {
     if (title?.type === "text") {
       expect(title.runs?.[0]).toMatchObject({ start: 0, end: 4, bold: true, color: "#3366CC" });
       expect(title.style.fontFamily).toBe("Aptos Display");
+      expect(title.style.letterSpacingPt).toBe(0.8);
     }
 
     const image = slide.elements.find((element) => element.type === "image");
@@ -133,6 +134,17 @@ describe("importedDeckToDocument", () => {
       ]);
     }
     expect(() => presentationDocumentSchema.parse(document)).not.toThrow();
+  });
+
+  it("keeps an explicit zero character spacing instead of treating it as absent", () => {
+    const source = deck();
+    const text = source.slides[0]!.elements.find((element) => element.type === "text");
+    if (!text || text.type !== "text") throw new Error("expected a text element");
+    text.style.letterSpacingPt = 0;
+
+    const document = importedDeckToDocument(source);
+    const title = document.slides[0]!.elements.find((element) => element.type === "text" && element.contentRef === "title");
+    expect(title?.type === "text" ? title.style.letterSpacingPt : undefined).toBe(0);
   });
 
   it("falls back to a readable page title when the slide has none", () => {
