@@ -48,7 +48,7 @@ const BALANCE_SHARE = 0.3;
 /** A lead sentence sits between the title and the panel grid. */
 const LEAD_GAP = 0.035;
 /** How far the board may shrink to avoid a stranded last line. */
-const ORPHAN_ALLOWANCE_PT = 3;
+const ORPHAN_ALLOWANCE_PT = 4;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -182,18 +182,20 @@ export const instrumentColumns: LayoutRecipe = {
       Math.max(...units.items.map((item) => textHeightPt(item, widthPt, size, bodyFamily, lineHeight)));
     const roomPt = available * pageHeightIn * 72 - (tickHeight + numeralHeight + NUMERAL_GAP) * pageHeightIn * 72;
     const preferredText = Math.min(MAX_TEXT_PT, ctx.tokens.type.bodyPt + 6);
-    // A cell that ends on one character ("…贡献有 / 限") is the defect this grid
-    // produces most: four equal columns, one stranded glyph. The board shrinks
-    // together, never one cell on its own.
-    const orphanFloor = Math.max(MIN_TEXT_PT, preferredText - ORPHAN_ALLOWANCE_PT);
+    // The size the board can afford by height comes first, then a short step for
+    // the break: a cell that ends on one character ("…贡献有 / 限") is the defect
+    // this grid produces most. The board shrinks as one — never one cell on its
+    // own — and only a few points below what the room already forced.
     let textSize = preferredText;
-    while (
-      textSize > MIN_TEXT_PT &&
-      (tallest(textSize) > roomPt ||
-        (textSize > orphanFloor && anyEndsInOrphan(units.items, widthPt, textSize, bodyFamily)))
-    )
-      textSize -= 1;
+    while (textSize > MIN_TEXT_PT && tallest(textSize) > roomPt) textSize -= 1;
     if (tallest(textSize) > roomPt) return conflict("items", "面板里的要点放不下");
+    const orphanFloor = Math.max(MIN_TEXT_PT, textSize - ORPHAN_ALLOWANCE_PT);
+    while (textSize > orphanFloor && anyEndsInOrphan(units.items, widthPt, textSize, bodyFamily)) textSize -= 1;
+    // Four columns too narrow to break cleanly even after that step would ship a
+    // visibly broken board; the planner has other skeletons that carry four points.
+    if (anyEndsInOrphan(units.items, widthPt, textSize, bodyFamily)) {
+      return conflict("items", "四条要点在窄栏里断不开，换一个能排开的构图");
+    }
 
     // The panel block sits slightly above the centre of the region it was given:
     // a board that hugs the top leaves the page looking half-filled.

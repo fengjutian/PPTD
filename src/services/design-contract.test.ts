@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { aiPresentationDesignSchema, pageDesignPlanSchema } from "./ai-service";
+
+import { RECIPE_CATALOG } from "../core/layout/recipes/catalog";
+import {
+  DESIGN_PROMPT_VERSION,
+  aiPresentationDesignSchema,
+  pageDesignPlanSchema,
+} from "./ai-service";
 
 /**
  * The plan fields that have a real consumer in the compiler or command layer.
@@ -53,5 +59,21 @@ describe("AI design contract", () => {
     const slide = aiPresentationDesignSchema.shape.slides.element.shape;
     expect(Object.keys(slide).sort()).toEqual(Object.keys(SLIDE_STYLE_FIELDS).sort());
     expect(SLIDE_STYLE_FIELDS.recipe).toBe("conditional");
+  });
+
+  it("pins the page design prompt version", () => {
+    // A prompt edit must bump this string and the report will carry the new
+    // value. The test cannot read the Rust prompt, but it stops a silent
+    // "rename" from being treated as the same revision.
+    expect(DESIGN_PROMPT_VERSION).toMatch(/^design-pages-v\d+$/);
+  });
+
+  it("accepts every implemented recipe and no unimplemented one", () => {
+    // The schema enum and the recipe catalog are two lists of the same fact.
+    // Drift in either direction is a bug: a recipe the renderer cannot draw, or
+    // an implemented recipe the model is never allowed to request.
+    const recipeSchema = pageDesignPlanSchema.shape.recipe;
+    const accepted = [...recipeSchema.unwrap().options].sort();
+    expect(accepted).toEqual(Object.keys(RECIPE_CATALOG).sort());
   });
 });

@@ -34,6 +34,7 @@ import {
   type AiDeckConcept,
   type DeckConcept,
 } from "../core/design/deck-concept";
+import { summarizeDesignMetrics, type DesignMetrics } from "../core/design/design-metrics";
 import {
   auditThemeDirection,
   themeDirectionForPreset,
@@ -120,7 +121,7 @@ import {
   type SplitSlidePage,
 } from "../services/ai-service";
 import { applyTheme, applyUiFont, applyUiLanguage, defaultSettings, loadSettings } from "../services/settings";
-import { DESIGN_DIRECTIONS_PROMPT_VERSION } from "../services/ai-service";
+import { DESIGN_DIRECTIONS_PROMPT_VERSION, DESIGN_PROMPT_VERSION } from "../services/ai-service";
 import {
   loadDesignPreferences,
   loadRecentLooks,
@@ -538,6 +539,10 @@ export function useAppRuntime() {
     themeDirectionAudit?: ThemeDirectionAudit;
     /** 设计计划实际采用、替换或拒绝了哪些配方。 */
     compileReport?: DesignDraftCompileReport;
+    /** 编译报告的扁平计数，供报告摘要和后续本地指标复用。 */
+    designMetrics?: DesignMetrics;
+    /** 产出这册设计的页面提示词版本。 */
+    promptVersion?: string;
     issues: PresentationQualityIssue[];
     notes: string[];
     /** 视觉评审留下的结构化结论，用于在报告里逐条展示模型建议。 */
@@ -3193,16 +3198,19 @@ export function useAppRuntime() {
       // 视觉上没问题。必须把报告留下，不能只闪一条状态就进入编辑器。
       const visualBelowTarget = stage.visualPassed === false;
       const qualityAccepted = qualityStageCanCommit(stage);
+      const compileReport = inspectAiDesignedDraftCompilation(document, {
+        ...generationCommand,
+        designs: stage.designs,
+      });
       const qualityReport = {
         templateName: deckName,
         ...(templateTarget === undefined ? {} : { templateTargetName: templateTarget.name }),
         concept,
         themeDirection,
         themeDirectionAudit: auditThemeDirection(themeDirection, concept),
-        compileReport: inspectAiDesignedDraftCompilation(document, {
-          ...generationCommand,
-          designs: stage.designs,
-        }),
+        compileReport,
+        designMetrics: summarizeDesignMetrics(compileReport, finalDocument.slides.length),
+        promptVersion: DESIGN_PROMPT_VERSION,
         issues: [
           ...new Map(
             stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),

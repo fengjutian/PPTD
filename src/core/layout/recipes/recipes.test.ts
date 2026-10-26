@@ -815,6 +815,52 @@ describe("process-rail recipe", () => {
     );
     expect("conflict" in result).toBe(true);
   });
+
+  it("stacks the rail when five steps would only break at small type", () => {
+    // Five stations across the page leave about 127pt per column. A ten-glyph
+    // step strands its last character at 15pt (8 + 2) and at 14pt (9 + 1), so
+    // the row would have to go below the readable floor to break cleanly. The
+    // vertical rail keeps the copy at body size instead.
+    const five = {
+      ...processContent,
+      blocks: [
+        {
+          id: "process-1",
+          type: "process" as const,
+          items: [
+            { label: "样本前处理", text: "样本前处理两天内完成" },
+            { label: "上机测序", text: "上机测序平台双端运行" },
+            { label: "生信分析", text: "生信分析流程人工复核" },
+            { label: "报告交付", text: "报告交付需要临床解读" },
+            { label: "数据归档", text: "数据归档保留五年以上" },
+          ],
+        },
+      ],
+    };
+    const ctx = context(five, {
+      facts: facts({ itemCount: 0, hasProcess: true, hasRowBlock: true, layout: "cards" }),
+    });
+    const result = plan(processRail, ctx);
+    const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(5);
+    // Stacked down one axis instead of across the page.
+    const centers = nodes.map((node) => node.frame.y + node.frame.height / 2);
+    expect(Math.max(...centers) - Math.min(...centers)).toBeGreaterThan(page.height * 0.15);
+    expect(
+      Math.max(...nodes.map((node) => node.frame.x)) - Math.min(...nodes.map((node) => node.frame.x)),
+    ).toBeLessThan(page.width * 0.05);
+    const block = five.blocks![0]!;
+    if (block.type !== "process") throw new Error("expected a process block");
+    const stepTexts = block.items.map((item) => item.text);
+    const steps = result.elements.filter(
+      (element): element is TextElement => element.type === "text" && stepTexts.includes(element.text),
+    );
+    expect(steps).toHaveLength(5);
+    for (const step of steps) {
+      expect(step.frame.width).toBeGreaterThan(inches(2));
+      expect(step.style.fontSizePt).toBeGreaterThanOrEqual(14);
+    }
+  });
 });
 
 describe("comparison recipe", () => {
@@ -1098,6 +1144,39 @@ describe("timeline-rail recipe", () => {
     );
     expect("conflict" in result).toBe(true);
   });
+
+  it("stacks the rail when a row of stations would only break at small type", () => {
+    // Five stations across a narrow content area leave about 50pt per column at
+    // body size: the events would strand a character at every size the row can
+    // afford (below 14pt), which is smaller than the copy around them. The
+    // vertical rail gives the events the width of the page instead.
+    const ctx = context(timelineContent, {
+      facts: facts({ itemCount: 5, hasTimeline: true, hasRowBlock: true, layout: "cards" }),
+    });
+    ctx.frame.content = { x: inches(2.9), y: inches(2.55), width: inches(6), height: inches(4.1) };
+    ctx.chrome = undefined;
+    const result = plan(timelineRail, ctx);
+    const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(5);
+    // The stations run down one axis instead of across the page.
+    const centers = nodes.map((node) => node.frame.y + node.frame.height / 2);
+    expect(Math.max(...centers) - Math.min(...centers)).toBeGreaterThan(page.height * 0.1);
+    expect(
+      Math.max(...nodes.map((node) => node.frame.x)) - Math.min(...nodes.map((node) => node.frame.x)),
+    ).toBeLessThan(page.width * 0.05);
+    // Every event gets a wide column and keeps a readable size.
+    const block = timelineContent.blocks![0]!;
+    if (block.type !== "timeline") throw new Error("expected a timeline block");
+    const eventTexts = block.items.map((item) => item.text);
+    const events = result.elements.filter(
+      (element): element is TextElement => element.type === "text" && eventTexts.includes(element.text),
+    );
+    expect(events).toHaveLength(5);
+    for (const event of events) {
+      expect(event.frame.width).toBeGreaterThan(inches(2));
+      expect(event.style.fontSizePt).toBeGreaterThanOrEqual(14);
+    }
+  });
 });
 
 describe("quote-field recipe", () => {
@@ -1287,5 +1366,35 @@ describe("instrument-columns recipe", () => {
         ),
       ),
     ).toBe(true);
+  });
+
+  it("refuses a board it cannot set without a stranded cell", () => {
+    // Whatever width the content area has, a planned board has no dangling
+    // glyph: the recipe either finds a size that breaks cleanly or reports the
+    // conflict and lets the planner pick a skeleton that carries four points.
+    const items = [
+      "搜索广告在 Google Services 中占比最高",
+      "YouTube 广告保持稳定增长领先",
+      "Google Cloud 营收增速持续领先",
+      "Other Bets 仍处投入阶段贡献有限",
+    ];
+    for (let widthIn = 5; widthIn <= 11; widthIn += 0.5) {
+      const pageContent = prosePage("四条增长线索", items);
+      const ctx = context(pageContent, { facts: facts({ itemCount: 4, longestItemLength: 26 }) });
+      ctx.concept = directionConcept("instrument");
+      ctx.frame.content = { x: inches(2.4), y: inches(2.55), width: inches(widthIn), height: inches(4.1) };
+      ctx.chrome = undefined;
+      const result = instrumentColumns.plan(ctx);
+      if (!("elements" in result)) continue;
+      const copy = result.elements.filter(
+        (element): element is TextElement => element.type === "text" && items.includes(element.text),
+      );
+      for (const element of copy) {
+        expect(
+          endsInOrphan(element.text, element.frame.width / 12_700, element.style.fontSizePt, element.style.fontFamily),
+          `${widthIn}in：${element.text}（${element.style.fontSizePt}pt）`,
+        ).toBe(false);
+      }
+    }
   });
 });

@@ -2,7 +2,14 @@ import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu, RectEmu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, headingMetrics, textFits, textHeightPt } from "./measure";
+import {
+  anyEndsInOrphan,
+  fittedFontSize,
+  frameFromNormalized,
+  headingMetrics,
+  textFits,
+  textHeightPt,
+} from "./measure";
 import { railStations } from "./rail-geometry";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
@@ -19,6 +26,8 @@ const TEXT_SIZE_PT = 16;
 const MIN_TEXT_SIZE_PT = 12;
 const MIN_GAP_PT = 12;
 const MAX_GAP_PT = 28;
+/** Below this size a row of stations breaks worse than a vertical rail does. */
+const HORIZONTAL_MIN_TEXT_PT = 14;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -136,8 +145,30 @@ export const timelineRail: LayoutRecipe = {
     // A landscape page reads a history left to right. The vertical rail put five
     // dates in a column on the left and left the other two thirds of the page
     // empty; a horizontal axis uses the width the page actually has.
-    if (page.width / page.height >= 1.3) {
-      const stations = railStations(chrome.content, block.items.length, 0.05);
+    //
+    // A row of stations only works while the columns are wide enough to set an
+    // event without stranding its last character. Five or six stations across a
+    // 16:9 page are not: the row would have to drop to 12pt to break cleanly,
+    // which is smaller than the body copy around it. Those pages keep the
+    // vertical rail, where the events get three quarters of the page width.
+    const rowStations = railStations(chrome.content, block.items.length, 0.05);
+    const rowColumnPt = (rowStations[0]?.width ?? chrome.content.width) * pageWidthIn * 72;
+    const readableRowSize = (() => {
+      for (let size = TEXT_SIZE_PT; size >= MIN_TEXT_SIZE_PT; size -= 1) {
+        if (
+          !anyEndsInOrphan(
+            block.items.map((item) => item.text),
+            rowColumnPt,
+            size,
+            bodyFamily,
+          )
+        )
+          return size;
+      }
+      return MIN_TEXT_SIZE_PT - 1;
+    })();
+    if (page.width / page.height >= 1.3 && readableRowSize >= HORIZONTAL_MIN_TEXT_PT) {
+      const stations = rowStations;
       const columnWidth = stations[0]?.width ?? chrome.content.width;
       const diameter = 0.12;
       const diameterNorm = diameter / pageHeightIn;

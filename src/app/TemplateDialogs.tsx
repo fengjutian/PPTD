@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { ArrowRight, Check, CircleAlert, FileUp, Palette, Sparkles, X } from "lucide-react";
 
+import { summarizeDesignMetrics } from "../core/design/design-metrics";
 import { THEME_PRESETS, findThemePreset } from "../core/design/theme-presets";
 import { ThemeCoverPreview } from "../features/ai/ThemeCoverPreview";
 import { VariantGalleryDialog } from "../features/ai/VariantGalleryDialog";
 
 import type { AppRuntime } from "./app-runtime";
+import { DesignCompileMetrics } from "./DesignCompileMetrics";
 import { visualIssueLabels, templateFitLabels, reviewEvidenceLabel, formatElapsed } from "./app-shared";
 
 export function TemplateDialogs({ app }: { app: AppRuntime }) {
@@ -62,6 +64,12 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
   /** Quick run: one concept call instead of four two-page direction previews. */
   const [skipDirectionGate, setSkipDirectionGate] = useState(false);
   const batchRunning = designBusy && variantBatch !== undefined;
+  // Old reports do not carry the summary yet; deriving it here keeps the
+  // component usable while a project still holds a report from a previous run.
+  const compileReport = designQualityReport?.compileReport;
+  const compileMetrics = compileReport
+    ? (designQualityReport?.designMetrics ?? summarizeDesignMetrics(compileReport, document.slides.length))
+    : undefined;
 
   return (
     <>
@@ -407,20 +415,19 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                 <X />
               </button>
             </div>
-            {designQualityReport.compileReport && designQualityReport.compileReport.plannedSlides > 0 && (
+            {compileMetrics && compileMetrics.plannedSlides > 0 && (
               <div className="design-quality-template">
                 <h3>设计编译</h3>
-                <p>
-                  已按计划编译 {designQualityReport.compileReport.plannedSlides} 页：直接采用{" "}
-                  {designQualityReport.compileReport.acceptedSlides} 页，调整{" "}
-                  {designQualityReport.compileReport.adjustedSlides} 页，拒绝{" "}
-                  {designQualityReport.compileReport.rejectedSlides} 页。
-                </p>
-                {designQualityReport.compileReport.slides.some((item) =>
-                  item.report.diagnostics.some((diagnostic) => diagnostic.severity !== "info"),
-                ) && (
-                  <ul className="export-report-list">
-                    {designQualityReport.compileReport.slides.flatMap((item) =>
+                <DesignCompileMetrics
+                  metrics={compileMetrics}
+                  promptVersion={designQualityReport.promptVersion}
+                />
+                {compileReport &&
+                  compileReport.slides.some((item) =>
+                    item.report.diagnostics.some((diagnostic) => diagnostic.severity !== "info"),
+                  ) && (
+                    <ul className="export-report-list">
+                      {compileReport.slides.flatMap((item) =>
                       item.report.diagnostics
                         .filter((diagnostic) => diagnostic.severity !== "info")
                         .map((diagnostic) => (

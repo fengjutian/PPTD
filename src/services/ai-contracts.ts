@@ -332,6 +332,16 @@ export const aiDeckDirectionsSchema = z
  * recorded model outputs.
  */
 export const DESIGN_DIRECTIONS_PROMPT_VERSION = "design-directions-v2";
+
+/**
+ * Bumped whenever the page design prompt or its output contract changes.
+ *
+ * The page prompt is assembled in `src-tauri/src/commands/ai.rs`; this constant
+ * is the frontend's record of which revision produced a deck. Bump it in the
+ * same change as the prompt, and surface it in the design quality report so a
+ * run can be traced without storing the prompt text.
+ */
+export const DESIGN_PROMPT_VERSION = "design-pages-v1";
 export type AiDeckConceptOutput = z.infer<typeof aiDeckConceptSchema>;
 
 export function briefsFromDraft(draft: AiDraft): SlideBrief[] {

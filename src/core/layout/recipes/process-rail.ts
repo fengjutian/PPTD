@@ -2,7 +2,14 @@ import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu, RectEmu } from "../../document-model";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
-import { fittedFontSize, frameFromNormalized, headingMetrics, textFits, textHeightPt } from "./measure";
+import {
+  anyEndsInOrphan,
+  fittedFontSize,
+  frameFromNormalized,
+  headingMetrics,
+  textFits,
+  textHeightPt,
+} from "./measure";
 import { railStations } from "./rail-geometry";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
 
@@ -15,6 +22,8 @@ const RAIL_OFFSET = 0.035;
 const TEXT_OFFSET = 0.06;
 const MIN_GAP_PT = 12;
 const MAX_GAP_PT = 32;
+/** Below this size a row of steps breaks worse than the vertical rail does. */
+const HORIZONTAL_MIN_TEXT_PT = 14;
 const LABEL_SIZE_PT = 20;
 const TEXT_SIZE_PT = 16;
 const MIN_TEXT_SIZE_PT = 12;
@@ -134,10 +143,29 @@ export const processRail: LayoutRecipe = {
     // used to put four short steps in the left fifth of a 16:9 page and leave
     // the rest blank: it read as a list squeezed into a corner. Tall pages keep
     // the vertical rail, where a row of four columns would be unreadable.
-    if (page.width / page.height >= 1.3) {
-      const columns = block.items.length;
-      const gap = 0.045;
-      const stations = railStations(chrome.content, columns, gap);
+    //
+    // A row only works while its columns are wide enough to set the step copy
+    // without stranding a character. Six steps across a 16:9 content area are
+    // not: the row would have to drop below the body size to break cleanly, so
+    // those pages keep the vertical rail and read as a list of steps.
+    const rowStations = railStations(chrome.content, block.items.length, 0.045);
+    const rowColumnPt = (rowStations[0]?.width ?? chrome.content.width) * pageWidthIn * 72;
+    const readableRowSize = (() => {
+      for (let size = Math.min(TEXT_SIZE_PT, 15); size >= MIN_TEXT_SIZE_PT; size -= 1) {
+        if (
+          !anyEndsInOrphan(
+            block.items.map((item) => item.text),
+            rowColumnPt,
+            size,
+            bodyFamily,
+          )
+        )
+          return size;
+      }
+      return MIN_TEXT_SIZE_PT - 1;
+    })();
+    if (page.width / page.height >= 1.3 && readableRowSize >= HORIZONTAL_MIN_TEXT_PT) {
+      const stations = rowStations;
       const columnWidth = stations[0]?.width ?? chrome.content.width;
       const diameter = 0.26;
       // The circle is a length (inches) while everything else here is a share
