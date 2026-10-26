@@ -62,11 +62,21 @@ describe("native animation in PowerPoint", () => {
     const path = join(directory, "probe.pptx");
     writeFileSync(path, result.bytes);
 
-    const output = execFileSync(
-      "powershell",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", SCRIPT, "-Pptx", path],
-      { encoding: "utf8", timeout: 180_000 },
-    );
+    // PowerPoint's COM server occasionally refuses a second client when the
+    // suite runs in parallel. That is a transient failure, not a missing
+    // animation: retry once before calling it a regression.
+    const readEffects = () =>
+      execFileSync(
+        "powershell",
+        ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", SCRIPT, "-Pptx", path],
+        { encoding: "utf8", timeout: 180_000 },
+      );
+    let output: string;
+    try {
+      output = readEffects();
+    } catch {
+      output = readEffects();
+    }
     expect(output).toContain("slides=1");
     expect(output).toContain("effects=3");
   }, 180_000);

@@ -32,7 +32,7 @@ const LIBREOFFICE_PATHS = [
   "C:/Program Files (x86)/LibreOffice/program/soffice.com",
 ];
 
-function run(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
+function runOnce(command: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     execFile(
       command,
@@ -47,6 +47,26 @@ function run(command: string, args: string[]): Promise<{ stdout: string; stderr:
       },
     );
   });
+}
+
+/**
+ * Runs a command, optionally retrying a transient failure.
+ *
+ * PowerPoint's COM server refuses a second client often enough that a full
+ * parallel test run would fail once and pass on the next attempt, which looks
+ * exactly like a rendering regression. The retry is only used by the
+ * automation paths, never by a command whose failure is the thing under test.
+ */
+async function run(command: string, args: string[], attempts = 1): Promise<{ stdout: string; stderr: string }> {
+  let last: unknown;
+  for (let attempt = 0; attempt < Math.max(1, attempts); attempt += 1) {
+    try {
+      return await runOnce(command, args);
+    } catch (error) {
+      last = error;
+    }
+  }
+  throw last;
 }
 
 function readRenderedSlides(directory: string): RasterizedSlide[] {
@@ -65,18 +85,23 @@ export const powerPointRasterizer: PptxRasterizer = {
   name: "powerpoint",
   coverage: "all",
   async rasterize(pptxPath, outputDirectory) {
-    await run("powershell", [
-      "-NoProfile",
-      "-NonInteractive",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      SCRIPT,
-      "-Pptx",
-      pptxPath,
-      "-OutDir",
-      outputDirectory,
-    ]);
+    await run(
+      "powershell",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        SCRIPT,
+        "-Pptx",
+        pptxPath,
+        "-OutDir",
+        outputDirectory,
+        // A COM refusal is transient, not a rendering result: retry once.
+      ],
+      2,
+    );
     return readRenderedSlides(outputDirectory);
   },
 };
