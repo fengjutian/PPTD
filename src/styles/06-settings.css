@@ -396,6 +396,7 @@
 .settings-actions {
   position: sticky;
   bottom: 0;
+  align-self: end;
   display: flex;
   justify-content: flex-end;
   padding: 14px 0;

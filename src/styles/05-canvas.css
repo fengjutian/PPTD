@@ -1929,6 +1929,7 @@ body.layer-reordering .layer-row {
   min-height: 100%;
   padding: 20px;
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 16px;
 }
 .settings-tabs {
