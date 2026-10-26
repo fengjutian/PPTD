@@ -2636,6 +2636,26 @@ export function buildDesignedSlide(
       }
     }
   }
+  // The rail and the headline are one piece of page chrome. A visual repair
+  // may improve a local collision, but moving only the headline back to the
+  // default margin leaves the fixed rail cutting through its glyphs. Lock the
+  // title to the rail surface after all model-proposed geometry repairs; this
+  // is a deterministic alignment invariant, not a stylistic suggestion.
+  if (!hasTemplate && deckSurface === "rail") {
+    const title = slide.elements.find(
+      (element): element is TextElement => element.type === "text" && element.text === content.title,
+    );
+    if (title) {
+      const titleAxis = frame(chrome.title.x, chrome.title.y, chrome.title.width, chrome.title.height);
+      title.frame = {
+        ...title.frame,
+        x: titleAxis.x,
+        y: titleAxis.y,
+        width: Math.min(title.frame.width, titleAxis.width) as Emu,
+        height: Math.max(title.frame.height, titleAxis.height) as Emu,
+      };
+    }
+  }
   if (design.hierarchyAction === "strengthen-title") {
     const title = slide.elements.find((element) => element.type === "text" && element.text === content.title);
     if (title?.type === "text")

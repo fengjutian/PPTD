@@ -3,11 +3,72 @@ import { produce } from "immer";
 import { applyCommand } from "./commands";
 
 import { createDocument, inches, type TextElement } from "../document-model";
-import { defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
+import { defaultConceptForPreset, defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
 import { contrastRatio } from "../rendering/contrast";
 import { textLikelyOverflows } from "../rendering/text-fit";
 
 describe("commands 3", () => {
+  it("keeps a repaired instrument title on the rail alignment axis", () => {
+    const source = createDocument();
+    const content = {
+      title: "Alphabet 的业务版图由三条主线构成",
+      body: "搜索广告保持增长\nGoogle Cloud 增速持续\nOther Bets 仍处投入阶段",
+      speakerNotes: "",
+    };
+    const facts = {
+      itemCount: 3,
+      shortItems: true,
+      longestItemLength: 20,
+      bodyLength: content.body.length,
+      hasQuote: false,
+      hasComparison: false,
+      hasRowBlock: false,
+      layout: "title-body" as const,
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultConceptForPreset("instrument"),
+      pageFacts: [facts],
+      pageCount: 1,
+      id: "instrument-alignment",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "Alphabet 年报",
+        slides: [content],
+        designConcept: concept,
+        designs: [
+          {
+            layout: "title-body",
+            background: "#F4F7FA",
+            accent: "#1F5A85",
+            titleColor: "#12233E",
+            bodyColor: "#3E5068",
+            elementRepairs: [
+              {
+                action: "move",
+                target: "title",
+                frame: { x: 0.07, y: 0.08, width: 0.82, height: 0.13 },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const title = result.slides[0]!.elements.find(
+      (element): element is TextElement => element.type === "text" && element.text === content.title,
+    )!;
+    expect(title.frame.x / source.pageSize.width).toBeCloseTo(0.22, 2);
+    const rail = result.slides[0]!.elements.find(
+      (element) =>
+        element.type === "shape" &&
+        element.frame.height > source.pageSize.height * 0.6 &&
+        element.frame.width < source.pageSize.width * 0.01,
+    )!;
+    expect(rail.frame.x + rail.frame.width).toBeLessThan(title.frame.x);
+  });
+
   it("uses a content recipe on a template page while keeping its artwork", () => {
     const source = createDocument();
     const items = ["肿瘤早筛覆盖率提升", "三代测序渗透率上升", "临床指南更新加快"];
