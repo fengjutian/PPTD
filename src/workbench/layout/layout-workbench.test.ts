@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { layoutRect, type PageCoordinateSystem } from "./coordinate-system";
-import { callLayoutWorkbench, createLayoutWorkbench, LAYOUT_WORKBENCH_TOOLS } from "./workbench";
+import { layoutRect, type PageCoordinateSystem } from "../../core/layout/geometry/coordinate-system";
+import { callLayoutWorkbench, createLayoutWorkbench, LAYOUT_WORKBENCH_TOOLS } from "./layout-workbench";
 
 const system: PageCoordinateSystem = {
   coordinateSpace: "normalized-1000",

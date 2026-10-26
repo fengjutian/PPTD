@@ -1,6 +1,12 @@
-import type { LayoutRect, PageCoordinateSystem } from "./coordinate-system";
-import { insetLayoutRect, layoutColumns, layoutRows, stackLayout, type LayoutSpacingToken } from "./layout-functions";
-import { validateLayoutSiblings, type LayoutIssue } from "./layout-validator";
+import type { LayoutRect, PageCoordinateSystem } from "../../core/layout/geometry/coordinate-system";
+import {
+  insetLayoutRect,
+  layoutColumns,
+  layoutRows,
+  stackLayout,
+  type LayoutSpacingToken,
+} from "../../core/layout/geometry/layout-functions";
+import { validateLayoutSiblings, type LayoutIssue } from "../../core/layout/geometry/layout-validator";
 
 export type LayoutRegionName = "page" | "safe" | "title" | "content" | "footer" | "rail" | "image";
 

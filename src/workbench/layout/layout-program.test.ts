@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutRect, type PageCoordinateSystem } from "./coordinate-system";
+import { layoutRect, type PageCoordinateSystem } from "../../core/layout/geometry/coordinate-system";
 import { compileLayoutProgram, parseAiLayoutProgram } from "./layout-program";
 import { layoutRectsOverlap } from "./layout-validator";
 

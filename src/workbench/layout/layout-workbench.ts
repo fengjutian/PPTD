@@ -1,4 +1,4 @@
-import type { LayoutRect, PageCoordinateSystem } from "./coordinate-system";
+import type { LayoutRect, PageCoordinateSystem } from "../../core/layout/geometry/coordinate-system";
 import {
   compileLayoutProgram,
   parseAiLayoutProgram,
@@ -6,7 +6,7 @@ import {
   type LayoutOperation,
   type LayoutProgramResult,
 } from "./layout-program";
-import { validatePageCoordinateSystem, type LayoutIssue } from "./layout-validator";
+import { validatePageCoordinateSystem, type LayoutIssue } from "../../core/layout/geometry/layout-validator";
 
 export type LayoutWorkbenchToolName = "regions" | "inspect" | "inset" | "columns" | "rows" | "stack" | "validate";
 

@@ -59,27 +59,28 @@
 
 ### 阶段 A（已完成）
 
-- 在独立目录 `src/core/layout/workbench/` 实现 `coordinate-system.ts`、`layout-functions.ts`、`layout-program.ts` 和 `layout-validator.ts`。
+- 在 `src/core/layout/geometry/` 实现与 AI 无关的纯坐标、布局函数和校验能力。
+- 在独立顶层模块 `src/workbench/` 实现 AI 操作 PPT 的受控中间层；布局是 `workbench/layout` 下的第一个工具域。
 - 提供 `PageChrome → PageCoordinateSystem` 转换及 EMU 转换。
 - 为未知输入提供运行时解析和稳定错误码。
 - 将 `instrument-columns` 的列计算迁移到统一 `columns` 函数。
 - 用导轨、标题、四列面板和非法程序建立固定测试。
 
-进度（2026-10-26）：已完成逻辑坐标、语义区域、EMU 转换、间距令牌、`inset/columns/rows/stack`、未知输入解析、程序编译及边界/重叠/轴线校验。`instrument-columns` 已改用统一四列函数。新增 `workbench.ts`，向 AI 暴露 `regions/inspect/inset/columns/rows/stack/validate` 七个受控工具；工具调用按不可变工作台状态连续执行，失败保留上一次有效状态。当前阶段尚未扩展 AI 页面输出协议，避免模型生成了布局程序但其他配方没有消费便宣称已支持。
+进度（2026-10-26）：已完成逻辑坐标、语义区域、EMU 转换、间距令牌、`inset/columns/rows/stack`、未知输入解析、程序编译及边界/重叠/轴线校验。`instrument-columns` 已改用统一四列函数。新增独立 `src/workbench/` 模块，统一向 AI 暴露带命名空间的 `layout.regions/layout.inspect/layout.inset/layout.columns/layout.rows/layout.stack/layout.validate` 七个受控工具；工具调用按不可变工作台状态连续执行，失败保留上一次有效状态。当前阶段尚未扩展 AI 页面输出协议，避免模型生成了布局程序但其他配方没有消费便宣称已支持。
 
 ## 7.1 AI 工作台调用模型
 
-调用方先用 `createLayoutWorkbench(PageCoordinateSystem)` 创建只包含页面语义区域的工作台，再把 `LAYOUT_WORKBENCH_TOOLS` 作为工具定义交给模型。每次模型工具调用由 `callLayoutWorkbench` 校验和执行，成功时返回新工作台及新建槽位，失败时返回稳定问题和原工作台。AI 不能持有可写文档对象，也不能通过工具传入正文、EMU、像素、颜色或任意坐标。
+应用层先用 `createPptWorkbench(PageCoordinateSystem)` 创建 PPT 工作台，再把 `PPT_WORKBENCH_TOOLS` 作为唯一工具清单交给模型。模型调用由 `callPptWorkbench` 路由到对应工具域；布局域内部继续用 `createLayoutWorkbench/callLayoutWorkbench` 校验和执行。成功时返回新工作台及新建槽位，失败时返回稳定问题和原工作台。AI 不能持有可写文档对象，也不能通过工具传入正文、EMU、像素、颜色或任意坐标。
 
 ```ts
-const created = createLayoutWorkbench(system);
-const columns = callLayoutWorkbench(created.workbench, "columns", {
+const created = createPptWorkbench(system);
+const columns = callPptWorkbench(created.workbench, "layout.columns", {
   id: "metrics",
   source: "content",
   count: 4,
   gap: "md",
 });
-const inspected = callLayoutWorkbench(columns.workbench, "inspect", {
+const inspected = callPptWorkbench(columns.workbench, "layout.inspect", {
   source: "metrics[2]",
 });
 ```
