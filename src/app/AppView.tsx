@@ -1,4 +1,4 @@
-import { LayoutDashboard, Palette, ScrollText, Settings, Sparkles } from "lucide-react";
+import { Layers3, LayoutDashboard, Palette, ScrollText, Settings, Sparkles } from "lucide-react";
 
 import { LogPanel } from "../features/diagnostics/LogPanel";
 
@@ -16,6 +16,7 @@ import { EditorRibbon } from "./EditorRibbon";
 import { EditorWorkspaceView } from "./EditorWorkspaceView";
 import { AiWorkspaceView } from "./AiWorkspaceView";
 import { ThemeWorkspaceView } from "./ThemeWorkspaceView";
+import { StyleWorkspaceView } from "./StyleWorkspaceView";
 import { DialogStack } from "./DialogStack";
 
 export function AppView({ app }: { app: AppRuntime }) {
@@ -92,6 +93,15 @@ export function AppView({ app }: { app: AppRuntime }) {
           <span>{t("shell.ai")}</span>
         </button>
         <button
+          className={activeView === "style" ? "active" : ""}
+          aria-current={activeView === "style" ? "page" : undefined}
+          title={t("shell.styleTitle")}
+          onClick={() => changeActiveView("style")}
+        >
+          <Layers3 />
+          <span>{t("shell.style")}</span>
+        </button>
+        <button
           className={activeView === "theme" ? "active" : ""}
           aria-current={activeView === "theme" ? "page" : undefined}
           title={t("shell.themeTitle")}
@@ -156,6 +166,8 @@ export function AppView({ app }: { app: AppRuntime }) {
       <EditorWorkspaceView app={app} />
 
       <AiWorkspaceView app={app} />
+
+      <StyleWorkspaceView app={app} />
 
       <ThemeWorkspaceView app={app} />
 

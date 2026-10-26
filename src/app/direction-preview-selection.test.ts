@@ -70,10 +70,7 @@ describe("direction preview page selection", () => {
     const sparse: AiDraft = {
       title: "短稿",
       presentationBrief: draft.presentationBrief,
-      slides: [
-        draft.slides[0]!,
-        { ...draft.slides[1]!, title: "正文", body: "一句话" },
-      ],
+      slides: [draft.slides[0]!, { ...draft.slides[1]!, title: "正文", body: "一句话" }],
     };
     expect(directionPreviewIndexes(sparse, "documentary")).toEqual([0, 1]);
   });

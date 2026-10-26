@@ -171,6 +171,12 @@ import { useAnimationPreview } from "./use-animation-preview";
 import { defaultThemePreset, findThemePreset } from "../core/design/theme-presets";
 import { themePresetAiPrompt, themePresetGuidance } from "../core/design/theme-preset-guidance";
 import { themePresetMetadata } from "../core/design/theme-preset-metadata";
+import {
+  applyStyleProfileToThemeDirection,
+  findStyleProfile,
+  STYLE_PROFILES,
+  type StyleProfileId,
+} from "../core/design/style-profiles";
 
 import {
   defaultConceptIdForTheme,
@@ -454,6 +460,14 @@ export function useAppRuntime() {
   const [templateMenu, setTemplateMenu] = useState<{ template: TemplateRecord; x: number; y: number }>();
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [themePresetId, setThemePresetId] = useState("");
+  const [styleProfileId, setStyleProfileId] = useState<StyleProfileId | "">(() => {
+    try {
+      const stored = window.localStorage.getItem("pptd.style-profile");
+      return STYLE_PROFILES.some((profile) => profile.id === stored) ? (stored as StyleProfileId) : "";
+    } catch {
+      return "";
+    }
+  });
   /**
    * 后台生成期间只允许预览主题详情：这里存的是抽屉里正在看的主题，
    * 与真正选中的 themePresetId 分开，避免任务浮层显示的主题和实际生成稿不一致。
@@ -2484,7 +2498,11 @@ export function useAppRuntime() {
     const visualGoal = templateTarget
       ? applyTemplateToGoal(defaultPresentationVisualGoal(), templateTarget)
       : defaultPresentationVisualGoal();
-    const themeDirection = preset ? themeDirectionForPreset(preset) : undefined;
+    const styleProfile = findStyleProfile(styleProfileId);
+    const themeDirection = applyStyleProfileToThemeDirection(
+      preset ? themeDirectionForPreset(preset) : undefined,
+      styleProfile,
+    );
     const deckName = preset ? preset.name : selectedTemplate!.name;
     designBusyRef.current = true;
     setGeneratingHistoryId(historyIdOverride ?? activeHistoryId);
@@ -2759,7 +2777,7 @@ export function useAppRuntime() {
               themeDirection,
             });
             concept = resolveDeckConcept({
-              concept: aiConcept,
+              concept: styleProfile ? { ...aiConcept, preset: styleProfile.preferredConcept } : aiConcept,
               pageFacts,
               pageCount: sourceDraft.slides.length,
             }).concept;
@@ -2769,7 +2787,9 @@ export function useAppRuntime() {
             // A direction is an enhancement, not a prerequisite. A failed concept
             // call falls back to the editorial preset and still produces the deck.
             concept = resolveDeckConcept({
-              concept: defaultEditorialConcept(),
+              concept: styleProfile
+                ? defaultConceptForPreset(styleProfile.preferredConcept)
+                : defaultEditorialConcept(),
               pageFacts,
               pageCount: sourceDraft.slides.length,
             }).concept;
@@ -3859,6 +3879,26 @@ export function useAppRuntime() {
   };
 
   const selectedThemePreset = findThemePreset(themePresetId);
+  const handleSelectStyleProfile = (profileId: StyleProfileId) => {
+    if (designBusyRef.current) {
+      setTaskStatus("AI 正在生成，完成后才能切换风格");
+      return;
+    }
+    const profile = findStyleProfile(profileId);
+    if (!profile) return;
+    setStyleProfileId(profile.id);
+    setThemePresetId(profile.themePresetId);
+    setSelectedTemplate(undefined);
+    setTemplatePreview(undefined);
+    setTemplateAnalysis(undefined);
+    setTemplateLayoutRenders([]);
+    try {
+      window.localStorage.setItem("pptd.style-profile", profile.id);
+    } catch {
+      // Browser previews without storage keep the choice for this session.
+    }
+    setTaskStatus(`已选择「${profile.name}」，并匹配主题「${findThemePreset(profile.themePresetId)?.name ?? profile.themePresetId}」`);
+  };
   const templateTargetPreview = useMemo(
     () =>
       selectedTemplate && templateAnalysis
@@ -4286,6 +4326,8 @@ export function useAppRuntime() {
     redoAiContent,
     setTemplateUploadOpen,
     themePresetId,
+    styleProfileId,
+    handleSelectStyleProfile,
     handleSelectThemePreset,
     templateLibrary,
     selectedTemplate,

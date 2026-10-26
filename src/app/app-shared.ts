@@ -96,7 +96,7 @@ export function readInspectorWidth(): number {
   }
   return 252;
 }
-export type AppView = "editor" | "ai" | "theme" | "settings";
+export type AppView = "editor" | "ai" | "style" | "theme" | "settings";
 export type PageMessage = { id: number; text: string; kind: "info" | "success" | "error" };
 export type DesignProgress = { percent: number; label: string };
 
