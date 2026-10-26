@@ -19,6 +19,7 @@ import type {
   TextElement,
 } from "../document-model";
 import { isNeutralColor, normalizeHexColor } from "../rendering/color-analysis";
+import { measureLine, MEASURE_BAND } from "../rendering/text-fit";
 
 export type TasteSeverity = "hard" | "soft";
 
@@ -26,6 +27,8 @@ export type TasteIssueCode =
   | "BODY_TEXT_TOO_SMALL"
   | "LABEL_TEXT_TOO_SMALL"
   | "TITLE_BODY_RATIO_LOW"
+  | "MEASURE_TOO_WIDE"
+  | "MEASURE_TOO_NARROW"
   | "FONT_FAMILY_COUNT"
   | "COLOR_COUNT"
   | "DECORATION_KICKER"
@@ -39,6 +42,8 @@ export const TASTE_ISSUE_CODES: readonly TasteIssueCode[] = [
   "BODY_TEXT_TOO_SMALL",
   "LABEL_TEXT_TOO_SMALL",
   "TITLE_BODY_RATIO_LOW",
+  "MEASURE_TOO_WIDE",
+  "MEASURE_TOO_NARROW",
   "FONT_FAMILY_COUNT",
   "COLOR_COUNT",
   "DECORATION_KICKER",
@@ -53,6 +58,8 @@ const SEVERITY: Readonly<Record<TasteIssueCode, TasteSeverity>> = {
   BODY_TEXT_TOO_SMALL: "hard",
   LABEL_TEXT_TOO_SMALL: "hard",
   TITLE_BODY_RATIO_LOW: "hard",
+  MEASURE_TOO_WIDE: "soft",
+  MEASURE_TOO_NARROW: "soft",
   FONT_FAMILY_COUNT: "soft",
   COLOR_COUNT: "soft",
   DECORATION_KICKER: "soft",
@@ -405,6 +412,37 @@ export function lintTaste(document: PresentationDocument, options: TasteLintOpti
           `标签字号 ${smallestLabel.toFixed(1)}pt 低于下限 ${labelFloor.toFixed(1)}pt`,
           { fontSizePt: smallestLabel, minimumPt: labelFloor },
           "标签也要能看清；不要用缩小字号来腾空间。",
+        );
+      }
+    }
+
+    // A line that runs the full width of a 16:9 page is hard to read even when
+    // nothing overflows: the eye loses the line it was on. The band depends on
+    // the script — 45–75 Latin characters, 18–36 full-width ones — so the check
+    // measures the copy, not the container.
+    for (const element of body) {
+      if (element.text.trim().length < minBodyLength) continue;
+      const measure = measureLine(element.text, element.frame.width / 12_700, element.style.fontSizePt);
+      const band = MEASURE_BAND[measure.script];
+      if (measure.characters > band.max) {
+        report(
+          "MEASURE_TOO_WIDE",
+          slideIndex,
+          slide,
+          [element.id],
+          `正文每行约 ${measure.characters} 个字符，超过可读上限 ${band.max}`,
+          { characters: measure.characters, max: band.max, script: measure.script },
+          "收窄栏宽或减少每行字数；满版长行会让读者找不到下一行。",
+        );
+      } else if (measure.characters > 0 && measure.characters < band.min) {
+        report(
+          "MEASURE_TOO_NARROW",
+          slideIndex,
+          slide,
+          [element.id],
+          `正文每行只有 ${measure.characters} 个字符，低于可读下限 ${band.min}`,
+          { characters: measure.characters, min: band.min, script: measure.script },
+          "把栏拉宽，或减少这一栏的字数；过窄的栏会把句子拆碎。",
         );
       }
     }

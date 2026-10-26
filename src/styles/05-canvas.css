@@ -592,6 +592,68 @@
   opacity: 0.45;
   cursor: default;
 }
+/* 图层搜索：只影响列表显示，不写文档；搜索中禁用拖动排序。 */
+.layer-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 6px;
+  padding: 4px 8px;
+  border: 1px solid #303237;
+  border-radius: 7px;
+  background: #1c1e22;
+  color: #7d818a;
+}
+.layer-search:focus-within {
+  border-color: var(--ppt-accent);
+  color: #c9ccd2;
+}
+.layer-search > svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+.layer-search input {
+  min-width: 0;
+  flex: 1;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #d8dae0;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.layer-search input::placeholder {
+  color: #6f747d;
+}
+.layer-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.layer-search-count {
+  color: #8b909a;
+  font-size: 10px;
+}
+.layer-search button {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #9ba0a9;
+  cursor: pointer;
+}
+.layer-search button:hover {
+  background: #303237;
+  color: #fff;
+}
+.layer-search button svg {
+  width: 11px;
+  height: 11px;
+}
 .layer-list {
   flex: 1;
   min-height: 0;
@@ -636,6 +698,20 @@
   background: var(--ppt-accent);
   color: #fff;
 }
+.layer-clear-search {
+  padding: 5px 10px;
+  border: 1px solid #3a3c42;
+  border-radius: 6px;
+  background: #24262b;
+  color: #c9ccd2;
+  font-size: 11px;
+  cursor: pointer;
+}
+.layer-clear-search:hover {
+  border-color: var(--ppt-accent);
+  background: var(--ppt-accent);
+  color: #fff;
+}
 .layer-empty-actions svg {
   width: 12px;
   height: 12px;
@@ -676,6 +752,9 @@
   background: rgba(211, 82, 48, 0.06);
 }
 .layer-row.locked {
+  cursor: default;
+}
+.layer-panel.filtering .layer-row {
   cursor: default;
 }
 .layer-row.dragging {
@@ -830,6 +909,72 @@ body.layer-reordering .layer-row {
   border-top: 1px solid #24262b;
   color: #8b909a;
   font-size: 10px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* 右键菜单：固定定位，盖在面板之上；点击空白处关闭。 */
+.layer-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.layer-menu {
+  position: fixed;
+  z-index: 61;
+  min-width: 184px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid #3a3c42;
+  border-radius: 9px;
+  background: #202227;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+.layer-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #d3d6db;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.layer-menu button:hover:not(:disabled),
+.layer-menu button:focus-visible {
+  background: #2c2f35;
+  color: #fff;
+  outline: none;
+}
+.layer-menu button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.layer-menu button.danger:hover:not(:disabled) {
+  background: #b23b2e;
+  color: #fff;
+}
+.layer-menu button svg {
+  width: 13px;
+  height: 13px;
+  color: #8f939b;
+  flex: 0 0 auto;
+}
+.layer-menu button:hover:not(:disabled) svg,
+.layer-menu button:focus-visible svg {
+  color: currentColor;
+}
+.layer-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: #303237;
 }
 
 .inspector-warning {

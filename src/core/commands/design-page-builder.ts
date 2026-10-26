@@ -1034,6 +1034,11 @@ export function buildDesignedSlide(
         );
         if (crop) candidate.crop = crop;
         else delete candidate.crop;
+        // The composition owns the frame shape as well: a picture that became a
+        // plate keeps the corner the recipe asked for, and one the recipe did
+        // not shape goes back to a plain frame.
+        if (recipePlan.imageShape) candidate.frameShape = recipePlan.imageShape;
+        else delete candidate.frameShape;
         break;
       }
     }

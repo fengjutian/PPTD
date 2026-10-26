@@ -10,7 +10,6 @@ import {
   ICON_GRID,
   textFragments,
   type ChartElement,
-  type ImageCrop,
   type ImageElement,
   type PresentationDocument,
   type ShapeElement,
@@ -24,7 +23,7 @@ import {
 import { validatePptxPackage, type PptxPackageValidation } from "./pptx-package";
 import { linkThemeColors, normalizeThemeColors, patchThemeColors } from "./theme-xml";
 import { normalizePackagePartNames } from "./package-parts";
-import { patchImageCrops } from "./image-crop-xml";
+import { patchImageFrames, type PictureTreatment } from "./image-frame-xml";
 import { patchShapeGradients } from "./shape-gradient-xml";
 import { patchSlideTransitions } from "./transition-xml";
 import { patchSlideAnimations } from "./native-animation";
@@ -267,9 +266,9 @@ export async function buildPptx(
   let croppedImageCount = 0;
   let nativeChartCount = 0;
   let nativeTableCount = 0;
-  // The crops of the pictures of every slide, in the order the pictures were
-  // added. The source rectangle of a crop is written into the slide XML later.
-  const cropsBySlide: (ImageCrop | undefined)[][] = [];
+  // The crop and the frame shape of every picture, in the order the pictures
+  // were added. Both are written into the slide XML later, in one pass.
+  const picturesBySlide: PictureTreatment[][] = [];
   for (const model of document.slides) {
     throwIfCancelled(options.signal);
     const master = model.layoutId ? masters.get(model.layoutId) : undefined;
@@ -277,7 +276,7 @@ export async function buildPptx(
     // A master that carries the artwork must not be covered by a page
     // background, otherwise the template image would be hidden.
     if (!master?.artwork) slide.background = { color: color(model.background) };
-    const slideCrops: (ImageCrop | undefined)[] = [];
+    const slidePictures: PictureTreatment[] = [];
 
     for (const element of model.elements) {
       throwIfCancelled(options.signal);
@@ -550,14 +549,14 @@ export async function buildPptx(
           objectName: element.id,
           altText: element.altText,
         });
-        slideCrops.push(element.crop);
+        slidePictures.push({ crop: element.crop, frameShape: element.frameShape });
         if (element.crop) croppedImageCount += 1;
       }
       nativeObjectCount += 1;
     }
 
     slide.addNotes(model.content.speakerNotes ? model.content.speakerNotes : "");
-    cropsBySlide.push(slideCrops);
+    picturesBySlide.push(slidePictures);
   }
 
   throwIfCancelled(options.signal);
@@ -586,7 +585,7 @@ export async function buildPptx(
     animationResult.skipped > 0 && !issues.some((issue) => issue.code === "animation-not-exported")
       ? [`${animationResult.skipped} 个动画缺少原生目标或效果不支持，未写入 PPTX`]
       : [];
-  const _cropsApplied = patchImageCrops(entries, cropsBySlide);
+  const _picturesPatched = patchImageFrames(entries, picturesBySlide);
   const bytes = zipSync(entries, { level: 6 });
   const packageValidation = validatePptxPackage(bytes);
   if (!packageValidation.valid) {

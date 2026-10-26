@@ -205,7 +205,7 @@
 **规则**：
 
 1. 比例与行距写入令牌；配方只消费令牌，不写点数。
-2. 行长越界由体检报 `MEASURE_TOO_WIDE` / `MEASURE_TOO_NARROW`（软提示），并给出建议列宽。
+2. 行长越界由体检报 `MEASURE_TOO_WIDE` / `MEASURE_TOO_NARROW`（软提示），并给出建议列宽（已按 [ADR 0103](../architecture/decisions/0103-measure-as-design-constraint.md) 交付：CJK 18–36 字 / 拉丁 40–85 字符）。
 3. 字阶比例变化必须通过现有溢出与容量守卫，不允许为了"比例正确"缩小到不可读。
 4. 中文与拉丁字符分别计数，不得用同一个阈值套两种文字。
 

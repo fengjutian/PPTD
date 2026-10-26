@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ElementId, Emu } from "../../core/document-model";
 import { strFromU8, unzipSync } from "fflate";
 import { applyCommand } from "../../core/commands";
 import { createDocument, emu, inches, pageSizeFromInches, type PresentationDocument } from "../../core/document-model";
@@ -253,6 +254,66 @@ describe("PPTX export", () => {
     const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
     expect(slideXml).toMatch(/gridSpan="2"/);
     expect(result.report.package.valid).toBe(true);
+  });
+
+  it("clips a picture into a native geometry and keeps its crop, rotation and alt text", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.elements.push({
+      id: "22222222-2222-4222-8222-222222222222" as ElementId,
+      type: "image",
+      frame: { x: 0 as Emu, y: 0 as Emu, width: 2_000_000 as Emu, height: 2_000_000 as Emu },
+      rotationMilliDegree: 45_000,
+      locked: false,
+      origin: "user",
+      source: {
+        kind: "embedded",
+        dataUrl:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==",
+        mimeType: "image/png",
+      },
+      altText: "圆形头像",
+      crop: { top: 0.1, right: 0.1, bottom: 0.1, left: 0.1 },
+      frameShape: "ellipse",
+    });
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    // A shape filled with the picture, not a picture in a rectangular frame.
+    expect(slideXml).toContain('prst="ellipse"');
+    expect(slideXml).toContain("<a:blipFill>");
+    // The crop is applied inside the fill; without it the picture stretches.
+    expect(slideXml).toContain("<a:srcRect");
+    // The parts a screenshot cannot show: the description and the rotation.
+    expect(slideXml).toContain('descr="圆形头像"');
+    // DrawingML stores rotation in 1/60000°, so the attribute is not the 45 the
+    // page holds; what matters is that the rewrite carried it across at all.
+    expect(slideXml).toMatch(/<a:xfrm[^>]*\brot="\d+"/);
+    expect(result.report.package.valid).toBe(true);
+  });
+
+  it("leaves a picture without a frame shape as a picture", async () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    slide.elements.push({
+      id: "33333333-3333-4333-8333-333333333333" as ElementId,
+      type: "image",
+      frame: { x: 0 as Emu, y: 0 as Emu, width: 1_000_000 as Emu, height: 1_000_000 as Emu },
+      rotationMilliDegree: 0,
+      locked: false,
+      origin: "user",
+      source: {
+        kind: "embedded",
+        dataUrl:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lK3Q6wAAAABJRU5ErkJggg==",
+        mimeType: "image/png",
+      },
+      altText: "方形照片",
+    });
+    const result = await buildPptx(document, { prevalidatedIssues: [] });
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    expect(slideXml).toContain("<p:pic>");
+    // No shape crop: the page keeps an ordinary picture.
+    expect(slideXml).not.toContain('prst="ellipse"');
   });
 
   it("writes a preset shape as native PowerPoint geometry", async () => {

@@ -24,7 +24,11 @@
 
 ### 落地后补记（同一 ADR）
 
-阴影已进生产（`ShapeShadowToken` + Schema 23，见 §"落地"）。实现时发现一处探针没暴露的细节：**PptxGenJS 的 `ShadowProps` 字段是 `offset`，不是 `distance`**。探针里写的 `distance` 被库静默忽略，所以当时三档之间的差异实际只来自 blur 与 opacity，偏移量并没有被验证。生产实现改用 `offset`，并用导出夹具断言 `<a:outerShdw` 真实存在（`export-pptx.test.ts`），不再依赖目视。
+阴影已进生产（`ShapeShadowToken` + Schema 23）。实现时发现一处探针没暴露的细节：**PptxGenJS 的 `ShadowProps` 字段是 `offset`，不是 `distance`**。探针里写的 `distance` 被库静默忽略，所以当时三档之间的差异实际只来自 blur 与 opacity，偏移量并没有被验证。生产实现改用 `offset`，并用导出夹具断言 `<a:outerShdw` 真实存在（`export-pptx.test.ts`），不再依赖目视。
+
+图片形状裁剪也已进生产（`ImageFrameShape` + Schema 24，`image-frame-xml.ts`）。落地时又发现一处探针没覆盖的连带影响：**回读校验只数 `<p:pic>`**。形状裁剪后图片变成 `p:sp`（以图片填充），回读就把它判成"图片丢失"，整册 parity 直接失败。校验改为按 `<a:blip r:embed=…>` 计数——数的是"图片引用"，两种包装都算，这也正是用户眼里的"这张图在不在"。对应的破坏性测试也从"删掉 `p:pic`"改为"删掉图片引用"，否则它只能发现矩形图片丢失。
+
+裁剪与形状共用一趟改写（`image-frame-xml.ts`），删除了原来的 `image-crop-xml.ts`：两者改的是同一个 `<p:pic>`，分两趟意味着第二趟要解析第一趟已经改过的文档。
 
 ## 探针发现的三个坑
 

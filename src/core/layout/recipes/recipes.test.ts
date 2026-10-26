@@ -432,6 +432,15 @@ describe("side-image-text recipe", () => {
     ctx.templateImage = { x: 0.56, y: 0.2, width: 0.38, height: 0.6 };
     const result = plan(sideImageText, ctx);
     expect(result.imageFrame).toEqual(ctx.templateImage);
+    // A template's placeholder is its own rectangle: the recipe does not
+    // reshape a frame it did not lay out.
+    expect(result.imageShape).toBeUndefined();
+  });
+
+  it("asks for a soft-cornered plate on a free page", () => {
+    const ctx = context(pageContent, { facts: facts({ itemCount: 3 }) });
+    const result = plan(sideImageText, ctx);
+    expect(result.imageShape).toBe("roundRect");
   });
 });
 

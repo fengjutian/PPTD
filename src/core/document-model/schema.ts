@@ -4,7 +4,7 @@ import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { MAX_DESIGN_DIRECTIONS } from "./types";
 
-export const CURRENT_SCHEMA_VERSION = 23 as const;
+export const CURRENT_SCHEMA_VERSION = 24 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -186,6 +186,7 @@ const imageElement = base.extend({
   }),
   altText: z.string().max(500),
   crop: imageCropSchema.optional(),
+  frameShape: z.enum(["roundRect", "ellipse"]).optional(),
   provenance: assetProvenanceSchema.optional(),
   placement: z.enum(["content", "layout-background", "slide-background"]).optional(),
 });
@@ -698,6 +699,11 @@ const versionEighteenDocumentSchema = baseDocumentSchema
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences);
 
+const versionTwentyThreeDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(23) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences);
+
 const versionTwentyTwoDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(22) })
   .superRefine(validateUniqueIds)
@@ -873,6 +879,9 @@ const migrations: Readonly<Record<number, Migration>> = {
   // flat, so a version 22 document keeps every object and renders exactly as it
   // did; the set of cards that float is a design decision, not a migration.
   22: (document) => ({ ...versionTwentyTwoDocumentSchema.parse(document), schemaVersion: 23 }),
+  // Version 24 adds the frame shape of a picture. Optional, so a version 23
+  // document keeps its rectangular pictures and renders exactly as it did.
+  23: (document) => ({ ...versionTwentyThreeDocumentSchema.parse(document), schemaVersion: 24 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

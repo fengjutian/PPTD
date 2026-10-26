@@ -266,6 +266,10 @@ export const sideImageText: LayoutRecipe = {
         blockIds: units.blockIds,
       },
       conflicts: [],
+      // The plate is a soft-cornered frame on a free page. On a template page
+      // the picture sits in the template's own placeholder, and a template's
+      // rectangle is not ours to reshape.
+      ...(templateImage ? {} : { imageShape: "roundRect" as const }),
       imageFrame: ctx.templateImage ?? {
         x: pictureX,
         y: area.y,

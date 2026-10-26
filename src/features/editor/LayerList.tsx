@@ -8,62 +8,39 @@ import {
   Lock,
   LockOpen,
   Minus,
+  Search,
   Sparkles,
   Square,
   Table2,
   Trash2,
   Type,
+  X,
 } from "lucide-react";
 
 import type { DocumentCommand } from "../../core/commands";
 import type { ElementId, Slide, SlideElement, SlideGroup } from "../../core/document-model";
 
 import { ElementPreview } from "./ElementPreview";
+import { LayerContextMenu } from "./LayerContextMenu";
 import {
   arrayInsertionIndex,
   blockMoved,
+  blockMoveIndex,
   dragBlockIds,
+  elementKind,
+  filterLayerRows,
+  fullElementName,
   insertionIndex,
   layerRangeIds,
   layerRows,
   type LayerRowRect,
 } from "./layer-order";
-import { ICON_LABELS } from "./icon-options";
 
 /** A pointer has to travel this far before a click becomes a drag. */
 const DRAG_THRESHOLD_PX = 4;
 
-const SHAPE_LABELS = {
-  rectangle: "矩形",
-  ellipse: "椭圆",
-  triangle: "三角形",
-  diamond: "菱形",
-  pentagon: "五边形",
-  hexagon: "六边形",
-  chevron: "V 形",
-  arrow: "箭头",
-  star: "星形",
-  parallelogram: "平行四边形",
-  trapezoid: "梯形",
-} as const;
-
-function elementKind(element: SlideElement): string {
-  if (element.type === "text") return "文本";
-  if (element.type === "image") return "图片";
-  if (element.type === "chart") return "图表";
-  if (element.type === "table") return "表格";
-  if (element.type === "line") return "线条";
-  if (element.type === "icon") return "图标";
-  return SHAPE_LABELS[element.shape];
-}
-
-/** The full name, used for the tooltip; the row itself truncates it with CSS. */
-function fullElementName(element: SlideElement): string {
-  if (element.type === "text") return element.text.replace(/\s+/g, " ").trim().slice(0, 80) || "文本";
-  if (element.type === "image") return element.altText.trim().slice(0, 80) || "图片";
-  if (element.type === "icon") return ICON_LABELS[element.name];
-  return elementKind(element);
-}
+/** The footprint of the context menu, used to keep it inside the window. */
+const MENU_SIZE = { width: 196, height: 316 };
 
 function ElementIcon({ element }: { element: SlideElement }) {
   if (element.type === "text") return <Type />;
@@ -121,7 +98,11 @@ export const LayerList = memo(function LayerList({
   onSelectMany,
   onCommand,
 }: LayerListProps) {
-  const rows = useMemo(() => layerRows(slide), [slide]);
+  const [query, setQuery] = useState("");
+  const [menu, setMenu] = useState<{ x: number; y: number; elementId: ElementId } | null>(null);
+  const allRows = useMemo(() => layerRows(slide), [slide]);
+  const rows = useMemo(() => filterLayerRows(allRows, query), [allRows, query]);
+  const filtering = query.trim().length > 0;
   const groupByElement = useMemo(() => {
     const map = new Map<ElementId, SlideGroup>();
     for (const group of slide.groups ?? []) {
@@ -145,6 +126,7 @@ export const LayerList = memo(function LayerList({
 
   const [drag, setDrag] = useState<DragPreview | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef(new Map<ElementId, HTMLDivElement>());
   const dragRef = useRef<ActiveDrag | null>(null);
   const anchorRef = useRef<ElementId | null>(null);
@@ -169,6 +151,11 @@ export const LayerList = memo(function LayerList({
   const focusRow = (elementId: ElementId) => {
     // The store update re-renders the row before the focus call lands.
     window.requestAnimationFrame(() => rowRefs.current.get(elementId)?.focus());
+  };
+
+  const clearSearch = () => {
+    setQuery("");
+    searchRef.current?.focus();
   };
 
   const blockOf = (elementId: ElementId) => dragBlockIds(slide, elementId, selectedElementIds);
@@ -222,6 +209,16 @@ export const LayerList = memo(function LayerList({
     anchorRef.current = element.id;
   };
 
+  const openMenu = (event: React.MouseEvent, element: SlideElement) => {
+    event.preventDefault();
+    if (!selectedSet.has(element.id)) onSelect(element.id);
+    // The row keeps the focus so Escape and the arrow keys continue from it.
+    rowRefs.current.get(element.id)?.focus();
+    const x = Math.max(8, Math.min(event.clientX, window.innerWidth - MENU_SIZE.width - 8));
+    const y = Math.max(8, Math.min(event.clientY, window.innerHeight - MENU_SIZE.height - 8));
+    setMenu({ x, y, elementId: element.id });
+  };
+
   const handleRowKeyDown = (event: React.KeyboardEvent, index: number) => {
     const row = rows[index];
     if (!row) return;
@@ -230,6 +227,25 @@ export const LayerList = memo(function LayerList({
       event.preventDefault();
       event.stopPropagation();
       onSelectMany(rows.map((item) => item.id));
+      return;
+    }
+    if (event.altKey && (key === "ArrowUp" || key === "ArrowDown")) {
+      event.preventDefault();
+      event.stopPropagation();
+      const block = blockOf(row.id);
+      // The command refuses a locked member, so the keyboard must not try.
+      if (block.some((id) => slide.elements.find((element) => element.id === id)?.locked)) return;
+      const toIndex = blockMoveIndex(slide.elements, block, key === "ArrowUp" ? "up" : "down");
+      if (toIndex !== null) onCommand({ type: "reorder-elements", slideId: slide.id, elementIds: block, toIndex });
+      return;
+    }
+    if (key === "ContextMenu" || (event.shiftKey && key === "F10")) {
+      event.preventDefault();
+      event.stopPropagation();
+      const box = rowRefs.current.get(row.id)?.getBoundingClientRect();
+      const x = Math.max(8, Math.min((box?.left ?? 0) + 24, window.innerWidth - MENU_SIZE.width - 8));
+      const y = Math.max(8, Math.min((box?.bottom ?? 0) + 4, window.innerHeight - MENU_SIZE.height - 8));
+      setMenu({ x, y, elementId: row.id });
       return;
     }
     if (key === "ArrowUp" || key === "ArrowDown" || key === "Home" || key === "End") {
@@ -288,6 +304,9 @@ export const LayerList = memo(function LayerList({
     // Modified clicks belong to selection, never to a drag.
     if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!selectedSet.has(element.id)) onSelect(element.id);
+    // A filtered list has no stable neighbour to drop against, so dragging is
+    // disabled until the search is cleared. Clicking still selects.
+    if (filtering) return;
 
     const blockIds = dragBlockIds(slide, element.id, selectedSet.has(element.id) ? selectedElementIds : []);
     if (blockIds.some((id) => slide.elements.find((item) => item.id === id)?.locked)) return;
@@ -393,18 +412,23 @@ export const LayerList = memo(function LayerList({
     drag && dropRows.length > 0 && drag.displayInsert >= dropRows.length
       ? dropRows[dropRows.length - 1]!.id
       : undefined;
-  const tabStopId = selectedElementIds.at(-1) ?? rows[0]?.id;
+  const tabStopId = [...selectedElementIds].reverse().find((id) => rows.some((row) => row.id === id)) ?? rows[0]?.id;
 
   return (
-    <div className="layer-panel">
+    <div className={`layer-panel${filtering ? " filtering" : ""}`}>
       <div className="layer-toolbar">
         <span>
           {selectedElementIds.length > 0
-            ? `已选 ${selectedElementIds.length} / ${rows.length}`
-            : `${rows.length} 个对象`}
+            ? `已选 ${selectedElementIds.length} / ${allRows.length}`
+            : `${allRows.length} 个对象`}
         </span>
         <span className="layer-toolbar-actions">
-          <button type="button" disabled={rows.length === 0} onClick={() => onSelectMany(rows.map((row) => row.id))}>
+          <button
+            type="button"
+            disabled={rows.length === 0}
+            title={filtering ? "全选匹配的图层" : "全选图层"}
+            onClick={() => onSelectMany(rows.map((row) => row.id))}
+          >
             全选
           </button>
           <button type="button" disabled={selectedElementIds.length === 0} onClick={() => onSelectMany([])}>
@@ -413,26 +437,75 @@ export const LayerList = memo(function LayerList({
         </span>
       </div>
 
-      <div className="layer-list" role="listbox" aria-label="当前页图层" aria-multiselectable="true" ref={listRef}>
-        {rows.length === 0 && (
-          <div className="layer-empty">
-            <Layers />
-            <p>当前页没有对象</p>
-            <span className="layer-empty-actions">
-              <button type="button" onClick={() => onCommand({ type: "add-text", slideId: slide.id })}>
-                <Type />
-                文本
-              </button>
-              <button
-                type="button"
-                onClick={() => onCommand({ type: "add-shape", slideId: slide.id, shape: "rectangle" })}
-              >
-                <Square />
-                矩形
-              </button>
-            </span>
-          </div>
+      <div className="layer-search">
+        <Search aria-hidden="true" />
+        <input
+          ref={searchRef}
+          type="search"
+          value={query}
+          placeholder="搜索图层"
+          aria-label="搜索图层"
+          autoComplete="off"
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              if (query) {
+                event.stopPropagation();
+                setQuery("");
+              }
+              return;
+            }
+            if ((event.key === "Enter" || event.key === "ArrowDown") && rows[0]) {
+              event.preventDefault();
+              if (event.key === "Enter") {
+                onSelect(rows[0].id);
+                anchorRef.current = rows[0].id;
+              }
+              focusRow(rows[0].id);
+            }
+          }}
+        />
+        {filtering && (
+          <span className="layer-search-count">
+            {rows.length}/{allRows.length}
+          </span>
         )}
+        {filtering && (
+          <button type="button" aria-label="清除搜索" title="清除搜索" onClick={clearSearch}>
+            <X />
+          </button>
+        )}
+      </div>
+
+      <div className="layer-list" role="listbox" aria-label="当前页图层" aria-multiselectable="true" ref={listRef}>
+        {rows.length === 0 &&
+          (allRows.length === 0 ? (
+            <div className="layer-empty">
+              <Layers />
+              <p>当前页没有对象</p>
+              <span className="layer-empty-actions">
+                <button type="button" onClick={() => onCommand({ type: "add-text", slideId: slide.id })}>
+                  <Type />
+                  文本
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCommand({ type: "add-shape", slideId: slide.id, shape: "rectangle" })}
+                >
+                  <Square />
+                  矩形
+                </button>
+              </span>
+            </div>
+          ) : (
+            <div className="layer-empty">
+              <Search />
+              <p>没有匹配的图层</p>
+              <button type="button" className="layer-clear-search" onClick={clearSearch}>
+                清除搜索
+              </button>
+            </div>
+          ))}
 
         {rows.map((element, index) => {
           const selected = selectedSet.has(element.id);
@@ -460,6 +533,7 @@ export const LayerList = memo(function LayerList({
               aria-label={`${kind}：${name}${element.locked ? "，已锁定" : ""}${
                 group ? `，与另外 ${group.elementIds.length - 1} 个对象同组` : ""
               }`}
+              aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Shift+F10"
               title={`${kind}：${name}`}
               data-layer-id={element.id}
               className={className}
@@ -469,6 +543,7 @@ export const LayerList = memo(function LayerList({
                 else rowRefs.current.delete(element.id);
               }}
               onClick={(event) => handleRowClick(event, element)}
+              onContextMenu={(event) => openMenu(event, element)}
               onKeyDown={(event) => handleRowKeyDown(event, index)}
               onPointerDown={(event) => handlePointerDown(event, element)}
             >
@@ -555,7 +630,30 @@ export const LayerList = memo(function LayerList({
         })}
       </div>
 
-      {rows.length > 0 && <p className="layer-hint">拖动排序 · Shift 连选 · Delete 删除</p>}
+      {allRows.length > 0 && (
+        <p className="layer-hint">
+          {filtering ? (
+            "搜索中 · 清除搜索后可拖动排序"
+          ) : (
+            <>
+              <span>拖动排序 · Alt+↑↓ 调层级 · Shift 连选</span>
+              <span>右键更多操作 · Del 删除</span>
+            </>
+          )}
+        </p>
+      )}
+
+      {menu && (
+        <LayerContextMenu
+          slide={slide}
+          elementId={menu.elementId}
+          selectedElementIds={selectedElementIds}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          onCommand={onCommand}
+        />
+      )}
     </div>
   );
 });

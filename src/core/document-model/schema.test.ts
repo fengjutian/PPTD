@@ -21,6 +21,7 @@ import versionNineteenFixture from "./__fixtures__/v19-document.json";
 import versionTwentyFixture from "./__fixtures__/v20-document.json";
 import versionTwentyOneFixture from "./__fixtures__/v21-document.json";
 import versionTwentyTwoFixture from "./__fixtures__/v22-document.json";
+import versionTwentyThreeFixture from "./__fixtures__/v23-document.json";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
@@ -302,6 +303,15 @@ describe("presentation document schema", () => {
     const shape = parsed.slides[0]!.elements.find((element) => element.type === "shape");
     expect(shape?.type).toBe("shape");
     expect(shape?.type === "shape" ? shape.style.shadow : undefined).toBeUndefined();
+  });
+
+  it("migrates a version 23 fixture without shaping its pictures", () => {
+    const parsed = parsePresentationDocument(versionTwentyThreeFixture);
+    expect(parsed.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    // A picture from before the field existed keeps its plain frame.
+    const image = parsed.slides[0]!.elements.find((element) => element.type === "image");
+    expect(image?.type).toBe("image");
+    expect(image?.type === "image" ? image.frameShape : undefined).toBeUndefined();
   });
 
   it("keeps a shadow token through a save and a re-read", () => {

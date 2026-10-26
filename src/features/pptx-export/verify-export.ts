@@ -89,7 +89,11 @@ export function verifyExportedPptx(bytes: Uint8Array, document: PresentationDocu
     ).length;
     const expectedTables = slide.elements.filter((element) => element.type === "table").length;
     const expectedCharts = slide.elements.filter((element) => element.type === "chart").length;
-    const actualPictures = count(xml, /<p:pic(?:\s|>)/g);
+    // A picture is counted by its image reference, not by its wrapper: a shaped
+    // picture is exported as a shape filled with the image (`p:sp` + `a:blipFill`)
+    // and is still the picture the page declared. Counting `<p:pic>` alone made
+    // every clipped picture look dropped (ADR 0102).
+    const actualPictures = count(xml, /<a:blip\b[^>]*r:embed=/g);
     const actualTables = count(xml, /<a:tbl(?:\s|>)/g);
     const actualCharts = count(xml, /<c:chart(?:\s|>)/g);
     checked.pictures += expectedPictures;

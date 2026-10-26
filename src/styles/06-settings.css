@@ -604,6 +604,50 @@
   background: var(--ppt-accent);
   color: #fff;
 }
+:root[data-theme="light"] .layer-search {
+  border-color: #cfd3d9;
+  background: #fff;
+  color: #7a8089;
+}
+:root[data-theme="light"] .layer-search input {
+  color: #24272c;
+}
+:root[data-theme="light"] .layer-search input::placeholder {
+  color: #8a8f98;
+}
+:root[data-theme="light"] .layer-search button:hover {
+  background: #e9ebee;
+  color: #22252a;
+}
+:root[data-theme="light"] .layer-clear-search {
+  border-color: #cfd3d9;
+  background: #fff;
+  color: #454a52;
+}
+:root[data-theme="light"] .layer-clear-search:hover {
+  border-color: var(--ppt-accent);
+  background: var(--ppt-accent);
+  color: #fff;
+}
+:root[data-theme="light"] .layer-menu {
+  border-color: #d9dce1;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(23, 25, 28, 0.18);
+}
+:root[data-theme="light"] .layer-menu button {
+  color: #33373d;
+}
+:root[data-theme="light"] .layer-menu button:hover:not(:disabled),
+:root[data-theme="light"] .layer-menu button:focus-visible {
+  background: #eef0f3;
+  color: #15171a;
+}
+:root[data-theme="light"] .layer-menu button svg {
+  color: #6b7079;
+}
+:root[data-theme="light"] .layer-menu-separator {
+  background: #e2e5e9;
+}
 :root[data-theme="light"] .inspector-warning {
   border-color: #d8b98a;
   background: rgba(214, 158, 74, 0.16);

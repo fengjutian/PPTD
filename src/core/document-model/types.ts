@@ -420,12 +420,28 @@ export interface AssetProvenance {
   contentHash?: string;
 }
 
+/**
+ * The shape a picture is clipped into.
+ *
+ * Two, because they are the two a deck actually uses: a soft-cornered plate and
+ * a circle for a face or a badge. Both are native PowerPoint geometries, so the
+ * picture stays replaceable instead of being baked into pixels (ADR 0102).
+ */
+export type ImageFrameShape = "roundRect" | "ellipse";
+
 export interface ImageElement extends ElementBase {
   type: "image";
   source: { kind: "embedded"; dataUrl: string; mimeType: SupportedImageMimeType };
   altText: string;
   /** Crop of the source image. Absent means the whole picture is shown. */
   crop?: ImageCrop;
+  /**
+   * The geometry the picture is clipped into. Absent means the plain frame.
+   *
+   * A frame shape turns the exported picture into a shape filled by the image;
+   * the crop is applied inside the fill, so the two compose.
+   */
+  frameShape?: ImageFrameShape;
   /** Source and licence of the picture. Absent on imported or unlabelled images. */
   provenance?: AssetProvenance;
   /**

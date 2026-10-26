@@ -1,0 +1,154 @@
+{
+  "id": "aaaaaaaa-aaaa-9aaa-8aaa-aaaaaaaaaaaa",
+  "schemaVersion": 23,
+  "title": "V23 fixture",
+  "pageSize": {
+    "width": 12191695,
+    "height": 6858000
+  },
+  "revisions": {
+    "document": 9,
+    "content": 1,
+    "design": 6
+  },
+  "slides": [
+    {
+      "id": "cccccccc-cccc-9ccc-8ccc-cccccccccccc",
+      "background": "#ffffff",
+      "content": {
+        "title": "Fixture",
+        "body": "Body",
+        "speakerNotes": "",
+        "status": "approved"
+      },
+      "elements": [
+        {
+          "id": "dddddddd-dddd-9ddd-8ddd-dddddddddddd",
+          "type": "text",
+          "text": "Fixture",
+          "contentRef": "title",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 1219169,
+            "height": 685800
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fontFamily": "Microsoft YaHei",
+            "fontSizePt": 28,
+            "color": "#17181c",
+            "bold": true,
+            "align": "left"
+          }
+        },
+        {
+          "id": "ffffffff-ffff-9fff-8fff-ffffffffffff",
+          "type": "shape",
+          "shape": "triangle",
+          "frame": {
+            "x": 1300000,
+            "y": 0,
+            "width": 1219169,
+            "height": 685800
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "user",
+          "style": {
+            "fill": "#ffffff",
+            "stroke": "#000000",
+            "strokeWidthPt": 1,
+            "radiusPt": 0
+          }
+        },
+        {
+          "id": "99999999-9999-4999-8999-999999999999",
+          "type": "image",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "width": 914400,
+            "height": 685800
+          },
+          "rotationMilliDegree": 0,
+          "locked": false,
+          "origin": "generated",
+          "source": {
+            "kind": "embedded",
+            "dataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=",
+            "mimeType": "image/png"
+          },
+          "altText": "来源测试图片",
+          "placement": "content",
+          "provenance": {
+            "verification": "verified",
+            "sourceUrl": "https://example.com/photo",
+            "license": "CC BY 4.0",
+            "checkedAt": "2026-10-24T00:00:00.000Z",
+            "contentHash": "0123456789abcdef"
+          }
+        }
+      ],
+      "transition": {
+        "kind": "push",
+        "speed": "medium",
+        "direction": "left"
+      },
+      "groups": [
+        {
+          "id": "99999999-9999-9999-8999-999999999999",
+          "elementIds": ["dddddddd-dddd-9ddd-8ddd-dddddddddddd", "ffffffff-ffff-9fff-8fff-ffffffffffff"]
+        }
+      ]
+    }
+  ],
+  "designDirections": [
+    {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "createdAt": "2026-10-24T12:00:00.000Z",
+      "contentRevision": 1,
+      "contentFingerprint": "fixture-content-fingerprint",
+      "proposals": [
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "preset": "editorial",
+          "name": "编辑式",
+          "idea": "用细线和大字号组织内容。",
+          "rationale": "内容以判断和要点为主。",
+          "typeContrast": "strong",
+          "imagery": "none",
+          "previewPages": [
+            {
+              "index": 0,
+              "contentFingerprint": "fixture-page-1"
+            }
+          ]
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "preset": "documentary",
+          "name": "纪实全幅",
+          "idea": "让图片占住页面。",
+          "rationale": "内容有真实场景。",
+          "typeContrast": "calm",
+          "imagery": "hero",
+          "previewPages": [
+            {
+              "index": 1,
+              "contentFingerprint": "fixture-page-2"
+            }
+          ]
+        }
+      ],
+      "selectedProposalId": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      "selectedBy": "user",
+      "userWords": "要更像图片报道",
+      "regenerations": 0,
+      "promptVersion": "design-directions-v1",
+      "model": "fixture-model"
+    }
+  ]
+}

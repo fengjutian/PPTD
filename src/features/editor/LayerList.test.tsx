@@ -143,4 +143,10 @@ describe("layer list", () => {
     expect(markup.match(/aria-label="删除"[^>]*disabled/g) ?? []).toHaveLength(1);
     expect(markup).toContain("layer-hint");
   });
+
+  it("offers a search field and documents the layer keyboard shortcut", () => {
+    const markup = renderList(slideWith([textElement("a", "标题")]));
+    expect(markup).toContain('aria-label="搜索图层"');
+    expect(markup).toContain("Alt+↑↓");
+  });
 });

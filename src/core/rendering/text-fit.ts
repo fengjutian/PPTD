@@ -52,6 +52,46 @@ export function estimateTextLines(text: string, widthPt: number, fontSizePt: num
 }
 
 /**
+ * How many characters one line of a text box holds.
+ *
+ * Two bands matter for readability and they are not the same number: a Latin
+ * line wants 45–75 characters, a full-width line wants far fewer. The script is
+ * decided from the text itself rather than from the font name, because a deck
+ * mixes both in one paragraph and the reader only cares which one dominates.
+ */
+export interface LineMeasure {
+  /** Characters per line at the element's own size and width. */
+  characters: number;
+  /** Which band applies: a line of 汉字 and a line of letters do not compare. */
+  script: "cjk" | "latin";
+}
+
+export function measureLine(text: string, widthPt: number, fontSizePt: number): LineMeasure {
+  const characters = [...text].filter((character) => !/\s/.test(character));
+  if (characters.length === 0 || widthPt <= 0 || fontSizePt <= 0) {
+    return { characters: 0, script: "latin" };
+  }
+  const wide = characters.filter((character) => !/^[\u0000-\u00ff]$/.test(character)).length;
+  const script: LineMeasure["script"] = wide * 2 >= characters.length ? "cjk" : "latin";
+  const emPerCharacter =
+    characters.reduce((sum, character) => sum + measureTextWidthEm(character), 0) / characters.length;
+  return { characters: Math.max(0, Math.round(widthPt / (emPerCharacter * fontSizePt))), script };
+}
+
+/**
+ * The readable band of one line, in characters.
+ *
+ * The CJK numbers are the same 45–75 Latin characters expressed in full-width
+ * glyphs (a full-width glyph is roughly 1.6–1.8 Latin characters wide), rounded
+ * to whole characters. Both are soft bounds: the lint reports them, it never
+ * refuses a page.
+ */
+export const MEASURE_BAND: Readonly<Record<LineMeasure["script"], { min: number; max: number }>> = {
+  cjk: { min: 18, max: 36 },
+  latin: { min: 40, max: 85 },
+};
+
+/**
  * Whether the text is taller than the frame it sits in.
  *
  * The thresholds match the ones the quality gate uses, so a page that reports

@@ -2,7 +2,7 @@ import type { CompositionFacts, IntentConflict } from "../../commands/design-int
 import type { AiVisualAsset } from "../../commands/visual-asset";
 import type { DeckConcept, RecipeId } from "../../design/deck-concept";
 import type { DesignTokens } from "../../design/design-tokens";
-import type { Emu, RectEmu, SlideContent, SlideElement } from "../../document-model";
+import type { Emu, ImageFrameShape, RectEmu, SlideContent, SlideElement } from "../../document-model";
 import type { PageChrome } from "../page-chrome";
 
 /** A rectangle in page-relative units, 0–1 on both axes. */
@@ -106,6 +106,13 @@ export interface RecipePlan {
   conflicts: IntentConflict[];
   /** A recipe may give the picture a different frame than the default layout. */
   imageFrame?: NormalizedFrame;
+  /**
+   * A recipe may clip the picture into a native geometry.
+   *
+   * The composition owns the frame, so it also owns the shape of the frame: a
+   * plate beside a column is a soft-cornered rectangle, a portrait is a circle.
+   */
+  imageShape?: ImageFrameShape;
 }
 
 export interface RecipeSupportOptions {

@@ -1,5 +1,5 @@
 import { type CSSProperties, type HTMLAttributes, type ReactNode, type Ref } from "react";
-import { type Slide, type SlideElement } from "../../core/document-model";
+import { type ImageFrameShape, type Slide, type SlideElement } from "../../core/document-model";
 import { ChartView } from "./ChartView";
 import { CroppedImage } from "./CroppedImage";
 import { LineView } from "./LineView";
@@ -30,7 +30,8 @@ export function SlideElementContent({ element, slide, scale, imageAlt }: SlideEl
   if (element.type === "shape") return <ShapeView element={element} scale={scale} />;
   if (element.type === "line") return <LineView element={element} scale={scale} />;
   if (element.type === "icon") return <IconView element={element} />;
-  if (element.type === "image") return <CroppedImage element={element} className="image-fill" alt={imageAlt} />;  if (element.type === "chart") return <ChartView element={element} slide={slide} scale={scale} />;
+  if (element.type === "image") return <CroppedImage element={element} className="image-fill" alt={imageAlt} />;
+  if (element.type === "chart") return <ChartView element={element} slide={slide} scale={scale} />;
   return <TableView element={element} slide={slide} scale={scale} />;
 }
 
@@ -42,12 +43,30 @@ export interface SlideElementFrameProps extends Omit<HTMLAttributes<HTMLDivEleme
 }
 
 /**
+ * How the frame of a picture is clipped.
+ *
+ * The canvas clips with the same two geometries the exporter writes: a
+ * roundRect whose corner is 16.667% of the shorter side (the `roundRect` preset's
+ * default adjustment, so PowerPoint draws the same radius) and an ellipse.
+ */
+function pictureClip(shape: ImageFrameShape | undefined, width: number, height: number): CSSProperties | undefined {
+  if (shape === "ellipse") return { borderRadius: "50%", overflow: "hidden" };
+  if (shape === "roundRect") {
+    return { borderRadius: Math.min(width, height) * 0.16667, overflow: "hidden" };
+  }
+  return undefined;
+}
+
+/**
  * The frame of one element on the page.
  *
  * The frame is placed in pixels of the surface it is drawn on, so the same
  * element keeps the same place on the canvas and in the thumbnail.
  */
 export function SlideElementFrame({ element, scale, children, className, style, ...rest }: SlideElementFrameProps) {
+  const width = element.frame.width * scale;
+  const height = element.frame.height * scale;
+  const clip = element.type === "image" ? pictureClip(element.frameShape, width, height) : undefined;
   return (
     <div
       {...rest}
@@ -55,9 +74,10 @@ export function SlideElementFrame({ element, scale, children, className, style, 
       style={{
         left: element.frame.x * scale,
         top: element.frame.y * scale,
-        width: element.frame.width * scale,
-        height: element.frame.height * scale,
+        width,
+        height,
         transform: `rotate(${element.rotationMilliDegree / 1000}deg)`,
+        ...clip,
         ...style,
       }}
     >

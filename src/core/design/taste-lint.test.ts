@@ -383,7 +383,10 @@ describe("taste lint", () => {
       textElement(
         "本季度门店效率提升主要来自陈列调整与预约制，复购率连续三个月上升。",
         { fontSizePt: 14 },
-        { x: 0.8, y: 1.7, width: 11.5, height: 4.6 },
+        // 6.4in at 14pt holds about 32 汉字 — inside the readable band. An 11.5in
+        // column would hold 59 and read like a printed page seen through a
+        // letterbox, which the measure check now reports.
+        { x: 0.8, y: 1.7, width: 6.4, height: 4.6 },
         "body",
       ),
     ];
@@ -392,6 +395,57 @@ describe("taste lint", () => {
     expect(first.issues).toEqual([]);
     expect(first.skipped).toEqual([]);
     expect(first).toEqual(second);
+  });
+
+  it("reports a body line that runs wider than a readable measure", () => {
+    const document = documentWith(1);
+    const long = "本季度门店效率提升主要来自陈列调整与预约制，复购率连续三个月上升，客单价同步走高。";
+    document.slides[0]!.elements = [
+      textElement("季度经营回顾", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 11.5, height: 0.8 }, "title"),
+      // The same copy in the full page width: 14pt across 11.5in is about 59
+      // 汉字 per line, well past the 36 the band allows.
+      textElement(long, { fontSizePt: 14 }, { x: 0.8, y: 1.7, width: 11.5, height: 4.6 }, "body"),
+    ];
+    const report = lintTaste(document);
+    expect(report.counts.MEASURE_TOO_WIDE).toBe(1);
+    const issue = report.issues.find((entry) => entry.code === "MEASURE_TOO_WIDE");
+    expect(issue?.metrics?.script).toBe("cjk");
+    expect(Number(issue?.metrics?.characters)).toBeGreaterThan(36);
+    expect(issue?.severity).toBe("soft");
+  });
+
+  it("reports a body column too narrow to hold a sentence", () => {
+    const document = documentWith(1);
+    document.slides[0]!.elements = [
+      textElement("季度经营回顾", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 11.5, height: 0.8 }, "title"),
+      // 1.6in at 16pt holds about 9 汉字: the sentence is shredded.
+      textElement(
+        "本季度门店效率提升主要来自陈列调整与预约制，复购率连续上升。",
+        { fontSizePt: 16 },
+        { x: 0.8, y: 1.7, width: 1.6, height: 4.6 },
+        "body",
+      ),
+    ];
+    const report = lintTaste(document);
+    expect(report.counts.MEASURE_TOO_NARROW).toBe(1);
+    expect(report.issues.find((entry) => entry.code === "MEASURE_TOO_NARROW")?.metrics?.script).toBe("cjk");
+  });
+
+  it("measures Latin copy against its own band", () => {
+    const document = documentWith(1);
+    document.slides[0]!.elements = [
+      textElement("Quarterly review", { fontSizePt: 36 }, { x: 0.8, y: 0.6, width: 11.5, height: 0.8 }, "title"),
+      textElement(
+        "Store efficiency improved through display changes and appointment slots, and repeat purchase rose for three consecutive quarters.",
+        { fontSizePt: 14 },
+        { x: 0.8, y: 1.7, width: 5.2, height: 4.6 },
+        "body",
+      ),
+    ];
+    const report = lintTaste(document);
+    // 5.2in at 14pt holds about 48 Latin characters — inside 40–85.
+    expect(report.counts.MEASURE_TOO_WIDE).toBe(0);
+    expect(report.counts.MEASURE_TOO_NARROW).toBe(0);
   });
 
   it("reports skipped checks instead of pretending they passed", () => {

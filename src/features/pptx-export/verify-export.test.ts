@@ -64,7 +64,15 @@ describe("export read-back parity", () => {
     );
     expect(imageSlide).toBeGreaterThanOrEqual(0);
     const xml = strFromU8(unzipSync(result.bytes)[`ppt/slides/slide${imageSlide + 1}.xml`]!);
-    const damaged = replaceSlidePart(result.bytes, imageSlide + 1, xml.replace(/<p:pic[\s\S]*?<\/p:pic>/g, ""));
+    // Damage the picture by removing its image reference. Removing `p:pic`
+    // would only catch rectangular pictures: a shaped picture is exported as a
+    // shape filled with the image, and the reference is what both wrappers
+    // carry (and what parity counts).
+    const damaged = replaceSlidePart(
+      result.bytes,
+      imageSlide + 1,
+      xml.replace(/<a:blip\b[^>]*r:embed="[^"]*"[^>]*\/>/g, ""),
+    );
     const report = verifyExportedPptx(damaged, document);
     expect(report.passed).toBe(false);
     expect(report.issues.some((issue) => issue.kind === "picture-count")).toBe(true);
