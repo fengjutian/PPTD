@@ -65,9 +65,7 @@ describe("template layout selection", () => {
   it("rejects an image page instead of silently using a text-only layout", () => {
     const result = planTemplateLayoutsWithReport({ layouts: [contentLayout(11, "内页")], intents: ["image"] });
     expect(result.layouts).toEqual([undefined]);
-    expect(result.issues).toEqual([
-      expect.objectContaining({ slideIndex: 0, code: "TEMPLATE_LAYOUT_IMAGE_REQUIRED" }),
-    ]);
+    expect(result.issues).toEqual([expect.objectContaining({ slideIndex: 0, code: "TEMPLATE_LAYOUT_IMAGE_REQUIRED" })]);
   });
 
   it("rejects a split page when the template has no two-column layout", () => {

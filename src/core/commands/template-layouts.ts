@@ -219,11 +219,26 @@ function requirementIssue(
   if (requirement.hasTitle && !capabilities.some((item) => item.hasTitle))
     return { slideIndex, intent, code: "TEMPLATE_LAYOUT_TITLE_REQUIRED", message: "模板没有可用的标题占位版式" };
   if (requirement.hasImage && !capabilities.some((item) => item.hasImage))
-    return { slideIndex, intent, code: "TEMPLATE_LAYOUT_IMAGE_REQUIRED", message: "该页需要图片，但模板没有图片占位版式" };
+    return {
+      slideIndex,
+      intent,
+      code: "TEMPLATE_LAYOUT_IMAGE_REQUIRED",
+      message: "该页需要图片，但模板没有图片占位版式",
+    };
   if (requirement.minimumColumns >= 2 && !capabilities.some((item) => item.columns >= 2))
-    return { slideIndex, intent, code: "TEMPLATE_LAYOUT_COLUMNS_REQUIRED", message: "该页需要双栏，但模板没有双栏版式" };
+    return {
+      slideIndex,
+      intent,
+      code: "TEMPLATE_LAYOUT_COLUMNS_REQUIRED",
+      message: "该页需要双栏，但模板没有双栏版式",
+    };
   if (requirement.hasBody && !capabilities.some((item) => item.hasBody))
-    return { slideIndex, intent, code: "TEMPLATE_LAYOUT_BODY_REQUIRED", message: "该页需要正文，但模板没有正文占位版式" };
+    return {
+      slideIndex,
+      intent,
+      code: "TEMPLATE_LAYOUT_BODY_REQUIRED",
+      message: "该页需要正文，但模板没有正文占位版式",
+    };
   return { slideIndex, intent, code: "TEMPLATE_LAYOUT_NO_CANDIDATE", message: "模板没有满足该页设计需求的安全版式" };
 }
 

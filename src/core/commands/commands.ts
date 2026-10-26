@@ -29,12 +29,7 @@ import {
 
 import { alignFrames, distributeFrames, unionFrame } from "./arrange";
 
-import {
-  classifyRelayoutElements,
-  inferRelayoutContext,
-  slideLayoutApplicationIssue,
-  slideLayoutOptions,
-} from "./slide-relayout";
+import { classifyRelayoutElements, inferRelayoutContext, slideLayoutApplicationIssue } from "./slide-relayout";
 export {
   classifyRelayoutElements,
   inferRelayoutContext,

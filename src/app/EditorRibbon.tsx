@@ -49,10 +49,13 @@ import {
   type SlideAnimation,
 } from "../core/document-model";
 
+import { slideLayoutOptions } from "../core/commands";
+
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 import { FormatPainterTool } from "../features/editor/FormatPainterTool";
 import { DrawingRibbonTools } from "../features/editor/DrawingRibbonTools";
 import { SelectionMenu } from "../features/editor/SelectionMenu";
+import { SlideLayoutMenu } from "../features/editor/SlideLayoutMenu";
 import { RibbonCompactButton, RibbonGroup } from "../features/editor/RibbonGroup";
 
 import { PageSizeControls } from "../features/editor/PageSizeControls";
@@ -148,6 +151,7 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
   const currentLink = selectedTextElements
     .flatMap((element) => element.runs ?? [])
     .find((run) => run.hyperlinkUrl)?.hyperlinkUrl;
+  const layoutOptions = slideLayoutOptions(document, activeSlide);
 
   const applyHyperlink = () => {
     if (editableTextElements.length === 0) return;
@@ -303,6 +307,16 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
               >
                 <Copy />
               </RibbonCompactButton>
+              <SlideLayoutMenu
+                options={layoutOptions}
+                onApply={(layoutId) => {
+                  const layout = document.layouts?.find((candidate) => candidate.id === layoutId);
+                  execute({ type: "apply-slide-layout", slideId: activeSlide.id, layoutId });
+                  setTaskStatus(
+                    `已应用版式“${layout?.name || "未命名版式"}”，已审核内容和手工对象已保留`,
+                  );
+                }}
+              />
               <RibbonCompactButton
                 label="重置当前页面版式（保留手工对象/配图）"
                 caption="重置"

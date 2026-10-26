@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { produce } from "immer";
-import { applyCommand, type AiContentBlock } from "./commands";
+import { applyCommand, commandDomain, slideLayoutOptions, type AiContentBlock } from "./commands";
 import { classifyRelayoutElements } from "./slide-relayout";
 import { createDocument, inches } from "../document-model";
 import { useEditorStore } from "../../store/editor-store";
@@ -249,5 +249,109 @@ describe("design-only relayout", () => {
     );
     // 重排只渲染一页，但页脚仍要写“02 / 03”，不能退回单页编号。
     expect(footerAfter?.type).toBe("text");
+  });
+
+  describe("page layout picker", () => {
+    const contentLayout = {
+      id: crypto.randomUUID(),
+      name: "内页（浅色）1",
+      backgroundColor: "#FFFFFF",
+      capabilities: { hasTitle: true, hasBody: true, hasImage: false, columns: 1, free: false },
+    };
+    const splitLayout = {
+      id: crypto.randomUUID(),
+      name: "双栏对比",
+      backgroundColor: "#F1F4F8",
+      capabilities: { hasTitle: true, hasBody: true, hasImage: false, columns: 2, free: false },
+    };
+    const coverLayout = {
+      id: crypto.randomUUID(),
+      name: "封面",
+      backgroundColor: "#101820",
+      capabilities: { hasTitle: true, hasBody: false, hasImage: false, columns: 1, free: true },
+    };
+
+    function pageWithLayouts(blocks: AiContentBlock[]) {
+      const base = designedDocument(blocks);
+      return produce(base, (draft) => {
+        draft.layouts = [contentLayout, splitLayout, coverLayout];
+        draft.slides[0]!.layoutId = contentLayout.id;
+      });
+    }
+
+    it("rebuilds the composition from a target layout without touching content or the layout list", () => {
+      const source = pageWithLayouts([{ type: "bullet-list", items: ["第一项", "第二项"] }]);
+      const slide = source.slides[0]!;
+      const slideId = slide.id;
+      const contentBefore = JSON.stringify(slide.content);
+      slide.elements.push({
+        id: crypto.randomUUID() as never,
+        type: "text",
+        contentRef: "decorative",
+        text: "手工备注",
+        frame: { x: inches(0.3), y: inches(6.2), width: inches(2), height: inches(0.3) },
+        rotationMilliDegree: 0,
+        locked: false,
+        origin: "user",
+        style: { fontFamily: "Microsoft YaHei", fontSizePt: 12, color: "#333333", bold: false, align: "left" },
+      });
+      const command = { type: "apply-slide-layout" as const, slideId, layoutId: splitLayout.id };
+      expect(commandDomain(command)).toBe("design");
+
+      const result = produce(source, (draft) => applyCommand(draft, command));
+      const resultSlide = result.slides[0]!;
+      expect(JSON.stringify(resultSlide.content)).toBe(contentBefore);
+      expect(result.layouts).toHaveLength(3);
+      expect(resultSlide.layoutId).toBe(splitLayout.id);
+      expect(resultSlide.background).toBe(splitLayout.backgroundColor);
+      expect(
+        resultSlide.elements.some(
+          (element) => element.type === "text" && element.text === "手工备注" && element.origin === "user",
+        ),
+      ).toBe(true);
+      const bodyTexts = resultSlide.elements.filter(
+        (element) => element.type === "text" && element.contentRef === "body",
+      );
+      // A 双栏 target has to actually draw two columns, not only rewrite layoutId.
+      expect(bodyTexts.some((element) => element.frame.x < result.pageSize.width / 2)).toBe(true);
+      expect(bodyTexts.some((element) => element.frame.x + element.frame.width > result.pageSize.width / 2)).toBe(
+        true,
+      );
+    });
+
+    it("refuses a missing layout and a layout that would hide reviewed copy", () => {
+      const source = pageWithLayouts([{ type: "bullet-list", items: ["第一项", "第二项"] }]);
+      const slideId = source.slides[0]!.id;
+      expect(() =>
+        produce(source, (draft) =>
+          applyCommand(draft, { type: "apply-slide-layout", slideId, layoutId: "missing-layout" }),
+        ),
+      ).toThrow("LAYOUT_NOT_FOUND");
+      expect(() =>
+        produce(source, (draft) =>
+          applyCommand(draft, { type: "apply-slide-layout", slideId, layoutId: coverLayout.id }),
+        ),
+      ).toThrow("LAYOUT_INCOMPATIBLE");
+    });
+
+    it("explains layout availability to the picker", () => {
+      const source = pageWithLayouts([{ type: "bullet-list", items: ["第一项", "第二项"] }]);
+      const options = slideLayoutOptions(source, source.slides[0]!);
+      expect(options.find((option) => option.layout.id === contentLayout.id)?.current).toBe(true);
+      expect(options.find((option) => option.layout.id === splitLayout.id)?.issue).toBeUndefined();
+      expect(options.find((option) => option.layout.id === coverLayout.id)?.issue).toContain("隐藏内容");
+    });
+
+    it("refuses two columns when the page carries only one point", () => {
+      const source = pageWithLayouts([{ type: "paragraph", text: "只有一段正文" }]);
+      const slideId = source.slides[0]!.id;
+      expect(slideLayoutOptions(source, source.slides[0]!).find((option) => option.layout.id === splitLayout.id)?.issue)
+        .toContain("至少需要 2 条正文");
+      expect(() =>
+        produce(source, (draft) =>
+          applyCommand(draft, { type: "apply-slide-layout", slideId, layoutId: splitLayout.id }),
+        ),
+      ).toThrow("LAYOUT_INCOMPATIBLE");
+    });
   });
 });
