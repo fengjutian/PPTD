@@ -593,24 +593,38 @@ export async function generatePresentationDesign(
 ): Promise<AiPresentationDesign> {
   const { provider, model } = await aiSelection();
   const visualGoal = options.visualGoal ?? defaultPresentationVisualGoal();
-  const raw = await invoke<unknown>("generate_presentation_design", {
-    request: {
-      draft,
-      briefs,
-      template: designTemplateForPrompt(template),
-      visualGoal,
-      concept: options.concept,
-      recipeCatalog: options.concept ? recipeCatalogForConcept(options.concept) : [],
-      themeDirection: options.themeDirection,
-      styleConstraint: options.styleConstraint,
-      model,
-      provider,
-      taskId: options.taskId,
-      // 设计结果一次返回整册，流式只用于把"已设计几页"报给界面；
-      // 厂商不支持流式时后端会退回一次性请求，生成结果不受影响。
-      streamProgress: true,
+  const request = {
+    draft,
+    briefs,
+    template: designTemplateForPrompt(template),
+    visualGoal,
+    concept: options.concept,
+    recipeCatalog: options.concept ? recipeCatalogForConcept(options.concept) : [],
+    themeDirection: options.themeDirection,
+    styleConstraint: options.styleConstraint,
+    model,
+    provider,
+    taskId: options.taskId,
+    streamProgress: true,
+  };
+  const created = createPptWorkbench(designCoordinateSystem);
+  if (!created.ok) throw new Error(`AI_WORKBENCH_INIT_FAILED:${created.issues[0]?.code ?? "UNKNOWN"}`);
+  const loop = await runPptWorkbenchLoop({
+    workbench: created.workbench,
+    tools: PPT_WORKBENCH_TOOLS,
+    transport: async ({ tools, transcript }) => {
+      const response = await invoke<unknown>("generate_presentation_design", {
+        request: { ...request, workbenchTools: tools, workbenchTranscript: transcript },
+      });
+      const turn = workbenchTurnSchema.safeParse(response);
+      if (turn.success) return turn.data;
+      // Mixed-version desktop upgrades can briefly pair a new frontend with an
+      // older backend. A valid legacy design is an immediate final turn.
+      if (aiPresentationDesignSchema.safeParse(response).success) return { kind: "final" as const, output: response };
+      throw new Error("AI_WORKBENCH_TURN_INVALID");
     },
   });
+  const raw = loop.output;
   const design = aiPresentationDesignSchema.parse(raw);
   if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
   const constrained = constrainDesignToTemplate(

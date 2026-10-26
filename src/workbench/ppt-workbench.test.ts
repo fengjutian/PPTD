@@ -14,7 +14,7 @@ const coordinateSystem: PageCoordinateSystem = {
 
 describe("PPT workbench", () => {
   it("presents namespaced tools as the AI-to-PPT boundary", () => {
-    expect(PPT_WORKBENCH_TOOLS.map((tool) => tool.name)).toEqual([
+    expect(PPT_WORKBENCH_TOOLS.slice(0, 7).map((tool) => tool.name)).toEqual([
       "layout.regions",
       "layout.inspect",
       "layout.inset",

@@ -25,7 +25,7 @@ export type DocumentWorkbenchToolName =
   | "plan.inspect"
   | "plan.clear";
 
-type PlannedDesignCommand = Extract<
+export type PlannedDesignCommand = Extract<
   DocumentCommand,
   | { type: "transform-element" }
   | { type: "align-elements" }
@@ -67,6 +67,10 @@ export interface DocumentWorkbench {
   readonly base: WorkbenchDocumentSnapshot;
   readonly pendingCommands: readonly PlannedDesignCommand[];
 }
+
+export type DocumentWorkbenchCommitResult =
+  | { readonly ok: true; readonly baseRevisions: Revisions; readonly commands: readonly PlannedDesignCommand[] }
+  | { readonly ok: false; readonly code: "REVISION_CONFLICT"; readonly baseRevisions: Revisions; readonly currentRevisions: Revisions };
 
 const idsSchema = { type: "array", items: { type: "string" }, minItems: 1, uniqueItems: true } as const;
 
@@ -203,6 +207,26 @@ export function createDocumentWorkbench(document: PresentationDocument): Documen
     },
     pendingCommands: [],
   };
+}
+
+export function prepareDocumentWorkbenchCommit(
+  workbench: DocumentWorkbench,
+  currentRevisions: Revisions,
+): DocumentWorkbenchCommitResult {
+  const base = workbench.base.revisions;
+  if (
+    base.document !== currentRevisions.document ||
+    base.content !== currentRevisions.content ||
+    base.design !== currentRevisions.design
+  ) {
+    return {
+      ok: false,
+      code: "REVISION_CONFLICT",
+      baseRevisions: { ...base },
+      currentRevisions: { ...currentRevisions },
+    };
+  }
+  return { ok: true, baseRevisions: { ...base }, commands: [...workbench.pendingCommands] };
 }
 
 function failure(workbench: DocumentWorkbench, code: string, paths: string[], message: string): WorkbenchCallResult<DocumentWorkbench> {

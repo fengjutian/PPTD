@@ -4,9 +4,11 @@ import {
   callDocumentWorkbench,
   createDocumentWorkbench,
   DOCUMENT_WORKBENCH_TOOLS,
+  prepareDocumentWorkbenchCommit,
   type DocumentWorkbench,
   type DocumentWorkbenchToolName,
 } from "./document/document-workbench";
+import type { Revisions } from "../core/document-model";
 import {
   callLayoutWorkbench,
   createLayoutWorkbench,
@@ -86,4 +88,11 @@ export function callPptWorkbench(
   return result.ok
     ? { ok: true, workbench: next, value: result.value }
     : { ok: false, workbench: next, issues: result.issues };
+}
+
+export function preparePptWorkbenchCommit(workbench: PptWorkbench, currentRevisions: Revisions) {
+  if (!workbench.document) {
+    return { ok: false as const, code: "CONTEXT_UNAVAILABLE" as const };
+  }
+  return prepareDocumentWorkbenchCommit(workbench.document, currentRevisions);
 }
