@@ -15,10 +15,7 @@ describe("design audit", () => {
     const report = buildDesignAudit(document, { nativeAnimationSkipped: 2, nativeGroupSkipped: 1 });
     expect(report.components.text).toBeGreaterThan(0);
     expect(report.layouts[0]).toMatchObject({ name: "双栏图文", usedBySlides: 1, capabilities: { columns: 2 } });
-    expect(report.degradations.map((item) => item.code)).toEqual([
-      "ANIMATION_NATIVE_SKIPPED",
-      "GROUP_NATIVE_SKIPPED",
-    ]);
+    expect(report.degradations.map((item) => item.code)).toEqual(["ANIMATION_NATIVE_SKIPPED", "GROUP_NATIVE_SKIPPED"]);
     expect(report.recipes.coverage).toBe(0);
   });
 });

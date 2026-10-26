@@ -347,7 +347,8 @@ function targetBodyRegions(
   layout: SlideLayoutSpec,
   frame: AiTemplateRegion["frame"],
   textColor: string,
-  fontSizePt?: number,
+  fontSizePt: number | undefined,
+  useColumns: boolean,
 ): AiTemplateRegion[] {
   const capabilities = layout.capabilities;
   if (!capabilities || capabilities.free) return [];
@@ -357,7 +358,7 @@ function targetBodyRegions(
     textColor,
     fontSizePt,
   });
-  if (capabilities.columns < 2) return [region(frame)];
+  if (!useColumns) return [region(frame)];
   const gap = Math.min(0.03, frame.width * 0.06);
   const width = (frame.width - gap) / 2;
   return [region({ ...frame, width }), region({ ...frame, x: frame.x + width + gap, width })];
@@ -486,13 +487,17 @@ export function inferRelayoutContext(
   const layout = targetLayout ? layoutKindForTarget(targetLayout) : inferLayout(slide, document, classified.generated);
   const range = { title: backgroundRangeFor(titleColor), body: backgroundRangeFor(bodyColor) };
   const targetColumns = targetLayout?.capabilities?.columns ?? 0;
+  // Structured comparison pages already draw their own two columns across the
+  // whole content area. Splitting the template region under them would squeeze
+  // both columns into the left half of the page.
+  const useColumnRegions = targetColumns >= 2 && canForceColumns(slide);
   // A narrow source body leaves neither column enough room. A split target then
   // uses the standard body area instead of squeezing two columns into it.
-  const regionBodyFrame = targetColumns >= 2 && bodyFrame.width < 0.5 ? { ...DEFAULT_BODY } : bodyFrame;
+  const regionBodyFrame = useColumnRegions && bodyFrame.width < 0.5 ? { ...DEFAULT_BODY } : bodyFrame;
   const regions: AiTemplateRegion[] = [
     { role: "title", frame: titleFrame, textColor: titleColor, fontSizePt: title?.style.fontSizePt },
     ...(targetLayout
-      ? targetBodyRegions(targetLayout, regionBodyFrame, bodyColor, bodyTexts[0]?.style.fontSizePt)
+      ? targetBodyRegions(targetLayout, regionBodyFrame, bodyColor, bodyTexts[0]?.style.fontSizePt, useColumnRegions)
       : [
           {
             role: "body" as const,
@@ -513,7 +518,7 @@ export function inferRelayoutContext(
       safeRegion,
       backgroundTreatment: "none",
       inkOverride: true,
-      ...(targetColumns >= 2 && canForceColumns(slide) ? { composition: "columns" as const } : {}),
+      ...(useColumnRegions ? { composition: "columns" as const } : {}),
     },
     templateLayout: {
       index: 0,

@@ -28,9 +28,17 @@ export function buildDesignAudit(document: PresentationDocument, input: DesignAu
   }
   const degradations: DesignAuditReport["degradations"] = [];
   if ((input.nativeAnimationSkipped ?? 0) > 0)
-    degradations.push({ code: "ANIMATION_NATIVE_SKIPPED", count: input.nativeAnimationSkipped!, message: "部分动画无法写入原生时间轴" });
+    degradations.push({
+      code: "ANIMATION_NATIVE_SKIPPED",
+      count: input.nativeAnimationSkipped!,
+      message: "部分动画无法写入原生时间轴",
+    });
   if ((input.nativeGroupSkipped ?? 0) > 0)
-    degradations.push({ code: "GROUP_NATIVE_SKIPPED", count: input.nativeGroupSkipped!, message: "部分组合因成员限制保持扁平" });
+    degradations.push({
+      code: "GROUP_NATIVE_SKIPPED",
+      count: input.nativeGroupSkipped!,
+      message: "部分组合因成员限制保持扁平",
+    });
   if ((input.warnings?.length ?? 0) > 0)
     degradations.push({ code: "EXPORT_WARNING", count: input.warnings!.length, message: "导出过程中产生警告" });
   return {
