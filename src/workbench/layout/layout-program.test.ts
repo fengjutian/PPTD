@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { layoutRect, type PageCoordinateSystem } from "../../core/layout/geometry/coordinate-system";
 import { compileLayoutProgram, parseAiLayoutProgram } from "./layout-program";
-import { layoutRectsOverlap } from "./layout-validator";
+import { layoutRectsOverlap } from "../../core/layout/geometry/layout-validator";
 
 const system: PageCoordinateSystem = {
   coordinateSpace: "normalized-1000",

@@ -40,4 +40,15 @@ describe("PPT workbench", () => {
       value: { "metrics[0]": { x: 220, width: 162 } },
     });
   });
+
+  it("rejects an unregistered model tool without changing workbench state", () => {
+    const created = createPptWorkbench(coordinateSystem);
+    if (!created.ok) throw new Error("workbench failed");
+
+    expect(callPptWorkbench(created.workbench, "document.replace", {})).toMatchObject({
+      ok: false,
+      workbench: created.workbench,
+      issues: [{ code: "UNSUPPORTED_TOOL", paths: ["document.replace"] }],
+    });
+  });
 });

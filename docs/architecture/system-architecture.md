@@ -28,6 +28,12 @@ flowchart LR
 
 ## 3. 模块职责
 
+### AI PPT Workbench
+
+`src/workbench` 是 AI 操作 PPT 的独立中间层，不属于 React feature，也不属于领域核心。AI Provider Adapter 只能通过该模块公布的带命名空间工具读取能力和提出操作；Workbench 将未知模型输入解析为受控布局程序或强类型领域命令，再交给应用事务边界执行。
+
+纯坐标和布局算法位于 `src/core/layout/geometry`，供领域配方与 Workbench 共同使用。依赖方向固定为 `AI Adapter -> workbench -> core`，`core` 不得反向依赖 Workbench。详细约束见 [ADR 0113](decisions/0113-ai-ppt-workbench-boundary.md)。
+
 | 模块                       | 职责                                                            | 明确边界               |
 | -------------------------- | --------------------------------------------------------------- | ---------------------- |
 | `core/document-model`      | 实体、值对象、Schema、迁移                                      | 不访问文件、网络和 UI  |
