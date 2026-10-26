@@ -21,6 +21,10 @@ export function readSlideBackground(
     onError?.("背景图必须是 PNG、JPEG 或 WebP");
     return;
   }
+  if (file.size > 256 * 1024 * 1024) {
+    onError?.("背景图不能超过 256 MB");
+    return;
+  }
   const reader = new FileReader();
   reader.onerror = () => onError?.("背景图读取失败");
   reader.addEventListener("load", () => {

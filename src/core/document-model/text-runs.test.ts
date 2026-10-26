@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { applyTextRun, mergeTextRuns, resolveFragmentStyle, subtractTextRange, textFragments } from "./text-runs";
+import {
+  applyTextRun,
+  mergeTextRuns,
+  resolveFragmentStyle,
+  setTextHyperlink,
+  subtractTextRange,
+  textFragments,
+} from "./text-runs";
 import type { TextElementStyle } from "./types";
 
 const ELEMENT_STYLE: TextElementStyle = {
@@ -62,6 +69,29 @@ describe("text runs", () => {
         { start: 3, end: 6, color: "#FF6600" },
       ]),
     ).toHaveLength(2);
+  });
+
+  it("sets a link across a box without losing fragment emphasis", () => {
+    const runs = setTextHyperlink(
+      [
+        { start: 0, end: 2, bold: true },
+        { start: 4, end: 6, color: "#FF6600" },
+      ],
+      7,
+      "https://example.com/report",
+    );
+    expect(runs).toEqual([
+      { start: 0, end: 2, bold: true, hyperlinkUrl: "https://example.com/report" },
+      { start: 2, end: 4, hyperlinkUrl: "https://example.com/report" },
+      { start: 4, end: 6, color: "#FF6600", hyperlinkUrl: "https://example.com/report" },
+      { start: 6, end: 7, hyperlinkUrl: "https://example.com/report" },
+    ]);
+  });
+
+  it("clears a link and leaves the rest of the fragment styles alone", () => {
+    expect(setTextHyperlink([{ start: 0, end: 3, bold: true, hyperlinkUrl: "https://example.com" }], 3, null)).toEqual([
+      { start: 0, end: 3, bold: true },
+    ]);
   });
 
   it("lets the element decide the properties a run does not mention", () => {

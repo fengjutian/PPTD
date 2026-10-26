@@ -39,9 +39,7 @@ export function TransitionControls({
         value={kind}
         options={TRANSITION_KINDS}
         optionLabels={TRANSITION_KIND_LABELS}
-        onCommit={(value) =>
-          commitTransition(slideId, { kind: value as typeof kind, speed, direction }, onCommand)
-        }
+        onCommit={(value) => commitTransition(slideId, { kind: value as typeof kind, speed, direction }, onCommand)}
       />
       {kind !== "none" && (
         <SelectField
@@ -49,9 +47,7 @@ export function TransitionControls({
           value={speed}
           options={TRANSITION_SPEEDS}
           optionLabels={TRANSITION_SPEED_LABELS}
-          onCommit={(value) =>
-            commitTransition(slideId, { kind, speed: value as typeof speed, direction }, onCommand)
-          }
+          onCommit={(value) => commitTransition(slideId, { kind, speed: value as typeof speed, direction }, onCommand)}
         />
       )}
       {transitionHasDirection(kind) && (

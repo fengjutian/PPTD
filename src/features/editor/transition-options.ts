@@ -1,5 +1,11 @@
 import type { DocumentCommand } from "../../core/commands";
-import type { SlideId, SlideTransition, SlideTransitionDirection, SlideTransitionKind, SlideTransitionSpeed } from "../../core/document-model";
+import type {
+  SlideId,
+  SlideTransition,
+  SlideTransitionDirection,
+  SlideTransitionKind,
+  SlideTransitionSpeed,
+} from "../../core/document-model";
 
 export const TRANSITION_KINDS = ["none", "fade", "push", "wipe", "split"] as const;
 export const TRANSITION_KIND_LABELS: Record<string, string> = {

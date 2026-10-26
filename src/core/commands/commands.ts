@@ -95,8 +95,7 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       if (!document) return "design";
       const slide = document.slides.find((item) => item.id === command.slideId);
       const targets = slide?.elements.filter(
-        (item): item is TextElement =>
-          command.elementIds.includes(item.id) && item.type === "text" && !item.locked,
+        (item): item is TextElement => command.elementIds.includes(item.id) && item.type === "text" && !item.locked,
       );
       if (!targets || targets.length === 0) return "design";
       const url = command.url?.trim() ?? null;
@@ -113,7 +112,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
     case "set-text-style":
     case "set-text-style-elements":
     case "clear-text-format":
-    case "fit-text":    case "set-text-emphasis":
+    case "fit-text":
+    case "set-text-emphasis":
     case "clear-text-emphasis":
     case "set-shape-style":
     case "set-line-style":
@@ -562,10 +562,7 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
   }
   if (command.type === "set-text-hyperlink") {
     const url = command.url?.trim() ?? null;
-    if (
-      url !== null &&
-      (url.length > 2048 || !/^(?:https?:\/\/[^\s\x00-\x1f]+|mailto:[^\s\x00-\x1f]+)$/i.test(url))
-    ) {
+    if (url !== null && (url.length > 2048 || !/^(?:https?:\/\/[^\s\x00-\x1f]+|mailto:[^\s\x00-\x1f]+)$/i.test(url))) {
       throw new Error("TEXT_HYPERLINK_INVALID");
     }
     const targets = slide.elements.filter(
@@ -578,7 +575,17 @@ export function applyCommand(document: PresentationDocument, command: DocumentCo
     // changes.
     for (const target of targets) {
       const runs = setTextHyperlink(target.runs, target.text.length, url);
-      target.runs = runs.length > 0 ? runs : undefined;
+      // Removing the last link should leave a plain element instead of a run
+      // that carries no formatting at all.
+      target.runs = runs.some(
+        (run) =>
+          run.bold !== undefined ||
+          run.color !== undefined ||
+          run.underline !== undefined ||
+          run.hyperlinkUrl !== undefined,
+      )
+        ? runs
+        : undefined;
     }
     return;
   }

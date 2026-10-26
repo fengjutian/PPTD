@@ -167,6 +167,74 @@ button {
   align-items: center;
   gap: 3px;
 }
+/* “设计”页背景与“动画”页切换的紧凑控件，高度与 48px 工具按钮对齐。 */
+.ribbon-background-tools,
+.ribbon-transition-tools {
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+.ribbon-color-control,
+.ribbon-transition-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgb(255 255 255 / 78%);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.ribbon-color-control input {
+  width: 30px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.ribbon-background-actions {
+  display: flex;
+  gap: 3px;
+}
+.ribbon-background-actions button {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 9px;
+  cursor: pointer;
+}
+.ribbon-background-actions button:hover {
+  background: rgb(255 255 255 / 12%);
+}
+.ribbon-background-actions button svg {
+  width: 12px;
+  height: 12px;
+}
+.ribbon-transition-row {
+  display: flex;
+  gap: 5px;
+}
+.ribbon-transition-row select {
+  height: 22px;
+  padding: 0 3px;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 4px;
+  color: #fff;
+  background: rgb(0 0 0 / 16%);
+  font-size: 9px;
+}
+.ribbon-transition-row select option {
+  color: #111;
+  background: #fff;
+}
 .text-format-select {
   height: 22px;
   padding: 0 3px;
@@ -1362,6 +1430,10 @@ button {
 }
 .tool-button:hover:not(:disabled) {
   background: #292b30;
+}
+.tool-button[aria-pressed="true"] {
+  background: #2b2e34;
+  color: #fff;
 }
 .tool-button:disabled {
   color: #55585f;

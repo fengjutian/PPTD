@@ -41,8 +41,7 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { type AnimationEffect, type SlideAnimation } from "../core/document-model";
-import { isElementVisible } from "../core/document-model";
+import { isElementVisible, type AnimationEffect, type SlideAnimation } from "../core/document-model";
 
 import { TextFormatToolbar } from "../features/editor/TextFormatToolbar";
 
@@ -142,8 +141,8 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
     const input = window.prompt("输入链接地址（http/https 或 mailto），留空移除链接", currentLink ?? "");
     if (input === null) return;
     const url = input.trim();
-    if (url && !/^(?:https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(url)) {
-      setTaskStatus("链接必须是 http、https 或 mailto 地址");
+    if (url && (url.length > 2048 || !/^(?:https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(url))) {
+      setTaskStatus("链接必须是 2048 字符以内的 http、https 或 mailto 地址");
       return;
     }
     execute({
@@ -314,6 +313,26 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             >
               <Trash2 />
             </ToolButton>
+            <ToolButton
+              label="全选本页对象（Ctrl+A）"
+              caption="全选"
+              pressed={allSelected}
+              disabled={selectableElements.length === 0}
+              onClick={() => {
+                selectElements(selectableElements.map((element) => element.id));
+                setTaskStatus(`已选择 ${selectableElements.length} 个对象`);
+              }}
+            >
+              <MousePointer2 />
+            </ToolButton>
+            <ToolButton
+              label="打开选择窗格"
+              caption="选择窗格"
+              pressed={leftTab === "layers"}
+              onClick={() => setLeftTab("layers")}
+            >
+              <Layers />
+            </ToolButton>
             <span className="separator" />
             <TextFormatToolbar slideId={activeSlide.id} elements={selectedTextElements} execute={execute} />
           </div>
@@ -351,6 +370,14 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             </ToolButton>
             <ToolButton label="图标" onClick={() => setIconPickerOpen(true)}>
               <Sparkles />
+            </ToolButton>
+            <ToolButton
+              label={currentLink ? `编辑超链接：${currentLink}` : "设置所选文本框的超链接"}
+              caption="超链接"
+              disabled={editableTextElements.length === 0}
+              onClick={applyHyperlink}
+            >
+              <Link2 />
             </ToolButton>
             <ToolButton label="插入表格" caption="表格" onClick={() => setInsertTableOpen(true)}>
               <Table2 />
@@ -414,6 +441,26 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             >
               <Trash2 />
             </ToolButton>
+            <span className="separator" />
+            <ToolButton
+              label="显示页面面板"
+              caption="页面"
+              pressed={leftTab === "slides"}
+              onClick={() => setLeftTab("slides")}
+            >
+              <Presentation />
+            </ToolButton>
+            <ToolButton
+              label="显示图层面板"
+              caption="图层"
+              pressed={leftTab === "layers"}
+              onClick={() => setLeftTab("layers")}
+            >
+              <Layers />
+            </ToolButton>
+            <ToolButton label="实际大小（100%）" caption="100%" onClick={() => setZoom(1)}>
+              <Maximize2 />
+            </ToolButton>
           </div>
           <div className="toolbar-group design-tools">
             <ToolButton label="选择主题" onClick={() => changeActiveView("theme")}>
@@ -425,6 +472,14 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
             >
               <Wand2 />
             </ToolButton>
+            <span className="separator" />
+            <SlideBackgroundTools
+              slideId={activeSlide.id}
+              background={activeSlide.background}
+              hasBackgroundImage={hasBackgroundImage}
+              onCommand={execute}
+              onStatus={setTaskStatus}
+            />
             <span className="separator" />
             <PageSizeControls
               pageSize={document.pageSize}
@@ -739,6 +794,8 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
                 </div>
               </div>
             )}
+            <span className="separator" />
+            <TransitionRibbon slideId={activeSlide.id} transition={activeSlide.transition} onCommand={execute} />
           </div>
           <button
             className="export-button"
