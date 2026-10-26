@@ -66,7 +66,7 @@
 - 将 `instrument-columns` 的列计算迁移到统一 `columns` 函数。
 - 用导轨、标题、四列面板和非法程序建立固定测试。
 
-进度（2026-10-26）：已完成逻辑坐标、语义区域、EMU 转换、间距令牌、`inset/columns/rows/stack`、未知输入解析、程序编译及边界/重叠/轴线校验。`instrument-columns` 已改用统一四列函数。新增独立 `src/workbench/` 模块，统一向 AI 暴露带命名空间的 `layout.regions/layout.inspect/layout.inset/layout.columns/layout.rows/layout.stack/layout.validate` 七个受控工具；工具调用按不可变工作台状态连续执行，失败保留上一次有效状态。当前阶段尚未扩展 AI 页面输出协议，避免模型生成了布局程序但其他配方没有消费便宣称已支持。
+进度（2026-10-26）：已完成逻辑坐标、语义区域、EMU 转换、间距令牌、`inset/columns/rows/stack`、未知输入解析、程序编译及边界/重叠/轴线校验。`instrument-columns` 已改用统一四列函数。新增独立 `src/workbench/` 模块，统一向 AI 暴露带命名空间的布局工具，并补充文档/页面/对象检查、对象放置、对齐、分布、锁定、层级、文本样式和命令计划工具。所有编辑工具只生成设计命令计划，不直接修改文档；提交前必须通过 revision 冲突检查。当前阶段尚未把现有 AI Provider 请求改造成完整工具调用循环，不宣称运行时已经接入。
 
 ## 7.1 AI 工作台调用模型
 

@@ -1648,8 +1648,8 @@ pub async fn generate_presentation_design(
         serde_json::to_string(&request.theme_direction).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let style_constraint = serde_json::to_string(&request.style_constraint)
         .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
-    let workbench_tools = serde_json::to_string(&request.workbench_tools)
-        .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let workbench_tools =
+        serde_json::to_string(&request.workbench_tools).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let workbench_transcript = serde_json::to_string(&request.workbench_transcript)
         .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     if draft.len() > 120_000
