@@ -7,7 +7,7 @@ import { findThemePreset } from "./theme-presets";
 
 describe("style profiles", () => {
   it("only references themes, concepts and recipes the renderer owns", () => {
-    expect(STYLE_PROFILES).toHaveLength(16);
+    expect(STYLE_PROFILES).toHaveLength(18);
     expect(new Set(STYLE_PROFILES.map((profile) => profile.id)).size).toBe(STYLE_PROFILES.length);
 
     for (const profile of STYLE_PROFILES) {
@@ -25,6 +25,16 @@ describe("style profiles", () => {
       );
       for (const recipe of profile.preferredRecipes) expect(availableRecipes).toContain(recipe);
     }
+  });
+
+  it("makes degraded capabilities explicit for glass and 3D styles", () => {
+    const glass = findStyleProfile("glassmorphism")!;
+    const threeDimensional = findStyleProfile("3d-visual")!;
+
+    expect(glass.capability?.status).toBe("partial");
+    expect(glass.capability?.note).toContain("背景模糊");
+    expect(threeDimensional.capability?.status).toBe("partial");
+    expect(threeDimensional.capability?.note).toContain("渲染图片");
   });
 
   it("adds style constraints without changing the selected theme identity", () => {

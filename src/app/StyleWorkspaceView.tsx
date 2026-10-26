@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Ban, Check, Image, Layers3, LayoutTemplate, Palette, X } from "lucide-react";
+import { Ban, Check, Image, Info, Layers3, LayoutTemplate, Palette, X } from "lucide-react";
 
 import { CONCEPT_PRESET_LABELS } from "../core/design/deck-concept";
 import { STYLE_PROFILES, type StyleProfile, type StyleProfileId } from "../core/design/style-profiles";
@@ -98,6 +98,16 @@ export function StyleDetailDrawer({
         <div className="style-drawer-scroll">
           <StyleSpecimen profile={profile} large />
 
+          {profile.capability && (
+            <section className="style-capability-note">
+              <Info />
+              <div>
+                <strong>部分支持</strong>
+                <p>{profile.capability.note}</p>
+              </div>
+            </section>
+          )}
+
           <section className="style-detail-section style-detail-overview">
             <div>
               <small>信息密度</small>
@@ -174,6 +184,17 @@ export function StyleDetailDrawer({
               ))}
             </ul>
           </section>
+
+          {profile.capability && (
+            <section className="style-detail-section style-detail-fallbacks">
+              <h3>导出降级规则</h3>
+              <ul>
+                {profile.capability.fallbacks.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
 
         <footer className="style-drawer-actions">
@@ -264,6 +285,7 @@ export function StyleWorkspaceView({ app }: { app: AppRuntime }) {
                       </span>
                     )}
                   </span>
+                  {profile.capability && <span className="style-card-support">部分支持</span>}
                   <span className="style-card-summary">{profile.summary}</span>
                   <span className="style-traits">
                     {profile.visualTraits.map((trait) => (

@@ -2634,6 +2634,31 @@
   border-radius: 52% 48% 38% 62%;
   background: linear-gradient(145deg, var(--style-secondary), var(--style-accent)) !important;
 }
+.style-specimen-glass {
+  background: linear-gradient(135deg, var(--style-bg), var(--style-secondary));
+}
+.style-specimen-glass .style-specimen-visual {
+  top: 13%;
+  right: 8%;
+  width: 34%;
+  height: 72%;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 48%) !important;
+  box-shadow: 0 9px 24px rgb(60 61 150 / 17%);
+}
+.style-specimen-three-dimensional .style-specimen-visual {
+  top: 16%;
+  right: 11%;
+  width: 29%;
+  height: 64%;
+  border-radius: 38% 58% 42% 62%;
+  background: linear-gradient(145deg, var(--style-secondary), var(--style-accent)) !important;
+  box-shadow:
+    -14px 16px 0 rgb(123 97 209 / 16%),
+    12px -10px 22px rgb(240 138 75 / 22%);
+  transform: rotate(-9deg);
+}
 
 .style-card-heading {
   display: flex;
@@ -2677,6 +2702,17 @@
   color: #545d67;
   font-size: 11px;
   line-height: 1.6;
+}
+.style-card-support {
+  display: inline-flex;
+  margin-top: 7px;
+  padding: 3px 7px;
+  border: 1px solid #d8b56c;
+  border-radius: 999px;
+  color: #86601e;
+  background: #fff8e8;
+  font-size: 9px;
+  font-weight: 700;
 }
 .style-traits {
   display: flex;
@@ -2812,6 +2848,34 @@
   background: #ffffff;
 }
 
+.style-capability-note {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 9px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #dfc17e;
+  border-radius: 10px;
+  color: #6f511e;
+  background: #fff8e8;
+}
+
+.style-capability-note > svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.style-capability-note strong {
+  font-size: 11px;
+}
+
+.style-capability-note p {
+  margin: 3px 0 0;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
 .style-detail-section h3 {
   display: flex;
   align-items: center;
@@ -2926,6 +2990,21 @@
   color: #765b55;
   font-size: 10px;
   list-style-position: inside;
+}
+
+.style-detail-fallbacks {
+  border-color: #dfc17e;
+  background: #fffaf0;
+}
+
+.style-detail-fallbacks ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 18px;
+  color: #6f5b37;
+  font-size: 10px;
+  line-height: 1.55;
 }
 
 .style-drawer-actions {

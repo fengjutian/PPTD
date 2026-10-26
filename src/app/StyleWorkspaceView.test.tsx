@@ -19,10 +19,10 @@ describe("StyleWorkspaceView", () => {
       />,
     );
 
-    expect((markup.match(/class="style-card(?: active)?"/g) ?? []).length).toBe(16);
+    expect((markup.match(/class="style-card(?: active)?"/g) ?? []).length).toBe(18);
     expect(markup).toContain("商务专业");
     expect(markup).toContain("风格决定整册构图、信息密度和图片语言");
-    expect((markup.match(/aria-haspopup="dialog"/g) ?? []).length).toBe(16);
+    expect((markup.match(/aria-haspopup="dialog"/g) ?? []).length).toBe(18);
     expect(markup).toContain("查看商务专业风格详情");
   });
 
@@ -37,5 +37,20 @@ describe("StyleWorkspaceView", () => {
     expect(markup).toContain("图片语言");
     expect(markup).toContain("避免使用");
     expect(markup).toContain("选择此风格");
+  });
+
+  it("discloses partial support and export fallbacks", () => {
+    const markup = renderToStaticMarkup(
+      <StyleDetailDrawer
+        profile={STYLE_PROFILES.find((profile) => profile.id === "glassmorphism")!}
+        selected={false}
+        onClose={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("部分支持");
+    expect(markup).toContain("背景模糊不会写入 PPTX");
+    expect(markup).toContain("导出降级规则");
   });
 });

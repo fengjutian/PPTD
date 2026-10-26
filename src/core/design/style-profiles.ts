@@ -17,7 +17,9 @@ export type StyleProfileId =
   | "bauhaus"
   | "hand-drawn"
   | "government"
-  | "industrial";
+  | "industrial"
+  | "glassmorphism"
+  | "3d-visual";
 
 export type StyleDensity = "airy" | "balanced" | "compact";
 export type StyleImageMedium = "photo" | "illustration" | "3d" | "texture";
@@ -44,12 +46,27 @@ export interface StyleProfile {
   };
   visualTraits: readonly string[];
   forbidden: readonly string[];
+  capability?: {
+    status: "partial";
+    note: string;
+    fallbacks: readonly string[];
+  };
   specimen: {
     background: string;
     ink: string;
     accent: string;
     secondary: string;
-    composition: "minimal" | "grid" | "hero" | "editorial" | "paper" | "data" | "organic" | "luxury";
+    composition:
+      | "minimal"
+      | "grid"
+      | "hero"
+      | "editorial"
+      | "paper"
+      | "data"
+      | "organic"
+      | "luxury"
+      | "glass"
+      | "three-dimensional";
   };
 }
 
@@ -339,6 +356,48 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
     visualTraits: ["参数结构", "工程精度", "冷调摄影"],
     forbidden: ["卡通机械", "廉价科技蓝", "装饰性渐变"],
     specimen: { background: "#EEF1F2", ink: "#25343D", accent: "#35566B", secondary: "#D97706", composition: "data" },
+  },
+  {
+    id: "glassmorphism",
+    name: "现代渐变与玻璃拟态",
+    englishName: "Glassmorphism",
+    summary: "柔和渐变、半透明面板和轻量阴影形成现代数字产品气质。",
+    suitableFor: ["SaaS 产品", "AI 产品", "互联网创业项目", "数字化方案"],
+    themePresetId: "tech-blue",
+    preferredConcept: "editorial",
+    allowedConcepts: ["editorial", "instrument"],
+    preferredRecipes: ["cover-statement", "asymmetric-split", "instrument-columns", "data-story"],
+    density: "balanced",
+    imagery: { media: ["illustration", "3d"], guidance: "柔和光感抽象图、渐变空间或简洁 3D 元素，背景保持低细节。" },
+    visualTraits: ["柔和渐变", "透明面板", "轻量阴影"],
+    forbidden: ["低对比文字", "过多悬浮卡片", "强烈高光叠加"],
+    capability: {
+      status: "partial",
+      note: "当前使用原生渐变、透明度、细描边和阴影近似玻璃质感；背景模糊不会写入 PPTX。",
+      fallbacks: ["背景模糊 → 半透明浅色面板", "复杂光晕 → 柔和渐变或透明形状"],
+    },
+    specimen: { background: "#E9EEFF", ink: "#172443", accent: "#6967E8", secondary: "#43BBD0", composition: "glass" },
+  },
+  {
+    id: "3d-visual",
+    name: "3D 视觉",
+    englishName: "3D Illustration",
+    summary: "以三维物体、空间层次和柔和材质强化产品概念与视觉记忆。",
+    suitableFor: ["产品概念", "创意提案", "科技教育", "视觉营销"],
+    themePresetId: "creative-orange",
+    preferredConcept: "documentary",
+    allowedConcepts: ["documentary", "editorial"],
+    preferredRecipes: ["full-bleed-image", "image-led", "side-image-text", "cover-statement"],
+    density: "airy",
+    imagery: { media: ["3d"], guidance: "统一材质、视角和光向的 3D 渲染图，主体轮廓明确并为文字保留负空间。" },
+    visualTraits: ["三维主体", "空间层次", "柔和材质"],
+    forbidden: ["同页混用多种 3D 风格", "图片内文字", "伪装成原生 3D 对象"],
+    capability: {
+      status: "partial",
+      note: "3D 主体以生成或导入的渲染图片进入页面；标题、正文、图表和普通形状继续原生可编辑。",
+      fallbacks: ["原生 3D 模型 → 高分辨率渲染图片", "复杂空间动效 → 静态构图与普通进入动画"],
+    },
+    specimen: { background: "#F5F1EB", ink: "#241E22", accent: "#7B61D1", secondary: "#F08A4B", composition: "three-dimensional" },
   },
 ] as const;
 
