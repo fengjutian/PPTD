@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
-import type { AiDraft, DesignTemplateContext, SlideBrief } from "./ai-contracts";
+import { legacySlidePlan, type AiDraft, type DesignTemplateContext, type SlideBrief } from "./ai-contracts";
 import { buildDesignIntelligence } from "./design-intelligence";
 
 const draft: AiDraft = {
   title: "经营复盘",
+  presentationBrief: {
+    objective: "复盘经营结果",
+    audience: "管理层",
+    scenario: "季度复盘",
+    expectedAction: "确认下一步",
+    coreConclusion: "产品升级带来增长",
+    narrativeStrategy: "retrospective",
+    assumptions: [],
+  },
   slides: [
-    { title: "结论", body: "增长来自产品升级", speakerNotes: "", blocks: [] },
+    { title: "结论", body: "增长来自产品升级", speakerNotes: "", blocks: [], plan: legacySlidePlan },
     {
       title: "前后对比",
       body: "升级前\n升级后",
       speakerNotes: "",
-      blocks: [{ type: "comparison", id: "comparison", left: { title: "前", items: ["旧"] }, right: { title: "后", items: ["新"] } }],
+      blocks: [{ type: "comparison", leftLabel: "前", rightLabel: "后", leftItems: ["旧"], rightItems: ["新"] }],
+      plan: legacySlidePlan,
     },
-    { title: "总结", body: "下一步", speakerNotes: "", blocks: [] },
+    { title: "总结", body: "下一步", speakerNotes: "", blocks: [], plan: legacySlidePlan },
   ],
 };
 
