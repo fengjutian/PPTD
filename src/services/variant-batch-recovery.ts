@@ -108,17 +108,12 @@ export function variantFailureMessage(error: unknown): { code: string; message: 
  * 文的零产出；这里按出现次数排序，把最主要的原因带进状态栏（面板里仍保留
  * 每个版本的完整记录）。
  */
-export function summarizeVariantFailures(
-  failures: readonly { message: string }[],
-  total: number,
-): string {
+export function summarizeVariantFailures(failures: readonly { message: string }[], total: number): string {
   const counts = new Map<string, number>();
   for (const failure of failures) counts.set(failure.message, (counts.get(failure.message) ?? 0) + 1);
   const reasons = [...counts.entries()]
     .sort((left, right) => right[1] - left[1])
     .slice(0, 3)
     .map(([message, count]) => (count > 1 ? `${message} ×${count}` : message));
-  return reasons.length > 0
-    ? `${total} 个版本都没有产出（${reasons.join("、")}）`
-    : `${total} 个版本都没有产出`;
+  return reasons.length > 0 ? `${total} 个版本都没有产出（${reasons.join("、")}）` : `${total} 个版本都没有产出`;
 }

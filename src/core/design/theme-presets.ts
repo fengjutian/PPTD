@@ -425,3 +425,20 @@ export function findThemePreset(id: string): ThemePreset | undefined {
 export function defaultThemePreset(): ThemePreset {
   return findThemePreset(DEFAULT_THEME_PRESET_ID) ?? THEME_PRESETS[0]!;
 }
+
+/** Slots a generated deck is read by: the page field first, then its accents. */
+const SWATCH_SLOTS = ["surface", "accent", "accent2", "accent3"] as const;
+
+/**
+ * The palette a candidate card shows for its preset.
+ *
+ * Order matches the theme picker, so a variant card cannot advertise a colour
+ * combination the picker does not offer. Missing slots are skipped instead of
+ * being filled with white, which would claim a colour the theme does not own.
+ */
+export function themePresetSwatches(preset: ThemePreset): Array<{ slot: string; value: string }> {
+  return SWATCH_SLOTS.flatMap((slot) => {
+    const color = preset.theme.colors.find((entry) => entry.name === slot);
+    return color ? [{ slot, value: color.value }] : [];
+  });
+}

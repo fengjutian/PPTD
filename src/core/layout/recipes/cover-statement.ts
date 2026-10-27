@@ -1,5 +1,6 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import { accentPanelGradient, mixHex } from "../../design/shape-gradient";
+import { colorLuminance } from "../../rendering/contrast";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement } from "./elements";
 import { fittedFontSize, fittedFontSizeWithoutOrphan, frameFromNormalized, textFits } from "./measure";
@@ -64,8 +65,14 @@ export const coverStatement: LayoutRecipe = {
     // never an ink resolved for this page: on a dark page that ink is nearly
     // white, which painted the cover as a grey gradient. Every stop is dark
     // enough for white copy, so the same ink works on all presets.
-    const gradient = paperCover || instrumentCover ? undefined : accentPanelGradient(ctx.colors.panel);
+    //
+    // Paper and instrument normally sit on the light page surface, but the
+    // deck-level colour beat can make their cover a filled page too. That
+    // field is the same brand surface the other directions paint as a panel,
+    // so it gets the same gradient; a light paper page stays flat. Without
+    // this, a coloured instrument cover was one unbroken accent rectangle.
     const field = paperCover || instrumentCover ? ctx.colors.background : ctx.colors.panel;
+    const gradient = (colorLuminance(field) ?? 1) < 0.45 ? accentPanelGradient(field) : undefined;
     const ink = paperCover || instrumentCover ? ctx.colors.title : "#FFFFFF";
     const secondaryInk = paperCover || instrumentCover ? ctx.colors.body : ink;
     const accentInk = paperCover || instrumentCover ? ctx.colors.accentStrong : ink;

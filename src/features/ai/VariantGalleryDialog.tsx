@@ -4,6 +4,7 @@ import { ArrowLeft, Check, CircleAlert, Eye, Sparkles } from "lucide-react";
 import type { VariantOptionView } from "../../app/app-shared";
 
 import { VariantPreviewDialog } from "./VariantPreviewDialog";
+import { VariantStyleLine } from "./VariantStyleLine";
 
 /**
  * The batch result: every variant already laid out, one click to keep it.
@@ -90,6 +91,7 @@ export function VariantGalleryDialog({ options, onSelect, onDiscard, renderPages
                     <strong>{option.name}</strong>
                     {index === 0 && <em>AI 推荐</em>}
                   </span>
+                  <VariantStyleLine presetId={option.presetId} />
                   <span className="variant-gallery-description">{option.description}</span>
                   <span className="variant-gallery-reason">{option.reason}</span>
                   {option.aestheticScore !== undefined && (

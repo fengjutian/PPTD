@@ -3747,14 +3747,17 @@ export function useAppRuntime() {
           if (!gate.passed) {
             pending.splice(index, 1);
             failed += 1;
+            const gateError = new Error(`VARIANT_QUALITY_GATE_FAILED:${[...new Set(gate.reasons)].join(",")}`);
             failureRecords.push({
               presetId: entry.presetId,
               presetName: findThemePreset(entry.presetId)?.name ?? entry.name,
-              ...variantFailureMessage(
-                new Error(`VARIANT_QUALITY_GATE_FAILED:${[...new Set(gate.reasons)].join(",")}`),
-              ),
+              ...variantFailureMessage(gateError),
             });
             setVariantBatchFailures([...failureRecords]);
+            // This pass discards candidates too, so it has to reach the same
+            // diagnostic log as the first one; otherwise a batch that lost
+            // versions here looks like "no reason recorded".
+            void recordAppError("批量版本筛选", gateError, { preset: entry.presetId });
           } else entry.aesthetic = gate.score;
         }
         pending.sort((left, right) => right.aesthetic.overall - left.aesthetic.overall);

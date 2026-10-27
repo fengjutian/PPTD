@@ -661,6 +661,52 @@ describe("cover-statement recipe", () => {
     const title = result.elements.find((element) => element.type === "text" && element.contentRef === "title");
     expect(title?.type === "text" ? title.style.color : "").toBe("#FFFFFF");
   });
+
+  it.each([
+    ["instrument", defaultInstrumentConcept],
+    ["paper", defaultPaperConcept],
+  ] as const)("gives a coloured %s cover a gradient field instead of one flat fill", (preset, conceptForPreset) => {
+    const pageContent = {
+      title: "年度销售汇报",
+      body: "2026 财年 · 董事会",
+      speakerNotes: "",
+      status: "approved" as const,
+    };
+    const pageFacts = facts({ layout: "cover", itemCount: 1 });
+    const ctx = context(pageContent, { facts: pageFacts });
+    ctx.concept = resolveDeckConcept({
+      concept: conceptForPreset(),
+      pageFacts: [pageFacts],
+      pageCount: 1,
+      id: `cover-${preset}`,
+    }).concept;
+    // The deck-level colour beat turns the cover into a filled brand page.
+    // These directions normally have a light page, so their field used to skip
+    // the gradient and stay one solid accent rectangle.
+    ctx.colors = {
+      ...ctx.colors,
+      background: "#2563EB",
+      title: "#FFFFFF",
+      body: "#F7F9FC",
+      panel: "#1F54C8",
+    };
+    const result = plan(coverStatement, ctx);
+    const field = result.elements.find((element) => element.type === "shape" && element.style.fillGradient);
+    expect(field?.type === "shape" ? field.style.fill : "").toBe("#2563EB");
+    expect(field?.frame).toMatchObject({ width: page.width, height: page.height });
+    for (const stop of field?.type === "shape" ? (field.style.fillGradient?.stops ?? []) : []) {
+      expect(contrastRatio("#FFFFFF", stop.color), stop.color).toBeGreaterThanOrEqual(4.5);
+    }
+    if (preset === "instrument") {
+      const rail = result.elements.find(
+        (element) =>
+          element.type === "shape" &&
+          element.style.fill === "#1F54C8" &&
+          element.frame.width < page.width / 2,
+      );
+      expect(rail).toBeDefined();
+    }
+  });
 });
 
 describe("asymmetric-split recipe", () => {

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AiSlideDesign } from "../core/commands";
-import {
-  recoverMissingVisualAssets,
-  summarizeVariantFailures,
-  variantFailureMessage,
-} from "./variant-batch-recovery";
+import { recoverMissingVisualAssets, summarizeVariantFailures, variantFailureMessage } from "./variant-batch-recovery";
 
 const design = (overrides: Partial<AiSlideDesign> = {}): AiSlideDesign => ({
   layout: "title-body",

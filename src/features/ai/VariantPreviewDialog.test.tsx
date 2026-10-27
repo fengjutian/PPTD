@@ -80,6 +80,21 @@ describe("VariantPreviewDialog", () => {
     expect(markup.indexOf('aria-pressed="true"') < markup.indexOf("AI 推荐")).toBe(true);
   });
 
+  it("shows which template, palette and fonts the opened version used", () => {
+    const markup = renderToStaticMarkup(
+      <VariantPreviewDialog
+        options={OPTIONS}
+        option={OPTIONS[1]!}
+        onClose={noop}
+        onUse={noop}
+        renderPages={renderPages}
+      />,
+    );
+    expect(markup).toContain("模板「藏青」");
+    expect(markup).toContain("微软雅黑标题 / 微软雅黑正文");
+    expect(markup).toContain("background:#1F4E79");
+  });
+
   it("keeps the measured issue count visible when deciding to keep a version", () => {
     const markup = renderToStaticMarkup(
       <VariantPreviewDialog

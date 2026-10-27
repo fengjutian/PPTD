@@ -3,6 +3,8 @@ import { Check, ChevronLeft, ChevronRight, CircleAlert, Eye, LoaderCircle, X } f
 
 import type { VariantOptionView } from "../../app/app-shared";
 
+import { VariantStyleLine } from "./VariantStyleLine";
+
 /**
  * "2、3、5–7" for the pages the audit flagged.
  *
@@ -145,6 +147,9 @@ export function VariantPreviewDialog({
                 同一份已审核内容 · 共 {option.pageCount} 页 · 第 {currentPage + 1} / {totalPages} 页 ·
                 配图与成品一致（缺图页为占位块）
               </p>
+              {/* The heading names the style profile and the concept; the theme
+                  preset is what actually decides the colours and the fonts. */}
+              <VariantStyleLine presetId={option.presetId} />
             </div>
           </div>
           <button type="button" aria-label="关闭整册预览" onClick={onClose}>

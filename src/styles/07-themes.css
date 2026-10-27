@@ -1710,6 +1710,44 @@
   font-size: 8px;
   font-style: normal;
 }
+/*
+ * Style identity: a card names the style profile and the concept, but the
+ * theme preset is what decides the colours and the fonts. The swatch strip
+ * matches the theme picker's slots so both screens describe one palette, and
+ * the font pairing truncates rather than wrapping the card.
+ */
+.variant-style-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.variant-style-swatches {
+  display: inline-flex;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid #d9dfe5;
+  border-radius: 4px;
+}
+.variant-style-swatches i {
+  display: block;
+  width: 11px;
+  height: 11px;
+}
+.variant-style-copy {
+  min-width: 0;
+  overflow: hidden;
+  color: #5b6a78;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.variant-gallery-copy .variant-style-copy {
+  font-size: 9px;
+}
+.upload-dialog-heading .variant-style-line {
+  margin-top: 6px;
+}
 .variant-gallery-description,
 .variant-gallery-reason {
   display: -webkit-box;
