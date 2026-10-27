@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { LAYOUT_CAPACITY, stripListPrefix } from "../core/commands/layout-capacity";
 import type { AiPaletteRole, CompositionFacts } from "../core/commands/design-intent";
+import type { DesignLayoutTrace } from "../core/layout/design-compiler";
 
 import { contrastRatio as colorContrastRatio, fillForInk, MINIMUM_CONTRAST } from "../core/rendering/contrast";
 import { loadSettings } from "./settings";
@@ -538,6 +539,8 @@ export interface DesignSlideRepair {
 export interface AiPresentationDesignResult extends AiPresentationDesign {
   /** Absent when the model output was complete. */
   designRepairs?: readonly DesignSlideRepair[];
+  /** Session-only geometry evidence produced by the bounded layout Workbench. */
+  layoutTrace?: DesignLayoutTrace;
 }
 
 const designEnvelopeSchema = z.object({ slides: z.array(z.unknown()).min(1) });

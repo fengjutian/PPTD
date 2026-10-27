@@ -25,6 +25,7 @@ import type {
 } from "../document-model";
 import type { DeckConcept } from "../design/deck-concept";
 import type { StyleConstraint } from "../design/style-profiles";
+import type { DesignLayoutTrace } from "../layout/design-compiler";
 import type { AiVisualAssetRole } from "./visual-asset";
 import { type TextRunStyle } from "../document-model";
 
@@ -136,6 +137,8 @@ export type DocumentCommand =
       designConcept?: DeckConcept;
       /** Ephemeral design-system bounds consumed while compiling editable objects. */
       styleConstraint?: StyleConstraint;
+      /** Ephemeral Workbench evidence copied into compile reports, never persisted. */
+      layoutTrace?: DesignLayoutTrace;
       /**
        * The direction decision that produced this design. It is written with the
        * design in one transaction, so undo removes both and the content hash is

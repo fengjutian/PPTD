@@ -691,8 +691,19 @@ export async function generatePresentationDesign(
     },
     template,
   );
-  const withRepairs = (value: AiPresentationDesign): AiPresentationDesignResult =>
-    repairs.length > 0 ? { ...value, designRepairs: repairs } : value;
+  const layoutTrace = {
+    coordinateSpace: "normalized-1000" as const,
+    operations: loop.workbench.layout.program.operations.map(({ id, op, source }) => ({ id, op, source })),
+    slots: [...loop.workbench.layout.slots.entries()].map(([id, rect]) => ({ id, rect: { ...rect } })),
+    degradations: loop.transcript.flatMap((entry) =>
+      entry.result.ok ? [] : entry.result.issues.map((issue) => ({ code: issue.code, message: issue.message })),
+    ),
+  };
+  const withRepairs = (value: AiPresentationDesign): AiPresentationDesignResult => ({
+    ...value,
+    layoutTrace,
+    ...(repairs.length > 0 ? { designRepairs: repairs } : {}),
+  });
   if (!options.styleConstraint) return withRepairs(constrained);
   const allowedRecipes = options.concept ? new Set(options.concept.recipes) : undefined;
   return withRepairs({

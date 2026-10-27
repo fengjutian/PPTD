@@ -18,7 +18,11 @@ describe("PPT workbench orchestration", () => {
     if (!created.ok) throw new Error("workbench failed");
     const transport = vi
       .fn()
-      .mockResolvedValueOnce({ kind: "tool-call", name: "layout.columns", input: { id: "grid", source: "content", count: 4, gap: "md" } })
+      .mockResolvedValueOnce({
+        kind: "tool-call",
+        name: "layout.columns",
+        input: { id: "grid", source: "content", count: 4, gap: "md" },
+      })
       .mockResolvedValueOnce({ kind: "tool-call", name: "layout.validate", input: {} })
       .mockResolvedValueOnce({ kind: "final", output: { slides: [] } });
 

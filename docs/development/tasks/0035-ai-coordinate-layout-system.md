@@ -92,8 +92,8 @@ const inspected = callPptWorkbench(columns.workbench, "layout.inspect", {
 ### 阶段 B
 
 - 迁移 comparison、process、timeline、image 和卡片网格配方。
-- 把 `AiLayoutProgram` 加入设计请求与 Rust 端大小限制。
-- 在 `DesignCompileReport` 中记录操作、槽位和降级原因。
+- 把 `AiLayoutProgram` 加入设计请求与 Rust 端大小限制。（2026-10-27 已完成：每轮传递当前强类型程序；Rust 限制 32 KB、64 个操作并校验坐标空间。）
+- 在 `DesignCompileReport` 中记录操作、槽位和降级原因。（2026-10-27 已完成：最终 Workbench 程序、只读槽位和失败工具诊断作为会话内 trace 进入逐页编译报告，不写入持久化文档。）
 
 ### 阶段 C
 

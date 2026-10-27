@@ -1081,6 +1081,7 @@ export function buildDesignedSlide(
         hasArtwork: keepsArtwork,
         hasAsset: hasActualAsset,
         ...(hasActualAsset && assetPlan.role ? { assetRole: assetPlan.role } : {}),
+        ...(command.layoutTrace ? { layoutTrace: command.layoutTrace } : {}),
       });
       context.compileReports.push({ slideIndex: index, report: compiled.compileReport });
       if (!("elements" in compiled)) return undefined;

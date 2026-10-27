@@ -28,6 +28,22 @@ export interface DesignCompileInput {
   hasArtwork: boolean;
   hasAsset: boolean;
   assetRole?: "hero" | "side" | "band";
+  /** Session-only evidence from the bounded AI layout Workbench. */
+  layoutTrace?: DesignLayoutTrace;
+}
+
+export interface DesignLayoutTrace {
+  coordinateSpace: "normalized-1000";
+  operations: readonly {
+    id: string;
+    op: "inset" | "columns" | "rows" | "stack";
+    source: string;
+  }[];
+  slots: readonly {
+    id: string;
+    rect: { x: number; y: number; width: number; height: number };
+  }[];
+  degradations: readonly { code: string; message: string }[];
 }
 
 export type DesignCompileOutcome = "accepted" | "accepted-with-adjustments" | "rejected";
@@ -62,6 +78,8 @@ export interface DesignCompileReport {
   requestedRecipe?: RecipeId;
   selectedRecipe?: RecipeId;
   diagnostics: readonly DesignCompileDiagnostic[];
+  /** Absent for legacy and manually-created plans that did not use the Workbench. */
+  layoutTrace?: DesignLayoutTrace;
 }
 
 export type DesignCompileResult =
@@ -132,7 +150,7 @@ function compatibleRecipeAlternatives(
  * content surface over the template's body artwork while leaving the header,
  * Logo and footer in place.
  */
-export function compileDesignPlan(input: DesignCompileInput): DesignCompileResult {
+function compileDesignPlanCore(input: DesignCompileInput): DesignCompileResult {
   const supports: RecipeSupportOptions = {
     hasArtwork: input.hasArtwork,
     hasAsset: input.hasAsset,
@@ -314,6 +332,16 @@ export function compileDesignPlan(input: DesignCompileInput): DesignCompileResul
       selectedRecipe: recipeId,
       diagnostics,
     },
+  };
+}
+
+/** Compiles a plan and preserves the exact bounded Workbench evidence used for it. */
+export function compileDesignPlan(input: DesignCompileInput): DesignCompileResult {
+  const result = compileDesignPlanCore(input);
+  if (!input.layoutTrace) return result;
+  return {
+    ...result,
+    compileReport: { ...result.compileReport, layoutTrace: input.layoutTrace },
   };
 }
 

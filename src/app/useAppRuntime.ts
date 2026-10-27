@@ -3086,6 +3086,7 @@ export function useAppRuntime() {
         slides: sourceDraft.slides,
         designs: design.slides,
         designConcept: concept,
+        ...(design.layoutTrace ? { layoutTrace: design.layoutTrace } : {}),
         ...(styleConstraint ? { styleConstraint } : {}),
         ...(designDirection ? { designDirection } : {}),
         pageSize: hasTemplateSize

@@ -70,6 +70,48 @@ function input(plan: Parameters<typeof compileDesignPlan>[0]["plan"]) {
 }
 
 describe("design plan compiler", () => {
+  it("copies Workbench operations, slots and degradations into the compile report", () => {
+    const layoutTrace = {
+      coordinateSpace: "normalized-1000" as const,
+      operations: [{ id: "main", op: "columns" as const, source: "content" }],
+      slots: [{ id: "main[0]", rect: { x: 100, y: 260, width: 390, height: 600 } }],
+      degradations: [{ code: "INSUFFICIENT_CAPACITY", message: "布局空间不足" }],
+    };
+    const result = compileDesignPlan({
+      ...input({
+        role: "claim",
+        composition: { primitive: "split" },
+        density: "normal",
+        templatePolicy: "use",
+        recipe: "asymmetric-split",
+      }),
+      layoutTrace,
+    });
+
+    expect(result.compileReport.layoutTrace).toEqual(layoutTrace);
+  });
+
+  it("copies Workbench operations, slots and degradations into the compile report", () => {
+    const layoutTrace = {
+      coordinateSpace: "normalized-1000" as const,
+      operations: [{ id: "main", op: "columns" as const, source: "content" }],
+      slots: [{ id: "main[0]", rect: { x: 100, y: 260, width: 390, height: 600 } }],
+      degradations: [{ code: "INSUFFICIENT_CAPACITY", message: "布局空间不足" }],
+    };
+    const result = compileDesignPlan({
+      ...input({
+        role: "claim",
+        composition: { primitive: "split" },
+        density: "normal",
+        templatePolicy: "use",
+        recipe: "asymmetric-split",
+      }),
+      layoutTrace,
+    });
+
+    expect(result.compileReport.layoutTrace).toEqual(layoutTrace);
+  });
+
   it("lays a clean surface over the template body before compiling the recipe", () => {
     const result = compileDesignPlan(
       input({

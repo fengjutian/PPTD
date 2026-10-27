@@ -5,7 +5,8 @@ import type { AiLayoutProgram } from "./layout/layout-program";
 export interface WorkbenchTranscriptEntry {
   readonly name: string;
   readonly input: unknown;
-  readonly result: { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly issues: readonly WorkbenchIssue[] };
+  readonly result:
+    { readonly ok: true; readonly value: unknown } | { readonly ok: false; readonly issues: readonly WorkbenchIssue[] };
 }
 
 export type WorkbenchModelTurn =
