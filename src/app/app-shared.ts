@@ -145,6 +145,8 @@ export interface VariantOptionView {
     rhythm: number;
     homogeneity: number;
     imageRelevance: number;
+    coverage: number;
+    visualAnchor: number;
   };
   /** Real low-resolution images rendered into the review candidate. */
   realAssetCount?: number;

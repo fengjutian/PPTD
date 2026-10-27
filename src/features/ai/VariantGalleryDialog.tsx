@@ -96,7 +96,8 @@ export function VariantGalleryDialog({ options, onSelect, onDiscard, renderPages
                     <span className="variant-gallery-issues ok">
                       审美 {option.aestheticScore} · 层级 {option.aestheticDimensions?.hierarchy} · 平衡{" "}
                       {option.aestheticDimensions?.balance} · 节奏 {option.aestheticDimensions?.rhythm} · 差异{" "}
-                      {option.aestheticDimensions?.homogeneity} · 配图 {option.aestheticDimensions?.imageRelevance}
+                      {option.aestheticDimensions?.homogeneity} · 配图 {option.aestheticDimensions?.imageRelevance} ·
+                      填充 {option.aestheticDimensions?.coverage} · 视觉锚点 {option.aestheticDimensions?.visualAnchor}
                     </span>
                   )}
                   {option.issueCount !== undefined && (

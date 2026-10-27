@@ -827,11 +827,9 @@ describe("process-rail recipe", () => {
     expect("conflict" in result).toBe(true);
   });
 
-  it("stacks the rail when five steps would only break at small type", () => {
-    // Five stations across the page leave about 127pt per column. A ten-glyph
-    // step strands its last character at 15pt (8 + 2) and at 14pt (9 + 1), so
-    // the row would have to go below the readable floor to break cleanly. The
-    // vertical rail keeps the copy at body size instead.
+  it("keeps five steps on one row when body-size copy breaks cleanly", () => {
+    // At 20pt a 127pt column holds six glyphs, so a ten-glyph sentence breaks
+    // 6 + 4: the row is readable and must not collapse into a vertical list.
     const five = {
       ...processContent,
       blocks: [
@@ -841,6 +839,44 @@ describe("process-rail recipe", () => {
           items: [
             { label: "样本前处理", text: "样本前处理两天内完成" },
             { label: "上机测序", text: "上机测序平台双端运行" },
+            { label: "生信分析", text: "生信分析流程人工复核" },
+            { label: "报告交付", text: "报告交付需要临床解读" },
+            { label: "数据归档", text: "数据归档保留五年以上" },
+          ],
+        },
+      ],
+    };
+    const ctx = context(five, {
+      facts: facts({ itemCount: 0, hasProcess: true, hasRowBlock: true, layout: "cards" }),
+    });
+    const result = plan(processRail, ctx);
+    const nodes = result.elements.filter((element) => element.type === "shape" && element.shape === "ellipse");
+    expect(nodes).toHaveLength(5);
+    expect(
+      Math.max(...nodes.map((node) => node.frame.x)) - Math.min(...nodes.map((node) => node.frame.x)),
+    ).toBeGreaterThan(page.width * 0.5);
+    const block = five.blocks![0]!;
+    if (block.type !== "process") throw new Error("expected a process block");
+    const stepTexts = block.items.map((item) => item.text);
+    const steps = result.elements.filter(
+      (element): element is TextElement => element.type === "text" && stepTexts.includes(element.text),
+    );
+    for (const step of steps) expect(step.style.fontSizePt).toBeGreaterThanOrEqual(18);
+  });
+
+  it("stacks the rail when five steps have no orphan-free row size", () => {
+    // Mixed lengths leave no common row size: the eight-glyph sentences strand
+    // two characters at 20–16pt, the ten-glyph ones strand two at 15–14pt. The
+    // vertical rail keeps the copy at body size instead.
+    const five = {
+      ...processContent,
+      blocks: [
+        {
+          id: "process-1",
+          type: "process" as const,
+          items: [
+            { label: "样本前处理", text: "样本前处理两天内" },
+            { label: "上机测序", text: "上机测序平台双端" },
             { label: "生信分析", text: "生信分析流程人工复核" },
             { label: "报告交付", text: "报告交付需要临床解读" },
             { label: "数据归档", text: "数据归档保留五年以上" },

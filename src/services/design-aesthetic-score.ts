@@ -1,6 +1,7 @@
 import type { AiSlideDesign } from "../core/commands";
 import type { PresentationDocument, SlideElement, TextElement } from "../core/document-model";
 import { textInkBox } from "../core/rendering/text-fit";
+import { measureDeckFill } from "../core/design/page-fill";
 import type { GeneratedVisualAsset } from "./ai-visual-asset";
 
 export interface AestheticDimensions {
@@ -9,6 +10,10 @@ export interface AestheticDimensions {
   rhythm: number;
   homogeneity: number;
   imageRelevance: number;
+  /** How much of each content page is actually painted. */
+  coverage: number;
+  /** How often a page carries a picture, chart, table, icon or large number. */
+  visualAnchor: number;
 }
 
 export interface AestheticScore {
@@ -18,6 +23,14 @@ export interface AestheticScore {
 }
 
 const clamp = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+
+/**
+ * Below this share of painted area a content page reads as a caption on a
+ * blank sheet. The target is deliberately conservative: a text page with a
+ * title, three points and a rule lands around 0.18–0.25.
+ */
+const COVERAGE_FLOOR = 0.08;
+const COVERAGE_TARGET = 0.26;
 
 function visible(element: SlideElement): boolean {
   return element.hidden !== true && element.frame.width > 0 && element.frame.height > 0;
@@ -42,6 +55,15 @@ function hierarchyScore(document: PresentationDocument): number {
   return scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
 }
 
+/**
+ * Balance without punishing composition.
+ *
+ * The old score pulled every page toward the geometric centre. Editorial
+ * layouts put the weight on one side on purpose, so they lost points for being
+ * well composed. Only a page whose content has drifted into an edge — or whose
+ * centre of mass sits in the top or bottom sliver — is now treated as
+ * unbalanced.
+ */
 function balanceScore(document: PresentationDocument): number {
   const scores = document.slides.map((slide) => {
     const elements = slide.elements.filter(visible);
@@ -60,14 +82,17 @@ function balanceScore(document: PresentationDocument): number {
     }
     const centerX = weightedX / Math.max(weight, 0.001);
     const centerY = weightedY / Math.max(weight, 0.001);
-    const centerPenalty = Math.abs(centerX - 0.5) * 90 + Math.max(0, Math.abs(centerY - 0.48) - 0.08) * 70;
-    const edgePenalty = elements.filter(
-      (element) =>
-        element.frame.x < 0 ||
-        element.frame.y < 0 ||
-        element.frame.x + element.frame.width > document.pageSize.width ||
-        element.frame.y + element.frame.height > document.pageSize.height,
-    ).length * 30;
+    const driftX = Math.max(0, Math.abs(centerX - 0.5) - 0.22);
+    const driftY = Math.max(0, Math.abs(centerY - 0.48) - 0.26);
+    const centerPenalty = driftX * 120 + driftY * 90;
+    const edgePenalty =
+      elements.filter(
+        (element) =>
+          element.frame.x < 0 ||
+          element.frame.y < 0 ||
+          element.frame.x + element.frame.width > document.pageSize.width ||
+          element.frame.y + element.frame.height > document.pageSize.height,
+      ).length * 30;
     return clamp(100 - centerPenalty - edgePenalty);
   });
   return scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
@@ -92,12 +117,9 @@ function rhythmScore(document: PresentationDocument, designs: readonly AiSlideDe
       longestRun = Math.max(longestRun, run);
     } else run = 1;
   }
-  const titleAxes = document.slides
-    .map((slide) => slide.elements.find((element) => element.type === "text" && element.contentRef === "title"))
-    .filter((element): element is TextElement => Boolean(element))
-    .map((element) => Math.round((element.frame.x / document.pageSize.width) * 20));
-  const axisCount = new Set(titleAxes).size;
-  return clamp(100 - repeated * 9 - Math.max(0, longestRun - 2) * 12 - (axisCount === 1 ? 6 : 0));
+  // An aligned title axis is a deck-level quality; it must not cost points.
+  // Only actual repetition is a rhythm problem.
+  return clamp(100 - repeated * 9 - Math.max(0, longestRun - 2) * 12);
 }
 
 function tokens(value: string): Set<string> {
@@ -113,7 +135,10 @@ function imageRelevanceScore(
   assets: readonly GeneratedVisualAsset[],
 ): number {
   const requested = designs.flatMap((design, index) => (design.visualAsset?.enabled ? [index] : []));
-  if (requested.length === 0) return 85;
+  // No page asked for a picture. That is a neutral choice, not a pass: the old
+  // 85-point floor made a text-only deck outrank one with real images, so the
+  // generator learned to skip imagery entirely.
+  if (requested.length === 0) return 55;
   const scores = requested.map((index) => {
     const asset = assets.find((candidate) => candidate.slideIndex === index);
     if (!asset || /占位|placeholder/i.test(asset.altText)) return 0;
@@ -144,29 +169,46 @@ export function compositionHomogeneity(designs: readonly (readonly AiSlideDesign
   });
 }
 
+/**
+ * Turns measured fill into a score.
+ *
+ * A page at the floor is unreadable as a composition; a page at the target is
+ * full without being crowded. Everything above the target stays at 100 so a
+ * deliberately dense page is not punished.
+ */
+function coverageScore(coverage: number): number {
+  return clamp(((coverage - COVERAGE_FLOOR) / (COVERAGE_TARGET - COVERAGE_FLOOR)) * 100);
+}
+
 export function scorePresentationAesthetics(input: {
   document: PresentationDocument;
   designs: readonly AiSlideDesign[];
   assets?: readonly GeneratedVisualAsset[];
   homogeneity?: number;
 }): AestheticScore {
+  const fill = measureDeckFill(input.document, input.designs);
   const dimensions: AestheticDimensions = {
     hierarchy: clamp(hierarchyScore(input.document)),
     balance: clamp(balanceScore(input.document)),
     rhythm: rhythmScore(input.document, input.designs),
     homogeneity: clamp(input.homogeneity ?? 80),
     imageRelevance: imageRelevanceScore(input.document, input.designs, input.assets ?? []),
+    coverage: coverageScore(fill.contentCoverage),
+    visualAnchor: clamp(40 + fill.anchorRatio * 60),
   };
   const overall = clamp(
-    dimensions.hierarchy * 0.25 +
-      dimensions.balance * 0.22 +
-      dimensions.rhythm * 0.2 +
-      dimensions.homogeneity * 0.16 +
-      dimensions.imageRelevance * 0.17,
+    dimensions.hierarchy * 0.2 +
+      dimensions.balance * 0.14 +
+      dimensions.rhythm * 0.15 +
+      dimensions.homogeneity * 0.11 +
+      dimensions.imageRelevance * 0.12 +
+      dimensions.coverage * 0.18 +
+      dimensions.visualAnchor * 0.1,
   );
   const issues = Object.entries(dimensions).flatMap(([name, score]) =>
     score < 55 ? [`AESTHETIC_${name.replace(/[A-Z]/g, (value) => `_${value}`).toUpperCase()}_LOW`] : [],
   );
+  if (fill.contentCoverage < COVERAGE_FLOOR) issues.push("AESTHETIC_CONTENT_UNDERFILLED");
   return { overall, dimensions, issues };
 }
 
@@ -194,7 +236,13 @@ export function candidateAestheticGate(input: {
   homogeneity?: number;
 }): { passed: boolean; score: AestheticScore; reasons: string[] } {
   const score = scorePresentationAesthetics(input);
+  const fill = measureDeckFill(input.document, input.designs);
   const reasons = [...score.issues];
+  for (const pageIndex of fill.underfilledPages) {
+    // A page this empty is a composition failure, not an airy choice. Naming
+    // the page lets the repair loop rebuild that page instead of the deck.
+    reasons.push(`SLIDE_UNDERFILLED:${pageIndex}`);
+  }
   input.designs.forEach((design, index) => {
     if ((design.layout === "cover" || index === 0) && textInkOverlap(input.document, index)) {
       reasons.push(`COVER_TEXT_OVERLAP:${index}`);

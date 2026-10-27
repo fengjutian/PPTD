@@ -41,6 +41,7 @@ describe("deck concept", () => {
       "cover-statement",
       "data-story",
       "chart-story",
+      "table-story",
       "image-led",
       "side-image-text",
       "editorial-index",

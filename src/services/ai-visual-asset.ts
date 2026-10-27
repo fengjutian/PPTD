@@ -132,8 +132,8 @@ export async function generateVisualAsset(input: {
   return result.ok ? result.asset : undefined;
 }
 
-/** 一次生成里配图的上限。整册都配图会变成相册，也会烧掉大量额度。 */
-const MAX_ASSETS_PER_DECK = 4;
+/** 一次生成里配图的上限。六张足够让十来页的文稿形成节奏，又不至于变成相册。 */
+const MAX_ASSETS_PER_DECK = 6;
 
 /** 一页配不配图的决定。 */
 export interface VisualAssetDecision {

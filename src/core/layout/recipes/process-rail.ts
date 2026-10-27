@@ -19,12 +19,14 @@ type ProcessBlock = Extract<ContentBlock, { type: "process" }>;
 
 const MIN_STEPS = 3;
 const MAX_STEPS = 6;
-const NODE_DIAMETER_IN = 0.3;
+const NODE_DIAMETER_IN = 0.36;
 /** Below this size a row of steps breaks worse than the vertical rail does. */
 const HORIZONTAL_MIN_TEXT_PT = 14;
-const LABEL_SIZE_PT = 20;
-const TEXT_SIZE_PT = 16;
+const LABEL_SIZE_PT = 24;
+const TEXT_SIZE_PT = 20;
 const MIN_TEXT_SIZE_PT = 12;
+/** A step block may use this share of the content height before copy shrinks. */
+const CONTENT_FILL = 0.86;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -160,7 +162,7 @@ export const processRail: LayoutRecipe = {
     const rowStations = railStations(chrome.content, block.items.length, "lg");
     const rowColumnPt = (rowStations[0]?.width ?? chrome.content.width) * pageWidthIn * 72;
     const readableRowSize = (() => {
-      for (let size = Math.min(TEXT_SIZE_PT, 15); size >= MIN_TEXT_SIZE_PT; size -= 1) {
+      for (let size = TEXT_SIZE_PT; size >= MIN_TEXT_SIZE_PT; size -= 1) {
         if (
           !anyEndsInOrphan(
             block.items.map((item) => item.text),
@@ -176,7 +178,7 @@ export const processRail: LayoutRecipe = {
     if (page.width / page.height >= 1.3 && readableRowSize >= HORIZONTAL_MIN_TEXT_PT) {
       const stations = rowStations;
       const columnWidth = stations[0]?.width ?? chrome.content.width;
-      const diameter = 0.26;
+      const diameter = 0.34;
       // The circle is a length (inches) while everything else here is a share
       // of the page height. Converting once keeps the node on the rail and the
       // labels under it instead of a third of a page away.
@@ -206,11 +208,15 @@ export const processRail: LayoutRecipe = {
             page.height,
           ),
         );
-      let textSize = Math.min(TEXT_SIZE_PT, 15);
+      // Start at the body size and only shrink when the copy needs the room;
+      // the block is allowed to grow into the content area first. The orphan
+      // search still caps the size, so a larger column cannot leave a single
+      // character on its own line.
+      let textSize = Math.min(TEXT_SIZE_PT, readableRowSize);
       let textHeights = textHeightsAt(textSize);
       const blockHeightAt = () =>
         diameterNorm + labelGap + Math.max(...labelHeights) + textGap + Math.max(...textHeights);
-      while (textSize > MIN_TEXT_SIZE_PT && blockHeightAt() > contentHeight) {
+      while (textSize > MIN_TEXT_SIZE_PT && blockHeightAt() > contentHeight * CONTENT_FILL) {
         textSize -= 1;
         textHeights = textHeightsAt(textSize);
       }
@@ -287,7 +293,7 @@ export const processRail: LayoutRecipe = {
       fittedFontSize(
         item.label,
         frameFromNormalized({ x: textX, y: contentTop, width: textWidth, height: 0.12 }, page),
-        LABEL_SIZE_PT,
+        Math.min(LABEL_SIZE_PT, 20),
         14,
         headingFamily,
         lineHeight,

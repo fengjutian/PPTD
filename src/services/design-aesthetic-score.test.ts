@@ -34,7 +34,7 @@ describe("design aesthetic score", () => {
     expect(gate.passed).toBe(false);
   });
 
-  it("scores five explicit dimensions", () => {
+  it("scores seven explicit dimensions", () => {
     const score = scorePresentationAesthetics({ document: createDocument(), designs: [design()] });
     expect(Object.keys(score.dimensions)).toEqual([
       "hierarchy",
@@ -42,6 +42,13 @@ describe("design aesthetic score", () => {
       "rhythm",
       "homogeneity",
       "imageRelevance",
+      "coverage",
+      "visualAnchor",
     ]);
+  });
+
+  it("treats a deck that requests no pictures as neutral, not full marks", () => {
+    const score = scorePresentationAesthetics({ document: createDocument(), designs: [design()] });
+    expect(score.dimensions.imageRelevance).toBe(55);
   });
 });

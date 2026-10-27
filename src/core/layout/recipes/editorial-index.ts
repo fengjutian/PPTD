@@ -130,8 +130,8 @@ export const editorialIndex: LayoutRecipe = {
     // fills because the copy is allowed to take the room it has, not because
     // the rows were stretched to fixed slots.
     const preferred = sparse
-      ? Math.min(32, Math.max(18, Math.round(ctx.tokens.type.bodyPt * 1.8)))
-      : Math.min(22, ctx.tokens.type.bodyPt + 1);
+      ? Math.min(36, Math.max(20, Math.round(ctx.tokens.type.bodyPt * 2)))
+      : Math.min(24, ctx.tokens.type.bodyPt + 2);
     // The column is measured, not divided. A three-point page used to give each
     // 17pt line a 1.35in row because the content area was split into equal
     // slots; the leftover space is now a bounded gap, and the block keeps the

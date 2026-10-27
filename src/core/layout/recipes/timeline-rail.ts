@@ -19,12 +19,14 @@ type TimelineBlock = Extract<ContentBlock, { type: "timeline" }>;
 
 const MIN_ITEMS = 3;
 const MAX_ITEMS = 6;
-const NODE_DIAMETER_IN = 0.12;
-const LABEL_SIZE_PT = 16;
-const TEXT_SIZE_PT = 16;
+const NODE_DIAMETER_IN = 0.2;
+const LABEL_SIZE_PT = 20;
+const TEXT_SIZE_PT = 20;
 const MIN_TEXT_SIZE_PT = 12;
 /** Below this size a row of stations breaks worse than a vertical rail does. */
 const HORIZONTAL_MIN_TEXT_PT = 14;
+/** A timeline block may use this share of the content height before copy shrinks. */
+const CONTENT_FILL = 0.86;
 
 function conflict(intent: string, reason: string): { conflict: IntentConflict } {
   return { conflict: { intent, reason } };
@@ -178,7 +180,7 @@ export const timelineRail: LayoutRecipe = {
     if (page.width / page.height >= 1.3 && readableRowSize >= HORIZONTAL_MIN_TEXT_PT) {
       const stations = rowStations;
       const columnWidth = stations[0]?.width ?? chrome.content.width;
-      const diameter = 0.12;
+      const diameter = 0.18;
       const diameterNorm = diameter / pageHeightIn;
       const labelGap = 0.022;
       const textGap = 0.012;
@@ -205,11 +207,14 @@ export const timelineRail: LayoutRecipe = {
             page.height,
           ),
         );
-      let textSize = TEXT_SIZE_PT;
+      // The orphan search picks a readable size; the height pass may only take
+      // it down. Starting at 20pt unconditionally would let a large column
+      // strand a character on its own line.
+      let textSize = Math.min(TEXT_SIZE_PT, readableRowSize);
       let textHeights = textHeightsAt(textSize);
       const blockHeightAt = () =>
         Math.max(...labelHeights) + labelGap + diameterNorm + textGap + Math.max(...textHeights);
-      while (textSize > MIN_TEXT_SIZE_PT && blockHeightAt() > contentHeight) {
+      while (textSize > MIN_TEXT_SIZE_PT && blockHeightAt() > contentHeight * CONTENT_FILL) {
         textSize -= 1;
         textHeights = textHeightsAt(textSize);
       }
