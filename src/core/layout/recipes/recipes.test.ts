@@ -28,7 +28,7 @@ import { processRail, processVerticalSlots } from "./process-rail";
 import { quoteField } from "./quote-field";
 import { sectionStatement } from "./section-statement";
 import { sideImageText } from "./side-image-text";
-import { timelineRail } from "./timeline-rail";
+import { timelineRail, timelineVerticalSlots } from "./timeline-rail";
 import { weightedSplit } from "./weighted-split";
 import { consumptionProblem } from "./plan";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
@@ -1100,6 +1100,17 @@ describe("timeline-rail recipe", () => {
     speakerNotes: "",
     status: "approved",
   };
+
+  it("allocates vertical dates with normalized-1000 rows and sm gaps", () => {
+    const slots = timelineVerticalSlots({ x: 0.08, y: 0.2, width: 0.84, height: 0.65 }, 5);
+    expect(slots).toEqual([
+      { x: 80, y: 200, width: 840, height: 118 },
+      { x: 80, y: 334, width: 840, height: 117 },
+      { x: 80, y: 467, width: 840, height: 117 },
+      { x: 80, y: 600, width: 840, height: 117 },
+      { x: 80, y: 733, width: 840, height: 117 },
+    ]);
+  });
 
   it("draws dates, nodes and events along one rail", () => {
     const ctx = context(timelineContent, {

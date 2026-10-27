@@ -1,5 +1,7 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu, RectEmu } from "../../document-model";
+import { layoutRectToNormalized, normalizedToLayoutRect } from "../geometry/coordinate-system";
+import { layoutRows } from "../geometry/layout-functions";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
 import {
@@ -17,15 +19,10 @@ type TimelineBlock = Extract<ContentBlock, { type: "timeline" }>;
 
 const MIN_ITEMS = 3;
 const MAX_ITEMS = 6;
-const LABEL_WIDTH = 0.16;
-const RAIL_OFFSET = 0.18;
-const TEXT_OFFSET = 0.21;
 const NODE_DIAMETER_IN = 0.12;
 const LABEL_SIZE_PT = 16;
 const TEXT_SIZE_PT = 16;
 const MIN_TEXT_SIZE_PT = 12;
-const MIN_GAP_PT = 12;
-const MAX_GAP_PT = 28;
 /** Below this size a row of stations breaks worse than a vertical rail does. */
 const HORIZONTAL_MIN_TEXT_PT = 14;
 
@@ -35,6 +32,11 @@ function conflict(intent: string, reason: string): { conflict: IntentConflict } 
 
 function pointsToNormalized(points: number, pageHeight: Emu): number {
   return points / 72 / (pageHeight / 914_400);
+}
+
+/** Deterministic rows for the vertical timeline fallback. */
+export function timelineVerticalSlots(content: { x: number; y: number; width: number; height: number }, count: number) {
+  return layoutRows(normalizedToLayoutRect(content), count, "sm");
 }
 
 function circleFrame(x: number, y: number, diameterIn: number): RectEmu {
@@ -134,13 +136,19 @@ export const timelineRail: LayoutRecipe = {
       contentTop = contentTop + leadHeight + 0.03;
     }
 
-    const labelX = chrome.content.x;
-    const labelWidth = Math.min(LABEL_WIDTH, chrome.content.width * 0.2);
-    const railX = chrome.content.x + RAIL_OFFSET;
-    const textX = chrome.content.x + TEXT_OFFSET;
-    const textWidth = Math.max(0.2, chrome.content.x + chrome.content.width - textX - 0.02);
     const contentHeight = chrome.contentBottom - contentTop;
     if (contentHeight < 0.25) return conflict("timeline", "时间线页没有足够的内容区");
+    const contentSlot = normalizedToLayoutRect({
+      x: chrome.content.x,
+      y: contentTop,
+      width: chrome.content.width,
+      height: contentHeight,
+    });
+    const labelX = contentSlot.x / 1000;
+    const labelWidth = Math.min(0.16, (contentSlot.width / 1000) * 0.2);
+    const railX = (contentSlot.x + 180) / 1000;
+    const textX = (contentSlot.x + 210) / 1000;
+    const textWidth = Math.max(0.2, (contentSlot.x + contentSlot.width - 16) / 1000 - textX);
 
     // A landscape page reads a history left to right. The vertical rail put five
     // dates in a column on the left and left the other two thirds of the page
@@ -291,27 +299,30 @@ export const timelineRail: LayoutRecipe = {
           ) + 0.008,
       );
     let rowHeights = measureRows(textSize);
-    const total = (rows: number[], gap: number) =>
-      rows.reduce((sum, height) => sum + height, 0) + gap * (rows.length - 1);
-    const minGap = pointsToNormalized(MIN_GAP_PT, page.height);
-    while (textSize > MIN_TEXT_SIZE_PT && total(rowHeights, minGap) > contentHeight) {
+    const rowSlots = timelineVerticalSlots(
+      { x: chrome.content.x, y: contentTop, width: chrome.content.width, height: contentHeight },
+      block.items.length,
+    );
+    while (textSize > MIN_TEXT_SIZE_PT && rowHeights.some((height, index) => height > rowSlots[index]!.height / 1000)) {
       textSize -= 1;
       rowHeights = measureRows(textSize);
     }
-    if (total(rowHeights, minGap) > contentHeight) {
+    if (rowHeights.some((height, index) => height > rowSlots[index]!.height / 1000)) {
       return conflict("timeline", "时间线条目在内容区里放不下");
     }
-    const leftover = contentHeight - total(rowHeights, minGap);
-    const gap = Math.min(
-      pointsToNormalized(MAX_GAP_PT, page.height),
-      minGap + leftover / Math.max(1, rowHeights.length - 1),
-    );
-    const groupHeight = total(rowHeights, gap);
-    const groupTop = contentTop + (contentHeight - groupHeight) / 2;
-    elements.push(verticalRule(railX, groupTop, groupHeight, 0.006, page, colors.rule));
+    const placedRows = rowSlots.map((slot, index) => {
+      const normalized = layoutRectToNormalized(slot);
+      const height = rowHeights[index]!;
+      return { top: normalized.y + (normalized.height - height) / 2, height };
+    });
+    const firstNodeY = placedRows[0]!.top + Math.min(labelHeights[0]!, placedRows[0]!.height) / 2;
+    const lastIndex = placedRows.length - 1;
+    const lastNodeY =
+      placedRows[lastIndex]!.top + Math.min(labelHeights[lastIndex]!, placedRows[lastIndex]!.height) / 2;
+    elements.push(verticalRule(railX, firstNodeY, lastNodeY - firstNodeY, 0.006, page, colors.rule));
 
-    let rowTop = groupTop;
     block.items.forEach((item, index) => {
+      const rowTop = placedRows[index]!.top;
       const rowHeight = rowHeights[index]!;
       const nodeCenterY = rowTop + Math.min(labelHeights[index]!, rowHeight) / 2;
       const node = circleFrame(
@@ -347,7 +358,6 @@ export const timelineRail: LayoutRecipe = {
           { contentRef: "decorative", lineHeight },
         ),
       );
-      rowTop += rowHeight + gap;
     });
 
     return {
