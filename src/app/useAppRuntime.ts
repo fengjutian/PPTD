@@ -140,6 +140,7 @@ import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
 import { recordAppError, recordAppLog } from "../services/app-log";
+import { variantCanEnterGallery } from "../services/variant-quality-policy";
 import { recordDesignCandidateEvent } from "../services/design-candidate-usage";
 import {
   analyzePptxTemplate,
@@ -3656,16 +3657,25 @@ export function useAppRuntime() {
           deckAudit = auditDeckLayout(candidate);
           aesthetic = candidateAestheticGate({ document: candidate, designs: design.slides, assets: visualAssets });
         }
-        const issues = [...layoutAudit.issues, ...deckAudit.issues];
-        if (!quality.passed || issues.length > 0 || !aesthetic.passed) {
+        const auditIssues = [...layoutAudit.issues, ...deckAudit.issues];
+        if (
+          !variantCanEnterGallery({
+            deterministicPassed: quality.passed,
+            aestheticPassed: aesthetic.passed,
+          })
+        ) {
           const reasons = [
             ...quality.issues.map((issue) => issue.issue),
-            ...issues.map((issue) => issue.kind),
+            ...auditIssues.map((issue) => issue.kind),
             ...aesthetic.reasons,
           ];
           throw new Error(`VARIANT_QUALITY_GATE_FAILED:${[...new Set(reasons)].join(",")}`);
         }
-        const issuePages = [...new Set(issues.map((issue) => issue.slideIndex))].sort((a, b) => a - b);
+        // Layout/deck audits are advisory (ADR 0115): keep the candidate and
+        // surface these pages in the gallery instead of treating a typography
+        // hint such as `text-orphan` as if the deck could not be delivered.
+        const reportedIssues = [...quality.issues, ...auditIssues];
+        const issuePages = [...new Set(reportedIssues.map((issue) => issue.slideIndex))].sort((a, b) => a - b);
         pending.push({
           id: crypto.randomUUID(),
           presetId: preset.id,
@@ -3676,7 +3686,7 @@ export function useAppRuntime() {
           name: `${variantStyle.name} · ${variantConcept.name}`,
           description: variantConcept.idea,
           reason: `${variantConcept.rationale}；${styleChoice?.reason ?? choice.reason}`,
-          issueCount: issues.length,
+          issueCount: reportedIssues.length,
           issuePages,
           visualAssets,
           document: candidate,
