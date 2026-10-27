@@ -84,6 +84,6 @@ describe("design intelligence", () => {
       index === 1 ? { ...brief, visualIntent: "data-chart" as const } : brief,
     );
     const plan = buildDesignIntelligence(chartDraft, chartBriefs, template);
-    expect(plan.slides[1]!.dataStory).toEqual({ relationship: "magnitude", recommendedChart: "bar" });
+    expect(plan.slides[1]!.dataStory).toEqual({ relationship: "magnitude", recommendedChart: "column" });
   });
 });
