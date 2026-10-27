@@ -273,7 +273,7 @@ flowchart TD
 | 步骤                          | 状态                 | 落点                                                                                                                       |
 | ----------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | 0.1 深色词汇夹具              | 完成（1/4）          | `tools/design-preview/fixture.ts` 的 `buildVocabularyPreviewDocument()`：三页深色文稿（对比 / 图文 / 全幅封面）            |
-| 0.2 样张与 contact sheet 基线 | 未开始               | 待 WP2 效果落地后一并冻结，避免基线刷两次                                                                                  |
+| 0.2 样张与 contact sheet 基线 | 完成                 | 四个概念方向各生成 8 页样张并组成 4×2 PowerPoint contact sheet；`npm run test:visual` 比较渲染器专属基线                   |
 | 1.1 八个角色                  | 完成                 | `deriveSemanticColors` 增 `surfaceSunken` / `borderStrong` / `accentStrong` / `onAccent`                                   |
 | 1.2 深色配对                  | 完成（方案调整）     | 未加"明暗入参"，改为 `sameAppearance(预设底色, 本页底色)` 决定是否复用预设值；页面总是按自己的底色派生，见 ADR 0101        |
 | 1.3 预设写入                  | 完成                 | `theme()` 自动写入八个角色，无需逐套手调                                                                                   |

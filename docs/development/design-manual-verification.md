@@ -11,6 +11,15 @@
 | 渲染器 | Windows + 本机 PowerPoint；macOS/Linux 预期为画布近似       |
 | 模型   | 已配置 API Key，且视觉探测通过（设置页显示已配置）          |
 
+### 1.1 视觉基线命名与重建
+
+- 常规导出基线：`tools/visual-regression/baseline/<renderer>/slide-<n>.png`。
+- 四个概念方向的八页样张：`tools/visual-regression/baseline/specimens/<renderer>/<concept>.png`。
+- contact sheet 固定为 4×2，按页序从左到右、从上到下排列；缺页或换序都会形成差异。
+- 校验：`npm run test:visual`。
+- 有意改变视觉后重建：`$env:PPTD_VISUAL_BASELINE='update'; npm run test:visual`。重建命令会以失败结束，提醒人工检查新增 PNG；目视确认后清除环境变量并再次运行。
+- 没有 PowerPoint/LibreOffice 的构建机可设 `PPTD_SKIP_VISUAL=1`，但这只表示明确跳过，不算视觉验证通过。LibreOffice 当前只覆盖首页，八页 contact sheet 仅由支持整册渲染的 PowerPoint 建立。
+
 ## 2. 界面验收
 
 ### 2.1 设置

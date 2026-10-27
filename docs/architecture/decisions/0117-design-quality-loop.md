@@ -114,6 +114,7 @@ PPTD 的路线是“AI 做艺术指导，代码保证落地”：模型输出页
 - 一页不合法或缺失时回退为安全版式（短封面、引用、摘要或正文页），不再让整册解析失败；模型多输出的页截断并报告 `DESIGN_SLIDE_EXTRA`。
 - 回退页没有 `designPlan`，走既有 legacy 合成；它不如模型原设计，但保留已审核内容，且报告只记录页码、稳定错误码和 schema 级原因，不含正文。
 - `generatePresentationDesign` 返回 `designRepairs`；生成质量报告的 notes 汇总回退页，用户能看到“第 N 页回退”。
+- 设计度量新增 `repairedSlides`、`ignoredSlides` 和 `repairCodes`（字段不合法/缺页/多输出）；设计编译报告显示回退与忽略计数，便于观察真实模型的合同稳定性。
 - 工作台 transport 用 `isDesignEnvelope` 判断最终设计，避免“一页字段不合法”被误判成无效轮次而丢掉整册。
 - 测试覆盖：完整设计不动、单页非法、缺页、多页、短封面回退、非法 envelope，共 6 项。
 - 统一几何审计仍在并行推进；本记录只覆盖页级设计隔离。
