@@ -86,7 +86,12 @@ export function callPptWorkbench(
         issues: [{ code: "CONTEXT_UNAVAILABLE", paths: [tool], message: "工作台没有文档快照" }],
       };
     }
-    const result = callDocumentWorkbench(workbench.document, workbench.layout, tool as DocumentWorkbenchToolName, input);
+    const result = callDocumentWorkbench(
+      workbench.document,
+      workbench.layout,
+      tool as DocumentWorkbenchToolName,
+      input,
+    );
     const next: PptWorkbench = { ...workbench, document: result.workbench };
     return result.ok
       ? { ok: true, workbench: next, value: result.value }

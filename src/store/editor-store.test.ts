@@ -41,7 +41,12 @@ describe("editor history", () => {
   it("undoes a layout plan as one design transaction", () => {
     const state = useEditorStore.getState();
     const definition = createStarterLayoutDefinition();
-    state.execute({ type: "apply-layout-plan", expectedRevision: { ...state.document.revisions }, definitions: [definition], slides: [{ slideId: state.activeSlideId, binding: { definitionId: definition.id, slotBindings: {} } }] });
+    state.execute({
+      type: "apply-layout-plan",
+      expectedRevision: { ...state.document.revisions },
+      definitions: [definition],
+      slides: [{ slideId: state.activeSlideId, binding: { definitionId: definition.id, slotBindings: {} } }],
+    });
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
     expect(useEditorStore.getState().document.layoutDefinitions).toHaveLength(1);
     useEditorStore.getState().undo();

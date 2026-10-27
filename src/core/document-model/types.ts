@@ -1,5 +1,6 @@
 import type { SchemaVersion } from "./schema";
 import type { BuiltinIconName } from "./icons";
+import type { LayoutBinding, LayoutDefinition } from "../layout/tree";
 
 export type Brand<T, B extends string> = T & { readonly __brand: B };
 export type DocumentId = Brand<string, "DocumentId">;
@@ -635,7 +636,7 @@ export interface Slide {
   /** The template layout this slide was designed against. */
   layoutId?: string;
   /** Declarative low-code layout instance. It is design metadata only. */
-  layoutBinding?: import("../layout/tree").LayoutBinding;
+  layoutBinding?: LayoutBinding;
 }
 
 /** The reviewed content of one page at the moment it was confirmed. */
@@ -825,7 +826,7 @@ export interface PresentationDocument {
   theme?: DocumentTheme;
   layouts?: SlideLayoutSpec[];
   /** Reusable declarative layout skeletons referenced by slide bindings. */
-  layoutDefinitions?: import("../layout/tree").LayoutDefinition[];
+  layoutDefinitions?: LayoutDefinition[];
   /**
    * Template target used by visual review. Design state: editing it never
    * increments the content revision or invalidates reviewed copy.

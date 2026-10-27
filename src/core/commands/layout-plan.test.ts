@@ -12,7 +12,12 @@ describe("declarative layout transaction", () => {
     const titleSlot = definition.tree.root.children[0]!;
     const binding = { definitionId: definition.id, slotBindings: { [titleSlot.id]: slide.elements[0]!.id } };
     const plan = compileLayoutFramePlan(definition, binding, slide, document.pageSize);
-    const command: DocumentCommand = { type: "apply-layout-plan", expectedRevision: { ...document.revisions }, definitions: [definition], slides: [{ slideId: slide.id, binding, elementFrames: plan.frames }] };
+    const command: DocumentCommand = {
+      type: "apply-layout-plan",
+      expectedRevision: { ...document.revisions },
+      definitions: [definition],
+      slides: [{ slideId: slide.id, binding, elementFrames: plan.frames }],
+    };
     expect(commandDomain(command, document)).toBe("design");
     applyCommand(document, command);
     expect(document.layoutDefinitions?.[0]?.id).toBe(definition.id);
@@ -24,7 +29,27 @@ describe("declarative layout transaction", () => {
     const document = createDocument();
     const before = structuredClone(document);
     const definition = createStarterLayoutDefinition();
-    expect(() => applyCommand(document, { type: "apply-layout-plan", expectedRevision: { document: 1, content: 0, design: 0 }, definitions: [definition], slides: [] })).toThrow("REVISION_CONFLICT");
+    expect(() =>
+      applyCommand(document, {
+        type: "apply-layout-plan",
+        expectedRevision: { document: 1, content: 0, design: 0 },
+        definitions: [definition],
+        slides: [],
+      }),
+    ).toThrow("REVISION_CONFLICT");
     expect(document).toEqual(before);
+  });
+
+  it("does not overwrite geometry after a slot is detached", () => {
+    const document = createDocument();
+    const slide = document.slides[0]!;
+    const definition = createStarterLayoutDefinition();
+    const slot = definition.tree.root.children[0]!;
+    const binding = {
+      definitionId: definition.id,
+      slotBindings: { [slot.id]: slide.elements[0]!.id },
+      overrides: [{ nodeId: slot.id, layoutState: "detached" as const }],
+    };
+    expect(compileLayoutFramePlan(definition, binding, slide, document.pageSize).frames).toHaveLength(0);
   });
 });

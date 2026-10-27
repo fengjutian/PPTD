@@ -67,7 +67,7 @@ export interface LayoutNodeOverride {
 export interface LayoutBinding {
   readonly definitionId: string;
   readonly slotBindings: Readonly<Record<string, string>>;
-  readonly overrides?: readonly LayoutNodeOverride[];
+  readonly overrides?: LayoutNodeOverride[];
 }
 
 export interface LayoutMeasurement {
@@ -102,4 +102,3 @@ export interface CompiledLayoutTree {
   readonly nodeRects: ReadonlyMap<string, LayoutRect>;
   readonly issues: readonly LayoutTreeIssue[];
 }
-

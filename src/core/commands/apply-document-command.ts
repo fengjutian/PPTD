@@ -88,9 +88,10 @@ export function applyDocumentCommand(document: PresentationDocument, command: Do
       const nodes = update.binding ? definitionNodeIds.get(update.binding.definitionId)! : undefined;
       if (
         update.binding &&
-        [...Object.keys(update.binding.slotBindings), ...(update.binding.overrides ?? []).map((item) => item.nodeId)].some(
-          (nodeId) => !nodes?.has(nodeId),
-        )
+        [
+          ...Object.keys(update.binding.slotBindings),
+          ...(update.binding.overrides ?? []).map((item) => item.nodeId),
+        ].some((nodeId) => !nodes?.has(nodeId))
       ) {
         throw new Error("INVALID_NODE_REFERENCE");
       }

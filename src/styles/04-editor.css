@@ -1612,10 +1612,19 @@
   text-align: left;
 }
 
-.layout-tree > button:last-child { border-bottom: 0; }
-.layout-tree > button.active { background: #eff6ff; color: #1d4ed8; }
+.layout-tree > button:last-child {
+  border-bottom: 0;
+}
+.layout-tree > button.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
 .layout-tree > button small,
-.layout-tree > button em { color: #64748b; font-size: 10px; font-style: normal; }
+.layout-tree > button em {
+  color: #64748b;
+  font-size: 10px;
+  font-style: normal;
+}
 
 .layout-node-properties {
   display: grid;
@@ -1653,8 +1662,13 @@
   font-size: 12px;
 }
 
-.layout-proposal ul { margin: 7px 0; padding-left: 18px; }
-.layout-proposal > div { justify-content: flex-end; }
+.layout-proposal ul {
+  margin: 7px 0;
+  padding-left: 18px;
+}
+.layout-proposal > div {
+  justify-content: flex-end;
+}
 .panel-heading,
 .inspector-title {
   height: 48px;

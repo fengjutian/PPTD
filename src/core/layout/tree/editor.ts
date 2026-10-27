@@ -80,7 +80,7 @@ export function updateLayoutNode(tree: LayoutTreeDraft, nodeId: string, patch: L
     };
   });
   if (!found || root.type !== "canvas") throw new Error("INVALID_NODE_REFERENCE");
-  return { ...tree, root };
+  return { ...tree, root: { ...root, type: "canvas" } };
 }
 
 function removeNode(node: LayoutContainerNode, nodeId: string): { parent: LayoutContainerNode; removed?: LayoutNode } {
@@ -98,7 +98,12 @@ function removeNode(node: LayoutContainerNode, nodeId: string): { parent: Layout
   return { parent: { ...node, children }, ...(removed ? { removed } : {}) };
 }
 
-function insertNode(node: LayoutContainerNode, parentId: string, index: number, child: LayoutNode): LayoutContainerNode {
+function insertNode(
+  node: LayoutContainerNode,
+  parentId: string,
+  index: number,
+  child: LayoutNode,
+): LayoutContainerNode {
   if (node.id === parentId) {
     const children = [...node.children];
     children.splice(Math.max(0, Math.min(index, children.length)), 0, child);
@@ -112,7 +117,12 @@ function insertNode(node: LayoutContainerNode, parentId: string, index: number, 
   };
 }
 
-export function moveLayoutNode(tree: LayoutTreeDraft, nodeId: string, parentId: string, index: number): LayoutTreeDraft {
+export function moveLayoutNode(
+  tree: LayoutTreeDraft,
+  nodeId: string,
+  parentId: string,
+  index: number,
+): LayoutTreeDraft {
   if (nodeId === tree.root.id || nodeId === parentId) throw new Error("INVALID_NODE_REFERENCE");
   const removed = removeNode(tree.root, nodeId);
   if (!removed.removed) throw new Error("INVALID_NODE_REFERENCE");
@@ -120,7 +130,10 @@ export function moveLayoutNode(tree: LayoutTreeDraft, nodeId: string, parentId: 
   return { ...tree, root: { ...root, type: "canvas" } };
 }
 
-export function applyLayoutOverrides(tree: LayoutTreeDraft, overrides: readonly LayoutNodeOverride[] = []): LayoutTreeDraft {
+export function applyLayoutOverrides(
+  tree: LayoutTreeDraft,
+  overrides: readonly LayoutNodeOverride[] = [],
+): LayoutTreeDraft {
   return overrides.reduce((current, override) => updateLayoutNode(current, override.nodeId, override), tree);
 }
 
@@ -143,9 +156,20 @@ export function compileLayoutFramePlan(
   const tree = applyLayoutOverrides(definition.tree, binding.overrides);
   const result = compileLayoutTree(tree, layoutRect(0, 0, 1000, 1000));
   if (!result.ok) throw new Error(result.issues[0]?.code ?? "INVALID_LAYOUT_TREE");
+  const detachedSlots = new Set<string>();
+  const collectDetached = (node: LayoutNode, inherited = false): void => {
+    const detached = inherited || node.layoutState === "detached";
+    if (node.type === "slot") {
+      if (detached) detachedSlots.add(node.id);
+      return;
+    }
+    node.children.forEach((child) => collectDetached(child, detached));
+  };
+  collectDetached(tree.root);
   const frames: Array<{ elementId: ElementId; frame: RectEmu }> = [];
   const unboundSlotIds: string[] = [];
   for (const [slotId, rect] of result.compiled.slots) {
+    if (detachedSlots.has(slotId)) continue;
     const elementId = binding.slotBindings[slotId] as ElementId | undefined;
     if (!elementId) {
       unboundSlotIds.push(slotId);

@@ -1,6 +1,6 @@
 # TASK-DESIGN-036：低代码布局编辑器与 AI 布局协作
 
-> **状态（2026-10-27）：** 部分实现。阶段 A（`LayoutTree` Schema、节点注册表、编译器、槽位分配与确定性测试）已完成；阶段 B–E（树/属性面板、AI 节点级工具与提案差异、持久化与模板复用、批量排版治理）未开始。完整盘点见 [实现状态](../implementation-status.md)。
+> **状态（2026-10-27）：** 核心链路已实现。阶段 A 的 Schema、注册表与确定性编译器已经接入右侧布局树/属性面板；支持节点拖放、整数比例、显式脱离自动布局、单事务撤销/重做和三 revision 乐观守卫。Workbench 已注册节点级读写、编译、预览与计划工具，提供 `callId` 幂等、草稿 revision 冲突及确认后提交。文档 Schema v31 持久化 `LayoutDefinition + LayoutBinding + LayoutOverride`，包含 v30 固定迁移样例，并支持模板复用和全稿批量应用。完整盘点见 [实现状态](../implementation-status.md)。
 
 ## 1. 目标
 

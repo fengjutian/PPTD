@@ -6,7 +6,12 @@ describe("layout tree workbench", () => {
   it("keeps repeated calls idempotent and rejects stale draft revisions", () => {
     const created = createLayoutTreeWorkbench(createDocument());
     const body = created.definition.tree.root.children[1]!;
-    const input = { callId: "call-1", draftRevision: 0, nodeId: body.id, patch: { height: { mode: "fraction", weight: 5 } } };
+    const input = {
+      callId: "call-1",
+      draftRevision: 0,
+      nodeId: body.id,
+      patch: { height: { mode: "fraction", weight: 5 } },
+    };
     const first = callLayoutTreeWorkbench(created, "layout.node.update", input);
     expect(first.ok).toBe(true);
     const repeated = callLayoutTreeWorkbench(first.workbench, "layout.node.update", input);
