@@ -149,7 +149,7 @@ export function VariantPreviewDialog({
               </p>
               {/* The heading names the style profile and the concept; the theme
                   preset is what actually decides the colours and the fonts. */}
-              <VariantStyleLine presetId={option.presetId} />
+              <VariantStyleLine presetId={option.presetId} showFonts />
             </div>
           </div>
           <button type="button" aria-label="关闭整册预览" onClick={onClose}>

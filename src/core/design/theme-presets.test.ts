@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { THEME_PRESETS, defaultThemePreset, findThemePreset } from "./theme-presets";
+import { THEME_PRESETS, defaultThemePreset, findThemePreset, themePresetSwatches } from "./theme-presets";
 
 describe("built-in theme presets", () => {
   it("ships a coherent palette and font pairing for each preset", () => {
@@ -61,5 +61,15 @@ describe("built-in theme presets", () => {
       surface: "#F7F4ED",
       surfaceAlt: "#D0DFE6",
     });
+  });
+
+  it("shows the picker's four slots as swatches, in the same order", () => {
+    const preset = findThemePreset("finance-gold")!;
+    expect(themePresetSwatches(preset)).toEqual([
+      { slot: "surface", value: "#FFFFFF" },
+      { slot: "accent", value: "#A67C2E" },
+      { slot: "accent2", value: "#486A67" },
+      { slot: "accent3", value: "#C65D3B" },
+    ]);
   });
 });

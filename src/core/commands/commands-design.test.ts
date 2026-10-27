@@ -1223,6 +1223,58 @@ describe("commands 3", () => {
     });
   });
 
+  it("paints a coloured paper cover as a gradient field instead of one flat page", () => {
+    const source = createDocument();
+    const content = {
+      title: "Alphabet 2023 年报：广告基本盘与 AI 第二曲线同时加速",
+      body: "广告基本盘稳固，云与 AI 重塑增长路径",
+      speakerNotes: "",
+    };
+    const concept = resolveDeckConcept({
+      concept: defaultConceptForPreset("paper"),
+      pageFacts: [
+        {
+          itemCount: 1,
+          shortItems: true,
+          longestItemLength: content.body.length,
+          bodyLength: content.body.length,
+          hasQuote: false,
+          hasComparison: false,
+          hasRowBlock: false,
+          layout: "cover",
+        },
+      ],
+      pageCount: 1,
+      id: "coloured-paper-cover",
+    }).concept;
+    const result = produce(source, (draft) =>
+      applyCommand(draft, {
+        type: "apply-ai-designed-draft",
+        title: "Alphabet 2023 年报",
+        slides: [content],
+        designs: [
+          {
+            layout: "cover",
+            background: "#2563EB",
+            accent: "#2563EB",
+            titleColor: "#FFFFFF",
+            bodyColor: "#F7F9FC",
+            palette: { background: "accent-1", accent: "accent-1", title: "inverse", body: "inverse" },
+          },
+        ],
+        designConcept: concept,
+      }),
+    );
+    const slide = result.slides[0]!;
+    expect(slide.background).toBe("#2563EB");
+    const field = slide.elements.find((element) => element.type === "shape" && element.style.fillGradient);
+    expect(field).toBeDefined();
+    expect(field?.type === "shape" ? field.style.fill : "").toBe("#2563EB");
+    for (const stop of field?.type === "shape" ? (field.style.fillGradient?.stops ?? []) : []) {
+      expect(contrastRatio("#FFFFFF", stop.color), stop.color).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("keeps a cover title readable when the template probe describes artwork that is not painted", () => {
     const source = createDocument();
     const content = {

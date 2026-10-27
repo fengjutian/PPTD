@@ -10,8 +10,12 @@ import { findThemePreset, themePresetSwatches } from "../../core/design/theme-pr
  * name, palette and font pairing travel with each card and with the enlarged
  * preview, and are omitted when the id is not a built-in preset (an AI design
  * direction, for example, has no preset to name).
+ *
+ * A gallery card is one column of a three-up grid, so it only carries the
+ * template and its swatches; the font pairing is spelled out in the enlarged
+ * preview, where the heading has room for it.
  */
-export function VariantStyleLine({ presetId }: { presetId: string }) {
+export function VariantStyleLine({ presetId, showFonts = false }: { presetId: string; showFonts?: boolean }) {
   const preset = findThemePreset(presetId);
   if (!preset) return null;
   const swatches = themePresetSwatches(preset);
@@ -23,7 +27,8 @@ export function VariantStyleLine({ presetId }: { presetId: string }) {
         ))}
       </span>
       <span className="variant-style-copy">
-        模板「{preset.name}」· {preset.theme.majorFont}标题 / {preset.theme.minorFont}正文
+        模板「{preset.name}」
+        {showFonts && ` · ${preset.theme.majorFont}标题 / ${preset.theme.minorFont}正文`}
       </span>
     </span>
   );

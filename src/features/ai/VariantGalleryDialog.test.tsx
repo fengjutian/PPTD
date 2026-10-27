@@ -63,14 +63,16 @@ describe("VariantGalleryDialog", () => {
     expect(markup).toContain("选定后只保留这一版");
   });
 
-  it("names the template, its palette and its fonts on every card", () => {
+  it("names the template and its palette on every card", () => {
     const markup = renderToStaticMarkup(
       <VariantGalleryDialog options={OPTIONS} onSelect={noop} onDiscard={noop} renderPages={renderPages} />,
     );
-    expect(markup).toContain("模板「金融金」· 华文中宋标题 / 微软雅黑正文");
+    expect(markup).toContain("模板「金融金」");
     expect(markup).toContain("模板「藏青」");
     // The swatch strip is the preset's own accent, not a generic accent colour.
     expect(markup).toContain("background:#A67C2E");
+    // The font pairing is spelled out in the enlarged preview, not on a card.
+    expect(markup).not.toContain("华文中宋标题");
   });
 
   it("does not invent a template for a candidate without a built-in preset", () => {

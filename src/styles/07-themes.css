@@ -1748,6 +1748,9 @@
 .upload-dialog-heading .variant-style-line {
   margin-top: 6px;
 }
+.upload-dialog-heading .variant-style-copy {
+  font-size: 11px;
+}
 .variant-gallery-description,
 .variant-gallery-reason {
   display: -webkit-box;
