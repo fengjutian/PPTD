@@ -604,6 +604,7 @@ export async function generatePresentationDesign(
   const [recentLooks, preferences] = memoryEnabled
     ? await Promise.all([loadRecentLooks(5), loadDesignPreferences(10)])
     : [[], []];
+  const designIntelligence = buildDesignIntelligence(draft, briefs, template);
   const request = {
     draft,
     briefs,
@@ -611,7 +612,7 @@ export async function generatePresentationDesign(
     visualGoal,
     concept: options.concept,
     recipeCatalog: options.concept ? recipeCatalogForConcept(options.concept) : [],
-    designIntelligence: buildDesignIntelligence(draft, briefs, template),
+    designIntelligence,
     recentLooks,
     preferences: preferences.map(({ text, scope }) => ({ text, scope })),
     themeDirection: options.themeDirection,
@@ -650,6 +651,7 @@ export async function generatePresentationDesign(
         design.slides.map((slide, index) => {
           const content = draft.slides[index]!;
           const brief = briefs[index]!;
+          const intelligence = designIntelligence.slides[index]!;
           const blockTypes = new Set((content.blocks ?? []).map((block) => block.type));
           const visualNarrative =
             slide.visualNarrative ??
@@ -683,10 +685,30 @@ export async function generatePresentationDesign(
                   prompt: `${content.title}相关的写实环境或象征性场景，无文字、无字母、无数字`,
                 }
               : undefined);
+          const designPlan = slide.designPlan
+            ? {
+                ...slide.designPlan,
+                density:
+                  intelligence.measurement.pressure === "high"
+                    ? ("dense" as const)
+                    : intelligence.measurement.pressure === "low"
+                      ? ("sparse" as const)
+                      : slide.designPlan.density,
+                ...(intelligence.dataStory
+                  ? {
+                      chart: {
+                        kind: intelligence.dataStory.recommendedChart,
+                        relation: intelligence.dataStory.relationship,
+                      },
+                    }
+                  : {}),
+              }
+            : undefined;
           return {
             ...slide,
             visualNarrative,
             ...(visualAsset ? { visualAsset } : {}),
+            ...(designPlan ? { designPlan } : {}),
             layout: chooseSlideLayout({
               index,
               requested: slide.layout,

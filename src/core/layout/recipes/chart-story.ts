@@ -140,7 +140,9 @@ export const chartStory: LayoutRecipe = {
       id: crypto.randomUUID() as ChartElement["id"],
       type: "chart",
       contentBlockIds: [block.id],
-      kind: block.kind,
+      // The reviewed block owns the values; the design plan may choose the
+      // editable chart form that best communicates their relationship.
+      kind: ctx.chartKind ?? block.kind,
       frame: frameFromNormalized(
         { x: chrome.content.x, y: contentTop + 0.02, width: chartWidth, height: chartHeight },
         page,

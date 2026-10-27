@@ -74,4 +74,16 @@ describe("design intelligence", () => {
       fonts: ["Aptos Display", "Aptos"],
     });
   });
+
+  it("turns chart data into a renderer-backed relationship and chart recommendation", () => {
+    const chartDraft: AiDraft = structuredClone(draft);
+    chartDraft.slides[1]!.blocks = [
+      { type: "chart", kind: "column", categories: ["第一季度", "第二季度", "第三季度"], values: [10, 18, 27] },
+    ];
+    const chartBriefs = briefs.map((brief, index) =>
+      index === 1 ? { ...brief, visualIntent: "data-chart" as const } : brief,
+    );
+    const plan = buildDesignIntelligence(chartDraft, chartBriefs, template);
+    expect(plan.slides[1]!.dataStory).toEqual({ relationship: "magnitude", recommendedChart: "bar" });
+  });
 });
