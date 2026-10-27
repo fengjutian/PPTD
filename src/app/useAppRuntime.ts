@@ -3612,7 +3612,11 @@ export function useAppRuntime() {
         // A weak composition is recompiled with another recipe family. This is
         // deliberately bounded and changes geometry instead of cosmetically
         // tweaking colour, type size or spacing around the same skeleton.
-        for (let attempt = 0; attempt < 2 && (!quality.passed || layoutAudit.issues.length > 0 || !aesthetic.passed); attempt += 1) {
+        for (
+          let attempt = 0;
+          attempt < 2 && (!quality.passed || layoutAudit.issues.length > 0 || !aesthetic.passed);
+          attempt += 1
+        ) {
           const problemPages = new Set([
             ...quality.issues.map((issue) => issue.slideIndex),
             ...layoutAudit.issues.map((issue) => issue.slideIndex),

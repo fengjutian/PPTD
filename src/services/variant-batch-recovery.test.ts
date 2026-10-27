@@ -29,7 +29,16 @@ describe("variant batch recovery", () => {
     const result = recoverMissingVisualAssets({
       designs: [original],
       decisions: [{ enabled: true, role: "side" }],
-      assets: [{ slideIndex: 0, dataUrl: "data:image/png;base64,AA==", mimeType: "image/png", naturalWidth: 10, naturalHeight: 10, altText: "图" }],
+      assets: [
+        {
+          slideIndex: 0,
+          dataUrl: "data:image/png;base64,AA==",
+          mimeType: "image/png",
+          naturalWidth: 10,
+          naturalHeight: 10,
+          altText: "图",
+        },
+      ],
       itemCounts: [4],
     });
     expect(result.designs[0]).toBe(original);
