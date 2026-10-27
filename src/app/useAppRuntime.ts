@@ -251,6 +251,7 @@ import {
   readInspectorWidth,
   matchTemplateLayoutRender,
   presetTemplateAnalysis,
+  shouldAutoDismissPageMessage,
 } from "./app-shared";
 import type {
   AppView,
@@ -820,7 +821,7 @@ export function useAppRuntime() {
     };
   }, []);
   useEffect(() => {
-    if (!message) return;
+    if (!message || !shouldAutoDismissPageMessage(message)) return;
     const timer = window.setTimeout(() => setMessage(undefined), 4200);
     return () => window.clearTimeout(timer);
   }, [message]);

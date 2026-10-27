@@ -35,7 +35,11 @@ export function AppNotifications({ app }: { app: AppRuntime }) {
   return (
     <>
       {message && (
-        <div className={`page-message ${message.kind}`} role="status" aria-live="polite">
+        <div
+          className={`page-message ${message.kind}`}
+          role={message.kind === "error" ? "alert" : "status"}
+          aria-live={message.kind === "error" ? "assertive" : "polite"}
+        >
           {message.kind === "success" ? <CircleCheck /> : message.kind === "error" ? <CircleAlert /> : <Info />}
           <span>{message.text}</span>
           <button type="button" aria-label="关闭提示" onClick={() => setMessage(undefined)}>

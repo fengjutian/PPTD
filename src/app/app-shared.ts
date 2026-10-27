@@ -102,6 +102,15 @@ export type PageMessage = { id: number; text: string; kind: "info" | "success" |
 export type DesignProgress = { percent: number; label: string };
 
 /**
+ * Errors describe an operation that did not complete and often contain the
+ * only actionable retry clue. Keep them visible until the user acknowledges
+ * them; routine progress and success messages may still expire on their own.
+ */
+export function shouldAutoDismissPageMessage(message: PageMessage): boolean {
+  return message.kind !== "error";
+}
+
+/**
  * One generated design variant, as the gallery needs it.
  *
  * The full design stays in the runtime; this view carries only what a card
