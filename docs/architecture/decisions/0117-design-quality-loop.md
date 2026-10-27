@@ -75,6 +75,19 @@ PPTD 的路线是“AI 做艺术指导，代码保证落地”：模型输出页
 - 先只覆盖 cover / section / claim 三类高方差页面，再扩展到全部页面。
 - 记录“候选被选中/被放弃”的计数和用户选择，作为配方排序与后续模型选择的证据。
 
+### Phase 1 实施记录：候选服务（2026-10-26）
+
+本轮先落地不依赖界面的候选内核：
+
+- 从方向预览抽出 `buildDesignPageCommand`，方向预览和候选共用同一份草稿、概念、页码、模板基座和配图；候选不再是第二条渲染路径。
+- 新增 `buildDesignedPage`：在克隆文档上执行真实命令，同时返回一页文档和该次构建的编译报告，避免“构建一次、检查一次”得到两个答案。
+- 新增 `buildDesignCandidates`：对同一份 `designPlan` 尝试 2–3 个替代配方，返回渲染所需的文档、编译报告、`auditSlideLayout`、taste lint 和确定性排序分；拒绝被编译器替代、被拒绝、改变内容或几何未变化的候选。
+- 新增 `designWithRecipe`：选择候选时同时改写 `designPlan.recipe` 与 legacy `recipe`，避免两条路径对“请求了哪个配方”给出不同答案。
+- 没有 `designPlan` 的页面不生成候选：legacy 路径没有编译报告，无法证明候选配方真的被采用，宁可报告 `DESIGN_CANDIDATE_PLAN_REQUIRED`，不把猜测包装成选择。
+- 测试覆盖：候选内容不变、配方不被替代、源文档不被修改、无 plan、页码不存在、数量上限和 `designWithRecipe` 的同步。
+
+剩余界面工作：编辑器里的“换一版”需要当前页的 `AiSlideDesign`。生成阶段的设计目前只存在于运行时，没有随项目持久化；因此下一步需要先决定设计快照的持久化或仅在生成后的质量报告里提供候选选择，不能从已建页面反推一份假的 plan。
+
 ## Phase 2：合同收敛
 
 - 新生成的页面只走 `PageDesignPlan` 一条合同；`palette`、`visualNarrative`、`visualAsset` 收进 plan 或一个 `PageDesignSpec` 包装。

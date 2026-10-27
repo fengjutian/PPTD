@@ -58,7 +58,9 @@ import { applyDocumentCommand } from "./apply-document-command";
 import { applyElementCommand } from "./apply-element-command";
 export { directionContentFingerprint } from "./ai-draft-helpers";
 export {
+  buildDesignedPage,
   inspectAiDesignedDraftCompilation,
+  type BuiltDesignPage,
   type DesignDraftCompileReport,
   type SlideDesignCompileReport,
 } from "./ai-designed-draft";

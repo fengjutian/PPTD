@@ -1,5 +1,11 @@
 import { isElementVisible, type PresentationDocument, type TextElement } from "../document-model";
-import { estimateTextLines, runMetricsOf, textInkBox, textLines } from "../rendering/text-fit";
+import {
+  DEFAULT_LINE_HEIGHT,
+  estimateTextLines,
+  runMetricsOf,
+  textInkBox,
+  textLines,
+} from "../rendering/text-fit";
 
 /**
  * A deterministic read of the geometry a designed page ended up with.
@@ -60,7 +66,7 @@ function textHeightPt(element: TextElement): number {
     runMetricsOf(element),
   );
   // The renderer defaults to 1.25 when a style never set a leading.
-  return lines * element.style.fontSizePt * (element.style.lineHeight ?? 1.25);
+  return lines * element.style.fontSizePt * (element.style.lineHeight ?? DEFAULT_LINE_HEIGHT);
 }
 
 /**

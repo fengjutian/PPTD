@@ -1,4 +1,4 @@
-﻿import type { Emu, PresentationDocument, Slide, SlideElement } from "../document-model";
+import type { Emu, PresentationDocument, Slide, SlideElement } from "../document-model";
 import { BUILTIN_ICONS, hashString, inches, clearTextEmphasisRange, mergeTextRunStyle } from "../document-model";
 
 import type { DocumentCommand } from "./command-types";
@@ -106,7 +106,7 @@ export function applyElementCommand(
   if (command.type === "fit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     // Fitting only changes the design: the copy and the review state stay.
-    const size = fittingTextSize(element.text, element.frame, element.style.fontFamily, element.style.fontSizePt);
+    const size = fittingTextSize(element, element.style.fontSizePt);
     if (size !== element.style.fontSizePt) {
       element.style = { ...element.style, fontSizePt: size };
     }

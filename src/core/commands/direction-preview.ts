@@ -49,39 +49,75 @@ export interface DirectionPreviewPage {
   document: PresentationDocument;
 }
 
+export type DesignPageCommand = DesignedDraftCommand;
+
+export interface DesignPageCommandInput {
+  /** The real deck. Read-only. */
+  document: PresentationDocument;
+  concept: DeckConcept;
+  pageIndex: number;
+  design: AiSlideDesign;
+  /** Theme/template context of the final application. */
+  commandBase?: DirectionPreviewCommandBase;
+  /** Defaults to the deck title. */
+  title?: string;
+}
+
+/**
+ * The command a single-page design build needs, without applying it.
+ *
+ * Both the direction preview and the design candidate loop use this function,
+ * so a candidate cannot silently become a second rendering path: it is the
+ * same draft, concept, page context, template base and visual asset as the
+ * page the application would really build.
+ */
+export function buildDesignPageCommand(input: DesignPageCommandInput): DesignPageCommand {
+  const slide = input.document.slides[input.pageIndex];
+  if (!slide) throw new Error("DIRECTION_PREVIEW_PAGE_MISSING");
+  const draft = draftOf(slide);
+  const sectionLabel = sectionLabelAt(input.document, input.pageIndex);
+  const assets = input.commandBase?.visualAssets
+    ?.filter((asset) => asset.slideIndex === input.pageIndex)
+    .map((asset) => ({ ...asset, slideIndex: 0 }));
+  // The base may carry assets for the whole deck; only this page's asset is
+  // relevant, and it becomes index 0 in the one-page document.
+  const base = { ...input.commandBase };
+  delete base.visualAssets;
+  return {
+    ...base,
+    type: "apply-ai-designed-draft",
+    title: input.title ?? input.document.title,
+    slides: [draft],
+    designs: [input.design],
+    designConcept: input.concept,
+    pageSize: { ...input.document.pageSize },
+    pageContext: {
+      index: input.pageIndex,
+      total: input.document.slides.length,
+      ...(sectionLabel ? { sectionLabel } : {}),
+    },
+    ...(assets && assets.length > 0 ? { visualAssets: assets } : {}),
+  };
+}
+
 export function buildDirectionPreviewPages(input: DirectionPreviewInput): DirectionPreviewPage[] {
   if (input.pageIndexes.length === 0 || input.pageIndexes.length !== input.designs.length) {
     throw new Error("DIRECTION_PREVIEW_MISMATCH");
   }
-  const total = input.document.slides.length;
   return input.pageIndexes.map((index, position) => {
-    const slide = input.document.slides[index];
-    if (!slide) throw new Error("DIRECTION_PREVIEW_PAGE_MISSING");
     const design = input.designs[position];
     if (!design) throw new Error("DIRECTION_PREVIEW_MISMATCH");
-    const draft = draftOf(slide);
+    const command = buildDesignPageCommand({
+      document: input.document,
+      concept: input.concept,
+      pageIndex: index,
+      design,
+      ...(input.commandBase ? { commandBase: input.commandBase } : {}),
+      ...(input.title ? { title: input.title } : {}),
+    });
     const temp = createDocument();
-    temp.title = input.title ?? input.document.title;
+    temp.title = command.title;
     temp.pageSize = { ...input.document.pageSize };
-    const sectionLabel = sectionLabelAt(input.document, index);
-    const assets = input.commandBase?.visualAssets
-      ?.filter((asset) => asset.slideIndex === index)
-      .map((asset) => ({ ...asset, slideIndex: 0 }));
-    // The base may carry assets for the whole deck; only this page's asset is
-    // relevant, and it becomes index 0 in the one-page document.
-    const base = { ...input.commandBase };
-    delete base.visualAssets;
-    const command: DesignedDraftCommand = {
-      ...base,
-      type: "apply-ai-designed-draft",
-      title: temp.title,
-      slides: [draft],
-      designs: [design],
-      designConcept: input.concept,
-      pageSize: { ...input.document.pageSize },
-      pageContext: { index, total, ...(sectionLabel ? { sectionLabel } : {}) },
-      ...(assets && assets.length > 0 ? { visualAssets: assets } : {}),
-    };
     applyCommand(temp, command);
     return { index, document: temp };
   });

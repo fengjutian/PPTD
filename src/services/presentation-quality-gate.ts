@@ -1,7 +1,7 @@
 import type { AiSlideDesign, AiNormalizedRect } from "../core/commands/commands";
 import type { PresentationDocument, RectEmu, Slide, TextElement } from "../core/document-model";
 import { contrastRatio } from "../core/rendering/contrast";
-import { estimateTextLines, textInkBox, textLikelyOverflows } from "../core/rendering/text-fit";
+import { DEFAULT_LINE_HEIGHT, estimateTextLines, textInkBox, textLikelyOverflows } from "../core/rendering/text-fit";
 
 export type PresentationQualityIssueKind =
   | "out-of-bounds"
@@ -49,7 +49,7 @@ function renderedTextHeight(element: TextElement, pageHeight: number): number {
   const heightPt =
     estimateTextLines(element.text, widthPt, element.style.fontSizePt, element.style.fontFamily) *
     element.style.fontSizePt *
-    1.25;
+    (element.style.lineHeight ?? DEFAULT_LINE_HEIGHT);
   return (heightPt * 12_700) / pageHeight;
 }
 

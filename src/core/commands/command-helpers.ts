@@ -16,7 +16,7 @@ import type {
 } from "../document-model";
 import { emu, isSafeTextHyperlinkUrl, stableStringify, type TextRunStyle } from "../document-model";
 
-import { estimateTextLines } from "../rendering/text-fit";
+import { estimateTextLines, textOverflowsFrame } from "../rendering/text-fit";
 
 import type { AiContentBlock, HorizontalAlign, VerticalAlign } from "./command-types";
 export type {
@@ -558,14 +558,16 @@ export type { ArrangeHorizontal, ArrangeVertical } from "./arrange";
 
 /**
  * The largest size the text fits into its frame at, or the current size when it
- * already fits. The thresholds are the ones the quality gate uses, so a text
- * that is reported as overflowing can be repaired and the report disappears.
+ * already fits.
+ *
+ * The check is the same predicate the audit and the editor use, with the
+ * element's own leading and tracking: fitting against a second, hand-written
+ * leading is how a text could be "repaired" and still reported as overflowing.
  */
-export function fittingTextSize(text: string, frame: RectEmu, fontFamily: string, preferredPt: number): number {
-  const widthPt = frame.width / 12_700;
-  const heightPt = frame.height / 12_700;
+export function fittingTextSize(element: TextElement, preferredPt: number): number {
   for (let size = preferredPt; size >= 8; size -= 1) {
-    if (estimateTextLines(text, widthPt, size, fontFamily) * size * 1.2 <= heightPt * 1.08) return size;
+    const candidate: TextElement = { ...element, style: { ...element.style, fontSizePt: size } };
+    if (!textOverflowsFrame(candidate)) return size;
   }
   return 8;
 }

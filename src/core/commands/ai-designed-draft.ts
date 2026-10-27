@@ -89,3 +89,26 @@ export function inspectAiDesignedDraftCompilation(
 ): DesignDraftCompileReport {
   return applyAiDesignedDraft(structuredClone(document), structuredClone(command));
 }
+
+export interface BuiltDesignPage {
+  /** A one-page snapshot produced by the real design command path. */
+  document: PresentationDocument;
+  report: DesignDraftCompileReport;
+}
+
+/**
+ * Builds one page on an isolated clone and returns both the page and its
+ * compile report.
+ *
+ * The source document is never touched. This is the function the candidate
+ * loop uses so a candidate page and its diagnostics come from the same build,
+ * instead of compiling twice and risking two different answers.
+ */
+export function buildDesignedPage(
+  document: PresentationDocument,
+  command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }>,
+): BuiltDesignPage {
+  const clone = structuredClone(document);
+  const report = applyAiDesignedDraft(clone, command);
+  return { document: clone, report };
+}

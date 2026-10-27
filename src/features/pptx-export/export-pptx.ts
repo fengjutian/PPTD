@@ -34,6 +34,7 @@ import { lintTaste } from "../../core/design/taste-lint";
 import { shadowSpec } from "../../core/design/effects";
 import { chartGridColor, chartPaletteReadable } from "../../core/design/chart-theme";
 import { buildDesignAudit, type DesignAuditReport } from "../../core/design/design-audit";
+import { DEFAULT_LINE_HEIGHT } from "../../core/rendering/text-fit";
 import { checkTemplateFit, templateTargetMatchesDocument } from "../../services/template-review-target";
 import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
@@ -342,7 +343,13 @@ export async function buildPptx(
           ...(element.style.strikethrough ? { strike: "sngStrike" as const } : {}),
           align: element.style.align,
           ...(element.style.letterSpacingPt === undefined ? {} : { charSpacing: element.style.letterSpacingPt }),
-          ...(element.style.lineHeight === undefined ? {} : { lineSpacingMultiple: element.style.lineHeight }),
+          // Leading is written as exact points, not as a percentage. The canvas,
+          // the preview and the measurement all read `lineHeight` as a multiple
+          // of the font size; PowerPoint's "Multiple" is a percentage of the
+          // font's *single* spacing (about 1.2em), so 130% came out near 1.56em
+          // and every paragraph led looser in the file than on the page it was
+          // designed on.
+          lineSpacing: (element.style.lineHeight ?? DEFAULT_LINE_HEIGHT) * element.style.fontSizePt,
           ...(element.style.paragraphSpaceBeforePt === undefined
             ? {}
             : { paraSpaceBefore: element.style.paragraphSpaceBeforePt }),

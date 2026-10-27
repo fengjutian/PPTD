@@ -20,6 +20,15 @@ export function measureTextUnits(text: string): number {
 }
 
 /**
+ * The asset width of one line before tracking, in em.
+ *
+ * Every reader of a text's height — the canvas, the preview, the audit, the
+ * refit and the exporter — uses this default when a style does not set one, so
+ * a page cannot be measured with one leading and written with another.
+ */
+export const DEFAULT_LINE_HEIGHT = 1.25;
+
+/**
  * The typographic properties of a run that change its advance.
  *
  * Both are optional and both default to "the plain regular run": a caller that
@@ -249,7 +258,7 @@ const EMU_PER_POINT = 12_700;
 
 export function textInkBox(element: TextElement): TextInkBox {
   const fontSizePt = Math.max(0.01, element.style.fontSizePt);
-  const lineHeight = element.style.lineHeight ?? 1.25;
+  const lineHeight = element.style.lineHeight ?? DEFAULT_LINE_HEIGHT;
   const frameWidthPt = element.frame.width / EMU_PER_POINT;
   const frameHeightPt = element.frame.height / EMU_PER_POINT;
   const metrics = runMetricsOf(element);
@@ -301,7 +310,7 @@ export function textOverflowsFrame(element: TextElement, tolerance = 1.001): boo
   // that never set one is measured with the single spacing the export writes
   // (1.2); the preview draws such a text with its own 1.25 default, and the
   // gate's allowance is what keeps the two from disagreeing about a page.
-  const lineHeight = element.style.lineHeight ?? 1.2;
+  const lineHeight = element.style.lineHeight ?? DEFAULT_LINE_HEIGHT;
   return (
     estimateTextLines(
       element.text,

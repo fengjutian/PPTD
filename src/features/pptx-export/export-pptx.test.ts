@@ -569,7 +569,9 @@ describe("PPTX export", () => {
     expect(slideXml).toContain('anchor="ctr"');
     expect(slideXml).toContain("<a:buAutoNum");
     expect(slideXml).toContain('lvl="2"');
-    expect(slideXml).toContain("<a:spcPct");
+    // Leading is an exact value: 1.5 × 28pt, not 150% of PowerPoint's single
+    // spacing (which would be about 1.8em and push the copy out of its frame).
+    expect(slideXml).toContain('<a:lnSpc><a:spcPts val="4200"/></a:lnSpc>');
     expect(slideXml).toContain('<a:spcBef><a:spcPts val="600"/></a:spcBef>');
     expect(slideXml).toContain('<a:spcAft><a:spcPts val="900"/></a:spcAft>');
     expect(slideXml).toContain('<a:tab pos="914400" algn="ctr"/>');
@@ -1070,17 +1072,35 @@ describe("PPTX export", () => {
     await expect(buildPptx(document)).rejects.toThrow("EXPORT_VALIDATION_FAILED");
   });
 
-  it("writes tracking and leading of a text into the slide XML", async () => {
+  it("writes tracking and exact leading of a text into the slide XML", async () => {
     const document = createDocument();
     const title = document.slides[0]!.elements[0]!;
     if (title.type !== "text") throw new Error("expected a text element");
     title.style.letterSpacingPt = 0.8;
     title.style.lineHeight = 1.3;
+    title.style.fontSizePt = 28;
     const result = await buildPptx(document);
     const files = unzipSync(result.bytes);
     const xml = strFromU8(files["ppt/slides/slide1.xml"]!);
     expect(xml).toContain('spc="80"');
-    expect(xml).toContain('spcPct val="130000"');
+    // 1.3 × 28pt = 36.4pt of leading, written as an exact value. A percentage
+    // would be 130% of PowerPoint's *single* spacing (about 1.56em here), and
+    // the file would lead the copy looser than the canvas and the measurement.
+    expect(xml).toContain('spcPts val="3640"');
+    expect(xml).not.toContain("spcPct val=\"130000\"");
+  });
+
+  it("gives a text without a leading the same default the canvas uses", async () => {
+    const document = createDocument();
+    const title = document.slides[0]!.elements[0]!;
+    if (title.type !== "text") throw new Error("expected a text element");
+    delete title.style.lineHeight;
+    title.style.fontSizePt = 20;
+    const result = await buildPptx(document);
+    const files = unzipSync(result.bytes);
+    const xml = strFromU8(files["ppt/slides/slide1.xml"]!);
+    // 1.25 × 20pt = 25pt: the default the canvas and the audit measure with.
+    expect(xml).toContain('spcPts val="2500"');
   });
 
   it("writes an icon as a native custom-geometry shape", async () => {

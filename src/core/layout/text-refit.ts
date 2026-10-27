@@ -1,6 +1,6 @@
 import { isElementVisible, type Emu, type PresentationDocument, type Slide, type TextElement } from "../document-model";
 import { endsInOrphan } from "./recipes/measure";
-import { estimateTextLines, fitTextToFrame, runMetricsOf } from "../rendering/text-fit";
+import { DEFAULT_LINE_HEIGHT, estimateTextLines, fitTextToFrame, runMetricsOf } from "../rendering/text-fit";
 
 /**
  * Makes the text of a finished page fit the frame it was given.
@@ -106,7 +106,7 @@ function neededHeightPt(element: TextElement, fontSizePt: number): number {
     element.style.fontFamily,
     runMetricsOf(element),
   );
-  return lines * fontSizePt * (element.style.lineHeight ?? 1.25);
+  return lines * fontSizePt * (element.style.lineHeight ?? DEFAULT_LINE_HEIGHT);
 }
 
 /**
@@ -141,7 +141,7 @@ export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
       width: element.frame.width / EMU_PER_PT,
       height: availablePt,
       fontSize: designedPt,
-      lineHeight: element.style.lineHeight ?? 1.25,
+      lineHeight: element.style.lineHeight ?? DEFAULT_LINE_HEIGHT,
       fontFamily: element.style.fontFamily,
       bold: element.style.bold,
       letterSpacingPt: element.style.letterSpacingPt,
@@ -151,7 +151,7 @@ export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
     // grows; growing it is a layout change, shrinking the type is not.
     const growsInPlace = (element.style.verticalAlign ?? "top") === "top";
     const neededPt = neededHeightPt(element, designedPt);
-    const linePt = designedPt * (element.style.lineHeight ?? 1.25);
+    const linePt = designedPt * (element.style.lineHeight ?? DEFAULT_LINE_HEIGHT);
     const roomPt = growsInPlace ? growthLimitPt(slide, element, pageHeight) : 0;
     const growthCapPt = Math.min(roomPt, MAXIMUM_GROWTH_LINES * linePt);
     if (growsInPlace && neededPt - availablePt <= growthCapPt) {

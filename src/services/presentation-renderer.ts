@@ -21,7 +21,12 @@ import { chartPlotArea, chartValueY, niceChartDomain } from "../core/rendering/c
 import { isLargeText } from "../core/rendering/contrast";
 import { gradientLinePoints, rgba as gradientRgba } from "../core/design/shape-gradient";
 import { cropGeometry } from "../core/rendering/image-crop";
-import { fitTextToFrame, measureCharacterEm, runMetricsOf } from "../core/rendering/text-fit";
+import {
+  DEFAULT_LINE_HEIGHT,
+  fitTextToFrame,
+  measureCharacterEm,
+  runMetricsOf,
+} from "../core/rendering/text-fit";
 import { resolveImageUrl } from "./image-url-service";
 
 export interface PresentationRender {
@@ -725,7 +730,7 @@ function drawText(
   scale: number,
 ): void {
   const nominal = (element.style.fontSizePt * scale * 914_400) / 72;
-  const lineHeightRatio = element.style.lineHeight ?? 1.25;
+  const lineHeightRatio = element.style.lineHeight ?? DEFAULT_LINE_HEIGHT;
   const metrics = runMetricsOf(element);
   const fit = fitTextToFrame(element.text, {
     width,

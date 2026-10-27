@@ -7,7 +7,7 @@ import {
   type TextRunStyle,
 } from "../../core/document-model";
 import { breakAtoms, type MeasurableAtom } from "../../core/rendering/cjk-linebreak";
-import { measureCharacterEm, runMetricsOf } from "../../core/rendering/text-fit";
+import { DEFAULT_LINE_HEIGHT, measureCharacterEm, runMetricsOf } from "../../core/rendering/text-fit";
 
 /**
  * One character of the text with the style it is drawn in.
@@ -159,7 +159,7 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
     fontStyle: element.style.italic ? "italic" : undefined,
     textAlign: element.style.align,
     letterSpacing: trackingPt === undefined ? undefined : (trackingPt * scale * EMU_PER_INCH) / 72,
-    lineHeight: element.style.lineHeight,
+    lineHeight: element.style.lineHeight ?? DEFAULT_LINE_HEIGHT,
     height: "100%",
     boxSizing: "border-box",
     display: "flex",
