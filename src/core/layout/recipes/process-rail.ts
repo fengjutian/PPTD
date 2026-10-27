@@ -35,10 +35,7 @@ function pointsToNormalized(points: number, pageHeight: Emu): number {
 }
 
 /** Deterministic vertical station slots used when a horizontal rail is not readable. */
-export function processVerticalSlots(
-  content: { x: number; y: number; width: number; height: number },
-  count: number,
-) {
+export function processVerticalSlots(content: { x: number; y: number; width: number; height: number }, count: number) {
   return layoutRows(normalizedToLayoutRect(content), count, "sm");
 }
 
@@ -319,10 +316,7 @@ export const processRail: LayoutRecipe = {
     );
     // Shrink the descriptions before shrinking the labels: the step name is the
     // reading anchor, the sentence is what gives way.
-    while (
-      textSize > MIN_TEXT_SIZE_PT &&
-      rowHeights.some((height, index) => height > rowSlots[index]!.height / 1000)
-    ) {
+    while (textSize > MIN_TEXT_SIZE_PT && rowHeights.some((height, index) => height > rowSlots[index]!.height / 1000)) {
       textSize -= 1;
       rowHeights = measureRows(textSize);
     }
