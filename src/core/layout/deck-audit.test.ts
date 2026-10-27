@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import { createDocument, createSlide, inches, type PresentationDocument, type Slide, type TextElement } from "../document-model";
 import { auditDeckLayout } from "./deck-audit";
 
-/** A page with one title-sized text and one footer-sized text. */
+/**
+ * A page with one title-sized text and one footer-sized text.
+ *
+ * The factory page carries a title, so the footer is built from the same style
+ * without that binding: a page number is not a second heading.
+ */
 function page(titleX: number, footerY: number, options: { centered?: boolean; template?: string } = {}): Slide {
   const slide = createSlide(2);
   const base = slide.elements[0]!;
   if (base.type !== "text") throw new Error("expected the factory page to carry a text");
+  const { contentRef: _titleRef, ...bare } = base;
   const title: TextElement = {
     ...base,
     id: crypto.randomUUID() as TextElement["id"],
@@ -20,11 +26,11 @@ function page(titleX: number, footerY: number, options: { centered?: boolean; te
     },
   };
   const footer: TextElement = {
-    ...base,
+    ...bare,
     id: crypto.randomUUID() as TextElement["id"],
     text: "02 / 08",
     frame: { x: inches(6), y: inches(footerY), width: inches(1.2), height: inches(0.2) },
-    style: { ...base.style, fontSizePt: 10 },
+    style: { ...bare.style, fontSizePt: 10 },
   };
   slide.elements = [title, footer];
   if (options.template) slide.layoutId = options.template;

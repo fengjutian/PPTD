@@ -16,13 +16,14 @@ import {
   aiDeckDirectionsSchema,
   aiDraftSchema,
   aiOutlineSchema,
-  aiPresentationDesignSchema,
   aiSelection,
   aiSlideBatchSchema,
   chooseSlideLayout,
   constrainDesignToTemplate,
   contentBlockSchema,
+  isDesignEnvelope,
   legacySlidePlan,
+  parseAiPresentationDesign,
   slideBriefsSchema,
   slidePlanSchema,
   sourceFactsResponseSchema,
@@ -31,6 +32,7 @@ import {
   type AiDraft,
   type AiGenerationOptions,
   type AiPresentationDesign,
+  type AiPresentationDesignResult,
   type ContentBlock,
   type DesignTemplateContext,
   type SlideBrief,
@@ -592,7 +594,7 @@ export async function generatePresentationDesign(
   briefs: SlideBrief[],
   template: DesignTemplateContext,
   options: AiPresentationDesignOptions = {},
-): Promise<AiPresentationDesign> {
+): Promise<AiPresentationDesignResult> {
   const { provider, model } = await aiSelection();
   const visualGoal = options.visualGoal ?? defaultPresentationVisualGoal();
   const request = {
@@ -626,13 +628,12 @@ export async function generatePresentationDesign(
       }
       // Mixed-version desktop upgrades can briefly pair a new frontend with an
       // older backend. A valid legacy design is an immediate final turn.
-      if (aiPresentationDesignSchema.safeParse(response).success) return { kind: "final" as const, output: response };
+      if (isDesignEnvelope(response)) return { kind: "final" as const, output: response };
       throw new Error("AI_WORKBENCH_TURN_INVALID");
     },
   });
   const raw = loop.output;
-  const design = aiPresentationDesignSchema.parse(raw);
-  if (design.slides.length !== draft.slides.length) throw new Error("AI_DESIGN_SLIDE_COUNT_MISMATCH");
+  const { design, repairs } = parseAiPresentationDesign(raw, draft);
   const constrained = constrainDesignToTemplate(
     {
       slides: applyDeckArtDirection(
@@ -690,16 +691,18 @@ export async function generatePresentationDesign(
     },
     template,
   );
-  if (!options.styleConstraint) return constrained;
+  const withRepairs = (value: AiPresentationDesign): AiPresentationDesignResult =>
+    repairs.length > 0 ? { ...value, designRepairs: repairs } : value;
+  if (!options.styleConstraint) return withRepairs(constrained);
   const allowedRecipes = options.concept ? new Set(options.concept.recipes) : undefined;
-  return {
+  return withRepairs({
     ...constrained,
     slides: constrained.slides.map((slide) => ({
       ...slide,
       densityTarget: options.styleConstraint!.density,
       ...(slide.recipe && allowedRecipes && !allowedRecipes.has(slide.recipe) ? { recipe: undefined } : {}),
     })),
-  };
+  });
 }
 
 export const aiKeyConfigured = (providerId: string) => invoke<boolean>("ai_api_key_configured", { providerId });

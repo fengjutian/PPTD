@@ -68,7 +68,7 @@ export function auditDeckLayout(document: PresentationDocument): DeckAuditReport
       if (element.type !== "text") continue;
       if (!isElementVisible(element)) continue;
       if (!element.text.trim()) continue;
-      if (element.contentRef === "title") {
+      if (element.contentRef === "title" && element.frame.y < pageHeight * 0.85) {
         // Centred and right-aligned titles are placed on their own axis by design.
         const align = element.style.align ?? "left";
         if (align === "left") titles.push({ slideIndex, element, value: element.frame.x / pageWidth });
