@@ -306,6 +306,7 @@ function toDocumentAssets(assets: readonly GeneratedVisualAsset[]): AiVisualAsse
     naturalWidth: asset.naturalWidth,
     naturalHeight: asset.naturalHeight,
     altText: asset.altText,
+    ...(asset.focalPoint ? { focalPoint: asset.focalPoint } : {}),
   }));
 }
 

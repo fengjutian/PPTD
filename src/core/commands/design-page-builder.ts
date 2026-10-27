@@ -882,6 +882,7 @@ export function buildDesignedSlide(
     const crop = coverCrop(
       { width: visualAsset.naturalWidth, height: visualAsset.naturalHeight },
       { width: assetLayout.image.width * pageWidth, height: assetLayout.image.height * pageHeight },
+      visualAsset.focalPoint,
     );
     slide.elements.push({
       id: crypto.randomUUID() as ElementId,
@@ -1148,6 +1149,7 @@ export function buildDesignedSlide(
         const crop = coverCrop(
           { width: visualAsset.naturalWidth, height: visualAsset.naturalHeight },
           { width: candidate.frame.width, height: candidate.frame.height },
+          visualAsset.focalPoint,
         );
         if (crop) candidate.crop = crop;
         else delete candidate.crop;

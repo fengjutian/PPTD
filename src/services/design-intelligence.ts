@@ -17,6 +17,18 @@ export interface SlideDesignIntelligence {
   preferredFamilies: string[];
   avoidFamilies: string[];
   focalPriority: "title" | "number" | "chart" | "image" | "body";
+  measurement: {
+    titleChars: number;
+    bodyChars: number;
+    itemCount: number;
+    estimatedTitleLines: number;
+    estimatedBodyLines: number;
+    pressure: "low" | "medium" | "high";
+  };
+  dataStory?: {
+    relationship: "proportion" | "change" | "comparison" | "magnitude";
+    recommendedChart: "column" | "bar" | "line" | "pie";
+  };
 }
 
 export interface DesignIntelligence {
@@ -71,6 +83,44 @@ function rhythmRole(index: number, total: number, relation: SemanticRelation): S
   return "build";
 }
 
+function itemCount(slide: AiDraft["slides"][number]): number {
+  const structured = (slide.blocks ?? []).reduce((count, block) => {
+    if (block.type === "bullet-list") return count + block.items.length;
+    if (block.type === "timeline" || block.type === "process") return count + block.items.length;
+    if (block.type === "comparison") return count + Math.max(block.leftItems.length, block.rightItems.length);
+    if (block.type === "table-data") return count + block.rows.length;
+    if (block.type === "metric") return count + 1;
+    return count;
+  }, 0);
+  return structured || slide.body.split("\n").filter((line) => line.trim()).length;
+}
+
+function measurementOf(slide: AiDraft["slides"][number], brief: SlideBrief): SlideDesignIntelligence["measurement"] {
+  const items = itemCount(slide);
+  const titleChars = [...slide.title].length;
+  const bodyChars = [...slide.body].length;
+  const load = bodyChars / 260 + items / 7 + titleChars / 45;
+  return {
+    titleChars,
+    bodyChars,
+    itemCount: items,
+    estimatedTitleLines: Math.max(1, Math.ceil(titleChars / 22)),
+    estimatedBodyLines: Math.max(1, Math.ceil(bodyChars / 52) + Math.max(0, items - 1)),
+    pressure: brief.density === "high" || load > 2.2 ? "high" : brief.density === "low" && load < 1 ? "low" : "medium",
+  };
+}
+
+function dataStoryOf(slide: AiDraft["slides"][number]): SlideDesignIntelligence["dataStory"] {
+  const chart = (slide.blocks ?? []).find((block) => block.type === "chart");
+  if (!chart) return undefined;
+  const multipleSeries = (chart.series?.length ?? 0) > 1;
+  const relationship = chart.kind === "pie" ? "proportion" : chart.kind === "line" ? "change" : multipleSeries ? "comparison" : "magnitude";
+  const longLabels = chart.categories.some((category) => [...category].length > 8);
+  const recommendedChart =
+    relationship === "change" ? "line" : relationship === "proportion" && chart.categories.length <= 5 ? "pie" : longLabels ? "bar" : "column";
+  return { relationship, recommendedChart };
+}
+
 /** Deterministic semantic and brand context supplied before the model chooses geometry. */
 export function buildDesignIntelligence(
   draft: AiDraft,
@@ -88,6 +138,8 @@ export function buildDesignIntelligence(
       preferredFamilies,
       avoidFamilies: previousFamilies.slice(0, 1),
       focalPriority: focalOf(relation),
+      measurement: measurementOf(slide, briefs[index]!),
+      ...(dataStoryOf(slide) ? { dataStory: dataStoryOf(slide) } : {}),
     };
     previousFamilies = preferredFamilies;
     return plan;

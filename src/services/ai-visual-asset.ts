@@ -7,6 +7,7 @@ import {
 } from "../core/commands/visual-asset";
 import type { AiSlideDesign } from "../core/commands/template-layouts";
 import { hasBlackBackdrop } from "./visual-asset-background";
+import { detectImageFocalPoint } from "./image-focal-point";
 
 /**
  * 生成页面配图。
@@ -28,6 +29,7 @@ export interface GeneratedVisualAsset {
   naturalWidth: number;
   /** 图片的原始像素高。 */
   naturalHeight: number;
+  focalPoint?: { x: number; y: number };
   /** 替代文字。 */
   altText: string;
 }
@@ -91,6 +93,7 @@ export async function requestVisualAsset(input: {
         naturalWidth: result.width,
         naturalHeight: result.height,
         altText: input.prompt.slice(0, 200),
+        focalPoint: await detectImageFocalPoint(result.dataUrl),
       },
     };
   } catch (error) {

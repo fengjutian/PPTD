@@ -105,6 +105,23 @@ export function applyAiDesignedDraft(
     command.designs.length !== command.slides.length
   )
     throw new Error("AI_DESIGN_INVALID");
+  if (
+    command.visualAssets?.some(
+      (asset) =>
+        !Number.isFinite(asset.naturalWidth) ||
+        !Number.isFinite(asset.naturalHeight) ||
+        asset.naturalWidth <= 0 ||
+        asset.naturalHeight <= 0 ||
+        (asset.focalPoint !== undefined &&
+          (!Number.isFinite(asset.focalPoint.x) ||
+            !Number.isFinite(asset.focalPoint.y) ||
+            asset.focalPoint.x < 0 ||
+            asset.focalPoint.x > 1 ||
+            asset.focalPoint.y < 0 ||
+            asset.focalPoint.y > 1)),
+    )
+  )
+    throw new Error("AI_VISUAL_ASSET_INVALID");
   if (command.pageSize) document.pageSize = command.pageSize;
 
   const context = createDesignContext(document, command);

@@ -27,6 +27,7 @@ export interface NormalizedRect {
 export function coverCrop(
   natural: { width: number; height: number },
   target: { width: number; height: number },
+  focalPoint: { x: number; y: number } = { x: 0.5, y: 0.5 },
 ): ImageCrop | undefined {
   if (natural.width <= 0 || natural.height <= 0 || target.width <= 0 || target.height <= 0) return undefined;
   const naturalAspect = natural.width / natural.height;
@@ -36,13 +37,13 @@ export function coverCrop(
   if (naturalAspect > targetAspect) {
     // 图更宽：切掉左右，两边各切一半。
     const keep = targetAspect / naturalAspect;
-    const cut = (1 - keep) / 2;
-    return { top: 0, bottom: 0, left: cut, right: cut };
+    const left = Math.max(0, Math.min(1 - keep, focalPoint.x - keep / 2));
+    return { top: 0, bottom: 0, left, right: 1 - keep - left };
   }
   // 图更高：切掉上下。
   const keep = naturalAspect / targetAspect;
-  const cut = (1 - keep) / 2;
-  return { top: cut, bottom: cut, left: 0, right: 0 };
+  const top = Math.max(0, Math.min(1 - keep, focalPoint.y - keep / 2));
+  return { top, bottom: 1 - keep - top, left: 0, right: 0 };
 }
 
 /**

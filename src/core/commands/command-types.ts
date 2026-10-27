@@ -91,6 +91,8 @@ export interface AiVisualAssetData {
   naturalWidth: number;
   /** 图片的原始像素高。 */
   naturalHeight: number;
+  /** Normalized subject/saliency centre used by cover cropping. */
+  focalPoint?: { x: number; y: number };
   /** 替代文字，导出与无障碍读取都用它。 */
   altText: string;
 }

@@ -30,6 +30,14 @@ describe("配图填充裁剪", () => {
     expect(visibleAspect).toBeCloseTo(target.width / target.height, 6);
   });
 
+  it("移动裁剪窗口以保留偏离中心的主体", () => {
+    const crop = coverCrop({ width: 1600, height: 900 }, { width: 600, height: 900 }, { x: 0.82, y: 0.5 })!;
+    expect(crop.left).toBeGreaterThan(crop.right);
+    const visible = visibleSourceRect({ width: 1600, height: 900 }, crop);
+    expect(0.82).toBeGreaterThanOrEqual(visible.x);
+    expect(0.82).toBeLessThanOrEqual(visible.x + visible.width);
+  });
+
   it("没有裁剪时露出整张图", () => {
     const visible = visibleSourceRect({ width: 100, height: 100 }, undefined);
     expect(visible).toEqual({ x: 0, y: 0, width: 1, height: 1 });

@@ -62,6 +62,7 @@ describe("design intelligence", () => {
     expect(plan.slides.map((slide) => slide.rhythmRole)).toEqual(["opening", "turn", "close"]);
     expect(plan.slides[1]).toMatchObject({ relation: "comparison", focalPriority: "body" });
     expect(plan.slides[1]!.preferredFamilies).toContain("comparison");
+    expect(plan.slides[1]!.measurement).toMatchObject({ itemCount: 1, pressure: "medium" });
   });
 
   it("extracts normalized brand axes, columns, palette and fonts", () => {
