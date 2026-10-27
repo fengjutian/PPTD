@@ -4,6 +4,7 @@ import { comparison } from "./comparison";
 import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { chartStory } from "./chart-story";
+import { tableStory } from "./table-story";
 import { editorialIndex } from "./editorial-index";
 import { fullBleedImage } from "./full-bleed-image";
 import { imageLed } from "./image-led";
@@ -22,6 +23,7 @@ const RECIPES: Readonly<Record<RecipeId, LayoutRecipe>> = {
   "cover-statement": coverStatement,
   "data-story": dataStory,
   "chart-story": chartStory,
+  "table-story": tableStory,
   "editorial-index": editorialIndex,
   "asymmetric-split": asymmetricSplit,
   "image-led": imageLed,

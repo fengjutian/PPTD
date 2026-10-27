@@ -7,6 +7,7 @@ export type DesignComponentRole =
   | "numbered-list"
   | "metric-card"
   | "native-chart"
+  | "native-table"
   | "content-image"
   | "image-plate"
   | "process-node"
@@ -73,6 +74,16 @@ export const RECIPE_CATALOG: Readonly<Record<RecipeId, RecipeCatalogEntry>> = {
     requiresImage: false,
     minimumColumns: 1,
     capacity: { minItems: 1, note: "需要 chart 内容块；系列色来自主题令牌。" },
+  }),
+  "table-story": recipe({
+    id: "table-story",
+    label: "表格证据",
+    intent: "evidence",
+    summary: "用原生可编辑表格承载二维数据，并保留结论说明。",
+    components: ["page-title", "body-copy", "native-table", "surface-panel", "accent-rule"],
+    requiresImage: false,
+    minimumColumns: 1,
+    capacity: { minItems: 1, maxItems: 12, note: "需要 table-data 内容块；行列过多时由容量门拒绝。" },
   }),
   "editorial-index": recipe({
     id: "editorial-index",

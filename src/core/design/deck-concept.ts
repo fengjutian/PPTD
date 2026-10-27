@@ -28,6 +28,7 @@ export type RecipeId =
   | "cover-statement"
   | "data-story"
   | "chart-story"
+  | "table-story"
   | "image-led"
   /**
    * The other two ways a picture can own a page.
@@ -103,6 +104,7 @@ const EDITORIAL_RECIPES: readonly RecipeId[] = [
   "cover-statement",
   "data-story",
   "chart-story",
+  "table-story",
   "image-led",
   "side-image-text",
   "editorial-index",

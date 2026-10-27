@@ -29,6 +29,7 @@ import { quoteField } from "./quote-field";
 import { sectionStatement } from "./section-statement";
 import { sideImageText } from "./side-image-text";
 import { timelineRail, timelineVerticalSlots } from "./timeline-rail";
+import { tableStory } from "./table-story";
 import { weightedSplit } from "./weighted-split";
 import { consumptionProblem } from "./plan";
 import type { LayoutRecipe, RecipeContext, RecipePlan } from "./types";
@@ -1040,6 +1041,37 @@ describe("chart-story recipe", () => {
     expect(body?.type).toBe("text");
     if (chart?.type !== "chart" || body?.type !== "text") return;
     expect(body.frame.x).toBeGreaterThan(chart.frame.x + chart.frame.width);
+  });
+});
+
+describe("table-story recipe", () => {
+  const tableContent: SlideContent = {
+    title: "区域经营数据形成清晰梯队",
+    body: "华东保持领先，华南增速更快。",
+    blocks: [
+      {
+        id: "table-1",
+        type: "table-data",
+        header: ["区域", "收入", "增速"],
+        rows: [
+          ["华东", "120", "12%"],
+          ["华南", "96", "18%"],
+          ["华北", "73", "9%"],
+        ],
+      },
+    ],
+    speakerNotes: "",
+    status: "approved",
+  };
+
+  it("draws an editable native table and consumes the reviewed block", () => {
+    const ctx = context(tableContent, { facts: facts({ itemCount: 3, hasTable: true, layout: "title-body" }) });
+    expect(tableStory.supports(ctx.facts, ctx.concept, { hasArtwork: false, hasAsset: false })).toBe(true);
+    const result = plan(tableStory, ctx);
+    expectInsidePage(result);
+    expect(consumptionProblem(result, tableContent)).toBeUndefined();
+    const table = result.elements.find((element) => element.type === "table");
+    expect(table?.type === "table" ? table.contentBlockId : "").toBe("table-1");
   });
 });
 

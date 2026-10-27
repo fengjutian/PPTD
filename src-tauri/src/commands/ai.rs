@@ -806,7 +806,7 @@ pub async fn plan_presentation_repairs(
 - restyle：改字号、颜色、字体、对齐和行距。fontScale 在 0.75–1.5 之间，color 是六位十六进制，fontFamily 必须是模板主字体或次字体，textAlign 为 left/center/right，lineHeight 为 0.5–4 的倍数。target 为 region 时只作用于落在 frame 里的文字。
 - align：对齐。frame 圈出要对齐的那一块，axis 为 left 表示把它们的左轴对齐到 frame.x，为 top 表示顶边对齐到 frame.y。
 - changeLayout：换这一页的版式。
-- recipe：换这一页的页面配方。可用值：cover-statement、data-story、chart-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，图表换 chart-story，流程换 process-rail，对比换 comparison 或 weighted-split，时间线换 timeline-rail，引文换 quote-field，章节换 section-statement；换配方时不要再叠加 elementActions 的几何修复。
+- recipe：换这一页的页面配方。可用值：cover-statement、data-story、chart-story、table-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement。只有内容确实装得下时才换：短要点换 editorial-index，长要点换 asymmetric-split，指标换 data-story，图表换 chart-story，表格换 table-story，流程换 process-rail，对比换 comparison 或 weighted-split，时间线换 timeline-rail，引文换 quote-field，章节换 section-statement；换配方时不要再叠加 elementActions 的几何修复。
 
 target 只有三种：
 - title：这一页的标题。
@@ -1468,7 +1468,7 @@ pub async fn generate_deck_concepts(
 - paper：纸本专栏。正文收进居中的窄栏（约 66% 页宽），两侧留白宽，字号对比克制；适合长判断和连续阅读。
 - instrument：数据仪表。内容整体右移，左侧留出竖栏和一条细线；数字与对比用大字阶，文字收在右侧栏内；适合指标、对比和结论。
 
-不得发明其他 preset；不得声称支持当前方向没有的配方（当前可渲染：cover-statement、data-story、chart-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement）。
+不得发明其他 preset；不得声称支持当前方向没有的配方（当前可渲染：cover-statement、data-story、chart-story、table-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement）。
 
 四、输出字段
 - preset：editorial、documentary、paper 或 instrument。
@@ -1580,7 +1580,7 @@ pub async fn generate_deck_directions(
 - paper：纸本专栏。正文收进居中的窄栏（约 66% 页宽），两侧留白宽，字号对比克制；标题轴随窄栏内移；适合长判断和连续阅读。
 - instrument：数据仪表。内容整体右移，左侧留出竖栏和一条细线；数字和对比用大字阶，文字收在右侧栏内；适合指标、对比和结论。
 
-不得声称支持当前方向没有的配方（当前可渲染：cover-statement、data-story、chart-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement）。
+不得声称支持当前方向没有的配方（当前可渲染：cover-statement、data-story、chart-story、table-story、image-led、editorial-index、asymmetric-split、process-rail、comparison、weighted-split、timeline-rail、quote-field、section-statement）。
 
 四、每个方向的字段
 - preset：editorial、documentary、paper 或 instrument。
@@ -1812,6 +1812,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - cover-statement：封面，主标题 + 一句副标题 + 几何强调块；仅用于第一页/封面。
 - data-story：1–3 个指标的大数字 + 标签；仅当页面有 metric 内容块且没有 timeline/process/table 时使用。
 - chart-story：原生图表页，图表数据来自 chart 内容块；仅当页面有 chart 内容块时使用。
+- table-story：原生可编辑表格页，表格数据来自 table-data 内容块；最多 8 列、12 行。
 - image-led：图片是页面主体，文字收在图片让出的文字区；仅当页面有已生成的视觉素材且没有 quote/comparison/结构化块时使用。
 - editorial-index：标题 + 编号 + 细线 + 正文，适合 3–6 条短要点；不要给卡片页选它。
 - asymmetric-split：左标题栏 + 右正文栏，适合 2–5 条较长要点；不要给两栏对比页选它。
@@ -1821,7 +1822,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
 - timeline-rail：日期在左、事件在右的纵向时间线；仅当页面有 timeline 内容块且 3–6 条时使用。
 - quote-field：大引文 + 引号 + 署名；仅当页面是 quote 版式且有 quote 内容块时使用。
 - section-statement：章节页，深色/强调色竖栏 + 大章节号 + 标题 + 一句说明；仅当 layout=section 且没有模板底图时使用。
-- 有 table 内容块的页面不选配方；有 comparison 优先 comparison，有 process 优先 process-rail，有 timeline 优先 timeline-rail，有 metric 优先 data-story。
+- 有 table 内容块优先 table-story；有 comparison 优先 comparison，有 process 优先 process-rail，有 timeline 优先 timeline-rail，有 metric 优先 data-story。
 - 结尾总结页暂不选配方；section 页优先 section-statement。
 - 封面优先 cover-statement；section 优先 section-statement；有已生成素材优先 image-led；有 comparison 优先 comparison；有 process 优先 process-rail；有 timeline 优先 timeline-rail；有 quote 且 layout=quote 优先 quote-field；有 metric 优先 data-story；3–6 条短要点优先 editorial-index；2–5 条较长要点优先 asymmetric-split；其余留空。
 - variant 只能是 left 或 right；页面级 focal 只能是 title、index 或 body；不确定就省略。

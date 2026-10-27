@@ -130,7 +130,9 @@ export function buildDesignIntelligence(
   let previousFamilies: string[] = [];
   const slides = draft.slides.map((slide, index) => {
     const relation = relationOf(slide, briefs[index]!);
-    const preferredFamilies = familiesFor(relation);
+    const preferredFamilies = (slide.blocks ?? []).some((block) => block.type === "table-data")
+      ? ["table-story", "instrument-columns", "paper-column"]
+      : familiesFor(relation);
     const plan: SlideDesignIntelligence = {
       slideIndex: index,
       relation,
