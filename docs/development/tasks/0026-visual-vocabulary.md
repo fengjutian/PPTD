@@ -277,7 +277,7 @@ flowchart TD
 | 1.1 八个角色                  | 完成                 | `deriveSemanticColors` 增 `surfaceSunken` / `borderStrong` / `accentStrong` / `onAccent`                                   |
 | 1.2 深色配对                  | 完成（方案调整）     | 未加"明暗入参"，改为 `sameAppearance(预设底色, 本页底色)` 决定是否复用预设值；页面总是按自己的底色派生，见 ADR 0101        |
 | 1.3 预设写入                  | 完成                 | `theme()` 自动写入八个角色，无需逐套手调                                                                                   |
-| 1.4 对比度校验器              | 未开始               | `export-validation.ts` 未加角色级断言；当前由派生函数与配方测试保证                                                        |
+| 1.4 对比度校验器              | 完成                 | `export-validation.ts` 按页校验语义承载面与允许墨色，失败以 `semantic-role-contrast` 报告具体角色、页码和实测比值          |
 | 1.5 主题 XML 槽位             | 未做（判定为不需要） | 新角色不在 OOXML 语义槽内，`normalizeThemeColors` 会丢弃；对象自带字面色，主题部件不需要这些角色                           |
 | 1.6 主题面板标签              | 完成                 | `app-shared.ts` 增四个中文名                                                                                               |
 | 消费点                        | 完成                 | `comparison.ts`：每栏下沉面 + 实心栏目头（`onAccent`）、中线 `borderStrong`；`side-image-text.ts`：分栏线改 `borderStrong` |
@@ -343,6 +343,16 @@ flowchart TD
 | 视觉验证 | 完成 | PowerPoint 导出目视：三项指标成为三块独立的浅色区，数字领先、标签后退                   |
 
 **观察**：这是 ADR 0101 的四个新角色在"页面类型"上第一次真正改变观感（此前只有对比页）。`surfaceSunken` 的强度在浅色页上刚好（约 10% 墨），再深就会抢标题。
+
+### 2026-10-27：角色级导出对比度断言
+
+| 步骤 | 状态 | 落点                                                                                                                                           |
+| ---- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 合同 | 完成 | 页面 `surface` 可承载 `primary/textMuted`；`surfaceRaised`、`surfaceSunken`、`accentSubtle` 可承载 `primary`；`accentStrong` 可承载 `onAccent` |
+| 预检 | 完成 | `core/validation/export-validation.ts` 逐页检查 4.5:1，下穿导出报告且不阻断导出                                                                |
+| 诊断 | 完成 | 稳定 code `semantic-role-contrast`；消息包含页码、承载角色、墨色角色、实测比值和阈值                                                           |
+| 兼容 | 完成 | 缺少语义角色的旧模板跳过对应合同，不为不存在的角色制造警告                                                                                     |
+| 测试 | 完成 | 内置主题通过、损坏的 `accentStrong/onAccent` 报告、旧模板兼容三条行为测试                                                                      |
 
 ### 2026-10-26：稀疏列表的行距与字阶（WP3 第二片）
 

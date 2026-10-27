@@ -409,7 +409,11 @@
 :root[data-theme="light"] .design-candidate-issues.warning,
 :root[data-theme="amber"] .design-candidate-issues.warning,
 :root[data-theme="green"] .design-candidate-issues.warning,
-:root[data-theme="blue"] .design-candidate-issues.warning {
+:root[data-theme="blue"] .design-candidate-issues.warning,
+:root[data-theme="light"] .design-compile-metrics-repairs,
+:root[data-theme="amber"] .design-compile-metrics-repairs,
+:root[data-theme="green"] .design-compile-metrics-repairs,
+:root[data-theme="blue"] .design-compile-metrics-repairs {
   color: #a45d0b;
 }
 :root[data-theme="light"] .design-candidate-note,
@@ -813,6 +817,12 @@
 .design-compile-metrics-diagnostics {
   margin: 7px 0 0;
   color: #a3a7af;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+.design-compile-metrics-repairs {
+  margin: 7px 0 0;
+  color: #e7c879;
   font-size: 10.5px;
   line-height: 1.6;
 }

@@ -3274,7 +3274,7 @@ export function useAppRuntime() {
         themeDirection,
         themeDirectionAudit: auditThemeDirection(themeDirection, concept),
         compileReport,
-        designMetrics: summarizeDesignMetrics(compileReport, finalDocument.slides.length),
+        designMetrics: summarizeDesignMetrics(compileReport, finalDocument.slides.length, design.designRepairs),
         promptVersion: DESIGN_PROMPT_VERSION,
         issues: [
           ...new Map(

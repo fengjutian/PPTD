@@ -8,12 +8,14 @@ import {
   type PresentationDocument,
   type SlideElement,
 } from "../document-model";
+import { contrastRatio, MINIMUM_CONTRAST } from "../rendering/contrast";
 import { textLikelyOverflows } from "../rendering/text-fit";
 
 export type ExportIssueCode =
   | "content-not-approved"
   | "out-of-bounds"
   | "text-overflow"
+  | "semantic-role-contrast"
   | "missing-font"
   | "unsupported-image-source"
   | "empty-slide"
@@ -41,6 +43,58 @@ export interface ExportValidationOptions {
 
 const TOLERANCE_EMU = 1_000;
 
+interface SemanticRoleContrastContract {
+  carrierRole: "surface" | "surfaceRaised" | "surfaceSunken" | "accentSubtle" | "accentStrong";
+  inkRoles: readonly ("primary" | "textMuted" | "onAccent")[];
+}
+
+/**
+ * The semantic surfaces that are allowed to carry copy.
+ *
+ * Lines (`border`/`borderStrong`) do not carry text, so they deliberately do
+ * not appear here. Keeping this contract beside export validation means a new
+ * recipe cannot rely only on the palette derivation tests: a damaged or
+ * hand-authored theme is reported on the actual page that would export it.
+ */
+export const SEMANTIC_ROLE_CONTRAST_CONTRACTS: readonly SemanticRoleContrastContract[] = [
+  { carrierRole: "surface", inkRoles: ["primary", "textMuted"] },
+  { carrierRole: "surfaceRaised", inkRoles: ["primary"] },
+  { carrierRole: "surfaceSunken", inkRoles: ["primary"] },
+  { carrierRole: "accentSubtle", inkRoles: ["primary"] },
+  { carrierRole: "accentStrong", inkRoles: ["onAccent"] },
+];
+
+function validateSemanticRoleContrast(
+  document: PresentationDocument,
+  slideIndex: number,
+  slideBackground: string,
+): ExportIssue[] {
+  if (!document.theme) return [];
+  const colors = new Map(document.theme.colors.map(({ name, value }) => [name, value]));
+  const issues: ExportIssue[] = [];
+
+  for (const contract of SEMANTIC_ROLE_CONTRAST_CONTRACTS) {
+    // The page background is the real `surface`; it may be a per-page dark
+    // variant and therefore takes precedence over the theme's default slot.
+    const carrier = contract.carrierRole === "surface" ? slideBackground : colors.get(contract.carrierRole);
+    if (!carrier) continue;
+    for (const inkRole of contract.inkRoles) {
+      const ink = colors.get(inkRole);
+      if (!ink) continue;
+      const ratio = contrastRatio(ink, carrier);
+      if (ratio !== undefined && ratio < MINIMUM_CONTRAST) {
+        issues.push({
+          code: "semantic-role-contrast",
+          severity: "warning",
+          message: `第 ${slideIndex + 1} 页颜色角色 ${contract.carrierRole} 不能承载 ${inkRole}（${ratio.toFixed(2)}:1，至少需要 ${MINIMUM_CONTRAST}:1）`,
+          slideIndex,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
 function frameOutsidePage(element: SlideElement, document: PresentationDocument): boolean {
   const { frame } = element;
   return (
@@ -64,6 +118,7 @@ export async function validatePresentationForExport(
   const fontCache = new Map<string, boolean>();
 
   for (const [slideIndex, slide] of document.slides.entries()) {
+    issues.push(...validateSemanticRoleContrast(document, slideIndex, slide.background));
     const hiddenCount = hiddenElementCount(slide);
     if (slide.elements.length - hiddenCount === 0) {
       issues.push({

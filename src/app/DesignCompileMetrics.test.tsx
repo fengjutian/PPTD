@@ -12,6 +12,9 @@ const metrics: DesignMetrics = {
   adjusted: 2,
   rejected: 1,
   substituted: 1,
+  repairedSlides: 2,
+  ignoredSlides: 1,
+  repairCodes: { invalid: 1, missing: 1, extra: 1 },
   recipes: [
     { recipe: "editorial-index", pages: 4 },
     { recipe: "asymmetric-split", pages: 2 },
@@ -56,6 +59,7 @@ describe("DesignCompileMetrics", () => {
     expect(markup).toContain("拒绝 1");
     expect(markup).toContain("换配方 1");
     expect(markup).toContain("提示词 design-pages-v1");
+    expect(markup).toContain("模型合同：回退 2 页（字段不合法 1、缺页 1）；忽略多输出 1 页");
     expect(markup).toContain("编辑索引×4");
     expect(markup).toContain("RECIPE_CAPACITY_EXCEEDED×2");
     expect(markup).toContain("每页配方决策（3 页）");

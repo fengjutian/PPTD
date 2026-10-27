@@ -192,4 +192,23 @@ describe("summarizeDesignMetrics", () => {
 
     expect(summarizeDesignMetrics(report, 1).coverage).toBe(1);
   });
+
+  it("counts contract repairs separately from ignored extra slides", () => {
+    const metrics = summarizeDesignMetrics(
+      {
+        outcome: "accepted",
+        plannedSlides: 0,
+        acceptedSlides: 0,
+        adjustedSlides: 0,
+        rejectedSlides: 0,
+        slides: [],
+      },
+      5,
+      [{ code: "DESIGN_SLIDE_INVALID" }, { code: "DESIGN_SLIDE_MISSING" }, { code: "DESIGN_SLIDE_EXTRA" }],
+    );
+
+    expect(metrics.repairedSlides).toBe(2);
+    expect(metrics.ignoredSlides).toBe(1);
+    expect(metrics.repairCodes).toEqual({ invalid: 1, missing: 1, extra: 1 });
+  });
 });

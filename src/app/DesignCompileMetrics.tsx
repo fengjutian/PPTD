@@ -44,6 +44,15 @@ export function DesignCompileMetrics({ metrics, promptVersion }: { metrics: Desi
         {metrics.substituted > 0 && <span>换配方 {metrics.substituted}</span>}
         {promptVersion && <span className="is-muted">提示词 {promptVersion}</span>}
       </div>
+      {(metrics.repairedSlides > 0 || metrics.ignoredSlides > 0) && (
+        <p className="design-compile-metrics-repairs">
+          模型合同：
+          {metrics.repairedSlides > 0
+            ? `回退 ${metrics.repairedSlides} 页（字段不合法 ${metrics.repairCodes.invalid}、缺页 ${metrics.repairCodes.missing}）`
+            : "没有回退页"}
+          {metrics.ignoredSlides > 0 ? `；忽略多输出 ${metrics.ignoredSlides} 页` : ""}
+        </p>
+      )}
       {metrics.recipes.length > 0 && (
         <p className="design-compile-metrics-recipes">
           配方：

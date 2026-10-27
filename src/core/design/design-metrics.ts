@@ -26,6 +26,17 @@ export interface DesignPageDecision {
 }
 
 /**
+ * A page the model did not design to contract.
+ *
+ * The structural shape is intentional: `core` must not import the AI service
+ * just to count repairs. The service's `DesignSlideRepair` has the same code
+ * union and can be passed directly.
+ */
+export interface DesignRepairSignal {
+  code: "DESIGN_SLIDE_INVALID" | "DESIGN_SLIDE_MISSING" | "DESIGN_SLIDE_EXTRA";
+}
+
+/**
  * A flat summary of one design run.
  *
  * It intentionally contains only counts, recipe ids and diagnostic codes: the
@@ -42,6 +53,12 @@ export interface DesignMetrics {
   adjusted: number;
   rejected: number;
   substituted: number;
+  /** Pages the model failed to design to contract and that fell back to a safe layout. */
+  repairedSlides: number;
+  /** Extra model pages that were truncated because the draft has fewer pages. */
+  ignoredSlides: number;
+  /** Repair reasons, separately counted so the report can name the failure shape. */
+  repairCodes: { invalid: number; missing: number; extra: number };
   recipes: DesignRecipeUsage[];
   diagnostics: DesignDiagnosticUsage[];
   decisions: DesignPageDecision[];
@@ -68,7 +85,11 @@ function higherSeverity(
  * hand in a partially built report in tests. Deriving from the page list keeps
  * the summary internally consistent and prevents "planned 8, accepted 9".
  */
-export function summarizeDesignMetrics(report: DesignDraftCompileReport, totalSlides: number): DesignMetrics {
+export function summarizeDesignMetrics(
+  report: DesignDraftCompileReport,
+  totalSlides: number,
+  repairs: readonly DesignRepairSignal[] = [],
+): DesignMetrics {
   const total = Math.max(0, Math.trunc(totalSlides));
   const decisions: DesignPageDecision[] = report.slides
     .map(({ slideIndex, report: page }) => {
@@ -124,6 +145,14 @@ export function summarizeDesignMetrics(report: DesignDraftCompileReport, totalSl
     .map(([code, value]) => ({ code, severity: value.severity, pages: value.pages.size }))
     .sort((left, right) => right.pages - left.pages || left.code.localeCompare(right.code));
 
+  const repairCodes = { invalid: 0, missing: 0, extra: 0 };
+  for (const repair of repairs) {
+    if (repair.code === "DESIGN_SLIDE_INVALID") repairCodes.invalid += 1;
+    else if (repair.code === "DESIGN_SLIDE_MISSING") repairCodes.missing += 1;
+    else if (repair.code === "DESIGN_SLIDE_EXTRA") repairCodes.extra += 1;
+  }
+  const repairedSlides = repairCodes.invalid + repairCodes.missing;
+
   return {
     totalSlides: total,
     plannedSlides,
@@ -132,6 +161,9 @@ export function summarizeDesignMetrics(report: DesignDraftCompileReport, totalSl
     adjusted,
     rejected,
     substituted: decisions.filter((decision) => decision.outcome !== "rejected" && decision.substituted).length,
+    repairedSlides,
+    ignoredSlides: repairCodes.extra,
+    repairCodes,
     recipes,
     diagnostics,
     decisions,
