@@ -91,6 +91,37 @@ describe("design plan compiler", () => {
     expect(result.compileReport.layoutTrace).toEqual(layoutTrace);
   });
 
+  it("uses AiLayoutProgram title and content slots as recipe geometry", () => {
+    const result = compileDesignPlan({
+      ...input({
+        role: "claim",
+        composition: { primitive: "split" },
+        density: "normal",
+        templatePolicy: "ignore",
+        recipe: "asymmetric-split",
+      }),
+      layoutTrace: {
+        coordinateSpace: "normalized-1000",
+        operations: [],
+        slots: [
+          { id: "program.title", rect: { x: 180, y: 80, width: 650, height: 120 } },
+          { id: "program.content", rect: { x: 180, y: 270, width: 650, height: 600 } },
+        ],
+        degradations: [],
+      },
+    });
+
+    expect(result.compileReport.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "LAYOUT_PROGRAM_APPLIED", severity: "info" }),
+    );
+    expect("elements" in result).toBe(true);
+    if (!("elements" in result)) return;
+    const titleElement = result.elements.find(
+      (element) => element.type === "text" && element.text === contentDocument.title,
+    );
+    expect(titleElement?.frame.x).toBeCloseTo(page.width * 0.18, -2);
+  });
+
   it("copies Workbench operations, slots and degradations into the compile report", () => {
     const layoutTrace = {
       coordinateSpace: "normalized-1000" as const,

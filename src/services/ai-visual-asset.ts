@@ -59,11 +59,18 @@ interface ImageResult {
 export async function requestVisualAsset(input: {
   prompt: string;
   role: AiVisualAssetRole;
+  /** Candidate previews use real pixels at lower cost; final assets keep 1. */
+  scale?: number;
 }): Promise<{ ok: true; asset: GeneratedVisualAsset } | { ok: false; error: string }> {
   const size = VISUAL_ASSET_REQUEST_SIZE[input.role];
+  const scale = Math.max(0.2, Math.min(1, input.scale ?? 1));
   try {
     const result = await invoke<ImageResult>("generate_presentation_image", {
-      request: { prompt: input.prompt, width: size.width, height: size.height },
+      request: {
+        prompt: input.prompt,
+        width: Math.max(256, Math.round(size.width * scale)),
+        height: Math.max(256, Math.round(size.height * scale)),
+      },
     });
     if (!result?.dataUrl) return { ok: false, error: "图像服务没有返回图片" };
     // The prompt asks for a light backdrop, but the model can still follow a
@@ -116,6 +123,7 @@ function describeImageFailure(error: unknown): string {
 export async function generateVisualAsset(input: {
   prompt: string;
   role: AiVisualAssetRole;
+  scale?: number;
 }): Promise<GeneratedVisualAsset | undefined> {
   const result = await requestVisualAsset(input);
   return result.ok ? result.asset : undefined;
@@ -229,6 +237,8 @@ export async function generateDeckVisualAssets(input: {
   decisions: readonly VisualAssetDecision[];
   prompts: ReadonlyMap<number, string>;
   concurrency?: number;
+  /** 0.35 is suitable for candidate review; omit for final delivery. */
+  previewScale?: number;
   /** 每完成一组（最多 `concurrency` 张）汇报一次，用于显示"配图 2/4"。 */
   onProgress?: (completed: number, total: number) => void;
 }): Promise<GeneratedVisualAsset[]> {
@@ -243,7 +253,11 @@ export async function generateDeckVisualAssets(input: {
       group.map(async (entry) => {
         const prompt = input.prompts.get(entry.index);
         if (!prompt) return undefined;
-        const asset = await generateVisualAsset({ prompt, role: entry.decision.role! });
+        const asset = await generateVisualAsset({
+          prompt,
+          role: entry.decision.role!,
+          ...(input.previewScale ? { scale: input.previewScale } : {}),
+        });
         return asset ? { ...asset, slideIndex: entry.index } : undefined;
       }),
     );

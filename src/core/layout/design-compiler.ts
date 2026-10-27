@@ -61,7 +61,8 @@ export type DesignCompileDiagnosticCode =
   | "RECIPE_CAPACITY_EXCEEDED"
   | "RECIPE_PLAN_REJECTED"
   | "RECIPE_RETRY_APPLIED"
-  | "RECIPE_RETRY_FAILED";
+  | "RECIPE_RETRY_FAILED"
+  | "LAYOUT_PROGRAM_APPLIED";
 
 export interface DesignCompileDiagnostic {
   code: DesignCompileDiagnosticCode;
@@ -335,13 +336,76 @@ function compileDesignPlanCore(input: DesignCompileInput): DesignCompileResult {
   };
 }
 
+function tracedRegion(input: DesignCompileInput, role: "title" | "content"): NormalizedFrame | undefined {
+  const slots = input.layoutTrace?.slots ?? [];
+  const pattern = role === "title" ? /(^|[-_.])(title|heading|header)([-_.]|$)/i : /(^|[-_.])(content|body|main)([-_.]|$)/i;
+  const candidates = slots
+    .filter((slot) => pattern.test(slot.id))
+    .map((slot) => ({
+      x: slot.rect.x / 1000,
+      y: slot.rect.y / 1000,
+      width: slot.rect.width / 1000,
+      height: slot.rect.height / 1000,
+    }))
+    .filter(
+      (rect) =>
+        rect.x >= 0 &&
+        rect.y >= 0 &&
+        rect.width > 0.08 &&
+        rect.height > (role === "title" ? 0.04 : 0.12) &&
+        rect.x + rect.width <= 1 &&
+        rect.y + rect.height <= 1,
+    );
+  return candidates.sort((left, right) => right.width * right.height - left.width * left.height)[0];
+}
+
+/** Turns bounded Workbench slots into the frame consumed by every recipe. */
+function applyLayoutProgram(input: DesignCompileInput): DesignCompileInput {
+  const title = tracedRegion(input, "title");
+  const content = tracedRegion(input, "content");
+  if (!title && !content) return input;
+  const nextChrome = {
+    ...input.chrome,
+    ...(title ? { title } : {}),
+    ...(content ? { content, contentTop: content.y, contentBottom: content.y + content.height } : {}),
+  };
+  return {
+    ...input,
+    chrome: nextChrome,
+    frame: {
+      ...input.frame,
+      ...(title ? { title: frameFromNormalized(title, input.frame.page) } : {}),
+      ...(content ? { content: frameFromNormalized(content, input.frame.page) } : {}),
+    },
+  };
+}
+
 /** Compiles a plan and preserves the exact bounded Workbench evidence used for it. */
 export function compileDesignPlan(input: DesignCompileInput): DesignCompileResult {
-  const result = compileDesignPlanCore(input);
+  const effective = applyLayoutProgram(input);
+  const result = compileDesignPlanCore(effective);
   if (!input.layoutTrace) return result;
+  const applied = effective !== input;
   return {
     ...result,
-    compileReport: { ...result.compileReport, layoutTrace: input.layoutTrace },
+    compileReport: {
+      ...result.compileReport,
+      layoutTrace: input.layoutTrace,
+      diagnostics: [
+        ...(applied
+          ? [
+              {
+                code: "LAYOUT_PROGRAM_APPLIED" as const,
+                severity: "info" as const,
+                intent: "layoutTrace.slots",
+                message: "AI LayoutProgram 的标题/正文槽位已进入页面几何编译",
+                ...(result.compileReport.selectedRecipe ? { selectedRecipe: result.compileReport.selectedRecipe } : {}),
+              },
+            ]
+          : []),
+        ...result.compileReport.diagnostics,
+      ],
+    },
   };
 }
 

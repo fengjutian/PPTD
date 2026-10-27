@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDocument } from "../document-model";
 import { defaultEditorialConcept, resolveDeckConcept } from "../design/deck-concept";
 import type { DocumentCommand } from "./commands";
-import { inspectAiDesignedDraftCompilation } from "./ai-designed-draft";
+import { applyAiDesignedDraft, inspectAiDesignedDraftCompilation } from "./ai-designed-draft";
 
 const command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }> = {
   type: "apply-ai-designed-draft",
@@ -81,5 +81,17 @@ describe("AI designed draft compile report", () => {
       adjustedSlides: 0,
       rejectedSlides: 0,
     });
+  });
+
+  it("attaches an editable LayoutTree to every AI-generated page", () => {
+    const document = createDocument();
+    applyAiDesignedDraft(document, command);
+
+    expect(document.layoutDefinitions).toHaveLength(1);
+    expect(document.slides[0]?.layoutBinding?.definitionId).toBe(document.layoutDefinitions?.[0]?.id);
+    expect(Object.keys(document.slides[0]?.layoutBinding?.slotBindings ?? {})).not.toHaveLength(0);
+    expect(document.layoutDefinitions?.[0]?.tree.root.children).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "slot", layoutState: "detached" })]),
+    );
   });
 });

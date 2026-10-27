@@ -223,6 +223,11 @@ import {
 import { renderPresentationForVisualReview, renderPresentationPages } from "../services/presentation-renderer";
 import { buildPreviewAssets } from "../services/preview-placeholder";
 import {
+  candidateAestheticGate,
+  compositionHomogeneity,
+  type AestheticScore,
+} from "../services/design-aesthetic-score";
+import {
   initialAgentWorkflow,
   startAgentWorkflow,
   transitionAgentWorkflow,
@@ -3496,6 +3501,9 @@ export function useAppRuntime() {
         reason: string;
         issueCount: number;
         issuePages: number[];
+        visualAssets: GeneratedVisualAsset[];
+        document: PresentationDocument;
+        aesthetic: AestheticScore;
       }> = [];
       let failed = 0;
       let completed = 0;
@@ -3525,37 +3533,110 @@ export function useAppRuntime() {
           pageFacts,
           pageCount: sourceDraft.slides.length,
         }).concept;
-        const design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
+        let design = await generatePresentationDesign(sourceDraft, briefs, analysis, {
           taskId,
           concept: variantConcept,
           themeDirection: variantThemeDirection,
           styleConstraint: variantConstraint,
         });
         if (designCancelRef.current) throw new Error("AI_GENERATION_CANCELLED");
-        const candidate = createDocument();
-        applyCommand(candidate, {
-          type: "apply-ai-designed-draft",
-          title: sourceDraft.title,
-          slides: sourceDraft.slides,
+        const assetPlan = planVisualAssets({
           designs: design.slides,
-          designConcept: variantConcept,
-          themePresetId: preset.id,
-          styleConstraint: variantConstraint,
-          backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+          itemCounts: sourceDraft.slides.map((slide) => countSlidePoints(slide)),
+          deterministicBlocks: sourceDraft.slides.map((slide) =>
+            (slide.blocks ?? []).some(
+              (block) => block.type !== "paragraph" && block.type !== "bullet-list" && block.type !== "quote",
+            ),
+          ),
+          topic: sourceDraft.title,
+          intents: sourceDraft.slides.map((slide) => slide.plan?.visualAsset),
         });
-        const quality = validatePresentationVisualQuality(candidate, design.slides);
-        if (!quality.passed) {
-          throw new Error(`VARIANT_QUALITY_GATE_FAILED:${quality.issues.map((issue) => issue.issue).join(",")}`);
-        }
+        const visualAssets = await generateDeckVisualAssets({
+          decisions: assetPlan.decisions,
+          prompts: assetPlan.prompts,
+          concurrency: 2,
+          previewScale: 0.35,
+        });
+        const buildCandidate = (candidateDesign: AiPresentationDesignResult) => {
+          const document = createDocument();
+          applyCommand(document, {
+            type: "apply-ai-designed-draft",
+            title: sourceDraft.title,
+            slides: sourceDraft.slides,
+            designs: candidateDesign.slides,
+            designConcept: variantConcept,
+            themePresetId: preset.id,
+            styleConstraint: variantConstraint,
+            backgroundRhythm: defaultPresentationVisualGoal().backgroundRhythm,
+            visualAssets: toDocumentAssets(visualAssets),
+            ...(candidateDesign.layoutTrace ? { layoutTrace: candidateDesign.layoutTrace } : {}),
+          });
+          return document;
+        };
+        let candidate = buildCandidate(design);
+        let quality = validatePresentationVisualQuality(candidate, design.slides);
         // The gate is a fixed list of checks; the card still has to say whether
         // the page it is about to show has a text that lost a line, an object
         // off the page or two texts on top of each other. A hard-coded zero made
         // that line claim "排版检查通过" for pages it had never measured.
         // The deck-level audit is counted in the same number: a title that left
         // the axis of its siblings is a layout problem the reader can see.
-        const layoutAudit = auditSlideLayout(candidate);
-        const deckAudit = auditDeckLayout(candidate);
+        let layoutAudit = auditSlideLayout(candidate);
+        let deckAudit = auditDeckLayout(candidate);
+        let aesthetic = candidateAestheticGate({ document: candidate, designs: design.slides, assets: visualAssets });
+
+        // A weak composition is recompiled with another recipe family. This is
+        // deliberately bounded and changes geometry instead of cosmetically
+        // tweaking colour, type size or spacing around the same skeleton.
+        for (let attempt = 0; attempt < 2 && (!quality.passed || layoutAudit.issues.length > 0 || !aesthetic.passed); attempt += 1) {
+          const problemPages = new Set([
+            ...quality.issues.map((issue) => issue.slideIndex),
+            ...layoutAudit.issues.map((issue) => issue.slideIndex),
+            ...deckAudit.issues.map((issue) => issue.slideIndex),
+            ...aesthetic.reasons.flatMap((reason) => {
+              const match = reason.match(/:(\d+)$/);
+              return match ? [Number(match[1])] : [];
+            }),
+          ]);
+          if (problemPages.size === 0) design.slides.forEach((_slide, pageIndex) => problemPages.add(pageIndex));
+          const nextSlides = [...design.slides];
+          let changed = false;
+          for (const pageIndex of problemPages) {
+            const alternatives = buildDesignCandidates({
+              document: candidate,
+              slideIndex: pageIndex,
+              design: design.slides[pageIndex]!,
+              concept: variantConcept,
+              recipes: variantConcept.recipes,
+              limit: 1,
+              commandBase: {
+                themePresetId: preset.id,
+                styleConstraint: variantConstraint,
+                visualAssets: toDocumentAssets(visualAssets),
+              },
+            });
+            const replacement = alternatives.candidates[0];
+            if (!replacement) continue;
+            nextSlides[pageIndex] = designWithRecipe(design.slides[pageIndex]!, replacement.recipe);
+            changed = true;
+          }
+          if (!changed) break;
+          design = { ...design, slides: nextSlides };
+          candidate = buildCandidate(design);
+          quality = validatePresentationVisualQuality(candidate, design.slides);
+          layoutAudit = auditSlideLayout(candidate);
+          deckAudit = auditDeckLayout(candidate);
+          aesthetic = candidateAestheticGate({ document: candidate, designs: design.slides, assets: visualAssets });
+        }
         const issues = [...layoutAudit.issues, ...deckAudit.issues];
+        if (!quality.passed || issues.length > 0 || !aesthetic.passed) {
+          const reasons = [
+            ...quality.issues.map((issue) => issue.issue),
+            ...issues.map((issue) => issue.kind),
+            ...aesthetic.reasons,
+          ];
+          throw new Error(`VARIANT_QUALITY_GATE_FAILED:${[...new Set(reasons)].join(",")}`);
+        }
         const issuePages = [...new Set(issues.map((issue) => issue.slideIndex))].sort((a, b) => a - b);
         pending.push({
           id: crypto.randomUUID(),
@@ -3569,6 +3650,9 @@ export function useAppRuntime() {
           reason: `${variantConcept.rationale}；${styleChoice?.reason ?? choice.reason}`,
           issueCount: issues.length,
           issuePages,
+          visualAssets,
+          document: candidate,
+          aesthetic: aesthetic.score,
         });
       };
       const worker = async () => {
@@ -3596,10 +3680,29 @@ export function useAppRuntime() {
       };
       await Promise.all(Array.from({ length: Math.min(3, plan.length) }, () => worker()));
 
-      // Candidate images stay as per-design placeholders. Sharing photographs
-      // from the first card made the other seven concepts visually dependent on
-      // it. The selected version generates its own final assets in the normal
-      // pipeline, after the user has chosen which concept to keep.
+      // A different palette around the same page skeleton is not a distinct
+      // candidate. Score each deck against its peers, reject near-duplicates,
+      // then rank the survivors before the gallery labels one “AI 推荐”.
+      if (pending.length > 1) {
+        const homogeneity = compositionHomogeneity(pending.map((entry) => entry.design.slides));
+        for (let index = pending.length - 1; index >= 0; index -= 1) {
+          const entry = pending[index]!;
+          const gate = candidateAestheticGate({
+            document: entry.document,
+            designs: entry.design.slides,
+            assets: entry.visualAssets,
+            homogeneity: homogeneity[index],
+          });
+          if (!gate.passed) {
+            pending.splice(index, 1);
+            failed += 1;
+          } else entry.aesthetic = gate.score;
+        }
+        pending.sort((left, right) => right.aesthetic.overall - left.aesthetic.overall);
+      }
+
+      // Each candidate owns its low-resolution review assets; the chosen deck
+      // reuses them and only tops up pages that were not covered by the preview.
       if (pending.length > 0) {
         // Pass 2: render each independent card.
         for (const [index, entry] of pending.entries()) {
@@ -3616,7 +3719,7 @@ export function useAppRuntime() {
               commandBase: {
                 themePresetId: entry.presetId,
                 styleConstraint: entry.styleConstraint,
-                visualAssets: buildPreviewAssets(entry.design.slides),
+                visualAssets: toDocumentAssets(entry.visualAssets),
               },
               title: sourceDraft.title,
             });
@@ -3628,6 +3731,7 @@ export function useAppRuntime() {
               styleProfileId: entry.styleProfile.id,
               concept: entry.concept,
               design: entry.design,
+              visualAssets: entry.visualAssets,
             });
             variants.push({
               id: entry.id,
@@ -3639,6 +3743,9 @@ export function useAppRuntime() {
               pageCount: sourceDraft.slides.length,
               issueCount: entry.issueCount,
               issuePages: entry.issuePages,
+              aestheticScore: entry.aesthetic.overall,
+              aestheticDimensions: entry.aesthetic.dimensions,
+              realAssetCount: entry.visualAssets.length,
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);

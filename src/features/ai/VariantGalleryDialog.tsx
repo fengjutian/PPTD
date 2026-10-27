@@ -12,9 +12,8 @@ import { VariantPreviewDialog } from "./VariantPreviewDialog";
  * rendered from the design that would be kept — so the choice is between
  * finished looks rather than swatches. A card only has room for two pages, so
  * the rendered pages are also a button that opens the whole deck at a readable
- * size; the batch deliberately does not generate pictures or run the visual
- * review, and the footer says so, because a preview without images is not the
- * final deck.
+ * size. Candidates already passed geometry and aesthetic gates and use their
+ * own low-resolution review images, so the user is comparing real compositions.
  */
 export interface VariantGalleryDialogProps {
   options: VariantOptionView[];
@@ -93,6 +92,13 @@ export function VariantGalleryDialog({ options, onSelect, onDiscard, renderPages
                   </span>
                   <span className="variant-gallery-description">{option.description}</span>
                   <span className="variant-gallery-reason">{option.reason}</span>
+                  {option.aestheticScore !== undefined && (
+                    <span className="variant-gallery-issues ok">
+                      审美 {option.aestheticScore} · 层级 {option.aestheticDimensions?.hierarchy} · 平衡{" "}
+                      {option.aestheticDimensions?.balance} · 节奏 {option.aestheticDimensions?.rhythm} · 差异{" "}
+                      {option.aestheticDimensions?.homogeneity} · 配图 {option.aestheticDimensions?.imageRelevance}
+                    </span>
+                  )}
                   {option.issueCount !== undefined && (
                     <span className={`variant-gallery-issues ${option.issueCount > 0 ? "warning" : "ok"}`}>
                       {option.issueCount > 0 ? (
@@ -122,7 +128,7 @@ export function VariantGalleryDialog({ options, onSelect, onDiscard, renderPages
             ))}
           </div>
           <p className="variant-gallery-note">
-            整册配图只生成一套，所有版本共用；选定那一版之后不再重复生成配图，只补上缺图的页并跑完整质检。
+            每个候选都用自己的真实低清配图完成审美评估；选定后复用这些素材，只补缺图页并跑完整质检。
           </p>
           <div className="upload-dialog-actions">
             <button type="button" className="secondary-action" onClick={onDiscard}>

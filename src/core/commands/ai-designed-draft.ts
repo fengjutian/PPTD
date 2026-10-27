@@ -1,5 +1,6 @@
-import type { PresentationDocument } from "../document-model";
+import type { PresentationDocument, SlideElement } from "../document-model";
 import { captureContentVersion, MAX_DESIGN_DIRECTIONS } from "../document-model";
+import type { LayoutDefinition, LayoutSlotRole } from "../layout/tree";
 
 import { CONCEPT_PRESET_IDS } from "../design/deck-concept";
 
@@ -36,6 +37,58 @@ function summarizeCompileReports(slides: readonly SlideDesignCompileReport[]): D
   };
 }
 
+function layoutRole(element: SlideElement): LayoutSlotRole {
+  if (element.type === "image") return "image";
+  if (element.type === "chart") return "chart";
+  if (element.type === "table") return "table";
+  if (element.type === "text") return element.contentRef === "title" ? "title" : "body";
+  return "decoration";
+}
+
+/** Captures each generated page as an editable LayoutTree in the same transaction. */
+function attachGeneratedLayoutTrees(document: PresentationDocument): void {
+  const definitions: LayoutDefinition[] = document.slides.map((slide, slideIndex) => {
+    const managed = slide.elements.filter((element) => element.origin === "generated" && element.hidden !== true);
+    const tree: LayoutDefinition["tree"] = {
+      coordinateSpace: "normalized-1000",
+      registryVersion: 1,
+      root: {
+        id: slide.id,
+        type: "canvas",
+        width: { mode: "fill" },
+        height: { mode: "fill" },
+        layoutState: "managed",
+        children: managed.map((element) => ({
+          id: element.id,
+          type: "slot",
+          role: layoutRole(element),
+          contentRef: element.type === "text" ? element.contentRef : undefined,
+          width: { mode: "fill" },
+          height: {
+            mode: "fraction",
+            weight: Math.max(1, Math.round((element.frame.height / document.pageSize.height) * 1000)),
+          },
+          // Geometry remains the compiler's source of truth. Detached slots
+          // make the generated arrangement editable without an eager reflow.
+          layoutState: "detached",
+        })),
+      },
+    };
+    const definition: LayoutDefinition = {
+      id: slide.id,
+      name: `AI 页面 ${slideIndex + 1}`,
+      layoutSchemaVersion: 1,
+      tree,
+    };
+    slide.layoutBinding = {
+      definitionId: definition.id,
+      slotBindings: Object.fromEntries(managed.map((element) => [element.id, element.id])),
+    };
+    return definition;
+  });
+  document.layoutDefinitions = definitions;
+}
+
 /**
  * Applies an AI-designed draft: every page is replaced by the composition the
  * design stage planned. The generated objects are marked as such so a later
@@ -56,6 +109,7 @@ export function applyAiDesignedDraft(
 
   const context = createDesignContext(document, command);
   document.slides = command.slides.map((content, index) => buildDesignedSlide(context, content, index));
+  attachGeneratedLayoutTrees(document);
   // The direction decision is design state: it is recorded with the design and
   // never touches the content hash. A preset the renderer cannot draw, or a
   // decision taken against different content, is refused instead of stored.

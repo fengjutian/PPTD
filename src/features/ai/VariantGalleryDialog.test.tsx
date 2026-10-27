@@ -58,8 +58,8 @@ describe("VariantGalleryDialog", () => {
     expect((markup.match(/AI 推荐/g) ?? []).length).toBe(1);
     expect(markup).toContain("排版检查通过");
     expect(markup).toContain("2 处排版待调整");
-    // The preview is not the final deck; the dialog has to say why.
-    expect(markup).toContain("整册配图只生成一套");
+    // Candidate evaluation uses its own real low-resolution artwork.
+    expect(markup).toContain("真实低清配图完成审美评估");
     expect(markup).toContain("选定后只保留这一版");
   });
 

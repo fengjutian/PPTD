@@ -128,6 +128,17 @@ export interface VariantOptionView {
   issueCount?: number;
   /** Zero-based pages that carry at least one audited problem. */
   issuePages?: number[];
+  /** Deterministic five-axis aesthetic score used to rank accepted candidates. */
+  aestheticScore?: number;
+  aestheticDimensions?: {
+    hierarchy: number;
+    balance: number;
+    rhythm: number;
+    homogeneity: number;
+    imageRelevance: number;
+  };
+  /** Real low-resolution images rendered into the review candidate. */
+  realAssetCount?: number;
 }
 
 /** How far the variant batch has got; `failed` counts attempts that produced no card. */
