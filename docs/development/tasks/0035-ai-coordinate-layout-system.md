@@ -91,13 +91,15 @@ const inspected = callPptWorkbench(columns.workbench, "layout.inspect", {
 
 ### 阶段 B
 
-- 迁移 comparison、process、timeline、image 和卡片网格配方。（2026-10-27：comparison、process 已迁移；timeline 横向槽位已迁移，竖向路径及 image、卡片网格待完成。）
+- 迁移 comparison、process、timeline、image 和卡片网格配方。（2026-10-27：comparison、process、timeline 已迁移；image 和卡片网格待完成。）
 - 把 `AiLayoutProgram` 加入设计请求与 Rust 端大小限制。（2026-10-27 已完成：每轮传递当前强类型程序；Rust 限制 32 KB、64 个操作并校验坐标空间。）
 - 在 `DesignCompileReport` 中记录操作、槽位和降级原因。（2026-10-27 已完成：最终 Workbench 程序、只读槽位和失败工具诊断作为会话内 trace 进入逐页编译报告，不写入持久化文档。）
 
 阶段 B 迁移记录（2026-10-27）：`comparison` 先将动态正文面板量化为 normalized-1000 矩形，再通过统一 `columns(..., "xl")` 产生两个等宽槽位，并使用 `inset(..., "sm")` 生成栏内文字区。标题带、下沉面、要点和中线均从同一槽位表转换为 EMU；800 单位内容区稳定得到 `368 + 64 + 368`，不再维护配方私有的浮点列宽与间距公式。
 
 `process-rail` 横版使用共享的 `columns(..., "lg")` 分配步骤，竖版使用 `rows(..., "sm")` 分配站点并在各槽内垂直居中实测文案；轨道只连接首末节点中心。共享 `railStations` 已改为逻辑坐标实现，因此 `timeline-rail` 的横向站点也使用整数余数规则，并以 `xl` 间距保持五节点文案可读。四行 600 单位区域稳定得到四个 138 单位槽与三个 16 单位间距。
+
+`timeline-rail` 竖版同样使用 `rows(..., "sm")`，日期、节点与事件共享同一行槽；字号收缩按单槽容量判断，任一事件超高即返回容量冲突。五行 650 单位区域按整数余数规则得到 `118 + 16 + 117 + 16 + 117 + 16 + 117 + 16 + 117`，轨道只连接首末日期节点中心。
 
 ### 阶段 C
 
