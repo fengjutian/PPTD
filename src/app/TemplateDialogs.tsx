@@ -39,6 +39,7 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
     generateFromDraft,
     variantOptions,
     variantBatch,
+    variantBatchFailures,
     generateVariantBatch,
     chooseVariant,
     discardVariantBatch,
@@ -190,6 +191,34 @@ export function TemplateDialogs({ app }: { app: AppRuntime }) {
                 )}
               </div>
             </div>
+            {!batchRunning && variantBatchFailures.length > 0 && (
+              <section className="variant-batch-failures" role="alert" aria-label="批量生成失败详情">
+                <div className="variant-batch-failures-heading">
+                  <CircleAlert />
+                  <div>
+                    <strong>本轮没有得到合格候选</strong>
+                    <small>失败原因会保留到重新生成；可直接重试，已审核内容不会改变。</small>
+                  </div>
+                </div>
+                <ul>
+                  {variantBatchFailures.map((failure, index) => (
+                    <li key={`${failure.presetId}-${failure.code}-${index}`}>
+                      <strong>{failure.presetName}</strong>
+                      <span>{failure.message}</span>
+                      <code>{failure.code}</code>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  disabled={!aiDraft || designBusy}
+                  onClick={() => void generateVariantBatch(variantCount)}
+                >
+                  <Sparkles size={13} />
+                  重新生成 {variantCount} 个版本
+                </button>
+              </section>
+            )}
             <div className="template-picker-body">
               <div className="template-picker-sources">
                 <section>

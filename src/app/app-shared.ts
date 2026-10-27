@@ -157,6 +157,13 @@ export interface VariantBatchProgress {
   failed: number;
 }
 
+export interface VariantBatchFailureView {
+  presetId: string;
+  presetName: string;
+  code: string;
+  message: string;
+}
+
 /** One compiled alternative for the current page. */
 export interface DesignCandidateOptionView {
   recipe: RecipeId;

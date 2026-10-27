@@ -227,6 +227,7 @@ import {
   compositionHomogeneity,
   type AestheticScore,
 } from "../services/design-aesthetic-score";
+import { recoverMissingVisualAssets, variantFailureMessage } from "../services/variant-batch-recovery";
 import {
   initialAgentWorkflow,
   startAgentWorkflow,
@@ -261,7 +262,7 @@ import type {
   PageMessage,
   TemplateLayoutRender,
 } from "./app-shared";
-import type { VariantBatchProgress, VariantOptionView } from "./app-shared";
+import type { VariantBatchFailureView, VariantBatchProgress, VariantOptionView } from "./app-shared";
 import { directionPreviewIndexes } from "./direction-preview-selection";
 
 /** The facts the theme ranking reads. Nothing here is invented by the batch. */
@@ -534,6 +535,7 @@ export function useAppRuntime() {
    */
   const [variantOptions, setVariantOptions] = useState<VariantOptionView[]>();
   const [variantBatch, setVariantBatch] = useState<VariantBatchProgress>();
+  const [variantBatchFailures, setVariantBatchFailures] = useState<VariantBatchFailureView[]>([]);
   const variantDesignsRef = useRef(
     new Map<
       string,
@@ -3464,6 +3466,7 @@ export function useAppRuntime() {
     setGeneratingHistoryId(activeHistoryId);
     setDesignQualityReport(undefined);
     setVariantOptions(undefined);
+    setVariantBatchFailures([]);
     setVariantBatch({ total: plan.length, completed: 0, failed: 0 });
     variantDesignsRef.current.clear();
     designTaskId.current += 1;
@@ -3507,6 +3510,7 @@ export function useAppRuntime() {
         document: PresentationDocument;
         aesthetic: AestheticScore;
       }> = [];
+      const failureRecords: VariantBatchFailureView[] = [];
       let failed = 0;
       let completed = 0;
       let nextIndex = 0;
@@ -3559,6 +3563,24 @@ export function useAppRuntime() {
           concurrency: 2,
           previewScale: 0.35,
         });
+        const recovered = recoverMissingVisualAssets({
+          designs: design.slides,
+          decisions: assetPlan.decisions,
+          assets: visualAssets,
+          itemCounts: sourceDraft.slides.map((slide) => countSlidePoints(slide)),
+        });
+        if (recovered.recoveredSlideIndexes.length > 0) {
+          design = { ...design, slides: recovered.designs };
+          void recordAppLog({
+            level: "warn",
+            code: "VARIANT_ASSET_FALLBACK",
+            message: "候选配图未返回，已切换为无图布局家族",
+            context: {
+              preset: preset.id,
+              pages: recovered.recoveredSlideIndexes.map((pageIndex) => pageIndex + 1),
+            },
+          });
+        }
         const buildCandidate = (candidateDesign: AiPresentationDesignResult) => {
           const document = createDocument();
           applyCommand(document, {
@@ -3668,6 +3690,13 @@ export function useAppRuntime() {
             const message = error instanceof Error ? error.message : String(error);
             if (designCancelRef.current || message.includes("CANCELLED")) throw error;
             failed += 1;
+            const detail = variantFailureMessage(error);
+            failureRecords.push({
+              presetId: plan[index]?.presetId ?? "unknown",
+              presetName: findThemePreset(plan[index]?.presetId ?? "")?.name ?? `候选 ${index + 1}`,
+              ...detail,
+            });
+            setVariantBatchFailures([...failureRecords]);
             void recordAppError("批量版本生成", error, { preset: plan[index]?.presetId, variant: index });
           } finally {
             completed += 1;
@@ -3680,7 +3709,9 @@ export function useAppRuntime() {
           }
         }
       };
-      await Promise.all(Array.from({ length: Math.min(3, plan.length) }, () => worker()));
+      // Two complete model/design pipelines are enough to keep the provider
+      // busy without making four long structured requests compete for timeout.
+      await Promise.all(Array.from({ length: Math.min(2, plan.length) }, () => worker()));
 
       // A different palette around the same page skeleton is not a distinct
       // candidate. Score each deck against its peers, reject near-duplicates,
@@ -3698,6 +3729,14 @@ export function useAppRuntime() {
           if (!gate.passed) {
             pending.splice(index, 1);
             failed += 1;
+            failureRecords.push({
+              presetId: entry.presetId,
+              presetName: findThemePreset(entry.presetId)?.name ?? entry.name,
+              ...variantFailureMessage(
+                new Error(`VARIANT_QUALITY_GATE_FAILED:${[...new Set(gate.reasons)].join(",")}`),
+              ),
+            });
+            setVariantBatchFailures([...failureRecords]);
           } else entry.aesthetic = gate.score;
         }
         pending.sort((left, right) => right.aesthetic.overall - left.aesthetic.overall);
@@ -3753,6 +3792,12 @@ export function useAppRuntime() {
             const message = error instanceof Error ? error.message : String(error);
             if (designCancelRef.current || message.includes("CANCELLED")) throw error;
             failed += 1;
+            failureRecords.push({
+              presetId: entry.presetId,
+              presetName: findThemePreset(entry.presetId)?.name ?? entry.name,
+              ...variantFailureMessage(error),
+            });
+            setVariantBatchFailures([...failureRecords]);
             void recordAppError("批量版本渲染", error, { preset: entry.presetId });
           }
           // The batch is one design pass plus one render pass over the same
@@ -4807,6 +4852,7 @@ export function useAppRuntime() {
     generateFromDraft,
     variantOptions,
     variantBatch,
+    variantBatchFailures,
     generateVariantBatch,
     chooseVariant,
     discardVariantBatch,

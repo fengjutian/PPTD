@@ -1329,6 +1329,80 @@
   background: #fff;
   border-color: #e3c3ba;
 }
+.variant-batch-failures {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid #e7b2b7;
+  border-radius: 10px;
+  color: #7f2530;
+  background: #fff5f5;
+}
+.variant-batch-failures-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.variant-batch-failures-heading > svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  margin-top: 1px;
+}
+.variant-batch-failures-heading strong,
+.variant-batch-failures-heading small {
+  display: block;
+}
+.variant-batch-failures-heading small {
+  margin-top: 2px;
+  color: #9a5058;
+  font-size: 10px;
+}
+.variant-batch-failures ul {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.variant-batch-failures li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 8px;
+  padding: 7px 9px;
+  border: 1px solid #efd1d4;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 10px;
+}
+.variant-batch-failures li span {
+  overflow-wrap: anywhere;
+  color: #773b42;
+}
+.variant-batch-failures li code {
+  grid-column: 1 / -1;
+  color: #9a656b;
+  font-size: 9px;
+}
+.variant-batch-failures > button {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border: 1px solid #d7868e;
+  border-radius: 7px;
+  color: #8c3039;
+  background: #fff;
+  cursor: pointer;
+}
+.variant-batch-failures > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 /*
  * The default theme keeps `.upload-dialog` dark. The older picker panels assume
  * the light surface, but this row sits at the top of the dialog, so it has to

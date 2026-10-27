@@ -1,6 +1,6 @@
 # TASK-DESIGN-035：AI 语义坐标系统与确定性布局 API
 
-> **状态（2026-10-27）：** 部分实现。阶段 A 已完成（逻辑坐标、几何函数、Workbench 工具域与多轮工具循环）；阶段 B 部分完成（`comparison` 配方迁移、`AiLayoutProgram` 进入设计请求、编译报告记录操作/槽位/降级）；阶段 C（模板区域覆盖、障碍物规避、有界重编译、视觉回归）未开始。完整盘点见 [实现状态](../implementation-status.md)。
+> **状态（2026-10-27）：** 部分实现。阶段 A 已完成（逻辑坐标、几何函数、Workbench 工具域与多轮工具循环）；阶段 B 部分完成（`comparison` 配方迁移、`AiLayoutProgram` 进入设计请求、编译报告记录操作/槽位/降级）；阶段 C 已开始（批量候选支持素材缺失后的无图家族有界重编译；模板区域覆盖、障碍物规避、内容测量反馈和视觉回归仍未完成）。完整盘点见 [实现状态](../implementation-status.md)。
 
 ## 1. 目标
 
@@ -105,6 +105,8 @@ const inspected = callPptWorkbench(columns.workbench, "layout.inspect", {
 
 - 增加模板区域覆盖、障碍物规避、内容测量反馈和有界重编译。
 - 建立视觉回归样张及 PPTX 原生对象可编辑性检查。
+
+阶段 C 首个增量（2026-10-27）：批量候选使用真实低清素材评估；已规划图片没有返回像素时，页面关闭图片意图并根据页面角色切换到 `cover-statement`、`section-statement`、`editorial-index` 或 `asymmetric-split`，然后走原命令路径重新编译。该降级只改变设计，不改变标题、正文、数字、引用、备注或页序，并记录 `VARIANT_ASSET_FALLBACK` 诊断。
 
 ## 8. 验收
 
