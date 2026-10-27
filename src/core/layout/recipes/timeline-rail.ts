@@ -151,7 +151,7 @@ export const timelineRail: LayoutRecipe = {
     // 16:9 page are not: the row would have to drop to 12pt to break cleanly,
     // which is smaller than the body copy around it. Those pages keep the
     // vertical rail, where the events get three quarters of the page width.
-    const rowStations = railStations(chrome.content, block.items.length, 0.05);
+    const rowStations = railStations(chrome.content, block.items.length, "xl");
     const rowColumnPt = (rowStations[0]?.width ?? chrome.content.width) * pageWidthIn * 72;
     const readableRowSize = (() => {
       for (let size = TEXT_SIZE_PT; size >= MIN_TEXT_SIZE_PT; size -= 1) {

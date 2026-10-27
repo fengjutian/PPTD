@@ -15,7 +15,7 @@ import { contrastRatio } from "../../rendering/contrast";
 import { planPageChrome } from "../page-chrome";
 import { asymmetricSplit } from "./asymmetric-split";
 import { chartStory } from "./chart-story";
-import { comparison } from "./comparison";
+import { comparison, comparisonColumnSlots } from "./comparison";
 import { coverStatement } from "./cover-statement";
 import { dataStory } from "./data-story";
 import { editorialIndex } from "./editorial-index";
@@ -24,7 +24,7 @@ import { imageLed } from "./image-led";
 import { instrumentColumns } from "./instrument-columns";
 import { frameFromNormalized, endsInOrphan, rectsOverlap } from "./measure";
 import { paperColumn } from "./paper-column";
-import { processRail } from "./process-rail";
+import { processRail, processVerticalSlots } from "./process-rail";
 import { quoteField } from "./quote-field";
 import { sectionStatement } from "./section-statement";
 import { sideImageText } from "./side-image-text";
@@ -754,6 +754,16 @@ describe("process-rail recipe", () => {
     status: "approved",
   };
 
+  it("allocates vertical stations with normalized-1000 rows and sm gaps", () => {
+    const slots = processVerticalSlots({ x: 0.1, y: 0.2, width: 0.8, height: 0.6 }, 4);
+    expect(slots).toEqual([
+      { x: 100, y: 200, width: 800, height: 138 },
+      { x: 100, y: 354, width: 800, height: 138 },
+      { x: 100, y: 508, width: 800, height: 138 },
+      { x: 100, y: 662, width: 800, height: 138 },
+    ]);
+  });
+
   it("draws four steps as one rail across a landscape page", () => {
     const ctx = context(processContent, {
       facts: facts({ itemCount: 0, hasProcess: true, hasRowBlock: true, layout: "cards" }),
@@ -880,6 +890,13 @@ describe("comparison recipe", () => {
     speakerNotes: "",
     status: "approved",
   };
+
+  it("allocates deterministic normalized-1000 columns with the shared xl gap", () => {
+    const [left, right] = comparisonColumnSlots({ x: 0.1, y: 0.26, width: 0.8, height: 0.6 });
+    expect(left).toEqual({ x: 100, y: 260, width: 368, height: 600 });
+    expect(right).toEqual({ x: 532, y: 260, width: 368, height: 600 });
+    expect(right!.x - (left!.x + left!.width)).toBe(64);
+  });
 
   it("draws two equal columns with a centre mark", () => {
     const ctx = context(comparisonContent, {

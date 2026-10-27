@@ -7,6 +7,9 @@
  * means the two pages cannot drift into different margins.
  */
 
+import { layoutRect, layoutRectToNormalized } from "../geometry/coordinate-system";
+import { layoutColumns, type LayoutSpacingToken } from "../geometry/layout-functions";
+
 export interface RailStation {
   /** Left edge of the station column, normalized to page width. */
   x: number;
@@ -15,16 +18,18 @@ export interface RailStation {
 }
 
 /**
- * Equal columns across an area, separated by `gap`.
- *
- * The gap is a share of the page width, not a fixed length: the same recipe has
- * to work on a 10in and a 16in page, and a fixed gap would crowd one of them.
+ * Equal normalized-1000 columns across an area, separated by a shared spacing
+ * token. Integer remainder allocation is owned by the geometry layer.
  */
-export function railStations(area: { x: number; width: number }, count: number, gap: number): RailStation[] {
+export function railStations(
+  area: { x: number; width: number },
+  count: number,
+  gap: LayoutSpacingToken = "lg",
+): RailStation[] {
   if (count <= 0) return [];
-  const width = (area.width - gap * (count - 1)) / count;
-  return Array.from({ length: count }, (_, index) => ({
-    x: area.x + index * (width + gap),
-    width,
-  }));
+  const source = layoutRect(Math.round(area.x * 1000), 0, Math.round(area.width * 1000), 1000);
+  return layoutColumns(source, count, gap).map((slot) => {
+    const normalized = layoutRectToNormalized(slot);
+    return { x: normalized.x, width: normalized.width };
+  });
 }

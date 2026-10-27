@@ -1,5 +1,7 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu, RectEmu } from "../../document-model";
+import { layoutRectToNormalized, normalizedToLayoutRect } from "../geometry/coordinate-system";
+import { layoutRows } from "../geometry/layout-functions";
 import { resolveChrome } from "../page-chrome";
 import { ellipseElement, rectElement, textElement, verticalRule } from "./elements";
 import {
@@ -18,10 +20,6 @@ type ProcessBlock = Extract<ContentBlock, { type: "process" }>;
 const MIN_STEPS = 3;
 const MAX_STEPS = 6;
 const NODE_DIAMETER_IN = 0.3;
-const RAIL_OFFSET = 0.035;
-const TEXT_OFFSET = 0.06;
-const MIN_GAP_PT = 12;
-const MAX_GAP_PT = 32;
 /** Below this size a row of steps breaks worse than the vertical rail does. */
 const HORIZONTAL_MIN_TEXT_PT = 14;
 const LABEL_SIZE_PT = 20;
@@ -34,6 +32,14 @@ function conflict(intent: string, reason: string): { conflict: IntentConflict } 
 
 function pointsToNormalized(points: number, pageHeight: Emu): number {
   return points / 72 / (pageHeight / 914_400);
+}
+
+/** Deterministic vertical station slots used when a horizontal rail is not readable. */
+export function processVerticalSlots(
+  content: { x: number; y: number; width: number; height: number },
+  count: number,
+) {
+  return layoutRows(normalizedToLayoutRect(content), count, "sm");
 }
 
 function circleFrame(x: number, y: number, diameterIn: number): RectEmu {
@@ -133,11 +139,17 @@ export const processRail: LayoutRecipe = {
       contentTop = contentTop + leadHeight + 0.03;
     }
 
-    const railX = chrome.content.x + RAIL_OFFSET;
-    const textX = railX + TEXT_OFFSET;
-    const textWidth = Math.max(0.2, chrome.content.x + chrome.content.width - textX - 0.02);
     const contentHeight = chrome.contentBottom - contentTop;
     if (contentHeight < 0.25) return conflict("process", "流程页没有足够的内容区");
+    const contentSlot = normalizedToLayoutRect({
+      x: chrome.content.x,
+      y: contentTop,
+      width: chrome.content.width,
+      height: contentHeight,
+    });
+    const railX = (contentSlot.x + 40) / 1000;
+    const textX = (contentSlot.x + 104) / 1000;
+    const textWidth = Math.max(0.2, (contentSlot.x + contentSlot.width - 16) / 1000 - textX);
 
     // A landscape page has room for the steps side by side. The vertical rail
     // used to put four short steps in the left fifth of a 16:9 page and leave
@@ -148,7 +160,7 @@ export const processRail: LayoutRecipe = {
     // without stranding a character. Six steps across a 16:9 content area are
     // not: the row would have to drop below the body size to break cleanly, so
     // those pages keep the vertical rail and read as a list of steps.
-    const rowStations = railStations(chrome.content, block.items.length, 0.045);
+    const rowStations = railStations(chrome.content, block.items.length, "lg");
     const rowColumnPt = (rowStations[0]?.width ?? chrome.content.width) * pageWidthIn * 72;
     const readableRowSize = (() => {
       for (let size = Math.min(TEXT_SIZE_PT, 15); size >= MIN_TEXT_SIZE_PT; size -= 1) {
@@ -301,29 +313,34 @@ export const processRail: LayoutRecipe = {
           ),
       );
     let rowHeights = measureRows(textSize);
-    const total = (rows: number[], gap: number) =>
-      rows.reduce((sum, height) => sum + height, 0) + gap * (rows.length - 1);
-    const minGap = pointsToNormalized(MIN_GAP_PT, page.height);
+    const rowSlots = processVerticalSlots(
+      { x: chrome.content.x, y: contentTop, width: chrome.content.width, height: contentHeight },
+      block.items.length,
+    );
     // Shrink the descriptions before shrinking the labels: the step name is the
     // reading anchor, the sentence is what gives way.
-    while (textSize > MIN_TEXT_SIZE_PT && total(rowHeights, minGap) > contentHeight) {
+    while (
+      textSize > MIN_TEXT_SIZE_PT &&
+      rowHeights.some((height, index) => height > rowSlots[index]!.height / 1000)
+    ) {
       textSize -= 1;
       rowHeights = measureRows(textSize);
     }
-    if (total(rowHeights, minGap) > contentHeight) {
+    if (rowHeights.some((height, index) => height > rowSlots[index]!.height / 1000)) {
       return conflict("process", "流程步骤在内容区里放不下");
     }
-    const leftover = contentHeight - total(rowHeights, minGap);
-    const gap = Math.min(
-      pointsToNormalized(MAX_GAP_PT, page.height),
-      minGap + leftover / Math.max(1, rowHeights.length - 1),
-    );
-    const groupHeight = total(rowHeights, gap);
-    const groupTop = contentTop + (contentHeight - groupHeight) / 2;
-    elements.push(verticalRule(railX, groupTop, groupHeight, 0.006, page, colors.accent));
+    const placedRows = rowSlots.map((slot, index) => {
+      const normalized = layoutRectToNormalized(slot);
+      const height = rowHeights[index]!;
+      return { top: normalized.y + (normalized.height - height) / 2, height };
+    });
+    const firstNodeY = placedRows[0]!.top + labelHeights[0]! / 2;
+    const lastIndex = placedRows.length - 1;
+    const lastNodeY = placedRows[lastIndex]!.top + labelHeights[lastIndex]! / 2;
+    elements.push(verticalRule(railX, firstNodeY, lastNodeY - firstNodeY, 0.006, page, colors.accent));
 
-    let rowTop = groupTop;
     block.items.forEach((item, index) => {
+      const rowTop = placedRows[index]!.top;
       const labelSize = labelSizes[index]!;
       const labelHeight = labelHeights[index]!;
       const textHeight = Math.max(0.02, rowHeights[index]! - labelHeight - 0.008);
@@ -367,7 +384,6 @@ export const processRail: LayoutRecipe = {
           { contentRef: "decorative", lineHeight },
         ),
       );
-      rowTop += rowHeights[index]! + gap;
     });
 
     return {

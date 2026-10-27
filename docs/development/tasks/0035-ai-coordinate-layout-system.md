@@ -1,6 +1,6 @@
 # TASK-DESIGN-035：AI 语义坐标系统与确定性布局 API
 
-> **状态（2026-10-27）：** 阶段 A 已完成（逻辑坐标、几何函数、Workbench 工具域与多轮工具循环）；阶段 B（配方迁移、`AiLayoutProgram` 进设计请求）和阶段 C（模板区域覆盖、障碍物规避、有界重编译、视觉回归）未开始。完整盘点见 [实现状态](../implementation-status.md)。
+> **状态（2026-10-27）：** 部分实现。阶段 A 已完成（逻辑坐标、几何函数、Workbench 工具域与多轮工具循环）；阶段 B 部分完成（`comparison` 配方迁移、`AiLayoutProgram` 进入设计请求、编译报告记录操作/槽位/降级）；阶段 C（模板区域覆盖、障碍物规避、有界重编译、视觉回归）未开始。完整盘点见 [实现状态](../implementation-status.md)。
 
 ## 1. 目标
 
@@ -91,9 +91,11 @@ const inspected = callPptWorkbench(columns.workbench, "layout.inspect", {
 
 ### 阶段 B
 
-- 迁移 comparison、process、timeline、image 和卡片网格配方。
+- 迁移 comparison、process、timeline、image 和卡片网格配方。（2026-10-27：comparison 已迁移；其余待完成。）
 - 把 `AiLayoutProgram` 加入设计请求与 Rust 端大小限制。（2026-10-27 已完成：每轮传递当前强类型程序；Rust 限制 32 KB、64 个操作并校验坐标空间。）
 - 在 `DesignCompileReport` 中记录操作、槽位和降级原因。（2026-10-27 已完成：最终 Workbench 程序、只读槽位和失败工具诊断作为会话内 trace 进入逐页编译报告，不写入持久化文档。）
+
+阶段 B 迁移记录（2026-10-27）：`comparison` 先将动态正文面板量化为 normalized-1000 矩形，再通过统一 `columns(..., "xl")` 产生两个等宽槽位，并使用 `inset(..., "sm")` 生成栏内文字区。标题带、下沉面、要点和中线均从同一槽位表转换为 EMU；800 单位内容区稳定得到 `368 + 64 + 368`，不再维护配方私有的浮点列宽与间距公式。
 
 ### 阶段 C
 

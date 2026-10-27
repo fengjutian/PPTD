@@ -1,6 +1,13 @@
 import type { IntentConflict } from "../../commands/design-intent";
 import type { ContentBlock, Emu } from "../../document-model";
 import { layoutFlow } from "../../rendering/flow";
+import {
+  layoutRect,
+  layoutRectToNormalized,
+  normalizedToLayoutRect,
+  type LayoutRect,
+} from "../geometry/coordinate-system";
+import { insetLayoutRect, layoutColumns } from "../geometry/layout-functions";
 import { resolveChrome } from "../page-chrome";
 import { rectElement, textElement, verticalRule } from "./elements";
 import {
@@ -24,7 +31,6 @@ const MIN_GAP_PT = 10;
 const MAX_GAP_PT = 42;
 const MARKER_GUTTER = 0.022;
 /** The inset that keeps the column label off the edge of its accent field. */
-const HEADER_PADDING = 0.018;
 /**
  * How far below the preferred size a list may shrink to avoid a stranded last
  * line. More than this and the page reads as one that changed size by accident.
@@ -37,6 +43,11 @@ function conflict(intent: string, reason: string): { conflict: IntentConflict } 
 
 function pointsToNormalized(points: number, pageHeight: Emu): number {
   return points / 72 / (pageHeight / 914_400);
+}
+
+/** Shared normalized-1000 slots for the two comparison zones. */
+export function comparisonColumnSlots(content: { x: number; y: number; width: number; height: number }): LayoutRect[] {
+  return layoutColumns(normalizedToLayoutRect(content), 2, "xl");
 }
 
 export const comparison: LayoutRecipe = {
@@ -142,14 +153,24 @@ export const comparison: LayoutRecipe = {
       contentTop = contentTop + leadHeight + 0.03;
     }
 
-    const gap = 0.06;
-    const columnWidth = (chrome.content.width - gap) / 2;
-    const paddingX = 0.02;
     const headerHeight = HEADER_IN / pageHeightIn;
-    const copyWidth = Math.max(0.12, columnWidth - paddingX - MARKER_GUTTER);
     const availableHeight = chrome.contentBottom - contentTop - 0.02;
     if (availableHeight < 0.3) return conflict("comparison", "对比页没有足够的内容区");
-    const copyArea = Math.max(0.15, availableHeight - headerHeight);
+    const panelSlots = comparisonColumnSlots({
+      x: chrome.content.x,
+      y: contentTop,
+      width: chrome.content.width,
+      height: availableHeight,
+    });
+    const headerHeightUnits = Math.min(Math.round(headerHeight * 1000), Math.round((0.42 / pageHeightIn) * 1000));
+    const bodySlots = panelSlots.map((slot) =>
+      insetLayoutRect(
+        layoutRect(slot.x, slot.y + headerHeightUnits, slot.width, slot.height - headerHeightUnits),
+        "sm",
+      ),
+    );
+    const copyWidth = Math.max(0.12, bodySlots[0]!.width / 1000 - MARKER_GUTTER);
+    const copyArea = Math.max(0.15, bodySlots[0]!.height / 1000);
 
     const flowFor = (items: string[], size: number) =>
       layoutFlow({
@@ -190,57 +211,26 @@ export const comparison: LayoutRecipe = {
     }
     if (leftFlow.overflow || rightFlow.overflow) return conflict("comparison", "对比要点在栏内放不下");
 
-    const panelTop = contentTop;
-    const panelHeight = availableHeight;
     const columns = [
-      { x: chrome.content.x, label: block.leftLabel, items: leftItems, flow: leftFlow },
-      {
-        x: chrome.content.x + columnWidth + gap,
-        label: block.rightLabel,
-        items: rightItems,
-        flow: rightFlow,
-      },
+      { slot: panelSlots[0]!, body: bodySlots[0]!, label: block.leftLabel, items: leftItems, flow: leftFlow },
+      { slot: panelSlots[1]!, body: bodySlots[1]!, label: block.rightLabel, items: rightItems, flow: rightFlow },
     ];
     columns.forEach((column) => {
-      const headerFrame = {
-        x: column.x,
-        y: panelTop,
-        width: columnWidth,
-        height: Math.min(headerHeight, 0.42 / pageHeightIn),
-      };
+      const panelFrame = layoutRectToNormalized(column.slot);
+      const headerSlot = layoutRect(column.slot.x, column.slot.y, column.slot.width, headerHeightUnits);
+      const headerFrame = layoutRectToNormalized(headerSlot);
       // A recessed field behind each column is what makes the two sides read as
       // two zones instead of two lists on the same page. It is skipped on a
       // template page: a filled panel would cover the artwork the user chose,
       // which a text element does not.
       if (!ctx.hasArtwork) {
-        elements.push(
-          rectElement(
-            frameFromNormalized(
-              {
-                x: Math.max(chrome.content.x - 0.01, headerFrame.x - 0.014),
-                y: panelTop,
-                width: headerFrame.width + 0.028,
-                height: panelHeight,
-              },
-              page,
-            ),
-            ctx.colors.surfaceSunken,
-          ),
-        );
+        elements.push(rectElement(frameFromNormalized(panelFrame, page), ctx.colors.surfaceSunken));
       }
       // The label sits on a solid accent field rather than in accent ink on the
       // page: the field carries `onAccent`, so the label is readable whatever
       // the accent is, and a pale brand tone is deepened instead of unreadable.
       elements.push(rectElement(frameFromNormalized(headerFrame, page), ctx.colors.accentStrong));
-      const labelFrame = frameFromNormalized(
-        {
-          x: headerFrame.x + HEADER_PADDING,
-          y: headerFrame.y + HEADER_PADDING * 0.5,
-          width: Math.max(0.1, headerFrame.width - HEADER_PADDING * 2),
-          height: Math.max(0.02, headerFrame.height - HEADER_PADDING),
-        },
-        page,
-      );
+      const labelFrame = frameFromNormalized(layoutRectToNormalized(insetLayoutRect(headerSlot, "sm")), page);
       const labelSize = Math.min(22, fittedFontSize(column.label, labelFrame, 22, 16, headingFamily, lineHeight));
       elements.push(
         textElement(column.label, labelFrame, labelSize, ctx.colors.onAccent, true, "left", headingFamily, {
@@ -248,14 +238,15 @@ export const comparison: LayoutRecipe = {
         }),
       );
       column.flow.rows.forEach((row, index) => {
-        const rowY = panelTop + headerHeight + pointsToNormalized(row.topPt, page.height);
+        const bodyFrame = layoutRectToNormalized(column.body);
+        const rowY = bodyFrame.y + pointsToNormalized(row.topPt, page.height);
         const rowHeight = pointsToNormalized(row.heightPt, page.height);
         const markerHeight = Math.min(0.05, rowHeight * 0.5);
         elements.push(
           rectElement(
             frameFromNormalized(
               {
-                x: column.x,
+                x: bodyFrame.x,
                 y: rowY + (rowHeight - markerHeight) / 2,
                 width: 0.008,
                 height: markerHeight,
@@ -270,7 +261,7 @@ export const comparison: LayoutRecipe = {
             column.items[index]!,
             frameFromNormalized(
               {
-                x: column.x + MARKER_GUTTER,
+                x: bodyFrame.x + MARKER_GUTTER,
                 y: rowY,
                 width: copyWidth,
                 height: Math.max(0.02, rowHeight),
@@ -288,8 +279,10 @@ export const comparison: LayoutRecipe = {
       });
     });
 
-    const centerX = chrome.content.x + chrome.content.width / 2;
-    elements.push(verticalRule(centerX, panelTop, panelHeight, 0.0014, page, colors.borderStrong));
+    const left = panelSlots[0]!;
+    const right = panelSlots[1]!;
+    const centerX = (left.x + left.width + right.x) / 2000;
+    elements.push(verticalRule(centerX, contentTop, availableHeight, 0.0014, page, colors.borderStrong));
 
     return {
       elements,
