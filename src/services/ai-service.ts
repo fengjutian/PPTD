@@ -10,6 +10,9 @@ import { layoutRect, type PageCoordinateSystem } from "../core/layout/geometry/c
 import { createPptWorkbench, PPT_WORKBENCH_TOOLS, runPptWorkbenchLoop } from "../workbench";
 import { defaultPresentationVisualGoal, type PresentationVisualGoal } from "./visual-alignment";
 import { normalizeDraftPunctuation } from "./ai-draft-normalize";
+import { buildDesignIntelligence } from "./design-intelligence";
+import { loadDesignPreferences, loadRecentLooks } from "./design-memory";
+import { loadSettings } from "./settings";
 import { bodyFromBlocks, sanitizeBlocks } from "./ai-draft-content";
 import {
   aiDeckConceptsSchema,
@@ -597,6 +600,10 @@ export async function generatePresentationDesign(
 ): Promise<AiPresentationDesignResult> {
   const { provider, model } = await aiSelection();
   const visualGoal = options.visualGoal ?? defaultPresentationVisualGoal();
+  const memoryEnabled = (await loadSettings().catch(() => undefined))?.designMemoryEnabled ?? false;
+  const [recentLooks, preferences] = memoryEnabled
+    ? await Promise.all([loadRecentLooks(5), loadDesignPreferences(10)])
+    : [[], []];
   const request = {
     draft,
     briefs,
@@ -604,6 +611,9 @@ export async function generatePresentationDesign(
     visualGoal,
     concept: options.concept,
     recipeCatalog: options.concept ? recipeCatalogForConcept(options.concept) : [],
+    designIntelligence: buildDesignIntelligence(draft, briefs, template),
+    recentLooks,
+    preferences: preferences.map(({ text, scope }) => ({ text, scope })),
     themeDirection: options.themeDirection,
     styleConstraint: options.styleConstraint,
     model,

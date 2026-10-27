@@ -237,6 +237,15 @@ pub struct GenerateDesignRequest {
     /// Renderer-backed recipe metadata supplied by the frontend catalog.
     #[serde(default)]
     recipe_catalog: serde_json::Value,
+    /// Deterministic content-relation, deck-rhythm and template-grammar plan.
+    #[serde(default)]
+    design_intelligence: serde_json::Value,
+    /// Local-only design memory. It contains visual fingerprints, never copy.
+    #[serde(default)]
+    recent_looks: serde_json::Value,
+    /// Explicit user taste notes stored locally.
+    #[serde(default)]
+    preferences: serde_json::Value,
     /// Structured theme art direction (character, rhythm, image style, constraints).
     theme_direction: Option<serde_json::Value>,
     /// User-selected style bounds (concepts, recipes, density and visual tokens).
@@ -1647,6 +1656,12 @@ pub async fn generate_presentation_design(
         serde_json::to_string(&request.concept).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let recipe_catalog =
         serde_json::to_string(&request.recipe_catalog).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let design_intelligence = serde_json::to_string(&request.design_intelligence)
+        .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let recent_looks =
+        serde_json::to_string(&request.recent_looks).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let preferences =
+        serde_json::to_string(&request.preferences).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let theme_direction =
         serde_json::to_string(&request.theme_direction).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let style_constraint = serde_json::to_string(&request.style_constraint)
@@ -1663,6 +1678,9 @@ pub async fn generate_presentation_design(
         || visual_goal.len() > 20_000
         || concept.len() > 20_000
         || recipe_catalog.len() > 40_000
+        || design_intelligence.len() > 40_000
+        || recent_looks.len() > 20_000
+        || preferences.len() > 10_000
         || theme_direction.len() > 20_000
         || style_constraint.len() > 20_000
         || layout_program.len() > 32_000
@@ -1858,7 +1876,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
         );
     }
     let mut user_prompt = format!(
-        "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度、页面配方和配色角色。SlideBrief 是页面目的、结论、视觉意图、视觉形式和密度的事实来源；不要跳过或改写它。visualBrief.form=chart/diagram/table 时优先选择能承载对应内容块的配方；form=none 时不要强行配图。\n\n整册设计方向（只用于保持配方合法，不得改写）：\n{concept}\n\n当前渲染器配方目录（只能从这里选择；requiresImage、minimumColumns 和 capacity 是能力边界，components 是会生成的语义组件）：\n{recipe_catalog}\n\n主题方向（只约束视觉；为空表示上传模板）：\n{theme_direction}\n\n风格约束（结构化强约束；为空表示未选择风格）：\n{style_constraint}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、配方来自目录且匹配内容条数与长度、需要图片的配方确有图片、构图与已审核内容相容、相邻页面不过度重复、配色角色全部来自模板色板且文字对比清晰。"
+        "请依据 SlideBrief 为以下演示文稿先选择逐页视觉叙事方式，再选择版式、构图、层级、密度、页面配方和配色角色。SlideBrief 是页面目的、结论、视觉意图、视觉形式和密度的事实来源；不要跳过或改写它。visualBrief.form=chart/diagram/table 时优先选择能承载对应内容块的配方；form=none 时不要强行配图。\n\n整册设计方向（只用于保持配方合法，不得改写）：\n{concept}\n\n当前渲染器配方目录（只能从这里选择；requiresImage、minimumColumns 和 capacity 是能力边界，components 是会生成的语义组件）：\n{recipe_catalog}\n\n生成前设计智能（逐页语义关系、整册节奏、应优先/避免的布局家族，以及从模板测得的品牌语法；这是结构约束，不得忽略）：\n{design_intelligence}\n\n最近项目外观（仅用于避免重复，不含正文）：\n{recent_looks}\n\n用户长期偏好（只能影响设计，不得影响已审核内容）：\n{preferences}\n\n主题方向（只约束视觉；为空表示上传模板）：\n{theme_direction}\n\n风格约束（结构化强约束；为空表示未选择风格）：\n{style_constraint}\n\n逐页 SlideBrief：\n{briefs}\n\n模板分析数据：\n{template}\n\n已审核内容（仅用于验证信息密度，不得复述或修改）：\n{draft}\n\n请在输出前自行检查：页数一致、视觉叙事匹配内容关系、版式匹配 visualIntent 和 density、布局家族遵循整册节奏且相邻页面不重复、配方来自目录并符合容量、需要图片的配方确有图片、构图与已审核内容相容、配色和字阶遵循品牌语法、文字对比清晰。"
     );
     if workbench_enabled {
         user_prompt.push_str(&format!(
