@@ -98,7 +98,7 @@ function balanceScore(document: PresentationDocument): number {
   return scores.length > 0 ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
 }
 
-function rhythmScore(document: PresentationDocument, designs: readonly AiSlideDesign[]): number {
+function rhythmScore(designs: readonly AiSlideDesign[]): number {
   if (designs.length < 2) return 80;
   let repeated = 0;
   let longestRun = 1;
@@ -190,7 +190,7 @@ export function scorePresentationAesthetics(input: {
   const dimensions: AestheticDimensions = {
     hierarchy: clamp(hierarchyScore(input.document)),
     balance: clamp(balanceScore(input.document)),
-    rhythm: rhythmScore(input.document, input.designs),
+    rhythm: rhythmScore(input.designs),
     homogeneity: clamp(input.homogeneity ?? 80),
     imageRelevance: imageRelevanceScore(input.document, input.designs, input.assets ?? []),
     coverage: coverageScore(fill.contentCoverage),

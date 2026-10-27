@@ -228,7 +228,11 @@ import {
   compositionHomogeneity,
   type AestheticScore,
 } from "../services/design-aesthetic-score";
-import { recoverMissingVisualAssets, variantFailureMessage } from "../services/variant-batch-recovery";
+import {
+  recoverMissingVisualAssets,
+  summarizeVariantFailures,
+  variantFailureMessage,
+} from "../services/variant-batch-recovery";
 import {
   initialAgentWorkflow,
   startAgentWorkflow,
@@ -3664,11 +3668,11 @@ export function useAppRuntime() {
             aestheticPassed: aesthetic.passed,
           })
         ) {
-          const reasons = [
-            ...quality.issues.map((issue) => issue.issue),
-            ...auditIssues.map((issue) => issue.kind),
-            ...aesthetic.reasons,
-          ];
+          // Only the checks that decide the gate may be named here. Layout and
+          // deck audits are advisory (ADR 0115), so putting `text-orphan` in
+          // this message made a deck rejected for contrast look like it failed
+          // on typography the gallery would have tolerated.
+          const reasons = [...quality.issues.map((issue) => issue.issue), ...aesthetic.reasons];
           throw new Error(`VARIANT_QUALITY_GATE_FAILED:${[...new Set(reasons)].join(",")}`);
         }
         // Layout/deck audits are advisory (ADR 0115): keep the candidate and
@@ -3821,9 +3825,12 @@ export function useAppRuntime() {
         }
       }
       if (variants.length === 0) {
+        // ADR 0117: a batch that produced nothing must say why. The status bar
+        // carries the dominant reasons; the picker keeps one row per version.
+        const summary = summarizeVariantFailures(failureRecords, plan.length);
         setDesignProgress({ percent: 0, label: "批量生成失败" });
-        setDesignDetail("所有版本都没能排出来，原因已写入诊断日志");
-        setTaskStatus(`批量生成失败：${plan.length} 个版本都没有产出，请改用单版本生成或稍后重试`);
+        setDesignDetail(`${summary}；原因已写入诊断日志`);
+        setTaskStatus(`批量生成失败：${summary}；可改用单版本生成或稍后重试`);
         return;
       }
       setVariantOptions(variants);

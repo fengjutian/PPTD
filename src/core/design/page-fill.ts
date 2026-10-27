@@ -53,7 +53,14 @@ export interface DeckFill {
 }
 
 function isBackground(element: SlideElement, pageArea: number): boolean {
-  if (element.type === "image" && element.placement === "layout-background") return true;
+  // A picture carries its own placement marker. A hero image that fills most of
+  // the page is still content; a layout or slide background is not.
+  if (element.type === "image") {
+    return element.placement === "layout-background" || element.placement === "slide-background";
+  }
+  // A shape this large is a page field (plate, panel, full-bleed colour block),
+  // not content. Counting it would report every dark page as 100% full.
+  if (element.type !== "shape") return false;
   return (element.frame.width * element.frame.height) / pageArea >= BACKGROUND_AREA;
 }
 
@@ -63,7 +70,8 @@ function isFooter(frame: { y: number; height: number }, pageHeight: number): boo
 
 function anchorOf(element: SlideElement, pageArea: number): boolean {
   if (element.hidden === true) return false;
-  if (element.type === "image" && element.placement !== "layout-background") return true;
+  if (element.type === "image")
+    return element.placement !== "layout-background" && element.placement !== "slide-background";
   if (element.type === "chart" || element.type === "table" || element.type === "icon") return true;
   if (element.type === "text" && element.style.fontSizePt >= ANCHOR_FONT_PT) return true;
   if (element.type === "shape" && (element.frame.width * element.frame.height) / pageArea >= ANCHOR_AREA) return true;

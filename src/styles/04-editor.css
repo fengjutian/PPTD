@@ -1016,13 +1016,23 @@
   color: #e2e5eb;
   font-size: 12px;
 }
+/*
+ * Flex column, not a fixed row template: the dialog grows a header row (the
+ * batch failure panel) whenever a batch produced nothing. A five-row grid
+ * silently collapsed the extra row to zero height and let the failure list
+ * paint over the preset cards, so the reasons were unreadable exactly when the
+ * user needed them.
+ */
 .template-picker-dialog {
   width: min(1080px, 100%);
   height: min(780px, calc(100vh - 48px));
   max-height: calc(100vh - 48px);
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+.template-picker-dialog > :not(.template-picker-body) {
+  flex: none;
 }
 .template-picker-toolbar {
   display: flex;
@@ -1045,6 +1055,7 @@
   min-height: 36px;
 }
 .template-picker-body {
+  flex: 1 1 auto;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(330px, 42%) minmax(0, 1fr);
@@ -1330,6 +1341,10 @@
   border-color: #e3c3ba;
 }
 .variant-batch-failures {
+  /* Bounded so a batch of eight failures cannot push the preset list out of
+   * the dialog; the panel scrolls instead. */
+  max-height: min(34vh, 300px);
+  overflow-y: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px 16px;
