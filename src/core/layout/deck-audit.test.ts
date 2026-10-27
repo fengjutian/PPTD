@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createDocument, createSlide, inches, type PresentationDocument, type Slide, type TextElement } from "../document-model";
+import {
+  createDocument,
+  createSlide,
+  inches,
+  type PresentationDocument,
+  type Slide,
+  type TextElement,
+} from "../document-model";
 import { auditDeckLayout } from "./deck-audit";
 
 /**
@@ -65,6 +72,16 @@ describe("deck layout audit", () => {
   it("leaves a centred statement title out of the comparison", () => {
     // A pull quote sets its heading on the centre axis on purpose.
     const report = auditDeckLayout(deck([page(0.9, 7.1), page(0.9, 7.1), page(2.4, 7.1, { centered: true })]));
+    expect(report.issues).toEqual([]);
+  });
+
+  it("does not compare a cover band with the body band", () => {
+    // A cover title is set in a narrower band at another x; it is its own band.
+    const cover = page(2.4, 7.1);
+    const coverTitle = cover.elements[0]!;
+    if (coverTitle.type !== "text") throw new Error("expected a text");
+    coverTitle.frame = { ...coverTitle.frame, width: inches(5) };
+    const report = auditDeckLayout(deck([page(0.9, 7.1), page(0.9, 7.1), page(0.9, 7.1), page(0.9, 7.1), cover]));
     expect(report.issues).toEqual([]);
   });
 

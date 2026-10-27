@@ -47,6 +47,7 @@ import {
   type ThemeDirectionAudit,
 } from "../core/design/theme-direction";
 import { setTextMeasurer } from "../core/rendering/text-metrics";
+import { auditDeckLayout } from "../core/layout/deck-audit";
 import { auditSlideLayout } from "../core/layout/layout-audit";
 
 import { createCanvasTextMeasurer } from "../services/text-metrics-canvas";
@@ -118,6 +119,7 @@ import {
   type AiDraft,
   type AiGenerationProgress,
   type AiPresentationDesign,
+  type AiPresentationDesignResult,
   type AiVisualAssetIntent,
   type ContentCheck,
   type DeckReviewIssue,
@@ -2645,7 +2647,7 @@ export function useAppRuntime() {
       setDesignDetail("已拆出每页的设计目的、视觉意图与信息密度");
       let concept!: DeckConcept;
       let designDirection: DesignDirectionRecord | undefined;
-      let design: AiPresentationDesign | undefined;
+      let design: AiPresentationDesignResult | undefined;
 
       /**
        * Four directions, two real pages each, then the user decides.
@@ -3279,7 +3281,16 @@ export function useAppRuntime() {
             stage.issues.map((issue) => [`${issue.slideIndex}-${issue.issue}-${issue.message}`, issue]),
           ).values(),
         ],
-        notes: stage.notes,
+        notes: [
+          ...stage.notes,
+          ...(design.designRepairs && design.designRepairs.length > 0
+            ? [
+                `设计合同有 ${design.designRepairs.length} 页未通过，已回退为安全版式：第 ${design.designRepairs
+                  .map((repair) => repair.slideIndex + 1)
+                  .join("、")} 页`,
+              ]
+            : []),
+        ],
         visualReview: stage.visualReview,
         visualReviewCoverage: stage.visualReviewCoverage,
         templateFit: stage.templateFit,
@@ -3539,8 +3550,12 @@ export function useAppRuntime() {
         // the page it is about to show has a text that lost a line, an object
         // off the page or two texts on top of each other. A hard-coded zero made
         // that line claim "排版检查通过" for pages it had never measured.
+        // The deck-level audit is counted in the same number: a title that left
+        // the axis of its siblings is a layout problem the reader can see.
         const layoutAudit = auditSlideLayout(candidate);
-        const issuePages = [...new Set(layoutAudit.issues.map((issue) => issue.slideIndex))].sort((a, b) => a - b);
+        const deckAudit = auditDeckLayout(candidate);
+        const issues = [...layoutAudit.issues, ...deckAudit.issues];
+        const issuePages = [...new Set(issues.map((issue) => issue.slideIndex))].sort((a, b) => a - b);
         pending.push({
           id: crypto.randomUUID(),
           presetId: preset.id,
@@ -3551,7 +3566,7 @@ export function useAppRuntime() {
           name: `${variantStyle.name} · ${variantConcept.name}`,
           description: variantConcept.idea,
           reason: `${variantConcept.rationale}；${styleChoice?.reason ?? choice.reason}`,
-          issueCount: layoutAudit.issues.length,
+          issueCount: issues.length,
           issuePages,
         });
       };

@@ -8,6 +8,7 @@ import { deriveSemanticColors } from "../../src/core/design/design-tokens";
 import { findThemePreset } from "../../src/core/design/theme-presets";
 import { colorLuminance, contrastRatio } from "../../src/core/rendering/contrast";
 import { rectsOverlap } from "../../src/core/layout/recipes/measure";
+import { auditDeckLayout } from "../../src/core/layout/deck-audit";
 import { auditSlideLayout } from "../../src/core/layout/layout-audit";
 import { refitDocumentText } from "../../src/core/layout/text-refit";
 import { buildDesignPreviewDocument, buildVocabularyPreviewDocument, previewPage, previewSlides } from "./fixture";
@@ -111,6 +112,12 @@ describe("ten-page design preview", () => {
         report.issues.map((issue) => `${conceptPresetId}:第 ${issue.slideIndex + 1} 页:${issue.kind}`),
         `${conceptPresetId} 的版面问题`,
       ).toEqual([]);
+      // The pages also agree with each other: one title axis, one footer baseline.
+      const deck = auditDeckLayout(document);
+      expect(
+        deck.issues.map((issue) => `${conceptPresetId}:第 ${issue.slideIndex + 1} 页:${issue.kind}`),
+        `${conceptPresetId} 的跨页一致性`,
+      ).toEqual([]);
       const refit = refitDocumentText(document);
       expect(refit.adjustments, `${conceptPresetId} 的自动重排`).toEqual([]);
       expect(refit.conflicts, `${conceptPresetId} 的容量冲突`).toEqual([]);
@@ -120,6 +127,7 @@ describe("ten-page design preview", () => {
   it("carries the vocabulary pages inside their frames too", () => {
     const document = buildVocabularyPreviewDocument();
     expect(auditSlideLayout(document).issues).toEqual([]);
+    expect(auditDeckLayout(document).issues).toEqual([]);
     expect(refitDocumentText(document).adjustments).toEqual([]);
   });
 

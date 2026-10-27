@@ -465,58 +465,58 @@ export const pageDesignPlanSchema = z.object({
 
 export const aiSlideDesignSchema = z.object({
   layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
-        background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-        accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-        titleColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-        bodyColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-        /**
-         * The composition family of the page. The renderer checks the request
-         * against the reviewed content, so an impossible request is refused
-         * instead of producing a page that cannot carry its own content.
-         */
-        composition: z.enum(["auto", "stacked", "columns", "grid", "editorial"]).optional(),
-        /**
-         * The page recipe that draws this page. It is optional so old models and
-         * old design files keep the legacy composition path.
-         */
-        recipe: z.enum(aiDesignRecipeIds).optional(),
-        /** The semantic design plan; absent keeps the legacy design path. */
-        designPlan: pageDesignPlanSchema.optional(),
-        variant: z.enum(["left", "right"]).optional(),
-        focal: z.enum(["title", "index", "body"]).optional(),
-        /** How this page communicates, before choosing a geometric skeleton. */
-        visualNarrative: z
-          .enum(["statement", "evidence", "comparison", "chronology", "framework", "quotation", "scene"])
-          .optional(),
-        /** Which level of the hierarchy carries the weight of the page. */
-        emphasis: z.enum(["balanced", "title-dominant", "body-dominant"]).optional(),
-        /** How much white space the page is willing to spend. */
-        densityTarget: z.enum(["airy", "balanced", "compact"]).optional(),
-        /**
-         * The slots of the template palette the page paints itself with. The model
-         * picks a slot instead of a colour value, so the deck stays inside the
-         * palette of its template and the choice still has an effect.
-         */
-        palette: z
-          .object({
-            background: aiPaletteRoleSchema.optional(),
-            accent: aiPaletteRoleSchema.optional(),
-            title: aiPaletteRoleSchema.optional(),
-            body: aiPaletteRoleSchema.optional(),
-          })
-          .optional(),
-        /**
-         * Whether this page carries a picture. The model says yes or no and
-         * describes the picture; the renderer decides where it goes.
-         */
-      visualAsset: z
-        .object({
-          enabled: z.boolean(),
-          /** What the picture shows. It describes the scene, never the wording. */
-          prompt: z.string().max(600).optional(),
-          role: z.enum(["hero", "side", "band"]).optional(),
-        })
-        .optional(),
+  background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  titleColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  bodyColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  /**
+   * The composition family of the page. The renderer checks the request
+   * against the reviewed content, so an impossible request is refused
+   * instead of producing a page that cannot carry its own content.
+   */
+  composition: z.enum(["auto", "stacked", "columns", "grid", "editorial"]).optional(),
+  /**
+   * The page recipe that draws this page. It is optional so old models and
+   * old design files keep the legacy composition path.
+   */
+  recipe: z.enum(aiDesignRecipeIds).optional(),
+  /** The semantic design plan; absent keeps the legacy design path. */
+  designPlan: pageDesignPlanSchema.optional(),
+  variant: z.enum(["left", "right"]).optional(),
+  focal: z.enum(["title", "index", "body"]).optional(),
+  /** How this page communicates, before choosing a geometric skeleton. */
+  visualNarrative: z
+    .enum(["statement", "evidence", "comparison", "chronology", "framework", "quotation", "scene"])
+    .optional(),
+  /** Which level of the hierarchy carries the weight of the page. */
+  emphasis: z.enum(["balanced", "title-dominant", "body-dominant"]).optional(),
+  /** How much white space the page is willing to spend. */
+  densityTarget: z.enum(["airy", "balanced", "compact"]).optional(),
+  /**
+   * The slots of the template palette the page paints itself with. The model
+   * picks a slot instead of a colour value, so the deck stays inside the
+   * palette of its template and the choice still has an effect.
+   */
+  palette: z
+    .object({
+      background: aiPaletteRoleSchema.optional(),
+      accent: aiPaletteRoleSchema.optional(),
+      title: aiPaletteRoleSchema.optional(),
+      body: aiPaletteRoleSchema.optional(),
+    })
+    .optional(),
+  /**
+   * Whether this page carries a picture. The model says yes or no and
+   * describes the picture; the renderer decides where it goes.
+   */
+  visualAsset: z
+    .object({
+      enabled: z.boolean(),
+      /** What the picture shows. It describes the scene, never the wording. */
+      prompt: z.string().max(600).optional(),
+      role: z.enum(["hero", "side", "band"]).optional(),
+    })
+    .optional(),
 });
 export const aiPresentationDesignSchema = z.object({ slides: z.array(aiSlideDesignSchema).min(1) });
 export type AiSlideDesignOutput = z.infer<typeof aiSlideDesignSchema>;
@@ -547,14 +547,21 @@ export function isDesignEnvelope(value: unknown): boolean {
   return designEnvelopeSchema.safeParse(value).success;
 }
 
-function safeLayoutForPage(content: AiDraft["slides"][number], index: number, total: number): AiSlideDesignOutput["layout"] {
+function safeLayoutForPage(
+  content: AiDraft["slides"][number],
+  index: number,
+  total: number,
+): AiSlideDesignOutput["layout"] {
   const blocks = content.blocks ?? [];
   const structured = blocks.some((block) =>
     ["chart", "table-data", "comparison", "timeline", "process", "metric"].includes(block.type),
   );
+  const hasItems =
+    blocks.some((block) => block.type === "bullet-list" && block.items.length > 0) ||
+    content.body.split("\n").filter((line) => line.trim().length > 0).length > 1;
   if (blockTypesHaveQuote(blocks)) return "quote";
-  if (index === 0 && !structured && content.body.trim().length < 80) return "cover";
-  if (index === total - 1 && !structured) return "summary";
+  if (index === 0 && !structured && !hasItems && content.body.trim().length < 80) return "cover";
+  if (index === total - 1 && !structured && !hasItems && content.body.trim().length < 120) return "summary";
   return "title-body";
 }
 
@@ -570,11 +577,7 @@ function blockTypesHaveQuote(blocks: AiDraft["slides"][number]["blocks"]): boole
  * than the model's intended design and better than losing the whole deck; the
  * repair is reported so the quality report can say so.
  */
-function fallbackSlideDesign(
-  content: AiDraft["slides"][number],
-  index: number,
-  total: number,
-): AiSlideDesignOutput {
+function fallbackSlideDesign(content: AiDraft["slides"][number], index: number, total: number): AiSlideDesignOutput {
   return {
     layout: safeLayoutForPage(content, index, total),
     background: "#FFFFFF",
