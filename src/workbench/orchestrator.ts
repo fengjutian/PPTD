@@ -1,5 +1,6 @@
 import { callPptWorkbench, type PptWorkbench } from "./ppt-workbench";
 import type { WorkbenchIssue, WorkbenchToolDefinition } from "./contracts";
+import type { AiLayoutProgram } from "./layout/layout-program";
 
 export interface WorkbenchTranscriptEntry {
   readonly name: string;
@@ -14,6 +15,8 @@ export type WorkbenchModelTurn =
 export interface WorkbenchTurnRequest {
   readonly tools: readonly WorkbenchToolDefinition[];
   readonly transcript: readonly WorkbenchTranscriptEntry[];
+  /** Current validated program, not a reconstruction from the transcript. */
+  readonly layoutProgram: AiLayoutProgram;
   readonly turn: number;
 }
 
@@ -39,7 +42,12 @@ export async function runPptWorkbenchLoop(input: {
   const transcript: WorkbenchTranscriptEntry[] = [];
   for (let turn = 0; turn < maxTurns; turn += 1) {
     if (input.isCancelled?.()) throw new Error("AI_GENERATION_CANCELLED");
-    const action = await input.transport({ tools: input.tools, transcript, turn });
+    const action = await input.transport({
+      tools: input.tools,
+      transcript,
+      layoutProgram: workbench.layout.program,
+      turn,
+    });
     if (action.kind === "final") return { workbench, output: action.output, transcript };
 
     const called = callPptWorkbench(workbench, action.name, action.input);

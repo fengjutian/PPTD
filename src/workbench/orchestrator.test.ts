@@ -29,6 +29,10 @@ describe("PPT workbench orchestration", () => {
     });
 
     expect(transport).toHaveBeenCalledTimes(3);
+    expect(transport.mock.calls[0]?.[0].layoutProgram.operations).toEqual([]);
+    expect(transport.mock.calls[1]?.[0].layoutProgram.operations).toEqual([
+      { id: "grid", op: "columns", source: "content", count: 4, gap: "md" },
+    ]);
     expect(result.transcript).toHaveLength(2);
     expect(result.workbench.layout.slots.has("grid[3]")).toBe(true);
     expect(result.output).toEqual({ slides: [] });

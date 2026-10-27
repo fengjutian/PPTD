@@ -254,6 +254,7 @@ describe("多页草稿的分批编排", () => {
     expect(call?.[1]).toMatchObject({
       request: {
         streamProgress: true,
+        layoutProgram: { coordinateSpace: "normalized-1000", operations: [] },
         recipeCatalog: [
           { id: "cover-statement", requiresImage: false },
           { id: "editorial-index", requiresImage: false },

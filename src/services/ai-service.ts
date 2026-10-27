@@ -616,9 +616,9 @@ export async function generatePresentationDesign(
   const loop = await runPptWorkbenchLoop({
     workbench: created.workbench,
     tools: designWorkbenchTools,
-    transport: async ({ tools, transcript }) => {
+    transport: async ({ tools, transcript, layoutProgram }) => {
       const response = await invoke<unknown>("generate_presentation_design", {
-        request: { ...request, workbenchTools: tools, workbenchTranscript: transcript },
+        request: { ...request, layoutProgram, workbenchTools: tools, workbenchTranscript: transcript },
       });
       const turn = workbenchTurnSchema.safeParse(response);
       if (turn.success) {

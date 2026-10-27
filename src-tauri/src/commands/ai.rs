@@ -241,6 +241,9 @@ pub struct GenerateDesignRequest {
     theme_direction: Option<serde_json::Value>,
     /// User-selected style bounds (concepts, recipes, density and visual tokens).
     style_constraint: Option<serde_json::Value>,
+    /// Current validated normalized-1000 program from the frontend Workbench.
+    #[serde(default)]
+    layout_program: serde_json::Value,
     model: Option<String>,
     provider: Option<String>,
     /// 生成任务号：同一任务的所有分批请求共享它，取消时一并中断。
@@ -1648,6 +1651,8 @@ pub async fn generate_presentation_design(
         serde_json::to_string(&request.theme_direction).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let style_constraint = serde_json::to_string(&request.style_constraint)
         .map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
+    let layout_program =
+        serde_json::to_string(&request.layout_program).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let workbench_tools =
         serde_json::to_string(&request.workbench_tools).map_err(|_| "AI_DESIGN_REQUEST_INVALID")?;
     let workbench_transcript = serde_json::to_string(&request.workbench_transcript)
@@ -1660,12 +1665,29 @@ pub async fn generate_presentation_design(
         || recipe_catalog.len() > 40_000
         || theme_direction.len() > 20_000
         || style_constraint.len() > 20_000
+        || layout_program.len() > 32_000
         || workbench_tools.len() > 40_000
         || workbench_transcript.len() > 120_000
         || request.workbench_tools.len() > 32
         || request.workbench_transcript.len() > 24
     {
         return Err("AI_DESIGN_REQUEST_TOO_LARGE".into());
+    }
+    if !request.layout_program.is_null() {
+        let coordinate_space = request
+            .layout_program
+            .get("coordinateSpace")
+            .and_then(serde_json::Value::as_str);
+        let operations = request
+            .layout_program
+            .get("operations")
+            .and_then(serde_json::Value::as_array);
+        if coordinate_space != Some("normalized-1000") || operations.is_none() {
+            return Err("AI_LAYOUT_PROGRAM_INVALID".into());
+        }
+        if operations.is_some_and(|items| items.len() > 64) {
+            return Err("AI_DESIGN_REQUEST_TOO_LARGE".into());
+        }
     }
     let provider = ai::resolve(request.provider.as_deref())?;
     let api_key = ai::read_api_key(provider)?;
@@ -1840,7 +1862,7 @@ palette 对象按 background、accent、title、body 四个位置各选一个角
     );
     if workbench_enabled {
         user_prompt.push_str(&format!(
-            "\n\nWorkbench 工具定义：\n{workbench_tools}\n\n此前工具调用与结果：\n{workbench_transcript}\n\n请决定下一次工具调用，或返回最终设计。"
+            "\n\n当前已校验布局程序（normalized-1000，只能通过工具继续修改）：\n{layout_program}\n\nWorkbench 工具定义：\n{workbench_tools}\n\n此前工具调用与结果：\n{workbench_transcript}\n\n请决定下一次工具调用，或返回最终设计。"
         ));
     }
     let body = ChatRequest {
