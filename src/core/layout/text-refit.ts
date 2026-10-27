@@ -99,13 +99,7 @@ function growthLimitPt(slide: Slide, element: TextElement, pageHeight: Emu): num
 /** The height a text needs at a given size, measured the way the renderer breaks it. */
 function neededHeightPt(element: TextElement, fontSizePt: number): number {
   const widthPt = element.frame.width / EMU_PER_PT;
-  const lines = estimateTextLines(
-    element.text,
-    widthPt,
-    fontSizePt,
-    element.style.fontFamily,
-    runMetricsOf(element),
-  );
+  const lines = estimateTextLines(element.text, widthPt, fontSizePt, element.style.fontFamily, runMetricsOf(element));
   return lines * fontSizePt * (element.style.lineHeight ?? DEFAULT_LINE_HEIGHT);
 }
 
@@ -185,6 +179,40 @@ export function refitSlideText(slide: Slide, pageHeight: Emu): TextRefitReport {
   }
   repairStrandedLines(slide, record);
   return { adjustments: [...byElement.values()], conflicts };
+}
+
+/**
+ * Grows the frame of one edited text so its new copy fits, and stops there.
+ *
+ * The design-time refit may shrink type as well, because the page was composed
+ * without the writer. After an edit the copy is the writer's own text: the box has
+ * to follow it, but the size is their choice and silently shrinking it after they
+ * type is a different thing from shrinking a page nobody has read yet. So this
+ * helper only makes the frame taller — never the type smaller, never another
+ * element — and only while there is room below it.
+ *
+ * A vertically centred or bottom-aligned block would jump when its frame grows, so
+ * those are left alone; the audit and the canvas edge report them instead.
+ */
+export function growFrameForText(slide: Slide, element: TextElement, pageHeight: Emu): TextRefitAdjustment | undefined {
+  if (slide.layoutId !== undefined) return undefined;
+  if (!isElementVisible(element)) return undefined;
+  if (!element.text.trim()) return undefined;
+  if (element.frame.width <= 0 || element.frame.height <= 0) return undefined;
+  if ((element.style.verticalAlign ?? "top") !== "top") return undefined;
+  const availablePt = element.frame.height / EMU_PER_PT;
+  const neededPt = neededHeightPt(element, element.style.fontSizePt);
+  if (neededPt <= availablePt * OVERFLOW_TOLERANCE) return undefined;
+  const roomPt = growthLimitPt(slide, element, pageHeight);
+  if (neededPt - availablePt > roomPt) return undefined;
+  // One point of slack: the measurement and the renderer may differ by a rounding
+  // sliver, and a frame that is one point short would still show a warning edge.
+  const grownPt = neededPt * 1.01 - availablePt;
+  element.frame = {
+    ...element.frame,
+    height: Math.ceil((availablePt + grownPt) * EMU_PER_PT) as Emu,
+  };
+  return { elementId: element.id, kind: "grew-frame", fontSizePt: element.style.fontSizePt, grownPt };
 }
 
 /**

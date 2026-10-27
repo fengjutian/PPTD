@@ -16,7 +16,8 @@ import type {
 } from "../document-model";
 import { emu, isSafeTextHyperlinkUrl, stableStringify, type TextRunStyle } from "../document-model";
 
-import { estimateTextLines, textOverflowsFrame } from "../rendering/text-fit";
+import { textOverflowsFrame } from "../rendering/text-fit";
+import { growFrameForText } from "../layout/text-refit";
 
 import type { AiContentBlock, HorizontalAlign, VerticalAlign } from "./command-types";
 export type {
@@ -247,7 +248,7 @@ export function textEditTouchesContent(slide: Slide, element: TextElement): bool
  * replacement updates the reviewed title/body/metric exactly like typing does,
  * and both paths drop run fragments that would address the old copy.
  */
-export function applyTextEdit(slide: Slide, element: TextElement, text: string): void {
+export function applyTextEdit(slide: Slide, element: TextElement, text: string, pageHeight?: Emu): void {
   const blockRef = element.contentBlockRef;
   const metric = blockRef ? findMetricBlock(slide, blockRef.blockId) : undefined;
   // The block schema caps a metric field at 1,000 characters. Refusing the edit
@@ -286,6 +287,10 @@ export function applyTextEdit(slide: Slide, element: TextElement, text: string):
     else metric.label = text;
     syncMetricText(slide, metric.id, blockRef.field, text);
   }
+  // The new copy may need more lines than the box has. Grow the box (never the
+  // type) so the writer sees their own words, the way a page composed from
+  // scratch would hold them; a fully edited field is the only element touched.
+  if (pageHeight !== undefined) growFrameForText(slide, element, pageHeight);
   if (textEditTouchesContent(slide, element)) markContentChanged(slide);
 }
 

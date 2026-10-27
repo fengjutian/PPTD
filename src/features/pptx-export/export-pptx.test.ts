@@ -972,6 +972,49 @@ describe("PPTX export", () => {
     expect(result.report.package.valid).toBe(true);
   });
 
+  it("gives a table row the height its longest cell needs", async () => {
+    // Two columns of 3in: the long cell wraps to three lines. The file has to
+    // carry that height, or PowerPoint grows the row by an amount the preview
+    // and the audit cannot predict.
+    const document = createDocument();
+    document.slides[0]!.content.status = "approved";
+    const block = {
+      id: crypto.randomUUID(),
+      type: "table-data" as const,
+      header: ["项目", "说明"],
+      rows: [
+        ["覆盖机构", "短"],
+        ["样本量", "十二家三级甲等医院与三十家区域检验中心联合复核"],
+      ],
+    };
+    document.slides[0]!.content.blocks = [block];
+    document.slides[0]!.elements.push({
+      id: crypto.randomUUID() as never,
+      type: "table",
+      contentBlockId: block.id,
+      frame: { x: inches(1), y: inches(2), width: inches(6), height: inches(1.2) },
+      rotationMilliDegree: 0,
+      locked: false,
+      style: {
+        fontFamily: "Microsoft YaHei",
+        fontSizePt: 14,
+        headerFill: "#3366CC",
+        headerTextColor: "#FFFFFF",
+        bodyTextColor: "#17181c",
+        borderColor: "#E2E7EC",
+        firstColumnBold: true,
+      },
+    });
+    const result = await buildPptx(document);
+    const slideXml = strFromU8(unzipSync(result.bytes)["ppt/slides/slide1.xml"]!);
+    const rowHeights = [...slideXml.matchAll(/<a:tr h="(\d+)"/g)].map((match) => Number(match[1]));
+    expect(rowHeights).toHaveLength(3);
+    // The row with the wrapped cell is taller than the others, and the table is
+    // taller than the frame it was given.
+    expect(rowHeights[2]).toBeGreaterThan(rowHeights[1]!);
+    expect(rowHeights.reduce((sum, height) => sum + height, 0)).toBeGreaterThan(inches(1.2));
+  });
+
   it("exports a manually inserted table and chart as native objects", async () => {
     const document = createDocument();
     const slideId = document.slides[0]!.id;
@@ -1087,7 +1130,7 @@ describe("PPTX export", () => {
     // would be 130% of PowerPoint's *single* spacing (about 1.56em here), and
     // the file would lead the copy looser than the canvas and the measurement.
     expect(xml).toContain('spcPts val="3640"');
-    expect(xml).not.toContain("spcPct val=\"130000\"");
+    expect(xml).not.toContain('spcPct val="130000"');
   });
 
   it("gives a text without a leading the same default the canvas uses", async () => {

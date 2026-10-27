@@ -147,7 +147,7 @@ export function applyDocumentCommand(document: PresentationDocument, command: Do
         continue;
       }
       if (edit.kind === "text") {
-        applyTextEdit(edit.slide, edit.element, edit.text);
+        applyTextEdit(edit.slide, edit.element, edit.text, document.pageSize.height);
         continue;
       }
       if (edit.kind === "table-cell") {

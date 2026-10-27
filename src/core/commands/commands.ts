@@ -7,6 +7,7 @@ import type {
   SlideLayoutSpec,
   TextElement,
 } from "../document-model";
+import { textOverflowsFrame } from "../rendering/text-fit";
 import {
   captureContentVersion,
   createDocument,
@@ -218,9 +219,12 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
         // step. Runs only change when the copy changes, so they count as work.
         if (!element.runs && element.text === command.text && current === command.text) return null;
       }
-      return element.contentRef === "title" || element.contentRef === "body" || legacyTitle || Boolean(metric)
-        ? "content"
-        : "design";
+      const isContent =
+        element.contentRef === "title" || element.contentRef === "body" || legacyTitle || Boolean(metric);
+      // Copy that no longer fits its box makes the command grow the frame, which
+      // is a design change: the page's geometry moves even though the reviewed
+      // words did too. A copy edit that still fits stays a content edit.
+      return textOverflowsFrame({ ...element, text: command.text }) ? "both" : isContent ? "content" : "design";
     }
     case "replace-text-edits": {
       if (!document) return "content";
@@ -238,6 +242,9 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
         if (!slide || element?.type !== "text") continue;
         if (textEditTouchesContent(slide, element)) touchesContent = true;
         else touchesDesign = true;
+        // A replacement that no longer fits the box grows the frame, so the
+        // batch is a design edit as well.
+        if (textOverflowsFrame({ ...element, text: edit.text })) touchesDesign = true;
       }
       if (touchesContent && touchesDesign) return "both";
       return touchesDesign ? "design" : "content";

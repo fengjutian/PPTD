@@ -14,9 +14,16 @@ import {
 } from "../document-model";
 import { estimateTextLines } from "../rendering/text-fit";
 import { auditSlideLayout } from "./layout-audit";
-import { refitSlideText } from "./text-refit";
+import { growFrameForText, refitSlideText } from "./text-refit";
 
 const pageHeight = inches(7.5) as Emu;
+
+/** A one-page document around a slide, so the audit can read it. */
+function singleSlideDocument(slide: Slide): PresentationDocument {
+  const document = createDocument();
+  document.slides = [slide];
+  return document;
+}
 
 function textPage(overrides: {
   text: string;
@@ -233,6 +240,69 @@ describe("text refit", () => {
     // The element ids are generated per page, so the comparison is geometry.
     expect(first.element.frame).toEqual(second.element.frame);
     expect(first.element.style.fontSizePt).toBe(second.element.style.fontSizePt);
+  });
+});
+
+describe("growing a frame after an edit", () => {
+  it("makes the box tall enough for the new copy and keeps the type size", () => {
+    const { slide, element } = textPage({
+      text: "利润率行业领先。搜索与广告业务规模大、利润率高，是公司当前的现金牛，但增速持续放缓；云业务增速更快但利润率仍低。",
+      frame: { x: inches(1), y: inches(1), width: inches(4), height: inches(0.5) },
+      fontSizePt: 18,
+      lineHeight: 1.25,
+    });
+    const size = element.style.fontSizePt;
+    const before = element.frame.height;
+    const adjustment = growFrameForText(slide, element, pageHeight);
+    expect(adjustment?.kind).toBe("grew-frame");
+    expect(element.frame.height).toBeGreaterThan(before);
+    expect(element.style.fontSizePt).toBe(size);
+    // The grown frame is enough: the audit has nothing left to report.
+    expect(auditSlideLayout(singleSlideDocument(slide)).issues).toEqual([]);
+  });
+
+  it("stops when something sits right below the text", () => {
+    const { slide, element } = textPage({
+      text: "利润率行业领先。搜索与广告业务规模大、利润率高，是公司当前的现金牛，但增速持续放缓。",
+      frame: { x: inches(1), y: inches(1), width: inches(4), height: inches(0.5) },
+      fontSizePt: 18,
+      lineHeight: 1.25,
+    });
+    slide.elements.push({
+      ...element,
+      id: crypto.randomUUID() as TextElement["id"],
+      text: "图表标题",
+      frame: { x: inches(1), y: inches(1.55), width: inches(4), height: inches(0.4) },
+    });
+    const before = element.frame;
+    expect(growFrameForText(slide, element, pageHeight)).toBeUndefined();
+    expect(element.frame).toEqual(before);
+  });
+
+  it("leaves a vertically centred block alone", () => {
+    const { slide, element } = textPage({
+      text: "利润率行业领先。搜索与广告业务规模大、利润率高，是公司当前的现金牛，但增速持续放缓。",
+      frame: { x: inches(1), y: inches(1), width: inches(4), height: inches(0.5) },
+      fontSizePt: 18,
+      lineHeight: 1.25,
+      verticalAlign: "middle",
+    });
+    const before = element.frame;
+    expect(growFrameForText(slide, element, pageHeight)).toBeUndefined();
+    expect(element.frame).toEqual(before);
+  });
+
+  it("does not touch a page that follows a template", () => {
+    const { slide, element } = textPage({
+      text: "利润率行业领先。搜索与广告业务规模大、利润率高，是公司当前的现金牛。",
+      frame: { x: inches(1), y: inches(1), width: inches(4), height: inches(0.5) },
+      fontSizePt: 18,
+      lineHeight: 1.25,
+    });
+    slide.layoutId = "layout-1";
+    const before = element.frame;
+    expect(growFrameForText(slide, element, pageHeight)).toBeUndefined();
+    expect(element.frame).toEqual(before);
   });
 });
 

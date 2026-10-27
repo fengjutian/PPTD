@@ -35,6 +35,7 @@ import { shadowSpec } from "../../core/design/effects";
 import { chartGridColor, chartPaletteReadable } from "../../core/design/chart-theme";
 import { buildDesignAudit, type DesignAuditReport } from "../../core/design/design-audit";
 import { DEFAULT_LINE_HEIGHT } from "../../core/rendering/text-fit";
+import { tableGeometry } from "../../core/rendering/table-geometry";
 import { checkTemplateFit, templateTargetMatchesDocument } from "../../services/template-review-target";
 import { verifyExportedPptx, type ExportParityReport } from "./verify-export";
 
@@ -577,14 +578,27 @@ export async function buildPptx(
           });
         });
         const rows = [header, ...body];
-        // The rows fill the frame exactly; a fixed 0.2–0.6in clamp made a
-        // table taller or shorter than the box the canvas draws.
-        const rowHeight = position.h / rows.length;
+        // Row heights come from the cells, not from an even split of the frame.
+        // PowerPoint treats `a:tr h` as a minimum and grows any row whose cells
+        // need more lines, so an even split made a long cell expand the table
+        // past its frame in an amount the preview could not predict. Writing the
+        // measured heights (never below the even split, so a short table still
+        // fills its frame) keeps the file the same table the page measured.
+        const geometry = tableGeometry({
+          header: resolved.header,
+          rows: resolved.rows,
+          frameWidthPt: element.frame.width / 12_700,
+          fontSizePt: element.style.fontSizePt,
+          fontFamily: element.style.fontFamily,
+          ...(element.style.cellPaddingPt === undefined ? {} : { cellPaddingPt: element.style.cellPaddingPt }),
+        });
+        const evenRowHeight = position.h / rows.length;
+        const rowHeights = geometry.rows.map((row) => Math.max(evenRowHeight, row.heightPt / 72));
         slide.addTable(rows, {
           ...position,
           objectName: element.id,
           h: position.h,
-          rowH: rowHeight,
+          rowH: rowHeights,
           fontFace: element.style.fontFamily,
           fontSize: element.style.fontSizePt,
           color: color(element.style.bodyTextColor),

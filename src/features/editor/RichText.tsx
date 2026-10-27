@@ -91,7 +91,7 @@ export function RichText({ element, scale }: { element: TextElement; scale: numb
       }));
       return breakAtoms(atoms, widthEm).map((line) => line.map((atom) => atom.value));
     });
-  }, [element, trackingPt]);
+  }, [element]);
 
   const decorationOf = (underline: boolean): string | undefined => {
     const decoration = [underline ? "underline" : "", struck ? "line-through" : ""].filter(Boolean).join(" ");

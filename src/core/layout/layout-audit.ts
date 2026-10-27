@@ -1,11 +1,12 @@
-import { isElementVisible, type PresentationDocument, type TextElement } from "../document-model";
 import {
-  DEFAULT_LINE_HEIGHT,
-  estimateTextLines,
-  runMetricsOf,
-  textInkBox,
-  textLines,
-} from "../rendering/text-fit";
+  isElementVisible,
+  resolveTableData,
+  type PresentationDocument,
+  type TableElement,
+  type TextElement,
+} from "../document-model";
+import { DEFAULT_LINE_HEIGHT, estimateTextLines, runMetricsOf, textInkBox, textLines } from "../rendering/text-fit";
+import { tableGeometry } from "../rendering/table-geometry";
 
 /**
  * A deterministic read of the geometry a designed page ended up with.
@@ -22,7 +23,7 @@ import {
  * shrinks a text that does not fit, the same way the exported `normAutofit`
  * does, so an overflow here is a layout problem to surface, not copy to cut.
  */
-export type LayoutAuditKind = "text-overflow" | "out-of-bounds" | "text-overlap" | "text-orphan";
+export type LayoutAuditKind = "text-overflow" | "out-of-bounds" | "text-overlap" | "text-orphan" | "table-overflow";
 
 export interface LayoutAuditIssue {
   slideIndex: number;
@@ -82,6 +83,49 @@ export function auditSlideLayout(document: PresentationDocument): LayoutAuditRep
   document.slides.forEach((slide, slideIndex) => {
     const visible = slide.elements.filter(isElementVisible);
     const texts = visible.filter((element): element is TextElement => element.type === "text");
+    const tables = visible.filter((element): element is TableElement => element.type === "table");
+
+    // A table has no cells of its own: the rows come from the reviewed block. The
+    // exporter hands PowerPoint the frame and a uniform row height, and
+    // PowerPoint grows a row whose cells need more lines — so a table whose cells
+    // do not fit grows past its frame and covers whatever sits below it.
+    for (const table of tables) {
+      const data = resolveTableData(slide, table);
+      if (!data) continue;
+      const frameHeightPt = table.frame.height / 12_700;
+      const geometry = tableGeometry({
+        header: data.header,
+        rows: data.rows,
+        frameWidthPt: table.frame.width / 12_700,
+        fontSizePt: table.style.fontSizePt,
+        fontFamily: table.style.fontFamily,
+        ...(table.style.cellPaddingPt === undefined ? {} : { cellPaddingPt: table.style.cellPaddingPt }),
+      });
+      if (frameHeightPt > 0 && geometry.neededHeightPt > frameHeightPt * OVERFLOW_TOLERANCE) {
+        // Name the column of the tallest cell: the copy is what the reader sees,
+        // the column is what the writer has to shorten or rebalance.
+        let worstLines = 0;
+        let worstColumn = 0;
+        let worstText = "";
+        geometry.rows.forEach((row) =>
+          row.cells.forEach((cell, column) => {
+            if (cell.lines.length > worstLines) {
+              worstLines = cell.lines.length;
+              worstColumn = column;
+              worstText = cell.text;
+            }
+          }),
+        );
+        issues.push({
+          slideIndex,
+          elementIds: [table.id],
+          kind: "table-overflow",
+          message: `表格需要约 ${Math.round(geometry.neededHeightPt)}pt 高度，框只有 ${Math.round(
+            frameHeightPt,
+          )}pt；第 ${worstColumn + 1} 列的「${worstText}」要 ${worstLines} 行`,
+        });
+      }
+    }
 
     for (const element of texts) {
       const heightPt = element.frame.height / 12_700;

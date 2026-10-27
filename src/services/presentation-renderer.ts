@@ -21,12 +21,8 @@ import { chartPlotArea, chartValueY, niceChartDomain } from "../core/rendering/c
 import { isLargeText } from "../core/rendering/contrast";
 import { gradientLinePoints, rgba as gradientRgba } from "../core/design/shape-gradient";
 import { cropGeometry } from "../core/rendering/image-crop";
-import {
-  DEFAULT_LINE_HEIGHT,
-  fitTextToFrame,
-  measureCharacterEm,
-  runMetricsOf,
-} from "../core/rendering/text-fit";
+import { DEFAULT_LINE_HEIGHT, fitTextToFrame, measureCharacterEm, runMetricsOf } from "../core/rendering/text-fit";
+import { DEFAULT_CELL_PADDING_PT, tableGeometry } from "../core/rendering/table-geometry";
 import { resolveImageUrl } from "./image-url-service";
 
 export interface PresentationRender {
@@ -623,47 +619,56 @@ function drawTable(
 ): void {
   const resolved = resolveTableData(slide, element);
   if (!resolved) return;
-  const columnCount = resolved.header.length;
-  const rowCount = resolved.rows.length + 1;
-  const columnWidth = width / columnCount;
-  const rowHeight = height / rowCount;
-  // Points become the pixels of this render; the row height still caps the font
-  // so a short table cannot grow text past its own cells.
-  const fontSize = Math.max(9, Math.min(rowHeight * 0.45, (element.style.fontSizePt * scale * 914_400) / 72));
+  const geometry = tableGeometry({
+    header: resolved.header,
+    rows: resolved.rows,
+    frameWidthPt: element.frame.width / 12_700,
+    fontSizePt: element.style.fontSizePt,
+    fontFamily: element.style.fontFamily,
+    ...(element.style.cellPaddingPt === undefined ? {} : { cellPaddingPt: element.style.cellPaddingPt }),
+  });
+  const ptToPx = 12_700 * scale;
+  const padding = (element.style.cellPaddingPt ?? DEFAULT_CELL_PADDING_PT) * ptToPx;
+  // Row heights come from the cells, not from the frame: PowerPoint grows a row
+  // whose cells need more lines, and a table that outgrows its frame spills onto
+  // whatever sits below it. Measuring the same way keeps the review honest, and
+  // a cell is wrapped instead of being cut at a fixed number of characters.
   const alignsRight = (column: number) => tableColumnAlignsRight(resolved.rows, column);
-  context.font = `${fontSize}px "${element.style.fontFamily}"`;
   context.textBaseline = "middle";
-  const cell = (text: string, x: number, y: number, fill: string, ink: string, bold: boolean, column: number) => {
-    context.fillStyle = fill;
-    context.fillRect(x, y, columnWidth, rowHeight);
-    context.strokeStyle = element.style.borderColor;
-    context.lineWidth = Math.max(1, height * 0.002);
-    context.strokeRect(x, y, columnWidth, rowHeight);
-    context.fillStyle = ink;
-    context.font = `${bold ? 700 : 400} ${fontSize}px "${element.style.fontFamily}"`;
-    // A number column lines up on the right, the way the exporter writes it.
-    const right = alignsRight(column);
-    context.textAlign = right ? "right" : "left";
-    const padding = columnWidth * 0.06;
-    context.fillText(text.slice(0, 12), right ? x + columnWidth - padding : x + padding, y + rowHeight / 2);
-  };
-  resolved.header.forEach((text, index) =>
-    cell(text, index * columnWidth, 0, element.style.headerFill, element.style.headerTextColor, true, index),
-  );
-  resolved.rows.forEach((row, rowIndex) => {
-    row
-      .slice(0, columnCount)
-      .forEach((text, cellIndex) =>
-        cell(
-          text,
-          cellIndex * columnWidth,
-          (rowIndex + 1) * rowHeight,
-          rowIndex % 2 === 1 && element.style.bandingFill ? element.style.bandingFill : "#FFFFFF",
-          element.style.bodyTextColor,
-          element.style.firstColumnBold && cellIndex === 0,
-          cellIndex,
-        ),
-      );
+  const columnWidth = geometry.columnWidthPt * ptToPx;
+  let rowTop = 0;
+  geometry.rows.forEach((row, rowIndex) => {
+    const rowHeight = row.heightPt * ptToPx;
+    row.cells.forEach((cell, column) => {
+      const x = column * columnWidth;
+      // Banding follows the body row index, the way the exporter writes it; the
+      // header never bands.
+      const bodyIndex = rowIndex - 1;
+      const fill = row.header
+        ? element.style.headerFill
+        : bodyIndex % 2 === 1 && element.style.bandingFill
+          ? element.style.bandingFill
+          : "#FFFFFF";
+      context.fillStyle = fill;
+      context.fillRect(x, rowTop, columnWidth, rowHeight);
+      context.strokeStyle = element.style.borderColor;
+      context.lineWidth = Math.max(1, height * 0.002);
+      context.strokeRect(x, rowTop, columnWidth, rowHeight);
+      const bold = row.header || (element.style.firstColumnBold && column === 0);
+      const fontSizePx = geometry.fontSizePt * ptToPx;
+      context.font = `${bold ? 700 : 400} ${fontSizePx}px "${element.style.fontFamily}"`;
+      context.fillStyle = row.header ? element.style.headerTextColor : element.style.bodyTextColor;
+      // A number column lines up on the right, the way the exporter writes it.
+      const right = alignsRight(column);
+      context.textAlign = right ? "right" : "left";
+      const lineHeightPx = fontSizePx * 1.2;
+      const blockHeight = cell.lines.length * lineHeightPx;
+      const firstY = rowTop + (rowHeight - blockHeight) / 2 + lineHeightPx / 2;
+      cell.lines.forEach((line, lineIndex) => {
+        context.fillText(line, right ? x + columnWidth - padding : x + padding, firstY + lineIndex * lineHeightPx);
+      });
+    });
+    rowTop += rowHeight;
   });
 }
 

@@ -1,6 +1,43 @@
 import { describe, expect, it } from "vitest";
-import { createDocument, inches, type PresentationDocument, type RectEmu, type TextElement } from "../document-model";
+import {
+  createDocument,
+  inches,
+  type PresentationDocument,
+  type RectEmu,
+  type TableElement,
+  type TextElement,
+} from "../document-model";
 import { auditSlideLayout } from "./layout-audit";
+
+/** A native table over a reviewed block with the given cells, on the given page. */
+function tableElement(
+  document: PresentationDocument,
+  frame: RectEmu,
+  header: string[],
+  rows: string[][],
+  style: Partial<TableElement["style"]> = {},
+): TableElement {
+  const blockId = crypto.randomUUID();
+  document.slides[0]!.content.blocks = [{ id: blockId, type: "table-data", header, rows }];
+  return {
+    id: crypto.randomUUID() as TableElement["id"],
+    type: "table",
+    contentBlockId: blockId,
+    frame,
+    rotationMilliDegree: 0,
+    locked: false,
+    style: {
+      fontFamily: "Microsoft YaHei",
+      fontSizePt: 14,
+      headerFill: "#12233D",
+      headerTextColor: "#FFFFFF",
+      bodyTextColor: "#17181C",
+      borderColor: "#E2E7EC",
+      firstColumnBold: true,
+      ...style,
+    },
+  };
+}
 
 /** A text element with the geometry and copy the case needs. */
 function text(overrides: {
@@ -109,5 +146,46 @@ describe("layout audit", () => {
       ]),
     );
     expect(report.issues).toEqual([]);
+  });
+
+  it("reports a table whose cells need more height than its frame", () => {
+    // Three columns of 2in leave 1.7in of text per cell: a cell of twenty
+    // full-width characters wraps to three lines, and PowerPoint grows the row
+    // past the 1in frame instead of cutting the text.
+    const document = createDocument();
+    const table = tableElement(
+      document,
+      {
+        x: inches(1),
+        y: inches(1),
+        width: inches(6),
+        height: inches(1),
+      },
+      ["项目", "说明", "备注"],
+      [["覆盖机构", "十二家三级甲等医院与三十家区域检验中心", "年度复核"]],
+    );
+    document.slides[0]!.elements = [table];
+    const report = auditSlideLayout(document);
+    expect(report.issues.map((issue) => issue.kind)).toEqual(["table-overflow"]);
+    expect(report.issues[0]!.elementIds).toEqual([table.id]);
+    expect(report.issues[0]!.message).toContain("第 2 列");
+    expect(report.issues[0]!.message).toContain("要 3 行");
+  });
+
+  it("accepts a table that fits its frame", () => {
+    const document = createDocument();
+    const table = tableElement(
+      document,
+      {
+        x: inches(1),
+        y: inches(1),
+        width: inches(9),
+        height: inches(3),
+      },
+      ["项目", "数值"],
+      [["覆盖机构", "12 家"]],
+    );
+    document.slides[0]!.elements = [table];
+    expect(auditSlideLayout(document).issues).toEqual([]);
   });
 });

@@ -286,6 +286,6 @@ export function applyElementCommand(
   if (command.type === "edit-text") {
     if (element.type !== "text") throw new Error("ELEMENT_NOT_TEXT");
     if (command.text.length > 20_000) throw new Error("CONTENT_TEXT_TOO_LONG");
-    applyTextEdit(slide, element, command.text);
+    applyTextEdit(slide, element, command.text, document.pageSize.height);
   }
 }
