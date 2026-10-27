@@ -17,8 +17,15 @@ import {
   type LayoutWorkbenchToolName,
 } from "./layout/layout-workbench";
 import type { WorkbenchCallResult, WorkbenchToolDefinition } from "./contracts";
+import {
+  callLayoutTreeWorkbench,
+  createLayoutTreeWorkbench,
+  LAYOUT_TREE_TOOLS,
+  type LayoutTreeToolName,
+  type LayoutTreeWorkbench,
+} from "./layout-tree";
 
-export type PptWorkbenchToolName = `layout.${LayoutWorkbenchToolName}` | DocumentWorkbenchToolName;
+export type PptWorkbenchToolName = `layout.${LayoutWorkbenchToolName}` | LayoutTreeToolName | DocumentWorkbenchToolName;
 
 /**
  * AI-facing PPT operation state. It deliberately contains no writable document
@@ -29,6 +36,7 @@ export interface PptWorkbench {
   readonly protocolVersion: 1;
   readonly layout: LayoutWorkbench;
   readonly document?: DocumentWorkbench;
+  readonly layoutTree?: LayoutTreeWorkbench;
 }
 
 export const PPT_WORKBENCH_TOOLS: readonly WorkbenchToolDefinition<PptWorkbenchToolName>[] = [
@@ -37,6 +45,7 @@ export const PPT_WORKBENCH_TOOLS: readonly WorkbenchToolDefinition<PptWorkbenchT
     name: `layout.${tool.name}` as PptWorkbenchToolName,
   })),
   ...DOCUMENT_WORKBENCH_TOOLS,
+  ...LAYOUT_TREE_TOOLS,
 ];
 
 const pptWorkbenchToolNames = new Set<string>(PPT_WORKBENCH_TOOLS.map((tool) => tool.name));
@@ -50,6 +59,7 @@ export function createPptWorkbench(
     protocolVersion: 1,
     layout: result.workbench,
     ...(document ? { document: createDocumentWorkbench(document) } : {}),
+    ...(document ? { layoutTree: createLayoutTreeWorkbench(document) } : {}),
   };
   return result.ok
     ? { ok: true, workbench, value: result.value as Record<string, unknown> }
@@ -78,6 +88,20 @@ export function callPptWorkbench(
     }
     const result = callDocumentWorkbench(workbench.document, workbench.layout, tool as DocumentWorkbenchToolName, input);
     const next: PptWorkbench = { ...workbench, document: result.workbench };
+    return result.ok
+      ? { ok: true, workbench: next, value: result.value }
+      : { ok: false, workbench: next, issues: result.issues };
+  }
+  if (LAYOUT_TREE_TOOLS.some((candidate) => candidate.name === tool)) {
+    if (!workbench.layoutTree) {
+      return {
+        ok: false,
+        workbench,
+        issues: [{ code: "CONTEXT_UNAVAILABLE", paths: [tool], message: "工作台没有页面布局树上下文" }],
+      };
+    }
+    const result = callLayoutTreeWorkbench(workbench.layoutTree, tool as LayoutTreeToolName, input);
+    const next: PptWorkbench = { ...workbench, layoutTree: result.workbench };
     return result.ok
       ? { ok: true, workbench: next, value: result.value }
       : { ok: false, workbench: next, issues: result.issues };

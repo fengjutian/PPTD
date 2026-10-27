@@ -634,6 +634,8 @@ export interface Slide {
   background: string;
   /** The template layout this slide was designed against. */
   layoutId?: string;
+  /** Declarative low-code layout instance. It is design metadata only. */
+  layoutBinding?: import("../layout/tree").LayoutBinding;
 }
 
 /** The reviewed content of one page at the moment it was confirmed. */
@@ -822,6 +824,8 @@ export interface PresentationDocument {
   slides: Slide[];
   theme?: DocumentTheme;
   layouts?: SlideLayoutSpec[];
+  /** Reusable declarative layout skeletons referenced by slide bindings. */
+  layoutDefinitions?: import("../layout/tree").LayoutDefinition[];
   /**
    * Template target used by visual review. Design state: editing it never
    * increments the content revision or invalidates reviewed copy.

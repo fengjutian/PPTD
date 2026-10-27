@@ -3,8 +3,9 @@ import { phaseForEffect } from "./animation";
 import { TABLE_MAX_COLUMNS, TABLE_MAX_ROWS } from "./table-data";
 import { MAX_CONTENT_VERSIONS } from "./content-version";
 import { ELEMENT_NAME_MAX_LENGTH, MAX_DESIGN_DIRECTIONS } from "./types";
+import { parseLayoutTreeDraft, type LayoutTreeDraft } from "../layout/tree";
 
-export const CURRENT_SCHEMA_VERSION = 30 as const;
+export const CURRENT_SCHEMA_VERSION = 31 as const;
 export type SchemaVersion = typeof CURRENT_SCHEMA_VERSION;
 
 const positiveEmu = z.number().int().positive();
@@ -448,6 +449,44 @@ const templateReviewTargetSchema = z.object({
   tolerances: templateTolerancesSchema,
 });
 
+const layoutSizeSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("fixed"), value: z.number().int().positive().max(1000) }),
+  z.object({ mode: z.literal("fraction"), weight: z.number().int().positive().max(1000) }),
+  z.object({ mode: z.literal("fill") }),
+  z.object({
+    mode: z.literal("content"),
+    min: z.number().int().nonnegative().max(1000).optional(),
+    max: z.number().int().positive().max(1000).optional(),
+  }),
+]);
+const layoutTreeSchema = z.custom<LayoutTreeDraft>((value) => parseLayoutTreeDraft(value).ok, {
+  message: "INVALID_LAYOUT_TREE",
+});
+const layoutDefinitionSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().trim().min(1).max(120),
+  layoutSchemaVersion: z.literal(1),
+  tree: layoutTreeSchema,
+});
+const layoutBindingSchema = z.object({
+  definitionId: z.string().uuid(),
+  slotBindings: z.record(z.string().uuid(), z.string().min(1).max(200)),
+  overrides: z
+    .array(
+      z.object({
+        nodeId: z.string().uuid(),
+        width: layoutSizeSchema.optional(),
+        height: layoutSizeSchema.optional(),
+        layoutState: z.enum(["managed", "detached", "overlay"]).optional(),
+        gap: z.enum(["xs", "sm", "md", "lg", "xl"]).optional(),
+        padding: z.enum(["xs", "sm", "md", "lg", "xl"]).optional(),
+        columns: z.number().int().min(1).max(12).optional(),
+      }),
+    )
+    .max(100)
+    .optional(),
+});
+
 const contentVersionDesignSchema = z.object({
   pageSize: z.object({ width: positiveEmu, height: positiveEmu }),
   theme: themeSchema.optional(),
@@ -527,6 +566,7 @@ const slideSchema = z.object({
     .max(100)
     .optional(),
   layoutId: z.string().uuid().optional(),
+  layoutBinding: layoutBindingSchema.optional(),
 });
 
 const designDirectionProposalSchema = z.object({
@@ -569,6 +609,7 @@ const baseDocumentSchema = z.object({
   slides: z.array(slideSchema).min(1),
   theme: themeSchema.optional(),
   layouts: z.array(slideLayoutSchema).max(200).optional(),
+  layoutDefinitions: z.array(layoutDefinitionSchema).max(100).optional(),
   templateStyle: templateReviewTargetSchema.optional(),
   contentVersions: z.array(contentVersionSchema).max(MAX_CONTENT_VERSIONS).optional(),
   designDirections: z.array(designDirectionRecordSchema).max(MAX_DESIGN_DIRECTIONS).optional(),
@@ -674,6 +715,25 @@ function validateUniqueIds(document: DocumentShape, context: z.RefinementCtx): v
 
 function validateLayoutReferences(document: DocumentShape, context: z.RefinementCtx): void {
   const layoutIds = new Set((document.layouts ?? []).map((layout) => layout.id));
+  const definitionIds = new Set<string>();
+  const definitionNodes = new Map<string, Set<string>>();
+  for (const [definitionIndex, definition] of (document.layoutDefinitions ?? []).entries()) {
+    if (definitionIds.has(definition.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["layoutDefinitions", definitionIndex, "id"],
+        message: "DUPLICATE_LAYOUT_DEFINITION_ID",
+      });
+    }
+    definitionIds.add(definition.id);
+    const nodes = new Set<string>();
+    const visit = (node: LayoutTreeDraft["root"] | LayoutTreeDraft["root"]["children"][number]) => {
+      nodes.add(node.id);
+      if (node.type !== "slot") node.children.forEach(visit);
+    };
+    visit(definition.tree.root);
+    definitionNodes.set(definition.id, nodes);
+  }
   for (const [slideIndex, slide] of document.slides.entries()) {
     if (slide.layoutId && !layoutIds.has(slide.layoutId)) {
       context.addIssue({
@@ -681,6 +741,35 @@ function validateLayoutReferences(document: DocumentShape, context: z.Refinement
         path: ["slides", slideIndex, "layoutId"],
         message: "UNKNOWN_SLIDE_LAYOUT",
       });
+    }
+    if (slide.layoutBinding) {
+      const nodes = definitionNodes.get(slide.layoutBinding.definitionId);
+      if (!nodes) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["slides", slideIndex, "layoutBinding", "definitionId"],
+          message: "UNKNOWN_LAYOUT_DEFINITION",
+        });
+        continue;
+      }
+      for (const nodeId of Object.keys(slide.layoutBinding.slotBindings)) {
+        if (!nodes.has(nodeId)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["slides", slideIndex, "layoutBinding", "slotBindings", nodeId],
+            message: "UNKNOWN_LAYOUT_NODE",
+          });
+        }
+      }
+      for (const [overrideIndex, override] of (slide.layoutBinding.overrides ?? []).entries()) {
+        if (!nodes.has(override.nodeId)) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["slides", slideIndex, "layoutBinding", "overrides", overrideIndex, "nodeId"],
+            message: "UNKNOWN_LAYOUT_NODE",
+          });
+        }
+      }
     }
   }
 }
@@ -725,6 +814,12 @@ function validateTableMerges(document: DocumentShape, context: z.RefinementCtx):
 
 export const presentationDocumentSchema = baseDocumentSchema
   .extend({ schemaVersion: z.literal(CURRENT_SCHEMA_VERSION) })
+  .superRefine(validateUniqueIds)
+  .superRefine(validateLayoutReferences)
+  .superRefine(validateTableMerges);
+
+const versionThirtyDocumentSchema = baseDocumentSchema
+  .extend({ schemaVersion: z.literal(30) })
   .superRefine(validateUniqueIds)
   .superRefine(validateLayoutReferences)
   .superRefine(validateTableMerges);
@@ -964,6 +1059,10 @@ const migrations: Readonly<Record<number, Migration>> = {
   // 30 preserves safe external links on text fragments. Older documents have
   // no links, so migration must not infer a destination from visible text.
   29: (document) => ({ ...versionTwentyNineDocumentSchema.parse(document), schemaVersion: 30 }),
+  // Version 31 persists reusable declarative layout definitions and per-page
+  // bindings. Both are optional, so existing absolute-coordinate pages remain
+  // byte-for-byte unchanged until a user explicitly adopts a layout tree.
+  30: (document) => ({ ...versionThirtyDocumentSchema.parse(document), schemaVersion: 31 }),
 };
 
 export function parsePresentationDocument(input: unknown) {

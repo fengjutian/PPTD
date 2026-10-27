@@ -26,6 +26,7 @@ import type {
 import type { DeckConcept } from "../design/deck-concept";
 import type { StyleConstraint } from "../design/style-profiles";
 import type { DesignLayoutTrace } from "../layout/design-compiler";
+import type { LayoutBinding, LayoutDefinition } from "../layout/tree";
 import type { AiVisualAssetRole } from "./visual-asset";
 import { type TextRunStyle } from "../document-model";
 
@@ -163,6 +164,17 @@ export type DocumentCommand =
     }
   | { type: "relayout-slide"; slideId: SlideId }
   | { type: "apply-slide-layout"; slideId: SlideId; layoutId: string }
+  | {
+      type: "apply-layout-plan";
+      /** Optimistic guard captured when editing or when an AI proposal was built. */
+      expectedRevision: { document: number; content: number; design: number };
+      definitions: LayoutDefinition[];
+      slides: Array<{
+        slideId: SlideId;
+        binding: LayoutBinding | null;
+        elementFrames?: Array<{ elementId: ElementId; frame: RectEmu }>;
+      }>;
+    }
   | { type: "duplicate-slide"; slideId: SlideId }
   | { type: "delete-slide"; slideId: SlideId }
   | { type: "move-slide"; slideId: SlideId; toIndex: number }

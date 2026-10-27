@@ -3,3 +3,4 @@ export * from "./document";
 export * from "./layout";
 export * from "./orchestrator";
 export * from "./ppt-workbench";
+export * from "./layout-tree";

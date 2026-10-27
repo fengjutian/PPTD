@@ -9,6 +9,7 @@ import {
   type TextElement,
 } from "../core/document-model";
 import { useEditorStore } from "./editor-store";
+import { createStarterLayoutDefinition } from "../core/layout/tree";
 
 describe("editor history", () => {
   beforeEach(() => {
@@ -35,6 +36,17 @@ describe("editor history", () => {
     useEditorStore.getState().redo();
     expect(useEditorStore.getState().document.slides[0]!.elements).toHaveLength(2);
     expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
+  });
+
+  it("undoes a layout plan as one design transaction", () => {
+    const state = useEditorStore.getState();
+    const definition = createStarterLayoutDefinition();
+    state.execute({ type: "apply-layout-plan", expectedRevision: { ...state.document.revisions }, definitions: [definition], slides: [{ slideId: state.activeSlideId, binding: { definitionId: definition.id, slotBindings: {} } }] });
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 1, content: 0, design: 1 });
+    expect(useEditorStore.getState().document.layoutDefinitions).toHaveLength(1);
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().document.layoutDefinitions).toBeUndefined();
+    expect(useEditorStore.getState().document.revisions).toEqual({ document: 0, content: 0, design: 0 });
   });
 
   it("renames a project as one undoable content transaction", () => {

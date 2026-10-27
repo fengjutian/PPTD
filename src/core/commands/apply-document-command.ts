@@ -16,6 +16,7 @@ export type {
 
 import { toContentBlocks } from "./ai-draft-helpers";
 import { applyAiDesignedDraft } from "./ai-designed-draft";
+import { parseLayoutTreeDraft } from "../layout/tree";
 export { directionContentFingerprint } from "./ai-draft-helpers";
 export { toAiBlocks } from "./command-helpers";
 
@@ -45,6 +46,85 @@ export type {
 
 export function applyDocumentCommand(document: PresentationDocument, command: DocumentCommand): boolean {
   if (command.type === "set-slide") return true;
+  if (command.type === "apply-layout-plan") {
+    const expected = command.expectedRevision;
+    if (
+      document.revisions.document !== expected.document ||
+      document.revisions.content !== expected.content ||
+      document.revisions.design !== expected.design
+    ) {
+      throw new Error("REVISION_CONFLICT");
+    }
+    if (command.definitions.length > 100 || command.slides.length > document.slides.length) {
+      throw new Error("LAYOUT_PLAN_INVALID");
+    }
+    const definitionIds = new Set<string>();
+    const definitionNodeIds = new Map<string, Set<string>>();
+    for (const definition of command.definitions) {
+      if (definition.layoutSchemaVersion !== 1 || !definition.name.trim() || definition.name.length > 120) {
+        throw new Error("LAYOUT_DEFINITION_INVALID");
+      }
+      if (definitionIds.has(definition.id)) throw new Error("LAYOUT_DEFINITION_ID_DUPLICATE");
+      definitionIds.add(definition.id);
+      const parsed = parseLayoutTreeDraft(definition.tree);
+      if (!parsed.ok) throw new Error("INVALID_LAYOUT_TREE");
+      const nodes = new Set<string>();
+      const visit = (node: typeof parsed.tree.root | (typeof parsed.tree.root.children)[number]) => {
+        nodes.add(node.id);
+        if (node.type !== "slot") node.children.forEach(visit);
+      };
+      visit(parsed.tree.root);
+      definitionNodeIds.set(definition.id, nodes);
+    }
+    const seenSlides = new Set<string>();
+    for (const update of command.slides) {
+      if (seenSlides.has(update.slideId)) throw new Error("LAYOUT_PLAN_INVALID");
+      seenSlides.add(update.slideId);
+      const slide = document.slides.find((candidate) => candidate.id === update.slideId);
+      if (!slide) throw new Error("SLIDE_NOT_FOUND");
+      if (update.binding && !definitionIds.has(update.binding.definitionId)) {
+        throw new Error("LAYOUT_DEFINITION_NOT_FOUND");
+      }
+      const nodes = update.binding ? definitionNodeIds.get(update.binding.definitionId)! : undefined;
+      if (
+        update.binding &&
+        [...Object.keys(update.binding.slotBindings), ...(update.binding.overrides ?? []).map((item) => item.nodeId)].some(
+          (nodeId) => !nodes?.has(nodeId),
+        )
+      ) {
+        throw new Error("INVALID_NODE_REFERENCE");
+      }
+      const elementIds = new Set(slide.elements.map((element) => element.id));
+      if (update.elementFrames?.some((item) => !elementIds.has(item.elementId))) {
+        throw new Error("ELEMENT_NOT_FOUND");
+      }
+      for (const item of update.elementFrames ?? []) {
+        const element = slide.elements.find((candidate) => candidate.id === item.elementId)!;
+        if (element.locked) throw new Error("ELEMENT_LOCKED");
+        if (
+          !Number.isSafeInteger(item.frame.x) ||
+          !Number.isSafeInteger(item.frame.y) ||
+          !Number.isSafeInteger(item.frame.width) ||
+          !Number.isSafeInteger(item.frame.height) ||
+          item.frame.width <= 0 ||
+          item.frame.height <= 0
+        ) {
+          throw new Error("INVALID_FRAME");
+        }
+      }
+    }
+    document.layoutDefinitions = structuredClone(command.definitions);
+    for (const update of command.slides) {
+      const slide = document.slides.find((candidate) => candidate.id === update.slideId)!;
+      if (update.binding) slide.layoutBinding = structuredClone(update.binding);
+      else delete slide.layoutBinding;
+      for (const item of update.elementFrames ?? []) {
+        const element = slide.elements.find((candidate) => candidate.id === item.elementId)!;
+        element.frame = { ...item.frame };
+      }
+    }
+    return true;
+  }
   if (command.type === "rename-document") {
     const title = command.title.trim();
     if (!title || title.length > 512) throw new Error("DOCUMENT_TITLE_INVALID");
@@ -284,6 +364,18 @@ export function applyDocumentCommand(document: PresentationDocument, command: Do
                       },
       ),
     };
+    if (duplicate.layoutBinding) {
+      const idMap = new Map(source.elements.map((element, index) => [element.id, duplicate.elements[index]!.id]));
+      duplicate.layoutBinding = {
+        ...duplicate.layoutBinding,
+        slotBindings: Object.fromEntries(
+          Object.entries(duplicate.layoutBinding.slotBindings).flatMap(([slotId, elementId]) => {
+            const mapped = idMap.get(elementId as ElementId);
+            return mapped ? [[slotId, mapped]] : [];
+          }),
+        ),
+      };
+    }
     document.slides.splice(sourceIndex + 1, 0, duplicate);
     return true;
   }

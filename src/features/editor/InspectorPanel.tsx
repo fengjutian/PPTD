@@ -78,6 +78,7 @@ import { unionFrame } from "../../core/commands/arrange";
 import { ElementPreview } from "./ElementPreview";
 import { paletteSwatches } from "./inspector-palette";
 import { FONT_OPTIONS } from "./font-options";
+import { LayoutTreePanel } from "./LayoutTreePanel";
 
 const ROTATION_PRESETS = [0, 90, 180, 270] as const;
 
@@ -1267,6 +1268,7 @@ export const InspectorPanel = memo(function InspectorPanel() {
 
   return (
     <aside className="right-panel">
+      <LayoutTreePanel document={document} slide={slide} onCommand={execute} />
       <TastePanel />
       <DirectionPanel />
       {multiBounds ? (

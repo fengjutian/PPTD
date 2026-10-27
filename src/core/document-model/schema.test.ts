@@ -26,11 +26,27 @@ import versionTwentyFourFixture from "./__fixtures__/v24-document.json";
 import versionTwentyFiveFixture from "./__fixtures__/v25-document.json";
 import versionTwentySixFixture from "./__fixtures__/v26-document.json";
 import versionTwentyNineFixture from "./__fixtures__/v29-document.json";
+import versionThirtyFixture from "./__fixtures__/v30-document.json";
+import { createStarterLayoutDefinition } from "../layout/tree";
 import { createDocument } from "./factory";
 import { applyCommand } from "../commands";
 import { parsePresentationDocument, presentationDocumentSchema, CURRENT_SCHEMA_VERSION } from "./schema";
 
 describe("presentation document schema", () => {
+  it("migrates the fixed version 30 fixture without inventing a layout binding", () => {
+    const migrated = parsePresentationDocument(versionThirtyFixture);
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(migrated.layoutDefinitions).toBeUndefined();
+    expect(migrated.slides[0]!.layoutBinding).toBeUndefined();
+  });
+
+  it("persists a reusable layout definition and validates its page binding", () => {
+    const document = createDocument();
+    const definition = createStarterLayoutDefinition();
+    document.layoutDefinitions = [definition];
+    document.slides[0]!.layoutBinding = { definitionId: definition.id, slotBindings: {} };
+    expect(presentationDocumentSchema.parse(document).layoutDefinitions?.[0]?.layoutSchemaVersion).toBe(1);
+  });
   it("migrates version 29 without inferring hyperlinks from visible text", () => {
     const migrated = parsePresentationDocument(versionTwentyNineFixture);
     expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);

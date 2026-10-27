@@ -109,6 +109,8 @@ export function commandDomain(command: DocumentCommand, document?: PresentationD
       return "design";
     case "set-template-style":
       return "design";
+    case "apply-layout-plan":
+      return "design";
     case "group-elements":
     case "ungroup-elements":
       return "design";

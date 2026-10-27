@@ -42,6 +42,34 @@ export interface LayoutTreeDraft {
   readonly root: LayoutContainerNode & { readonly type: "canvas" };
 }
 
+export const LAYOUT_SCHEMA_VERSION = 1 as const;
+
+/** A reusable, persisted layout skeleton. It never contains user copy. */
+export interface LayoutDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly layoutSchemaVersion: typeof LAYOUT_SCHEMA_VERSION;
+  readonly tree: LayoutTreeDraft;
+}
+
+/** Properties that a page may override without forking its definition. */
+export interface LayoutNodeOverride {
+  readonly nodeId: string;
+  readonly width?: LayoutSize;
+  readonly height?: LayoutSize;
+  readonly layoutState?: LayoutState;
+  readonly gap?: LayoutSpacingToken;
+  readonly padding?: LayoutSpacingToken;
+  readonly columns?: number;
+}
+
+/** A page instance: stable definition reference, content bindings and local overrides. */
+export interface LayoutBinding {
+  readonly definitionId: string;
+  readonly slotBindings: Readonly<Record<string, string>>;
+  readonly overrides?: readonly LayoutNodeOverride[];
+}
+
 export interface LayoutMeasurement {
   readonly width: number;
   readonly height: number;
