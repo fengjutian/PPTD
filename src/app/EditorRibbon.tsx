@@ -28,6 +28,7 @@ import {
   Plus,
   Presentation,
   Redo2,
+  RefreshCw,
   Replace,
   Save,
   SaveAll,
@@ -93,6 +94,8 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
     execute,
     activeSlide,
     document,
+    openDesignCandidates,
+    designCandidateBusy,
     selectedElementIds,
     selectElements,
     leftTab,
@@ -546,6 +549,14 @@ export function EditorRibbon({ app }: { app: AppRuntime }) {
               onClick={() => execute({ type: "relayout-slide", slideId: activeSlide.id })}
             >
               <Wand2 />
+            </ToolButton>
+            <ToolButton
+              label="换一版（同一内容，换页面构图）"
+              caption="换一版"
+              onClick={() => void openDesignCandidates()}
+              disabled={designCandidateBusy}
+            >
+              <RefreshCw />
             </ToolButton>
             <span className="separator" />
             <SlideBackgroundTools

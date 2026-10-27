@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createDocument } from "../core/document-model";
 import { QualityWorkspaceView } from "./QualityWorkspaceView";
@@ -51,5 +51,42 @@ describe("QualityWorkspaceView", () => {
     expect(markup).toContain("需要处理");
     expect(markup).toContain("确定性问题");
     expect(markup).toContain(">1<");
+  });
+
+  it("reports the local candidate usage without exposing deck copy", () => {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: () =>
+          JSON.stringify({
+            opened: 7,
+            picked: 3,
+            abandoned: 2,
+            noContext: 1,
+            edited: 0,
+            noPlan: 1,
+            recipes: { "editorial-index": 2, "asymmetric-split": 1 },
+          }),
+      },
+    });
+
+    const markup = renderToStaticMarkup(
+      <QualityWorkspaceView
+        app={
+          {
+            activeView: "quality",
+            document: createDocument(),
+            designQualityReport: undefined,
+            exportReport: undefined,
+          } as never
+        }
+      />,
+    );
+
+    expect(markup).toContain("换一版使用（本机）");
+    expect(markup).toContain("7 次");
+    expect(markup).toContain("3 次");
+    expect(markup).toContain("编辑索引");
+    expect(markup).toContain("2 次");
+    vi.unstubAllGlobals();
   });
 });

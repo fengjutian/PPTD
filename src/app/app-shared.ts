@@ -1,5 +1,6 @@
 import { type TemplateAnalysis } from "../services/project-files";
 
+import { type RecipeId } from "../core/design/deck-concept";
 import { type ThemePreset } from "../core/design/theme-presets";
 
 import { type ThemeAudience, type ThemeContentDensity, type ThemePageType } from "../core/design/theme-preset-metadata";
@@ -134,6 +135,36 @@ export interface VariantBatchProgress {
   total: number;
   completed: number;
   failed: number;
+}
+
+/** One compiled alternative for the current page. */
+export interface DesignCandidateOptionView {
+  recipe: RecipeId;
+  label: string;
+  /** A rendered thumbnail; absent when the canvas could not draw it. */
+  image?: string;
+  /** Deterministic layout issues (overflow, overlap, out of bounds, orphan). */
+  auditCount: number;
+  /** Taste-lint hard findings; advisory, but worth showing before a pick. */
+  tasteHardCount: number;
+}
+
+/**
+ * The session-only candidate picker.
+ *
+ * The designs only live in the generation run, so this view is deliberately
+ * not persisted: reopening the project has no candidate context and the entry
+ * point must say so instead of offering a stale choice.
+ */
+export interface DesignCandidateView {
+  slideIndex: number;
+  options: DesignCandidateOptionView[];
+  /** Recipes the compiler refused or replaced; the dialog reports the count. */
+  rejected: number;
+  /** Why there was nothing to offer, when the page or its plan is unavailable. */
+  reason?: string;
+  /** Local lifetime counters, so the prototype can be evaluated without logs. */
+  usage?: { opened: number; picked: number };
 }
 
 /** The user's answer to the direction gate. */

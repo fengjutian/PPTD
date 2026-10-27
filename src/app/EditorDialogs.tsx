@@ -10,6 +10,7 @@ import type { BuiltinIconName } from "../core/document-model";
 import { IconPicker } from "../features/editor/IconPicker";
 
 import type { AppRuntime } from "./app-runtime";
+import { DesignCandidateDialog } from "./DesignCandidateDialog";
 
 export function EditorDialogs({ app }: { app: AppRuntime }) {
   const {
@@ -32,6 +33,9 @@ export function EditorDialogs({ app }: { app: AppRuntime }) {
     recentProjects,
     handleOpenRecent,
     setRecentProjects,
+    designCandidateView,
+    closeDesignCandidates,
+    applyDesignCandidate,
   } = app;
 
   return (
@@ -134,6 +138,13 @@ export function EditorDialogs({ app }: { app: AppRuntime }) {
             )}
           </section>
         </div>
+      )}
+      {designCandidateView && (
+        <DesignCandidateDialog
+          view={designCandidateView}
+          onPick={applyDesignCandidate}
+          onClose={closeDesignCandidates}
+        />
       )}
     </>
   );

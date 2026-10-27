@@ -16,12 +16,15 @@ import {
 } from "../core/document-model";
 import {
   applyCommand,
+  buildDesignCandidates,
   buildDirectionPreviewPages,
+  designWithRecipe,
   directionContentFingerprint,
   importedDeckToDocument,
   inspectAiDesignedDraftCompilation,
   type AiSlideDesign,
   type AiVisualAssetData,
+  type DirectionPreviewCommandBase,
   type DocumentCommand,
   type ImportReport,
   type DesignDraftCompileReport,
@@ -33,7 +36,9 @@ import {
   resolveDeckConcept,
   type AiDeckConcept,
   type DeckConcept,
+  type RecipeId,
 } from "../core/design/deck-concept";
+import { RECIPE_CATALOG } from "../core/layout/recipes/catalog";
 import { summarizeDesignMetrics, type DesignMetrics } from "../core/design/design-metrics";
 import {
   auditThemeDirection,
@@ -133,6 +138,7 @@ import { probeVisionCapability } from "../services/ai-vision";
 import { createTranslator, type UiLanguage } from "../services/i18n";
 import { notifySystem, prepareSystemNotifications } from "../services/system-notification";
 import { recordAppError, recordAppLog } from "../services/app-log";
+import { recordDesignCandidateEvent } from "../services/design-candidate-usage";
 import {
   analyzePptxTemplate,
   choosePresentationFile,
@@ -239,7 +245,14 @@ import {
   matchTemplateLayoutRender,
   presetTemplateAnalysis,
 } from "./app-shared";
-import type { AppView, PageMessage, DesignProgress, DirectionChoice, TemplateLayoutRender } from "./app-shared";
+import type {
+  AppView,
+  DesignCandidateView,
+  DesignProgress,
+  DirectionChoice,
+  PageMessage,
+  TemplateLayoutRender,
+} from "./app-shared";
 import type { VariantBatchProgress, VariantOptionView } from "./app-shared";
 import { directionPreviewIndexes } from "./direction-preview-selection";
 
@@ -292,6 +305,30 @@ function toDocumentAssets(assets: readonly GeneratedVisualAsset[]): AiVisualAsse
 /** The preset the picker marks as recommended, for this reviewed draft. */
 function recommendedPresetFor(title: string, draft?: AiDraft): ThemePresetChoice {
   return rankThemePresets(draft ? themeSignalsFromDraft(draft) : { title })[0]!;
+}
+
+/**
+ * The deck-level part of the generation command a one-page candidate reuses.
+ *
+ * Per-page fields are omitted: the candidate supplies its own design and page
+ * context. `designDirection` is also omitted because its fingerprint covers the
+ * whole deck; replaying it against a one-page build would look stale.
+ */
+function candidateCommandBase(
+  command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }>,
+): DirectionPreviewCommandBase {
+  const {
+    type: _type,
+    title: _title,
+    slides: _slides,
+    designs: _designs,
+    designConcept: _concept,
+    pageContext: _pageContext,
+    pageSize: _pageSize,
+    designDirection: _designDirection,
+    ...base
+  } = command;
+  return base;
 }
 
 export function useAppRuntime() {
@@ -514,6 +551,32 @@ export function useAppRuntime() {
     const render = directionPreviewRenderersRef.current.get(id);
     return render ? render() : Promise.reject(new Error("DIRECTION_PREVIEW_MISSING"));
   };
+  /**
+   * The last design that was actually committed to this document.
+   *
+   * The AI design inputs live only in the generation run; they are not part of
+   * the project schema yet. Keeping them in a ref makes “换一版” work for the
+   * session without pretending a reopened project still has the context. The
+   * signatures guard against rebuilding a page the user has edited since.
+   */
+  const designCandidateContextRef = useRef<
+    | {
+        command: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }>;
+        designs: AiSlideDesign[];
+        concept: DeckConcept;
+        fingerprint: string;
+        slideSignatures: string[];
+      }
+    | undefined
+  >(undefined);
+  const [designCandidateView, setDesignCandidateView] = useState<DesignCandidateView>();
+  const [designCandidateBusy, setDesignCandidateBusy] = useState(false);
+  // A project opened under the same session must not inherit the previous
+  // project's generation command, even if the two decks happen to look alike.
+  useEffect(() => {
+    designCandidateContextRef.current = undefined;
+    setDesignCandidateView(undefined);
+  }, [document.id]);
   const [generatingHistoryId, setGeneratingHistoryId] = useState<string>();
   const designCancelRef = useRef(false);
   /** 设计阶段的后端取消任务号。 */
@@ -3015,7 +3078,7 @@ export function useAppRuntime() {
             ];
       setDesignProgress({ percent: 82, label: "正在准备导出与评审" });
       setDesignDetail("配图与底图测量已完成，开始导出 PPTX");
-      const generationCommand: DocumentCommand = {
+      const generationCommand: Extract<DocumentCommand, { type: "apply-ai-designed-draft" }> = {
         type: "apply-ai-designed-draft",
         title: sourceDraft.title,
         slides: sourceDraft.slides,
@@ -3238,6 +3301,13 @@ export function useAppRuntime() {
         // The quality gate is a commit boundary: until every required check
         // passes, the generated candidate remains isolated from project state.
         replaceDocument(finalDocument, "both");
+        designCandidateContextRef.current = {
+          command: generationCommand,
+          designs: stage.designs,
+          concept,
+          fingerprint: documentContentFingerprint(finalDocument),
+          slideSignatures: finalDocument.slides.map((slide) => JSON.stringify(slide)),
+        };
         if (designDirection) {
           void (async () => {
             try {
@@ -4066,6 +4136,140 @@ export function useAppRuntime() {
     );
     setTaskStatus("已清除模板验收目标");
   };
+  const designCandidateContextMatches = (context: NonNullable<typeof designCandidateContextRef.current>): boolean => {
+    if (documentContentFingerprint(document) !== context.fingerprint) return false;
+    const signatures = document.slides.map((slide) => JSON.stringify(slide));
+    return (
+      signatures.length === context.slideSignatures.length &&
+      signatures.every((signature, index) => signature === context.slideSignatures[index])
+    );
+  };
+
+  const openDesignCandidates = async () => {
+    if (designCandidateBusy) return;
+    const context = designCandidateContextRef.current;
+    if (!context) {
+      recordDesignCandidateEvent({ kind: "no-context" });
+      setTaskStatus("本次会话没有可换版的设计快照；重新生成后才能换版");
+      return;
+    }
+    if (!designCandidateContextMatches(context)) {
+      recordDesignCandidateEvent({ kind: "edited" });
+      setTaskStatus("页面已被修改，换版会覆盖手工调整；请重新生成后再换版");
+      return;
+    }
+    if (activeSlideIndex < 0) {
+      setTaskStatus("当前页不在文稿里，无法换版");
+      return;
+    }
+    const design = context.designs[activeSlideIndex];
+    if (!design) {
+      setTaskStatus("当前页不在本次生成的设计里，无法换版");
+      return;
+    }
+    setDesignCandidateBusy(true);
+    setTaskStatus(`正在计算第 ${activeSlideIndex + 1} 页可换的版式…`);
+    try {
+      const result = buildDesignCandidates({
+        document,
+        slideIndex: activeSlideIndex,
+        concept: context.concept,
+        design,
+        commandBase: candidateCommandBase(context.command),
+      });
+      if (result.reason) {
+        const usage = recordDesignCandidateEvent({ kind: "no-plan" });
+        setDesignCandidateView({
+          slideIndex: activeSlideIndex,
+          options: [],
+          rejected: result.rejected.length,
+          reason: result.reason,
+          usage: { opened: usage.opened, picked: usage.picked },
+        });
+        return;
+      }
+      if (result.candidates.length === 0) {
+        setTaskStatus("这一页没有可换的构图；内容形状可能只匹配当前配方");
+        return;
+      }
+      const options = await Promise.all(
+        result.candidates.map(async (candidate) => {
+          let image: string | undefined;
+          try {
+            [image] = await renderPresentationPages(candidate.document, 520);
+          } catch {
+            // A candidate without a thumbnail is still a valid layout, but the
+            // picker cannot claim it was rendered.
+            image = undefined;
+          }
+          return {
+            recipe: candidate.recipe,
+            label: RECIPE_CATALOG[candidate.recipe]?.label ?? candidate.recipe,
+            ...(image ? { image } : {}),
+            auditCount: candidate.audit.length,
+            tasteHardCount: candidate.taste.issues.filter((issue) => issue.severity === "hard").length,
+          };
+        }),
+      );
+      const usage = recordDesignCandidateEvent({ kind: "opened" });
+      setDesignCandidateView({
+        slideIndex: activeSlideIndex,
+        options,
+        rejected: result.rejected.length,
+        usage: { opened: usage.opened, picked: usage.picked },
+      });
+    } catch (error) {
+      setTaskStatus(`换版计算失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setDesignCandidateBusy(false);
+    }
+  };
+
+  const closeDesignCandidates = () => {
+    if (designCandidateView && designCandidateView.options.length > 0) {
+      recordDesignCandidateEvent({ kind: "abandoned" });
+    }
+    setDesignCandidateView(undefined);
+  };
+
+  const applyDesignCandidate = (recipe: RecipeId) => {
+    const context = designCandidateContextRef.current;
+    const view = designCandidateView;
+    if (!context || !view) return;
+    if (!designCandidateContextMatches(context)) {
+      recordDesignCandidateEvent({ kind: "edited" });
+      setDesignCandidateView(undefined);
+      setTaskStatus("页面已被修改，换版会覆盖手工调整；请重新生成后再换版");
+      return;
+    }
+    const nextDesigns = context.designs.map((design, index) =>
+      index === view.slideIndex ? designWithRecipe(design, recipe) : design,
+    );
+    try {
+      const next = structuredClone(document);
+      applyCommand(next, { ...context.command, designs: nextDesigns });
+      replaceDocument(next, "design");
+      designCandidateContextRef.current = {
+        ...context,
+        designs: nextDesigns,
+        slideSignatures: next.slides.map((slide) => JSON.stringify(slide)),
+      };
+      recordDesignCandidateEvent({ kind: "picked", recipe });
+      setDesignCandidateView(undefined);
+      setDesignQualityReport((previous) =>
+        previous
+          ? {
+              ...previous,
+              notes: [...previous.notes, `第 ${view.slideIndex + 1} 页已换版，旧评审结论对该页已过期`],
+            }
+          : previous,
+      );
+      setTaskStatus(`已把第 ${view.slideIndex + 1} 页换成「${RECIPE_CATALOG[recipe]?.label ?? recipe}」；可撤销`);
+    } catch (error) {
+      setTaskStatus(`换版失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   const runManualReview = async (scope: "current" | "changed" | "issues" | "all") => {
     if (manualReviewBusy || !designQualityReport) return;
     const currentSignatures = document.slides.map((slide) => JSON.stringify(slide));
@@ -4493,6 +4697,11 @@ export function useAppRuntime() {
     openQualityTarget,
     refreshTemplateTarget,
     clearTemplateTarget,
+    designCandidateView,
+    designCandidateBusy,
+    openDesignCandidates,
+    closeDesignCandidates,
+    applyDesignCandidate,
     setDesignQualityReport,
     setActiveView,
     setEditorSurface,

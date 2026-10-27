@@ -14,6 +14,7 @@ import { buildDesignAudit } from "../core/design/design-audit";
 import { RECIPE_SPECIMENS, type RecipeSpecimenMode } from "../core/design/recipe-specimens";
 import { RECIPE_CATALOG } from "../core/layout/recipes/catalog";
 import type { PresentationQualityIssueKind } from "../services/presentation-quality-gate";
+import { loadDesignCandidateUsage } from "../services/design-candidate-usage";
 import type { AppRuntime } from "./app-runtime";
 
 type QualityTab = "overview" | "issues" | "templates" | "audit" | "specimens";
@@ -54,6 +55,10 @@ const componentLabels: Record<string, string> = {
   group: "组合",
 };
 
+function recipeLabel(recipe: string): string {
+  return RECIPE_CATALOG[recipe as keyof typeof RECIPE_CATALOG]?.label ?? recipe;
+}
+
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
     <div className="quality-empty">
@@ -81,6 +86,12 @@ export function QualityWorkspaceView({ app }: { app: AppRuntime }) {
       })),
     [],
   );
+  // Local, cross-deck counters from the session-only “换一版” prototype. They
+  // contain no copy, so the quality view can show them without exposing a deck.
+  const candidateUsage = loadDesignCandidateUsage();
+  const topCandidateRecipes = Object.entries(candidateUsage.recipes)
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 3);
 
   if (activeView !== "quality") return null;
 
@@ -184,6 +195,47 @@ export function QualityWorkspaceView({ app }: { app: AppRuntime }) {
                     <dd>{RECIPE_SPECIMENS.length} 项</dd>
                   </div>
                 </dl>
+              </div>
+            </section>
+
+            <section className="quality-card quality-overview-grid" aria-label="换一版使用">
+              <div>
+                <h2>换一版使用（本机）</h2>
+                <dl>
+                  <div>
+                    <dt>打开</dt>
+                    <dd>{candidateUsage.opened} 次</dd>
+                  </div>
+                  <div>
+                    <dt>采用</dt>
+                    <dd>{candidateUsage.picked} 次</dd>
+                  </div>
+                  <div>
+                    <dt>打开后取消</dt>
+                    <dd>{candidateUsage.abandoned} 次</dd>
+                  </div>
+                  <div>
+                    <dt>无快照 / 已编辑 / 无 plan</dt>
+                    <dd>
+                      {candidateUsage.noContext} / {candidateUsage.edited} / {candidateUsage.noPlan}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+              <div>
+                <h2>最常采用的构图</h2>
+                {topCandidateRecipes.length === 0 ? (
+                  <p className="quality-muted">还没有采用记录。生成后点“换一版”才会累计。</p>
+                ) : (
+                  <dl>
+                    {topCandidateRecipes.map(([recipe, count]) => (
+                      <div key={recipe}>
+                        <dt>{recipeLabel(recipe)}</dt>
+                        <dd>{count} 次</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
               </div>
             </section>
           </div>
