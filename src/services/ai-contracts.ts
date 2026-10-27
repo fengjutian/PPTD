@@ -463,11 +463,8 @@ export const pageDesignPlanSchema = z.object({
     .optional(),
 });
 
-export const aiPresentationDesignSchema = z.object({
-  slides: z
-    .array(
-      z.object({
-        layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
+export const aiSlideDesignSchema = z.object({
+  layout: z.enum(["cover", "title-body", "split", "cards", "quote", "section", "summary"]),
         background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
         accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
         titleColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
@@ -512,20 +509,120 @@ export const aiPresentationDesignSchema = z.object({
          * Whether this page carries a picture. The model says yes or no and
          * describes the picture; the renderer decides where it goes.
          */
-        visualAsset: z
-          .object({
-            enabled: z.boolean(),
-            /** What the picture shows. It describes the scene, never the wording. */
-            prompt: z.string().max(600).optional(),
-            role: z.enum(["hero", "side", "band"]).optional(),
-          })
-          .optional(),
-      }),
-    )
-    .min(1),
+      visualAsset: z
+        .object({
+          enabled: z.boolean(),
+          /** What the picture shows. It describes the scene, never the wording. */
+          prompt: z.string().max(600).optional(),
+          role: z.enum(["hero", "side", "band"]).optional(),
+        })
+        .optional(),
 });
+export const aiPresentationDesignSchema = z.object({ slides: z.array(aiSlideDesignSchema).min(1) });
+export type AiSlideDesignOutput = z.infer<typeof aiSlideDesignSchema>;
 export type AiPresentationDesign = z.infer<typeof aiPresentationDesignSchema>;
 type DesignVisualAsset = NonNullable<AiPresentationDesign["slides"][number]["visualAsset"]>;
+
+/** One page whose model output did not satisfy the design contract. */
+export type DesignSlideRepairCode = "DESIGN_SLIDE_INVALID" | "DESIGN_SLIDE_MISSING" | "DESIGN_SLIDE_EXTRA";
+
+export interface DesignSlideRepair {
+  /** Zero-based page index; for an extra slide, the first index past the draft. */
+  slideIndex: number;
+  code: DesignSlideRepairCode;
+  /** Schema-level reason; never the page's copy. */
+  detail: string;
+}
+
+/** The design result plus the pages that had to be repaired. */
+export interface AiPresentationDesignResult extends AiPresentationDesign {
+  /** Absent when the model output was complete. */
+  designRepairs?: readonly DesignSlideRepair[];
+}
+
+const designEnvelopeSchema = z.object({ slides: z.array(z.unknown()).min(1) });
+
+/** Whether the value has the shape of a design response, before per-page validation. */
+export function isDesignEnvelope(value: unknown): boolean {
+  return designEnvelopeSchema.safeParse(value).success;
+}
+
+function safeLayoutForPage(content: AiDraft["slides"][number], index: number, total: number): AiSlideDesignOutput["layout"] {
+  const blocks = content.blocks ?? [];
+  const structured = blocks.some((block) =>
+    ["chart", "table-data", "comparison", "timeline", "process", "metric"].includes(block.type),
+  );
+  if (blockTypesHaveQuote(blocks)) return "quote";
+  if (index === 0 && !structured && content.body.trim().length < 80) return "cover";
+  if (index === total - 1 && !structured) return "summary";
+  return "title-body";
+}
+
+function blockTypesHaveQuote(blocks: AiDraft["slides"][number]["blocks"]): boolean {
+  return (blocks ?? []).some((block) => block.type === "quote");
+}
+
+/**
+ * The page the application can still draw when one model page is unusable.
+ *
+ * It is deliberately plain: a neutral light page with the reviewed copy and no
+ * design plan, so it takes the legacy composition path. A generic page is worse
+ * than the model's intended design and better than losing the whole deck; the
+ * repair is reported so the quality report can say so.
+ */
+function fallbackSlideDesign(
+  content: AiDraft["slides"][number],
+  index: number,
+  total: number,
+): AiSlideDesignOutput {
+  return {
+    layout: safeLayoutForPage(content, index, total),
+    background: "#FFFFFF",
+    accent: "#3366CC",
+    titleColor: "#172033",
+    bodyColor: "#364152",
+  };
+}
+
+/**
+ * Parses a model design page by page instead of failing the whole deck.
+ *
+ * The response envelope must still be a non-empty `slides` array; each page is
+ * validated against the design contract. A page that fails, is missing, or is
+ * extra is reported and repaired deterministically. The returned page count
+ * always equals the reviewed draft's page count.
+ */
+export function parseAiPresentationDesign(
+  raw: unknown,
+  draft: AiDraft,
+): { design: AiPresentationDesign; repairs: DesignSlideRepair[] } {
+  const envelope = designEnvelopeSchema.safeParse(raw);
+  if (!envelope.success) throw new Error("AI_DESIGN_INVALID");
+  const repairs: DesignSlideRepair[] = [];
+  const slides = draft.slides.map((content, index) => {
+    const parsed = aiSlideDesignSchema.safeParse(envelope.data.slides[index]);
+    if (parsed.success) return parsed.data;
+    const missing = envelope.data.slides[index] === undefined;
+    const firstIssue = parsed.error.issues[0];
+    repairs.push({
+      slideIndex: index,
+      code: missing ? "DESIGN_SLIDE_MISSING" : "DESIGN_SLIDE_INVALID",
+      detail: missing
+        ? "模型少输出了这一页"
+        : `${firstIssue?.path.join(".") || "slide"}：${firstIssue?.message ?? "页面设计不满足合同"}`,
+    });
+    return fallbackSlideDesign(content, index, draft.slides.length);
+  });
+  const extra = envelope.data.slides.length - draft.slides.length;
+  if (extra > 0) {
+    repairs.push({
+      slideIndex: draft.slides.length,
+      code: "DESIGN_SLIDE_EXTRA",
+      detail: `模型多输出 ${extra} 页，已忽略`,
+    });
+  }
+  return { design: { slides }, repairs };
+}
 
 /**
  * Applies the content stage's visual form to the design stage's asset choice.
