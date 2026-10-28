@@ -71,8 +71,10 @@ describe("VariantGalleryDialog", () => {
     expect(markup).toContain("模板「藏青」");
     // The swatch strip is the preset's own accent, not a generic accent colour.
     expect(markup).toContain("background:#A67C2E");
-    // The font pairing is spelled out in the enlarged preview, not on a card.
-    expect(markup).not.toContain("华文中宋标题");
+    // The description and font pairing belong to the enlarged preview; a card
+    // only has room for the name and the palette.
+    expect(markup).not.toContain("华文中宋");
+    expect(markup).not.toContain("白底、墨黑与哑金强调");
   });
 
   it("does not invent a template for a candidate without a built-in preset", () => {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, CircleAlert, Eye, LoaderCircle, X } from "lucide-react";
 
 import type { VariantOptionView } from "../../app/app-shared";
+import { findThemePreset, themePresetSwatches } from "../../core/design/theme-presets";
 
 import { VariantStyleLine } from "./VariantStyleLine";
 
@@ -149,7 +150,7 @@ export function VariantPreviewDialog({
               </p>
               {/* The heading names the style profile and the concept; the theme
                   preset is what actually decides the colours and the fonts. */}
-              <VariantStyleLine presetId={option.presetId} showFonts />
+              <VariantStyleLine presetId={option.presetId} detail />
             </div>
           </div>
           <button type="button" aria-label="关闭整册预览" onClick={onClose}>
@@ -158,17 +159,26 @@ export function VariantPreviewDialog({
         </div>
 
         <div className="variant-preview-versions" role="group" aria-label="切换版本">
-          {options.map((candidate, index) => (
-            <button
-              key={candidate.id}
-              type="button"
-              aria-pressed={candidate.id === optionId}
-              onClick={() => switchVariant(candidate.id)}
-            >
-              {candidate.name}
-              {index === 0 && <em>AI 推荐</em>}
-            </button>
-          ))}
+          {options.map((candidate, index) => {
+            const preset = findThemePreset(candidate.presetId);
+            const accent = preset
+              ? themePresetSwatches(preset).find((color) => color.slot === "accent")?.value
+              : undefined;
+            return (
+              <button
+                key={candidate.id}
+                type="button"
+                aria-pressed={candidate.id === optionId}
+                onClick={() => switchVariant(candidate.id)}
+              >
+                {/* The accent dot lets two similarly named compositions be told
+                    apart in the chip row, without opening each one. */}
+                {accent && <i className="variant-preview-accent" style={{ background: accent }} aria-hidden="true" />}
+                {candidate.name}
+                {index === 0 && <em>AI 推荐</em>}
+              </button>
+            );
+          })}
         </div>
 
         <div className={`variant-preview-stage${page || failed ? "" : " loading"}`}>

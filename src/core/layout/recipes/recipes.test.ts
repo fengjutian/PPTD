@@ -700,9 +700,7 @@ describe("cover-statement recipe", () => {
     if (preset === "instrument") {
       const rail = result.elements.find(
         (element) =>
-          element.type === "shape" &&
-          element.style.fill === "#1F54C8" &&
-          element.frame.width < page.width / 2,
+          element.type === "shape" && element.style.fill === "#1F54C8" && element.frame.width < page.width / 2,
       );
       expect(rail).toBeDefined();
     }

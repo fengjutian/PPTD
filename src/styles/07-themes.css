@@ -1712,44 +1712,108 @@
 }
 /*
  * Style identity: a card names the style profile and the concept, but the
- * theme preset is what decides the colours and the fonts. The swatch strip
- * matches the theme picker's slots so both screens describe one palette, and
- * the font pairing truncates rather than wrapping the card.
+ * theme preset is what decides the colours and the fonts. The strip is drawn
+ * from the same slots as the theme picker, so both screens describe one
+ * palette; the enlarged preview adds the preset's own description and the font
+ * pairing, which is what separates two compositions with similar names.
  */
 .variant-style-line {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
 }
-.variant-style-swatches {
+.variant-style-palette {
   display: inline-flex;
   flex: none;
   overflow: hidden;
   border: 1px solid #d9dfe5;
-  border-radius: 4px;
+  border-radius: 5px;
+  box-shadow: 0 1px 0 rgb(23 44 71 / 4%);
 }
-.variant-style-swatches i {
+.variant-style-palette i {
   display: block;
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 14px;
 }
 .variant-style-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
+}
+.variant-style-copy strong {
+  flex: none;
+  color: #2b3540;
+  font-size: 10px;
+  font-weight: 600;
+}
+.variant-style-copy small {
   overflow: hidden;
-  color: #5b6a78;
+  color: #7a8590;
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.variant-gallery-copy .variant-style-copy {
-  font-size: 9px;
+.variant-style-fonts {
+  flex: none;
+  margin-left: auto;
+  color: #7a8590;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.variant-style-fonts b {
+  color: #3c4a57;
+  font-weight: 600;
+}
+/* A card has no room for the description or the font pairing. */
+.variant-gallery-copy .variant-style-copy strong {
+  color: #5b6a78;
+  font-weight: 500;
+}
+/*
+ * The enlarged preview can afford a block rather than a sentence: the palette
+ * anchors it, the name sits above the preset's own description, and the font
+ * pairing reads as a separate column instead of a trailing clause.
+ */
+.variant-style-line.detail {
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid #e4e9ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.variant-style-line.detail .variant-style-palette i {
+  width: 14px;
+  height: 20px;
+}
+.variant-style-line.detail .variant-style-copy {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+.variant-style-line.detail .variant-style-copy strong {
+  color: #23303c;
+  font-size: 11px;
+}
+.variant-style-line.detail .variant-style-copy small {
+  font-size: 10px;
+}
+.variant-style-line.detail .variant-style-fonts {
+  align-self: center;
+  margin-left: auto;
+  padding-left: 12px;
+  border-left: 1px solid #e1e7ee;
 }
 .upload-dialog-heading .variant-style-line {
-  margin-top: 6px;
+  margin-top: 8px;
 }
-.upload-dialog-heading .variant-style-copy {
-  font-size: 11px;
+/* The preview's heading fills the dialog width so the style block reads as a
+ * bar under the title instead of a chip floating next to it. */
+.variant-preview-dialog .upload-dialog-heading > div,
+.variant-preview-dialog .upload-dialog-heading > div > div {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .variant-gallery-description,
 .variant-gallery-reason {
@@ -1879,6 +1943,13 @@
   font-size: 8px;
   font-style: normal;
   font-weight: 400;
+}
+.variant-preview-accent {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(18 28 38 / 14%);
 }
 .variant-preview-stage {
   position: relative;

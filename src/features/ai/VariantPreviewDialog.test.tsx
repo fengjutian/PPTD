@@ -76,6 +76,10 @@ describe("VariantPreviewDialog", () => {
     expect((markup.match(/aria-pressed="/g) ?? []).length).toBe(2);
     expect((markup.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
     expect(markup).toContain("AI 推荐");
+    // Each chip carries its template's accent, so two similar names can be told
+    // apart without opening both.
+    expect((markup.match(/class="variant-preview-accent"/g) ?? []).length).toBe(2);
+    expect(markup).toContain("background:#A67C2E");
     // The chosen version is the only selected chip.
     expect(markup.indexOf('aria-pressed="true"') < markup.indexOf("AI 推荐")).toBe(true);
   });
@@ -91,8 +95,11 @@ describe("VariantPreviewDialog", () => {
       />,
     );
     expect(markup).toContain("模板「藏青」");
-    expect(markup).toContain("微软雅黑标题 / 微软雅黑正文");
+    expect(markup).toContain("全黑体、深藏青强调、字号收敛；适合汇报、方案与尽调材料。");
+    expect(markup).toContain("标题 <b>微软雅黑</b> · 正文 <b>微软雅黑</b>");
     expect(markup).toContain("background:#1F4E79");
+    // Each swatch says what it is for, so the strip is a palette, not decoration.
+    expect(markup).toContain('title="主强调"');
   });
 
   it("keeps the measured issue count visible when deciding to keep a version", () => {
